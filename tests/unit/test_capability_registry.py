@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 import re
 
 import pytest
@@ -13,13 +15,59 @@ from odoo_accounting_cli_v4.registry import (
 )
 
 
-def test_registry_contains_a_complete_first_capability() -> None:
+EXPECTED_CAPABILITY_COUNT = 102
+EXPECTED_CAPABILITY_IDS_SHA256 = (
+    "2d340b3b7dd406474775655c5efa0444d1e5afee96b0dcdc399e811521278773"
+)
+EXPECTED_FIRST_CAPABILITY_SHA256 = (
+    "d8dc32b91736f2345e09ebbe3eeb1fbe1ab91d7e170456465f783a62c022222a"
+)
+
+
+def test_registry_contains_the_frozen_full_matrix() -> None:
     registry = load_registry()
 
-    assert registry.ids() == ("account.account.list",)
+    assert len(registry.ids()) == EXPECTED_CAPABILITY_COUNT
+    assert hashlib.sha256("\n".join(registry.ids()).encode()).hexdigest() == (
+        EXPECTED_CAPABILITY_IDS_SHA256
+    )
     assert re.fullmatch(r"[0-9a-f]{64}", registry.digest)
 
+    domains = {registry.describe(item)["domain"] for item in registry.ids()}
+    assert {
+        "accounting_context",
+        "accounting_master_data",
+        "general_ledger",
+        "invoices_and_bills",
+        "receivables_payables",
+        "payments",
+        "bank_reconciliation",
+        "multicurrency",
+        "assets",
+        "deferrals",
+        "inventory_accounting",
+        "purchase_accounting",
+        "sales_accounting",
+        "financial_reports",
+        "localization_china",
+        "localization_singapore",
+        "diagnostics",
+        "validation",
+        "operations",
+    } <= domains
+
+
+def test_first_capability_is_byte_semantically_unchanged() -> None:
+    registry = load_registry()
+
     descriptor = registry.describe("account.account.list")
+    canonical = json.dumps(
+        descriptor,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    assert hashlib.sha256(canonical).hexdigest() == EXPECTED_FIRST_CAPABILITY_SHA256
     assert descriptor["domain"] == "chart_of_accounts"
     assert descriptor["access"] == "read"
     assert descriptor["source"]["modules"] == ["account", "base"]
@@ -46,6 +94,28 @@ def test_registry_contains_a_complete_first_capability() -> None:
         "reverse",
     }
     assert set(descriptor["tests"]) == {"unit", "integration", "golden", "e2e"}
+
+
+def test_every_planned_capability_is_honestly_disabled_without_a_handler() -> None:
+    registry = load_registry()
+
+    for capability_id in registry.ids():
+        if capability_id == "account.account.list":
+            continue
+        descriptor = registry.describe(capability_id)
+        assert descriptor["handler_key"] is None
+        assert descriptor["status"] == {
+            "value": "disabled",
+            "reason_code": "implementation_pending",
+            "reason": "The capability is frozen in the G3 matrix but has no implementation or allowlisted handler.",
+        }
+        assert {definition["status"] for definition in descriptor["tests"].values()} == {
+            "planned"
+        }
+        assert all(
+            definition["references"] == []
+            for definition in descriptor["tests"].values()
+        )
 
 
 def test_registry_schema_references_resolve_to_public_files() -> None:

@@ -40,9 +40,14 @@ def test_capabilities_list_is_stable_machine_readable_json() -> None:
         "odoo",
         "audit",
     }
-    assert [item["id"] for item in document["data"]["capabilities"]] == [
-        "account.account.list"
-    ]
+    listed_ids = [item["id"] for item in document["data"]["capabilities"]]
+    assert listed_ids == list(load_registry().ids())
+    assert len(listed_ids) == 102
+    assert next(
+        item
+        for item in document["data"]["capabilities"]
+        if item["id"] == "journal_entry.post"
+    )["status"]["reason_code"] == "implementation_pending"
     assert len(document["data"]["registry_digest"]) == 64
 
 

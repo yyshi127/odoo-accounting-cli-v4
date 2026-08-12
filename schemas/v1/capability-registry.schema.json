@@ -342,7 +342,10 @@
           }
         },
         "handler_key": {
-          "type": "string",
+          "type": [
+            "string",
+            "null"
+          ],
           "pattern": "^[a-z][a-z0-9_]+$"
         }
       }

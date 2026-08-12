@@ -3,10 +3,11 @@
 - G0: passed (private environment baseline retained outside this public repository)
 - G1: passed
 - G2: in progress (source-snapshot sub-gate verified; isolated databases and deterministic fixtures pending)
-- G3: in progress (first capability-contract checkpoint verified; full matrix,
-  write state machine, and real Odoo validation pending)
-- G4: in progress (reviewed initial generation baseline retained; six focused
-  refinement rounds and generation validation pending)
+- G3: in progress (102-ID planned capability matrix frozen; write state
+  machine, implementations, and real Odoo validation pending)
+- G4: in progress (reviewed initial generation baseline retained outside the
+  public Git tree; six focused refinement rounds and generation validation
+  pending)
 - G5-G10: not started
 - Release readiness: not ready
 

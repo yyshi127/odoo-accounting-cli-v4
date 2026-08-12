@@ -133,8 +133,10 @@ def _validate_descriptor(capability_id: str, descriptor: Any) -> None:
         raise RegistryError(f"invalid access class for {capability_id}")
     if not isinstance(descriptor["domain"], str) or not descriptor["domain"]:
         raise RegistryError(f"invalid domain for {capability_id}")
-    if not isinstance(descriptor["handler_key"], str) or not re.fullmatch(
-        r"[a-z][a-z0-9_]+", descriptor["handler_key"]
+    handler_key = descriptor["handler_key"]
+    if handler_key is not None and (
+        not isinstance(handler_key, str)
+        or not re.fullmatch(r"[a-z][a-z0-9_]+", handler_key)
     ):
         raise RegistryError(f"invalid handler key for {capability_id}")
     summary = descriptor["summary"]
