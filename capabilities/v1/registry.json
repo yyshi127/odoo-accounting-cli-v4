@@ -1,0 +1,128 @@
+{
+  "registry_schema_version": "v1",
+  "contract_schema_version": "v1",
+  "capabilities": {
+    "account.account.list": {
+      "summary": {
+        "zh_CN": "列出当前用户可访问的指定公司会计科目",
+        "en_US": "List chart-of-account records visible to the configured user for one company"
+      },
+      "domain": "chart_of_accounts",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_account.py",
+          "account/security/account_security.xml",
+          "account/security/ir.model.access.csv",
+          "_references/base/models/res_company.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/account.account.list.request.schema.json",
+        "response": "schemas/v1/account.account.list.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "base.group_user"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.account:read"
+        ]
+      },
+      "strategies": {
+        "preview": "not_applicable_read_only",
+        "execute": "odoo_orm_read_only_transaction",
+        "verify": "response_schema_company_scope_and_cursor_order",
+        "idempotency": "not_applicable_read_only",
+        "reverse": "not_applicable_read_only"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_account_account_list.py",
+            "tests/unit/test_capability_registry.py",
+            "tests/unit/test_cli_contract.py"
+          ],
+          "reason": "Core request, scope, cursor, registry, JSON and subprocess behavior are covered."
+        },
+        "integration": {
+          "status": "planned",
+          "references": [],
+          "reason": "A real Odoo bridge test requires the dedicated synthetic database."
+        },
+        "golden": {
+          "status": "not_applicable",
+          "references": [],
+          "reason": "A master-data list has no accounting amount golden result."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language Pi routing is pending G8."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "bridge_configuration_missing",
+        "reason": "The implementation exists, but no real Odoo bridge configuration is active."
+      },
+      "routing": {
+        "object": "chart_of_accounts",
+        "actions": [
+          "list",
+          "inspect"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "会计科目",
+            "科目表",
+            "总账科目"
+          ],
+          "en_US": [
+            "chart of accounts",
+            "general ledger accounts"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "科目余额",
+            "总账明细",
+            "试算平衡表"
+          ],
+          "en_US": [
+            "account balances",
+            "general ledger entries",
+            "trial balance"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "account_account_list"
+    }
+  }
+}

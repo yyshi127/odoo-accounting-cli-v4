@@ -31,6 +31,15 @@ def test_private_execution_ledger_is_rejected(tmp_path: Path) -> None:
     assert "forbidden_path" in codes(scan(tmp_path, [private], []))
 
 
+def test_raw_initial_generation_is_rejected(tmp_path: Path) -> None:
+    private = write(
+        tmp_path,
+        "generated/initial/agent-harness/README.md",
+        "Synthetic raw generator output.\n",
+    )
+    assert "forbidden_path" in codes(scan(tmp_path, [private], []))
+
+
 def test_private_key_canary_is_rejected(tmp_path: Path) -> None:
     marker = "-----BEGIN " + "OPENSSH " + "PRIVATE KEY-----"
     canary = write(tmp_path, "canary.txt", marker + "\nsynthetic-only\n")

@@ -1,0 +1,351 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/capability-registry.schema.json",
+  "title": "Odoo Accounting CLI V4 capability registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "registry_schema_version",
+    "contract_schema_version",
+    "capabilities"
+  ],
+  "properties": {
+    "registry_schema_version": {
+      "const": "v1"
+    },
+    "contract_schema_version": {
+      "const": "v1"
+    },
+    "capabilities": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/descriptor"
+      }
+    }
+  },
+  "$defs": {
+    "localized": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zh_CN",
+        "en_US"
+      ],
+      "properties": {
+        "zh_CN": {
+          "type": "string",
+          "minLength": 1
+        },
+        "en_US": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "localizedLists": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zh_CN",
+        "en_US"
+      ],
+      "properties": {
+        "zh_CN": {
+          "$ref": "#/$defs/stringList"
+        },
+        "en_US": {
+          "$ref": "#/$defs/stringList"
+        }
+      }
+    },
+    "stringList": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "testDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "references",
+        "reason"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "implemented",
+            "planned",
+            "not_applicable",
+            "failed"
+          ]
+        },
+        "references": {
+          "$ref": "#/$defs/stringList"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "implemented"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "references": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "domain",
+        "access",
+        "source",
+        "schemas",
+        "requirements",
+        "strategies",
+        "tests",
+        "status",
+        "routing",
+        "handler_key"
+      ],
+      "properties": {
+        "summary": {
+          "$ref": "#/$defs/localized"
+        },
+        "domain": {
+          "type": "string",
+          "minLength": 1
+        },
+        "access": {
+          "enum": [
+            "read",
+            "write"
+          ]
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "modules",
+            "models",
+            "wizards",
+            "report_handlers",
+            "locations"
+          ],
+          "properties": {
+            "modules": {
+              "$ref": "#/$defs/stringList"
+            },
+            "models": {
+              "$ref": "#/$defs/stringList"
+            },
+            "wizards": {
+              "$ref": "#/$defs/stringList"
+            },
+            "report_handlers": {
+              "$ref": "#/$defs/stringList"
+            },
+            "locations": {
+              "$ref": "#/$defs/stringList"
+            }
+          }
+        },
+        "schemas": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "response"
+          ],
+          "properties": {
+            "request": {
+              "type": "string",
+              "pattern": "^schemas/v1/.+\\.json$"
+            },
+            "response": {
+              "type": "string",
+              "pattern": "^schemas/v1/.+\\.json$"
+            }
+          }
+        },
+        "requirements": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "modules",
+            "configuration",
+            "company",
+            "groups",
+            "acl"
+          ],
+          "properties": {
+            "modules": {
+              "$ref": "#/$defs/stringList"
+            },
+            "configuration": {
+              "$ref": "#/$defs/stringList"
+            },
+            "company": {
+              "enum": [
+                "required",
+                "optional",
+                "not_applicable"
+              ]
+            },
+            "groups": {
+              "$ref": "#/$defs/stringList"
+            },
+            "acl": {
+              "$ref": "#/$defs/stringList"
+            }
+          }
+        },
+        "strategies": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "preview",
+            "execute",
+            "verify",
+            "idempotency",
+            "reverse"
+          ],
+          "properties": {
+            "preview": {
+              "type": "string",
+              "minLength": 1
+            },
+            "execute": {
+              "type": "string",
+              "minLength": 1
+            },
+            "verify": {
+              "type": "string",
+              "minLength": 1
+            },
+            "idempotency": {
+              "type": "string",
+              "minLength": 1
+            },
+            "reverse": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "tests": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "unit",
+            "integration",
+            "golden",
+            "e2e"
+          ],
+          "properties": {
+            "unit": {
+              "$ref": "#/$defs/testDefinition"
+            },
+            "integration": {
+              "$ref": "#/$defs/testDefinition"
+            },
+            "golden": {
+              "$ref": "#/$defs/testDefinition"
+            },
+            "e2e": {
+              "$ref": "#/$defs/testDefinition"
+            }
+          }
+        },
+        "status": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "reason_code",
+            "reason"
+          ],
+          "properties": {
+            "value": {
+              "enum": [
+                "available",
+                "uninstalled",
+                "unconfigured",
+                "unauthorized",
+                "disabled",
+                "degraded",
+                "failed_validation"
+              ]
+            },
+            "reason_code": {
+              "type": "string",
+              "minLength": 1
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "routing": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "object",
+            "actions",
+            "aliases",
+            "not_for",
+            "required_slots"
+          ],
+          "properties": {
+            "object": {
+              "type": "string",
+              "minLength": 1
+            },
+            "actions": {
+              "$ref": "#/$defs/stringList"
+            },
+            "aliases": {
+              "$ref": "#/$defs/localizedLists"
+            },
+            "not_for": {
+              "$ref": "#/$defs/localizedLists"
+            },
+            "required_slots": {
+              "$ref": "#/$defs/stringList"
+            }
+          }
+        },
+        "handler_key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]+$"
+        }
+      }
+    }
+  }
+}

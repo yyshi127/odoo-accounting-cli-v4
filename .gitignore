@@ -19,6 +19,7 @@ npm-debug.log*
 # Private source snapshots and evidence
 /source/
 /evidence/
+/generated/initial/
 /generated/private/
 /_execution/
 

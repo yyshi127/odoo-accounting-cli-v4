@@ -95,8 +95,13 @@ def scan(root: Path, paths: list[Path], restricted_roots: list[Path]) -> list[di
 
     for path in paths:
         relative = path.relative_to(root).as_posix()
-        parts = set(path.relative_to(root).parts)
-        if parts & FORBIDDEN_PARTS or path.name in FORBIDDEN_NAMES:
+        relative_parts = path.relative_to(root).parts
+        parts = set(relative_parts)
+        if (
+            parts & FORBIDDEN_PARTS
+            or relative_parts[:2] == ("generated", "initial")
+            or path.name in FORBIDDEN_NAMES
+        ):
             findings.append({"code": "forbidden_path", "path": relative})
             continue
         if path.suffix.lower() in FORBIDDEN_SUFFIXES:

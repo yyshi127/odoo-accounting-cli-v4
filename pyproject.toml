@@ -8,7 +8,7 @@ version = "0.0.0"
 description = "Independent accounting automation CLI for Odoo 19"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-dependencies = []
+dependencies = ["jsonschema==4.26.0"]
 
 [project.scripts]
 odoo-accounting-cli-v4 = "odoo_accounting_cli_v4.cli:main"
@@ -18,6 +18,11 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.data-files]
+"share/odoo-accounting-cli-v4/capabilities/v1" = ["capabilities/v1/registry.json"]
+"share/odoo-accounting-cli-v4/schemas/v1" = ["schemas/v1/*.json"]
+"share/odoo-accounting-cli-v4/skills/odoo-accounting-cli-v4" = ["skills/odoo-accounting-cli-v4/SKILL.md"]
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"
