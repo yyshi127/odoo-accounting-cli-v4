@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/journal.list.response.schema.json",
+  "title": "journal.list response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "journal.list"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{
+    "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+    "then": {
+      "properties": {
+        "request_id": {"type": "string", "format": "uuid"},
+        "status": {"const": "verified"},
+        "data": {"$ref": "#/$defs/data"},
+        "error": {"type": "null"}
+      }
+    },
+    "else": {
+      "properties": {
+        "data": {"type": "null"},
+        "error": {"$ref": "response.schema.json#/$defs/error"}
+      }
+    }
+  }],
+  "$defs": {
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items", "has_more", "next_cursor"],
+      "properties": {
+        "items": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/item"}},
+        "has_more": {"type": "boolean"},
+        "next_cursor": {"type": ["string", "null"], "minLength": 1, "maxLength": 4096}
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sequence", "code", "name", "type", "active", "currency", "company_id"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "sequence": {"type": "integer"},
+        "code": {"type": "string", "minLength": 1, "maxLength": 5},
+        "name": {"type": "string", "minLength": 1},
+        "type": {"enum": ["sale", "purchase", "cash", "bank", "credit", "general"]},
+        "active": {"type": "boolean"},
+        "currency": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "code"],
+              "properties": {
+                "id": {"type": "integer", "minimum": 1},
+                "code": {"type": "string", "minLength": 1, "maxLength": 3}
+              }
+            }
+          ]
+        },
+        "company_id": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

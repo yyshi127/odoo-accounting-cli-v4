@@ -4,14 +4,15 @@
 - G1: passed
 - G2: in progress (source snapshot and two provenance-bound synthetic database
   sub-gates passed; the full deterministic accounting fixture matrix is pending)
-- G3: in progress (102-ID planned capability matrix frozen; write state
-  machine, implementations, and real Odoo validation pending)
+- G3: in progress (102-ID capability matrix frozen; five read implementations
+  and specialized contracts verified; remaining specialized contracts and the
+  write state machine are pending)
 - G4: passed for official generation provenance and baseline review (initial
   generation, six focused refinement rounds, official test/validate, complete
   transcript, and independent adjudication recorded; generated code remains a
   non-authoritative adapter draft)
-- G5: in progress (real dual-environment bridge and `account.account.list`
-  vertical slice verified; remaining reads and reports pending)
+- G5: in progress (real dual-environment bridge and five read vertical slices
+  verified; remaining reads and reports pending)
 - G6-G10: not started
 - Release readiness: not ready
 

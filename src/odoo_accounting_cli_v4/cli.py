@@ -9,16 +9,23 @@ import stat
 import sys
 import uuid
 from collections.abc import Callable, Sequence
+from functools import partial
 from pathlib import Path
 from typing import Any, TextIO
 
 from odoo_accounting_cli_v4 import __version__
 from odoo_accounting_cli_v4.bridge.account_accounts import OdooAccountListPort
 from odoo_accounting_cli_v4.bridge.client import BridgeError, OdooBridgeClient
+from odoo_accounting_cli_v4.bridge.master_data import OdooMasterDataPort
 from odoo_accounting_cli_v4.capabilities.account_account_list import (
     AccountListError,
     read_account_accounts,
     validate_account_list_request,
+)
+from odoo_accounting_cli_v4.capabilities.master_data_lists import (
+    MasterDataListError,
+    read_master_data,
+    validate_master_data_request,
 )
 from odoo_accounting_cli_v4.contracts import dumps, error_document, success_document
 from odoo_accounting_cli_v4.config import ConfigError, load_runtime_config
@@ -35,9 +42,24 @@ _MAX_REQUEST_BYTES = 1024 * 1024
 _DEFAULT_RUNTIME_CONFIG = Path("/etc/odoo-accounting-cli-v4/runtime.json")
 _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
     "account_account_list": read_account_accounts,
+    "journal_list": partial(read_master_data, "journal.list"),
+    "tax_list": partial(read_master_data, "tax.list"),
+    "payment_term_list": partial(read_master_data, "payment_term.list"),
+    "currency_list": partial(read_master_data, "currency.list"),
 }
 _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "account_account_list": validate_account_list_request,
+    "journal_list": partial(validate_master_data_request, "journal.list"),
+    "tax_list": partial(validate_master_data_request, "tax.list"),
+    "payment_term_list": partial(validate_master_data_request, "payment_term.list"),
+    "currency_list": partial(validate_master_data_request, "currency.list"),
+}
+_CAPABILITY_MODELS = {
+    "account.account.list": "account.account",
+    "journal.list": "account.journal",
+    "tax.list": "account.tax",
+    "payment_term.list": "account.payment.term",
+    "currency.list": "res.currency",
 }
 
 
@@ -404,7 +426,7 @@ def _execute_read(
             capability=capability_id,
             request_id=request_id,
         ) from exc
-    except AccountListError as exc:
+    except (AccountListError, MasterDataListError) as exc:
         raise CliError(
             exc.code,
             str(exc),
@@ -420,7 +442,7 @@ def _execute_read(
     try:
         port = port_factory(capability_id, request)
         data = handler(port, request)
-    except AccountListError as exc:
+    except (AccountListError, MasterDataListError) as exc:
         raise CliError(
             exc.code,
             str(exc),
@@ -475,7 +497,7 @@ def _execute_read(
         database=context["database"],
         company_id=context["company_id"],
         user_id=getattr(port, "user_id", None),
-        model="account.account",
+        model=_CAPABILITY_MODELS[capability_id],
         record_ids=[item["id"] for item in data["items"]],
     )
     try:
@@ -495,7 +517,7 @@ def _execute_read(
 def _configured_port_factory(
     capability_id: str, request: dict[str, Any]
 ) -> object:
-    if capability_id != "account.account.list":
+    if capability_id not in _CAPABILITY_MODELS:
         raise ConfigError("capability_unavailable", "The capability is unavailable.")
     configured_path = os.environ.get("ODOO_ACCOUNTING_CLI_V4_CONFIG")
     path = Path(configured_path) if configured_path else _DEFAULT_RUNTIME_CONFIG
@@ -503,13 +525,14 @@ def _configured_port_factory(
     target = load_runtime_config(path).resolve(
         context["database"], context["company_id"], context["user_login"]
     )
-    return OdooAccountListPort(
-        OdooBridgeClient(
-            target,
-            language=context["language"],
-            timezone=context["timezone"],
-        )
+    client = OdooBridgeClient(
+        target,
+        language=context["language"],
+        timezone=context["timezone"],
     )
+    if capability_id == "account.account.list":
+        return OdooAccountListPort(client)
+    return OdooMasterDataPort(client, capability_id)
 
 
 def main(

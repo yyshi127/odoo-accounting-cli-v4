@@ -22,6 +22,13 @@ EXPECTED_CAPABILITY_IDS_SHA256 = (
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
 )
+IMPLEMENTED_READS = {
+    "account.account.list": "account_account_list",
+    "journal.list": "journal_list",
+    "tax.list": "tax_list",
+    "payment_term.list": "payment_term_list",
+    "currency.list": "currency_list",
+}
 
 
 def test_registry_contains_the_frozen_full_matrix() -> None:
@@ -101,11 +108,11 @@ def test_first_capability_is_byte_semantically_unchanged() -> None:
     }
 
 
-def test_every_planned_capability_is_honestly_disabled_without_a_handler() -> None:
+def test_every_unimplemented_capability_is_honestly_disabled_without_a_handler() -> None:
     registry = load_registry()
 
     for capability_id in registry.ids():
-        if capability_id == "account.account.list":
+        if capability_id in IMPLEMENTED_READS:
             continue
         descriptor = registry.describe(capability_id)
         assert descriptor["handler_key"] is None
@@ -121,6 +128,30 @@ def test_every_planned_capability_is_honestly_disabled_without_a_handler() -> No
             definition["references"] == []
             for definition in descriptor["tests"].values()
         )
+
+
+def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> None:
+    registry = load_registry()
+
+    for capability_id, handler_key in IMPLEMENTED_READS.items():
+        descriptor = registry.describe(capability_id)
+        assert descriptor["handler_key"] == handler_key
+        assert descriptor["schemas"] == {
+            "request": f"schemas/v1/{capability_id}.request.schema.json",
+            "response": f"schemas/v1/{capability_id}.response.schema.json",
+        }
+        assert descriptor["status"]["value"] == "unconfigured"
+        assert descriptor["status"]["reason_code"] == "runtime_context_required"
+        assert descriptor["tests"]["unit"]["status"] == "implemented"
+        assert descriptor["tests"]["integration"]["status"] == "implemented"
+        expected_live_test = (
+            "tests/integration/test_account_account_list_live.py"
+            if capability_id == "account.account.list"
+            else "tests/integration/test_master_data_lists_live.py"
+        )
+        assert descriptor["tests"]["integration"]["references"] == [
+            expected_live_test
+        ]
 
 
 def test_registry_schema_references_resolve_to_public_files() -> None:

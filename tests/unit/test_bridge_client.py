@@ -88,6 +88,10 @@ def test_invoke_uses_argv_without_shell_and_one_json_document(monkeypatch) -> No
             '{"schema_version":"v1","success":true,"data":{}} trailing\n',
             "bridge_protocol_error",
         ),
+        (
+            '{"schema_version":"v1","success":true,"success":false,"data":{},"error":null}\n',
+            "bridge_protocol_error",
+        ),
     ],
 )
 def test_invoke_rejects_non_json_or_more_than_one_json_document(

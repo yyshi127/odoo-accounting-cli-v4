@@ -2483,8 +2483,8 @@
         ]
       },
       "schemas": {
-        "request": "schemas/v1/request.schema.json",
-        "response": "schemas/v1/response.schema.json"
+        "request": "schemas/v1/currency.list.request.schema.json",
+        "response": "schemas/v1/currency.list.response.schema.json"
       },
       "requirements": {
         "modules": [
@@ -2506,21 +2506,27 @@
       },
       "strategies": {
         "preview": "not_applicable_read_only",
-        "execute": "implementation_pending",
-        "verify": "real_odoo_result_reread_and_schema_validation_pending",
+        "execute": "local_read_only_odoo_bridge",
+        "verify": "same_transaction_acl_result_and_response_schema_validation",
         "idempotency": "not_applicable_read_only",
         "reverse": "not_applicable_read_only"
       },
       "tests": {
         "unit": {
-          "status": "planned",
-          "references": [],
-          "reason": "The unit definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_master_data_lists.py",
+            "tests/unit/test_master_data_bridge.py",
+            "tests/unit/test_master_data_runtime.py"
+          ],
+          "reason": "Unit tests cover the strict cursor, fixed bridge action, Odoo row normalization, and response contract."
         },
         "integration": {
-          "status": "planned",
-          "references": [],
-          "reason": "The integration definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_master_data_lists_live.py"
+          ],
+          "reason": "The live integration test verifies the real local read-only Odoo bridge against both dedicated synthetic database aliases, including strict schema validation and two-page cursor ordering without overlap."
         },
         "golden": {
           "status": "planned",
@@ -2534,9 +2540,9 @@
         }
       },
       "status": {
-        "value": "disabled",
-        "reason_code": "implementation_pending",
-        "reason": "The capability is frozen in the G3 matrix but has no implementation or allowlisted handler."
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Static registry metadata does not declare target-specific runtime availability; availability is evaluated for each configured database, company, and user."
       },
       "routing": {
         "object": "currency",
@@ -2561,7 +2567,7 @@
           "user_login"
         ]
       },
-      "handler_key": null
+      "handler_key": "currency_list"
     },
     "currency.rate.list": {
       "summary": {
@@ -4279,8 +4285,8 @@
         ]
       },
       "schemas": {
-        "request": "schemas/v1/request.schema.json",
-        "response": "schemas/v1/response.schema.json"
+        "request": "schemas/v1/journal.list.request.schema.json",
+        "response": "schemas/v1/journal.list.response.schema.json"
       },
       "requirements": {
         "modules": [
@@ -4301,21 +4307,27 @@
       },
       "strategies": {
         "preview": "not_applicable_read_only",
-        "execute": "implementation_pending",
-        "verify": "real_odoo_result_reread_and_schema_validation_pending",
+        "execute": "local_read_only_odoo_bridge",
+        "verify": "same_transaction_acl_result_and_response_schema_validation",
         "idempotency": "not_applicable_read_only",
         "reverse": "not_applicable_read_only"
       },
       "tests": {
         "unit": {
-          "status": "planned",
-          "references": [],
-          "reason": "The unit definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_master_data_lists.py",
+            "tests/unit/test_master_data_bridge.py",
+            "tests/unit/test_master_data_runtime.py"
+          ],
+          "reason": "Unit tests cover the strict cursor, fixed bridge action, Odoo row normalization, and response contract."
         },
         "integration": {
-          "status": "planned",
-          "references": [],
-          "reason": "The integration definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_master_data_lists_live.py"
+          ],
+          "reason": "The live integration test verifies the real local read-only Odoo bridge against both dedicated synthetic database aliases, including strict schema validation and two-page cursor ordering without overlap."
         },
         "golden": {
           "status": "planned",
@@ -4329,9 +4341,9 @@
         }
       },
       "status": {
-        "value": "disabled",
-        "reason_code": "implementation_pending",
-        "reason": "The capability is frozen in the G3 matrix but has no implementation or allowlisted handler."
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Static registry metadata does not declare target-specific runtime availability; availability is evaluated for each configured database, company, and user."
       },
       "routing": {
         "object": "journal",
@@ -4356,7 +4368,7 @@
           "user_login"
         ]
       },
-      "handler_key": null
+      "handler_key": "journal_list"
     },
     "journal_entry.create": {
       "summary": {
@@ -6379,8 +6391,8 @@
         ]
       },
       "schemas": {
-        "request": "schemas/v1/request.schema.json",
-        "response": "schemas/v1/response.schema.json"
+        "request": "schemas/v1/payment_term.list.request.schema.json",
+        "response": "schemas/v1/payment_term.list.response.schema.json"
       },
       "requirements": {
         "modules": [
@@ -6402,21 +6414,27 @@
       },
       "strategies": {
         "preview": "not_applicable_read_only",
-        "execute": "implementation_pending",
-        "verify": "real_odoo_result_reread_and_schema_validation_pending",
+        "execute": "local_read_only_odoo_bridge",
+        "verify": "same_transaction_acl_result_and_response_schema_validation",
         "idempotency": "not_applicable_read_only",
         "reverse": "not_applicable_read_only"
       },
       "tests": {
         "unit": {
-          "status": "planned",
-          "references": [],
-          "reason": "The unit definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_master_data_lists.py",
+            "tests/unit/test_master_data_bridge.py",
+            "tests/unit/test_master_data_runtime.py"
+          ],
+          "reason": "Unit tests cover the strict cursor, fixed bridge action, Odoo row normalization, and response contract."
         },
         "integration": {
-          "status": "planned",
-          "references": [],
-          "reason": "The integration definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_master_data_lists_live.py"
+          ],
+          "reason": "The live integration test verifies the real local read-only Odoo bridge against both dedicated synthetic database aliases, including strict schema validation and two-page cursor ordering without overlap."
         },
         "golden": {
           "status": "planned",
@@ -6430,9 +6448,9 @@
         }
       },
       "status": {
-        "value": "disabled",
-        "reason_code": "implementation_pending",
-        "reason": "The capability is frozen in the G3 matrix but has no implementation or allowlisted handler."
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Static registry metadata does not declare target-specific runtime availability; availability is evaluated for each configured database, company, and user."
       },
       "routing": {
         "object": "payment_term",
@@ -6457,7 +6475,7 @@
           "user_login"
         ]
       },
-      "handler_key": null
+      "handler_key": "payment_term_list"
     },
     "period.accrual.generate": {
       "summary": {
@@ -10245,8 +10263,7 @@
           "account"
         ],
         "models": [
-          "account.tax",
-          "account.tax.repartition.line"
+          "account.tax"
         ],
         "wizards": [],
         "report_handlers": [],
@@ -10255,8 +10272,8 @@
         ]
       },
       "schemas": {
-        "request": "schemas/v1/request.schema.json",
-        "response": "schemas/v1/response.schema.json"
+        "request": "schemas/v1/tax.list.request.schema.json",
+        "response": "schemas/v1/tax.list.response.schema.json"
       },
       "requirements": {
         "modules": [
@@ -10272,27 +10289,32 @@
           "account.group_account_readonly"
         ],
         "acl": [
-          "account.tax:read",
-          "account.tax.repartition.line:read"
+          "account.tax:read"
         ]
       },
       "strategies": {
         "preview": "not_applicable_read_only",
-        "execute": "implementation_pending",
-        "verify": "real_odoo_result_reread_and_schema_validation_pending",
+        "execute": "local_read_only_odoo_bridge",
+        "verify": "same_transaction_acl_result_and_response_schema_validation",
         "idempotency": "not_applicable_read_only",
         "reverse": "not_applicable_read_only"
       },
       "tests": {
         "unit": {
-          "status": "planned",
-          "references": [],
-          "reason": "The unit definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_master_data_lists.py",
+            "tests/unit/test_master_data_bridge.py",
+            "tests/unit/test_master_data_runtime.py"
+          ],
+          "reason": "Unit tests cover the strict cursor, fixed bridge action, Odoo row normalization, and response contract."
         },
         "integration": {
-          "status": "planned",
-          "references": [],
-          "reason": "The integration definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_master_data_lists_live.py"
+          ],
+          "reason": "The live integration test verifies the real local read-only Odoo bridge against both dedicated synthetic database aliases, including strict schema validation and two-page cursor ordering without overlap."
         },
         "golden": {
           "status": "planned",
@@ -10306,9 +10328,9 @@
         }
       },
       "status": {
-        "value": "disabled",
-        "reason_code": "implementation_pending",
-        "reason": "The capability is frozen in the G3 matrix but has no implementation or allowlisted handler."
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Static registry metadata does not declare target-specific runtime availability; availability is evaluated for each configured database, company, and user."
       },
       "routing": {
         "object": "tax",
@@ -10333,7 +10355,7 @@
           "user_login"
         ]
       },
-      "handler_key": null
+      "handler_key": "tax_list"
     },
     "user.accounting_access.inspect": {
       "summary": {

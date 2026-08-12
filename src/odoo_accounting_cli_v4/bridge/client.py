@@ -158,8 +158,15 @@ class OdooBridgeClient:
     def _parse_document(stdout: str) -> dict[str, Any] | None:
         if not stdout or len(stdout) > _MAX_RESPONSE_CHARS:
             return None
+        def reject_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+            result: dict[str, Any] = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError("duplicate JSON key")
+                result[key] = value
+            return result
         try:
-            value = json.loads(stdout)
-        except json.JSONDecodeError:
+            value = json.loads(stdout, object_pairs_hook=reject_duplicates)
+        except (json.JSONDecodeError, ValueError):
             return None
         return value if isinstance(value, dict) else None
