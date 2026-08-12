@@ -15,6 +15,7 @@ from pathlib import Path
 FORBIDDEN_PARTS = {
     ".tooling",
     ".venv",
+    "_execution",
     "evidence",
     "node_modules",
     "releases",
