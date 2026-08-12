@@ -13,12 +13,15 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from odoo_accounting_cli_v4 import __version__
+from odoo_accounting_cli_v4.bridge.account_accounts import OdooAccountListPort
+from odoo_accounting_cli_v4.bridge.client import BridgeError, OdooBridgeClient
 from odoo_accounting_cli_v4.capabilities.account_account_list import (
     AccountListError,
     read_account_accounts,
     validate_account_list_request,
 )
 from odoo_accounting_cli_v4.contracts import dumps, error_document, success_document
+from odoo_accounting_cli_v4.config import ConfigError, load_runtime_config
 from odoo_accounting_cli_v4.registry import (
     CapabilityNotFound,
     InstanceValidationError,
@@ -29,6 +32,7 @@ from odoo_accounting_cli_v4.registry import (
 
 PortFactory = Callable[[str, dict[str, Any]], object]
 _MAX_REQUEST_BYTES = 1024 * 1024
+_DEFAULT_RUNTIME_CONFIG = Path("/etc/odoo-accounting-cli-v4/runtime.json")
 _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
     "account_account_list": read_account_accounts,
 }
@@ -412,18 +416,37 @@ def _execute_read(
             retryable=exc.retryable,
         ) from exc
     if port_factory is None:
-        raise CliError(
-            "unconfigured",
-            "No Odoo bridge configuration is active for this invocation.",
-            exit_code=4,
-            status="unavailable",
-            capability=capability_id,
-            request_id=request_id,
-        )
+        port_factory = _configured_port_factory
     try:
         port = port_factory(capability_id, request)
         data = handler(port, request)
     except AccountListError as exc:
+        raise CliError(
+            exc.code,
+            str(exc),
+            exit_code=exc.exit_code,
+            status=_status_for_exit(exc.exit_code),
+            capability=capability_id,
+            request_id=request_id,
+            details=exc.details,
+            retryable=exc.retryable,
+        ) from exc
+    except ConfigError as exc:
+        if exc.code in {"unconfigured", "database_unavailable"}:
+            exit_code = 4
+        elif exc.code in {"company_unavailable", "user_unavailable"}:
+            exit_code = 3
+        else:
+            exit_code = 7
+        raise CliError(
+            exc.code,
+            "No matching Odoo bridge configuration is active.",
+            exit_code=exit_code,
+            status=_status_for_exit(exit_code),
+            capability=capability_id,
+            request_id=request_id,
+        ) from exc
+    except BridgeError as exc:
         raise CliError(
             exc.code,
             str(exc),
@@ -467,6 +490,26 @@ def _execute_read(
             request_id=request_id,
         ) from exc
     return document
+
+
+def _configured_port_factory(
+    capability_id: str, request: dict[str, Any]
+) -> object:
+    if capability_id != "account.account.list":
+        raise ConfigError("capability_unavailable", "The capability is unavailable.")
+    configured_path = os.environ.get("ODOO_ACCOUNTING_CLI_V4_CONFIG")
+    path = Path(configured_path) if configured_path else _DEFAULT_RUNTIME_CONFIG
+    context = request["context"]
+    target = load_runtime_config(path).resolve(
+        context["database"], context["company_id"], context["user_login"]
+    )
+    return OdooAccountListPort(
+        OdooBridgeClient(
+            target,
+            language=context["language"],
+            timezone=context["timezone"],
+        )
+    )
 
 
 def main(

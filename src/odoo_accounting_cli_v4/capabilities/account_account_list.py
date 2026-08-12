@@ -27,20 +27,17 @@ _CURSOR_VERSION = 1
 class AccountListPort(Protocol):
     """Narrow ORM port implemented later by the local Odoo bridge."""
 
-    def company_is_visible(self, company_id: int) -> bool: ...
+    @property
+    def user_id(self) -> int: ...
 
-    def module_is_installed(self, module: str) -> bool: ...
-
-    def can_read_accounts(self) -> bool: ...
-
-    def search_accounts(
+    def read_page(
         self,
         *,
         company_id: int,
         after_code: str | None,
         after_id: int | None,
         limit: int,
-    ) -> list[dict[str, Any]]: ...
+    ) -> dict[str, Any]: ...
 
 
 class AccountListError(RuntimeError):
@@ -247,25 +244,6 @@ def read_account_accounts(
 
     _, context, limit, cursor = validate_account_list_request(request)
     company_id = context["company_id"]
-    if not port.company_is_visible(company_id):
-        raise AccountListError(
-            "company_unavailable",
-            "The requested company is unavailable to the configured user.",
-            exit_code=3,
-        )
-    if not port.module_is_installed("account"):
-        raise AccountListError(
-            "uninstalled",
-            "The account capability is not installed in this database.",
-            exit_code=4,
-        )
-    if not port.can_read_accounts():
-        raise AccountListError(
-            "unauthorized",
-            "The configured user cannot read the chart of accounts.",
-            exit_code=3,
-        )
-
     after = (
         decode_cursor(
             cursor,
@@ -276,13 +254,62 @@ def read_account_accounts(
         if cursor
         else None
     )
-    rows = port.search_accounts(
+    page = port.read_page(
         company_id=company_id,
         after_code=after[0] if after else None,
         after_id=after[1] if after else None,
         limit=limit + 1,
     )
-    records = _validated_rows(rows, company_id=company_id, after=after)
+    if (
+        not isinstance(page, dict)
+        or set(page)
+        != {
+            "user_id",
+            "company_visible",
+            "module_installed",
+            "access_allowed",
+            "rows",
+        }
+        or not _is_integer(page["user_id"])
+        or page["user_id"] <= 0
+        or port.user_id != page["user_id"]
+        or not isinstance(page["company_visible"], bool)
+        or not isinstance(page["module_installed"], bool)
+        or not isinstance(page["access_allowed"], bool)
+        or not isinstance(page["rows"], list)
+        or (
+            page["access_allowed"]
+            and not (page["company_visible"] and page["module_installed"])
+        )
+        or (
+            not page["access_allowed"]
+            and page["rows"]
+        )
+    ):
+        raise AccountListError(
+            "failed_validation",
+            "Odoo returned an invalid account page.",
+            exit_code=8,
+        )
+    if not page["company_visible"]:
+        raise AccountListError(
+            "company_unavailable",
+            "The requested company is unavailable to the configured user.",
+            exit_code=3,
+        )
+    if not page["module_installed"]:
+        raise AccountListError(
+            "uninstalled",
+            "The account capability is not installed in this database.",
+            exit_code=4,
+        )
+    if not page["access_allowed"]:
+        raise AccountListError(
+            "unauthorized",
+            "The configured user cannot read the chart of accounts.",
+            exit_code=3,
+        )
+    records = _validated_rows(page["rows"], company_id=company_id, after=after)
     has_more = len(records) > limit
     items = records[:limit]
     next_cursor = None

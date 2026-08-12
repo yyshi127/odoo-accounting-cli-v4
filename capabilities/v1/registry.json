@@ -67,9 +67,11 @@
           "reason": "Core request, scope, cursor, registry, JSON and subprocess behavior are covered."
         },
         "integration": {
-          "status": "planned",
-          "references": [],
-          "reason": "A real Odoo bridge test requires the dedicated synthetic database."
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_account_account_list_live.py"
+          ],
+          "reason": "The live integration test verifies the real local Odoo bridge against both dedicated synthetic database aliases, including two-page cursor ordering and non-overlap."
         },
         "golden": {
           "status": "not_applicable",
@@ -84,8 +86,8 @@
       },
       "status": {
         "value": "unconfigured",
-        "reason_code": "bridge_configuration_missing",
-        "reason": "The implementation exists, but no real Odoo bridge configuration is active."
+        "reason_code": "runtime_context_required",
+        "reason": "Static registry metadata does not declare target-specific runtime availability; availability is evaluated for each configured database, company, and user."
       },
       "routing": {
         "object": "chart_of_accounts",

@@ -20,7 +20,7 @@ EXPECTED_CAPABILITY_IDS_SHA256 = (
     "2d340b3b7dd406474775655c5efa0444d1e5afee96b0dcdc399e811521278773"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
-    "d8dc32b91736f2345e09ebbe3eeb1fbe1ab91d7e170456465f783a62c022222a"
+    "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
 )
 
 
@@ -80,8 +80,8 @@ def test_first_capability_is_byte_semantically_unchanged() -> None:
     ]
     assert descriptor["status"] == {
         "value": "unconfigured",
-        "reason_code": "bridge_configuration_missing",
-        "reason": "The implementation exists, but no real Odoo bridge configuration is active.",
+        "reason_code": "runtime_context_required",
+        "reason": "Static registry metadata does not declare target-specific runtime availability; availability is evaluated for each configured database, company, and user.",
     }
     assert descriptor["handler_key"] == "account_account_list"
     assert "会计科目" in descriptor["routing"]["aliases"]["zh_CN"]
@@ -94,6 +94,11 @@ def test_first_capability_is_byte_semantically_unchanged() -> None:
         "reverse",
     }
     assert set(descriptor["tests"]) == {"unit", "integration", "golden", "e2e"}
+    assert descriptor["tests"]["integration"] == {
+        "status": "implemented",
+        "references": ["tests/integration/test_account_account_list_live.py"],
+        "reason": "The live integration test verifies the real local Odoo bridge against both dedicated synthetic database aliases, including two-page cursor ordering and non-overlap.",
+    }
 
 
 def test_every_planned_capability_is_honestly_disabled_without_a_handler() -> None:

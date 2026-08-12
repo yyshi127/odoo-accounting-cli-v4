@@ -182,33 +182,30 @@ def test_subprocess_argument_error_is_json_and_exit_two() -> None:
 class _ReadableAccountPort:
     user_id = 42
 
-    def company_is_visible(self, company_id: int) -> bool:
-        return company_id == 7
-
-    def module_is_installed(self, module: str) -> bool:
-        return module == "account"
-
-    def can_read_accounts(self) -> bool:
-        return True
-
-    def search_accounts(self, **kwargs):
+    def read_page(self, **kwargs):
         assert kwargs == {
             "company_id": 7,
             "after_code": None,
             "after_id": None,
             "limit": 2,
         }
-        return [
-            {
-                "id": 9,
-                "code": "1000",
-                "name": "Cash",
-                "account_type": "asset_cash",
-                "active": True,
-                "reconcile": False,
-                "company_ids": [7],
-            }
-        ]
+        return {
+            "user_id": self.user_id,
+            "company_visible": True,
+            "module_installed": True,
+            "access_allowed": True,
+            "rows": [
+                {
+                    "id": 9,
+                    "code": "1000",
+                    "name": "Cash",
+                    "account_type": "asset_cash",
+                    "active": True,
+                    "reconcile": False,
+                    "company_ids": [7],
+                }
+            ],
+        }
 
 
 def _read_request() -> dict:
@@ -226,7 +223,10 @@ def _read_request() -> dict:
     }
 
 
-def test_read_dispatches_by_allowlisted_capability_and_preserves_context() -> None:
+def test_read_dispatches_by_allowlisted_capability_and_preserves_context(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("ODOO_ACCOUNTING_CLI_V4_CONFIG", raising=False)
     exit_code, document, stderr = _run_main(
         ["read", "account.account.list", "--request", "-"],
         json.dumps(_read_request()),

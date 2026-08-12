@@ -15,33 +15,29 @@ class FakePort:
         *,
         company_visible: bool = True,
         module_installed: bool = True,
-        access_allowed: bool = True,
+        access_allowed: bool | None = None,
         rows: list[dict] | None = None,
     ) -> None:
         self._company_visible = company_visible
         self._module_installed = module_installed
-        self._access_allowed = access_allowed
+        self._access_allowed = (
+            company_visible and module_installed
+            if access_allowed is None
+            else access_allowed
+        )
         self._rows = rows or []
-        self.search_calls: list[dict] = []
+        self.user_id = 42
+        self.read_calls: list[dict] = []
 
-    def company_is_visible(self, company_id: int) -> bool:
-        return self._company_visible
-
-    def module_is_installed(self, module: str) -> bool:
-        return self._module_installed
-
-    def can_read_accounts(self) -> bool:
-        return self._access_allowed
-
-    def search_accounts(
+    def read_page(
         self,
         *,
         company_id: int,
         after_code: str | None,
         after_id: int | None,
         limit: int,
-    ) -> list[dict]:
-        self.search_calls.append(
+    ) -> dict:
+        self.read_calls.append(
             {
                 "company_id": company_id,
                 "after_code": after_code,
@@ -49,7 +45,13 @@ class FakePort:
                 "limit": limit,
             }
         )
-        return self._rows[:limit]
+        return {
+            "user_id": self.user_id,
+            "company_visible": self._company_visible,
+            "module_installed": self._module_installed,
+            "access_allowed": self._access_allowed,
+            "rows": self._rows[:limit],
+        }
 
 
 def _request(*, company_id: int = 7, limit: int = 2, cursor: str | None = None) -> dict:
@@ -110,7 +112,7 @@ def test_list_uses_company_scope_and_stable_keyset_cursor() -> None:
         database="v4-dev",
         user_login="v4-agent",
     ) == ("1100", 11)
-    assert port.search_calls == [
+    assert port.read_calls == [
         {"company_id": 7, "after_code": None, "after_id": None, "limit": 3}
     ]
 
@@ -142,10 +144,14 @@ def test_cursor_is_bound_to_company_scope() -> None:
         _request(limit=1),
     )
 
+    rejected_port = FakePort()
     with pytest.raises(AccountListError) as caught:
-        read_account_accounts(FakePort(), _request(company_id=8, cursor=first["next_cursor"]))
+        read_account_accounts(
+            rejected_port, _request(company_id=8, cursor=first["next_cursor"])
+        )
 
     assert caught.value.code == "invalid_cursor"
+    assert rejected_port.read_calls == []
 
 
 @pytest.mark.parametrize(
@@ -189,14 +195,14 @@ def test_cursor_is_bound_to_database_and_user(
     assert caught.value.code == "invalid_cursor"
 
 
-def test_company_is_checked_before_account_access() -> None:
+def test_company_failure_is_returned_from_the_single_bridge_read() -> None:
     port = FakePort(company_visible=False)
 
     with pytest.raises(AccountListError) as caught:
         read_account_accounts(port, _request())
 
     assert caught.value.code == "company_unavailable"
-    assert port.search_calls == []
+    assert len(port.read_calls) == 1
 
 
 @pytest.mark.parametrize(
@@ -213,18 +219,28 @@ def test_runtime_availability_failures_are_explicit(port: FakePort, expected_cod
     assert caught.value.code == expected_code
 
 
+def test_logically_contradictory_bridge_page_is_rejected() -> None:
+    port = FakePort(company_visible=False, access_allowed=True)
+
+    with pytest.raises(AccountListError) as caught:
+        read_account_accounts(port, _request())
+
+    assert caught.value.code == "failed_validation"
+    assert caught.value.exit_code == 8
+
+
 def test_default_and_maximum_limits_follow_v1_contract() -> None:
     default_request = _request()
     del default_request["parameters"]["limit"]
     default_port = FakePort(rows=[])
     result = read_account_accounts(default_port, default_request)
     assert result == {"items": [], "has_more": False, "next_cursor": None}
-    assert default_port.search_calls[0]["limit"] == 101
+    assert default_port.read_calls[0]["limit"] == 101
 
     request = _request(limit=1000)
     maximum_port = FakePort(rows=[])
     read_account_accounts(maximum_port, request)
-    assert maximum_port.search_calls[0]["limit"] == 1001
+    assert maximum_port.read_calls[0]["limit"] == 1001
 
     request["parameters"]["limit"] = 1001
     with pytest.raises(AccountListError) as caught:
