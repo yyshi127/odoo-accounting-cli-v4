@@ -1,0 +1,54 @@
+# Python development
+/.venv/
+/.tooling/
+/.pytest_cache/
+/.coverage
+/coverage.xml
+/htmlcov/
+/junit*.xml
+/dist/
+/build/
+*.egg-info/
+__pycache__/
+*.py[cod]
+
+# Node test tooling
+node_modules/
+npm-debug.log*
+
+# Private source snapshots and evidence
+/source/
+/evidence/
+/generated/private/
+
+# Installed releases and runtime state
+/releases/
+/current
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.backup
+*.sql
+*.log
+
+# Secrets and local configuration
+/.env
+/.env.*
+!/.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_ed25519*
+id_rsa*
+auth.json
+settings.json
+*.session.jsonl
+*transcript*.jsonl
+
+# Editors and operating systems
+/.idea/
+/.vscode/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools==84.0.0", "wheel==0.48.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "odoo-accounting-cli-v4"
+version = "0.0.0"
+description = "Independent accounting automation CLI for Odoo 19"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[project.scripts]
+odoo-accounting-cli-v4 = "odoo_accounting_cli_v4.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["odoo_accounting_cli_v4"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
