@@ -24,6 +24,7 @@ EXPECTED_FIRST_CAPABILITY_SHA256 = (
 )
 IMPLEMENTED_READS = {
     "account.account.list": "account_account_list",
+    "company.accounting_context.list": "company_accounting_context_list",
     "journal.list": "journal_list",
     "tax.list": "tax_list",
     "payment_term.list": "payment_term_list",
@@ -148,6 +149,10 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
         assert descriptor["tests"]["integration"]["status"] == "implemented"
         if capability_id in {"journal_entry.search", "journal_entry.get"}:
             expected_live_test = "tests/integration/test_journal_entries_live.py"
+        elif capability_id == "company.accounting_context.list":
+            expected_live_test = (
+                "tests/integration/test_company_accounting_context_live.py"
+            )
         else:
             expected_live_test = (
                 "tests/integration/test_account_account_list_live.py"

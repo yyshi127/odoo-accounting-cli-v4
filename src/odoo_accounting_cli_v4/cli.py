@@ -50,6 +50,9 @@ _MAX_REQUEST_BYTES = 1024 * 1024
 _DEFAULT_RUNTIME_CONFIG = Path("/etc/odoo-accounting-cli-v4/runtime.json")
 _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
     "account_account_list": read_account_accounts,
+    "company_accounting_context_list": partial(
+        read_master_data, "company.accounting_context.list"
+    ),
     "journal_list": partial(read_master_data, "journal.list"),
     "tax_list": partial(read_master_data, "tax.list"),
     "payment_term_list": partial(read_master_data, "payment_term.list"),
@@ -59,6 +62,9 @@ _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
 }
 _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "account_account_list": validate_account_list_request,
+    "company_accounting_context_list": partial(
+        validate_master_data_request, "company.accounting_context.list"
+    ),
     "journal_list": partial(validate_master_data_request, "journal.list"),
     "tax_list": partial(validate_master_data_request, "tax.list"),
     "payment_term_list": partial(validate_master_data_request, "payment_term.list"),
@@ -68,6 +74,7 @@ _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
 }
 _CAPABILITY_MODELS = {
     "account.account.list": "account.account",
+    "company.accounting_context.list": "res.company",
     "journal.list": "account.journal",
     "tax.list": "account.tax",
     "payment_term.list": "account.payment.term",

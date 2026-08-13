@@ -19,10 +19,27 @@ _NONNEGATIVE_DECIMAL_PATTERN = re.compile(r"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 
 _CAPABILITIES = frozenset(
     {
+        "company.accounting_context.list",
         "journal.list",
         "tax.list",
         "payment_term.list",
         "currency.list",
+    }
+)
+
+_COMPANY_CONTEXT_FIELDS = frozenset(
+    {
+        "id",
+        "name",
+        "sequence",
+        "active",
+        "current",
+        "currency",
+        "country",
+        "fiscal_country",
+        "chart_template",
+        "tax_calculation_rounding_method",
+        "fiscal_year_end",
     }
 )
 
@@ -310,6 +327,58 @@ def _valid_named_reference(value: Any) -> bool:
     )
 
 
+def _valid_context_currency(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and set(value) == {"id", "code", "decimal_places"}
+        and _valid_id(value["id"])
+        and _is_nonempty_string(value["code"])
+        and len(value["code"]) <= 3
+        and _is_integer(value["decimal_places"])
+        and value["decimal_places"] >= 0
+    )
+
+
+def _valid_country_reference(value: Any) -> bool:
+    return value is None or (
+        isinstance(value, dict)
+        and set(value) == {"id", "code", "name"}
+        and _valid_id(value["id"])
+        and _is_nonempty_string(value["code"])
+        and len(value["code"]) <= 3
+        and _is_nonempty_string(value["name"])
+    )
+
+
+def _validate_company_context(row: Any, company_id: int) -> bool:
+    fiscal_year_end = row.get("fiscal_year_end") if isinstance(row, dict) else None
+    return (
+        isinstance(row, dict)
+        and set(row) == _COMPANY_CONTEXT_FIELDS
+        and _valid_id(row["id"])
+        and _is_nonempty_string(row["name"])
+        and _valid_sequence(row["sequence"])
+        and isinstance(row["active"], bool)
+        and isinstance(row["current"], bool)
+        and row["current"] == (row["id"] == company_id)
+        and _valid_context_currency(row["currency"])
+        and _valid_country_reference(row["country"])
+        and _valid_country_reference(row["fiscal_country"])
+        and (
+            row["chart_template"] is None
+            or _is_nonempty_string(row["chart_template"])
+        )
+        and row["tax_calculation_rounding_method"]
+        in {None, "round_per_line", "round_globally"}
+        and isinstance(fiscal_year_end, dict)
+        and set(fiscal_year_end) == {"month", "day"}
+        and _is_integer(fiscal_year_end["month"])
+        and 1 <= fiscal_year_end["month"] <= 12
+        and _is_integer(fiscal_year_end["day"])
+        and 1 <= fiscal_year_end["day"] <= 31
+    )
+
+
 def _validate_journal(row: Any, company_id: int) -> bool:
     return (
         isinstance(row, dict)
@@ -431,6 +500,8 @@ def _validate_currency(row: Any, _company_id: int) -> bool:
 
 
 def _after_for_row(capability_id: str, row: dict[str, Any]) -> list[Any]:
+    if capability_id == "company.accounting_context.list":
+        return [row["id"]]
     if capability_id == "journal.list":
         return [row["sequence"], row["type"], row["code"], row["id"]]
     if capability_id in {"tax.list", "payment_term.list"}:
@@ -443,6 +514,10 @@ def _after_for_row(capability_id: str, row: dict[str, Any]) -> list[Any]:
 def _normalized_after(capability_id: str, after: Any) -> tuple[Any, ...] | None:
     if not isinstance(after, list):
         return None
+    if capability_id == "company.accounting_context.list":
+        if len(after) != 1 or not _valid_id(after[0]):
+            return None
+        return (after[0],)
     if capability_id == "journal.list":
         if (
             len(after) != 4
@@ -480,6 +555,7 @@ def _validated_rows(
     if not isinstance(rows, list) or len(rows) > maximum:
         raise _failed("Odoo returned an invalid master-data page.")
     validators = {
+        "company.accounting_context.list": _validate_company_context,
         "journal.list": _validate_journal,
         "tax.list": _validate_tax,
         "payment_term.list": _validate_payment_term,

@@ -6,6 +6,7 @@ from typing import Any, Protocol
 
 
 _ACTIONS = {
+    "company.accounting_context.list": "res.company.accounting_context.read_page",
     "journal.list": "account.journal.read_page",
     "tax.list": "account.tax.read_page",
     "payment_term.list": "account.payment.term.read_page",

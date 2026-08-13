@@ -1636,8 +1636,8 @@
         ]
       },
       "schemas": {
-        "request": "schemas/v1/request.schema.json",
-        "response": "schemas/v1/response.schema.json"
+        "request": "schemas/v1/company.accounting_context.list.request.schema.json",
+        "response": "schemas/v1/company.accounting_context.list.response.schema.json"
       },
       "requirements": {
         "modules": [
@@ -1654,26 +1654,36 @@
           "base.group_user"
         ],
         "acl": [
-          "res.company:read"
+          "res.company:read",
+          "res.currency:read",
+          "res.country:read"
         ]
       },
       "strategies": {
         "preview": "not_applicable_read_only",
-        "execute": "implementation_pending",
-        "verify": "real_odoo_result_reread_and_schema_validation_pending",
+        "execute": "local_read_only_bridge_with_configured_company_allowlist_and_business_user_record_rules",
+        "verify": "strict_contract_validation_and_real_odoo_integration",
         "idempotency": "not_applicable_read_only",
         "reverse": "not_applicable_read_only"
       },
       "tests": {
         "unit": {
-          "status": "planned",
-          "references": [],
-          "reason": "The unit definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_config.py",
+            "tests/unit/test_master_data_bridge.py",
+            "tests/unit/test_master_data_cli.py",
+            "tests/unit/test_master_data_lists.py",
+            "tests/unit/test_company_context_runtime.py"
+          ],
+          "reason": "The config allowlist, fixed bridge action, runtime scope, keyset contract, and CLI dispatch are covered by unit tests."
         },
         "integration": {
-          "status": "planned",
-          "references": [],
-          "reason": "The integration definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_company_accounting_context_live.py"
+          ],
+          "reason": "Live tests verify the configured-company allowlist intersection, business-user visibility, current-company marker, strict schemas, and two-page keyset traversal in both synthetic database aliases."
         },
         "golden": {
           "status": "planned",
@@ -1687,9 +1697,9 @@
         }
       },
       "status": {
-        "value": "disabled",
-        "reason_code": "implementation_pending",
-        "reason": "The capability is frozen in the G3 matrix but has no implementation or allowlisted handler."
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The allowlisted read handler is implemented; availability depends on a configured database, company allowlist, active user mapping, installed account module, and runtime ACLs."
       },
       "routing": {
         "object": "company.accounting_context",
@@ -1714,7 +1724,7 @@
           "user_login"
         ]
       },
-      "handler_key": null
+      "handler_key": "company_accounting_context_list"
     },
     "compliance.singapore.assessment.run": {
       "summary": {

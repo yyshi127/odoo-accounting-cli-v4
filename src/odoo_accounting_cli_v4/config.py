@@ -25,6 +25,7 @@ class RuntimeTarget:
     alias: str
     database: str
     company_id: int
+    available_company_ids: tuple[int, ...]
     user_login: str
     bridge_argv: tuple[str, ...]
     timeout_seconds: int
@@ -48,10 +49,20 @@ class RuntimeConfig:
             raise ConfigError("company_unavailable", "The company is unavailable.")
         if user_login not in users:
             raise ConfigError("user_unavailable", "The user is unavailable.")
+        available_company_ids = (
+            company_id,
+            *sorted(
+                configured_company_id
+                for configured_company_id, configured_users in companies.items()
+                if configured_company_id != company_id
+                and user_login in configured_users
+            ),
+        )
         return RuntimeTarget(
             alias=alias,
             database=database,
             company_id=company_id,
+            available_company_ids=available_company_ids,
             user_login=user_login,
             bridge_argv=self.bridge_argv,
             timeout_seconds=self.timeout_seconds,

@@ -12,6 +12,10 @@ from odoo_accounting_cli_v4.bridge.master_data import OdooMasterDataPort
         ("tax.list", "account.tax.read_page"),
         ("payment_term.list", "account.payment.term.read_page"),
         ("currency.list", "res.currency.read_page"),
+        (
+            "company.accounting_context.list",
+            "res.company.accounting_context.read_page",
+        ),
     ],
 )
 def test_read_page_uses_the_fixed_composite_action(

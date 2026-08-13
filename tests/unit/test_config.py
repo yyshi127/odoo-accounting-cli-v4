@@ -38,12 +38,30 @@ def test_resolve_returns_only_the_allowlisted_runtime_target(tmp_path) -> None:
     assert target.alias == "v4-dev"
     assert target.database == "odoo_cli_v4_dev"
     assert target.company_id == 7
+    assert target.available_company_ids == (7,)
     assert target.user_login == "v4-agent"
     assert target.bridge_argv == (
         "/usr/bin/python3",
         "/srv/odacv4/bridge.py",
     )
     assert target.timeout_seconds == 15
+
+
+def test_resolve_exposes_only_companies_allowlisted_for_the_selected_user(
+    tmp_path,
+) -> None:
+    path = _write_config(tmp_path)
+    value = json.loads(path.read_text(encoding="utf-8"))
+    value["aliases"]["v4-dev"]["companies"] = {
+        "7": ["v4-agent"],
+        "8": ["other-user", "v4-agent"],
+        "9": ["other-user"],
+    }
+    path.write_text(json.dumps(value), encoding="utf-8")
+
+    target = load_runtime_config(path).resolve("v4-dev", 8, "v4-agent")
+
+    assert target.available_company_ids == (8, 7)
 
 
 @pytest.mark.parametrize(

@@ -108,6 +108,7 @@ _MASTER_DATA_ACTIONS: dict[str, dict[str, Any]] = {
 }
 _ACTIONS = {
     "account.account.read_page",
+    "res.company.accounting_context.read_page",
     *_MASTER_DATA_ACTIONS,
     "account.move.journal_entry.search_page",
     "account.move.journal_entry.get",
@@ -452,6 +453,174 @@ def _dispatch_master_data(
             if row["position"] is False:
                 row["position"] = None
             row["rounding"] = _decimal_string(row["rounding"])
+    return {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        "rows": rows,
+    }
+
+
+def _dispatch_company_contexts(
+    env: Any,
+    payload: dict[str, Any],
+    company_id: int,
+    available_company_ids: tuple[int, ...],
+) -> dict[str, Any]:
+    _require_keys(payload, {"company_id", "after", "limit"})
+    after = payload["after"]
+    limit = payload["limit"]
+    if (
+        not isinstance(payload["company_id"], int)
+        or isinstance(payload["company_id"], bool)
+        or not isinstance(limit, int)
+        or isinstance(limit, bool)
+        or not 1 <= limit <= 1001
+        or (
+            after is not None
+            and (
+                not isinstance(after, list)
+                or len(after) != 1
+                or not isinstance(after[0], int)
+                or isinstance(after[0], bool)
+                or after[0] <= 0
+            )
+        )
+        or not isinstance(available_company_ids, tuple)
+        or not available_company_ids
+        or company_id not in available_company_ids
+        or any(
+            not isinstance(available_id, int)
+            or isinstance(available_id, bool)
+            or available_id <= 0
+            for available_id in available_company_ids
+        )
+        or len(available_company_ids) != len(set(available_company_ids))
+    ):
+        raise RuntimeFailure(
+            "bridge_protocol_error", "The bridge action payload is invalid.", exit_code=7
+        )
+    if payload["company_id"] != company_id:
+        raise RuntimeFailure(
+            "company_unavailable", "The company is unavailable.", exit_code=3
+        )
+
+    company_model = env["res.company"]
+    company_visible = bool(
+        company_model.search_count([("id", "=", company_id)], limit=1)
+    )
+    module_installed = env.registry.get("account.account") is not None
+    access_allowed = bool(
+        company_visible
+        and module_installed
+        and company_model.has_access("read")
+        and env["res.currency"].has_access("read")
+        and env["res.country"].has_access("read")
+    )
+    if not access_allowed:
+        return {
+            "user_id": env.uid,
+            "company_visible": company_visible,
+            "module_installed": module_installed,
+            "access_allowed": access_allowed,
+            "rows": [],
+        }
+
+    domain: list[Any] = [("id", "in", list(available_company_ids))]
+    if after is not None:
+        domain.append(("id", ">", after[0]))
+    rows = (
+        company_model.with_context(
+            active_test=False,
+            allowed_company_ids=list(available_company_ids),
+        ).search_read(
+            domain,
+            fields=[
+                "id",
+                "name",
+                "sequence",
+                "active",
+                "currency_id",
+                "country_id",
+                "account_fiscal_country_id",
+                "chart_template",
+                "tax_calculation_rounding_method",
+                "fiscalyear_last_month",
+                "fiscalyear_last_day",
+            ],
+            limit=limit,
+            order="id",
+        )
+    )
+    allowed_set = set(available_company_ids)
+    if any(row.get("id") not in allowed_set for row in rows):
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+
+    currency_ids = {_reference_id(row["currency_id"]) for row in rows}
+    if None in currency_ids:
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    country_ids = {
+        reference_id
+        for row in rows
+        for reference_id in (
+            _reference_id(row["country_id"]),
+            _reference_id(row["account_fiscal_country_id"]),
+        )
+        if reference_id is not None
+    }
+    currency_rows = env["res.currency"].with_context(active_test=False).search_read(
+        [("id", "in", list(currency_ids))],
+        fields=["id", "name", "decimal_places"],
+        limit=len(currency_ids),
+        order="id",
+    )
+    country_rows = env["res.country"].with_context(active_test=False).search_read(
+        [("id", "in", list(country_ids))],
+        fields=["id", "code", "name"],
+        limit=len(country_ids),
+        order="id",
+    )
+    currencies = {row["id"]: row for row in currency_rows}
+    countries = {row["id"]: row for row in country_rows}
+    if set(currencies) != currency_ids or set(countries) != country_ids:
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+
+    for row in rows:
+        currency_id = _reference_id(row.pop("currency_id"))
+        country_id = _reference_id(row.pop("country_id"))
+        fiscal_country_id = _reference_id(row.pop("account_fiscal_country_id"))
+        currency = currencies[currency_id]
+        row["currency"] = {
+            "id": currency_id,
+            "code": currency["name"],
+            "decimal_places": currency["decimal_places"],
+        }
+        row["country"] = dict(countries[country_id]) if country_id else None
+        row["fiscal_country"] = (
+            dict(countries[fiscal_country_id]) if fiscal_country_id else None
+        )
+        row["current"] = row["id"] == company_id
+        if row["chart_template"] is False:
+            row["chart_template"] = None
+        if row["tax_calculation_rounding_method"] is False:
+            row["tax_calculation_rounding_method"] = None
+        try:
+            month = int(row.pop("fiscalyear_last_month"))
+        except (TypeError, ValueError) as exc:
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            ) from exc
+        row["fiscal_year_end"] = {
+            "month": month,
+            "day": row.pop("fiscalyear_last_day"),
+        }
     return {
         "user_id": env.uid,
         "company_visible": company_visible,
@@ -1097,7 +1266,13 @@ def _dispatch_journal_entry_get(
     }
 
 
-def _dispatch(env: Any, action: str, payload: dict[str, Any], company_id: int):
+def _dispatch(
+    env: Any,
+    action: str,
+    payload: dict[str, Any],
+    company_id: int,
+    available_company_ids: tuple[int, ...] | None = None,
+):
     if action == "account.account.read_page":
         _require_keys(
             payload, {"company_id", "after_code", "after_id", "limit"}
@@ -1177,6 +1352,16 @@ def _dispatch(env: Any, action: str, payload: dict[str, Any], company_id: int):
         }
     if action in _MASTER_DATA_ACTIONS:
         return _dispatch_master_data(env, action, payload, company_id)
+    if action == "res.company.accounting_context.read_page":
+        if available_company_ids is None:
+            raise RuntimeFailure(
+                "bridge_protocol_error",
+                "The bridge action payload is invalid.",
+                exit_code=7,
+            )
+        return _dispatch_company_contexts(
+            env, payload, company_id, available_company_ids
+        )
     if action == "account.move.journal_entry.search_page":
         return _dispatch_journal_entry_search(env, payload, company_id)
     if action == "account.move.journal_entry.get":
@@ -1196,6 +1381,19 @@ def _ensure_language_is_active(root_env: Any, language: str) -> None:
             "The requested Odoo language is unavailable.",
             exit_code=4,
         )
+
+
+def _effective_company_ids(users: Any, target: Any) -> tuple[int, ...]:
+    user_company_ids = set(users.company_ids.ids)
+    if target.company_id not in user_company_ids:
+        raise RuntimeFailure(
+            "company_unavailable", "The company is unavailable.", exit_code=3
+        )
+    return tuple(
+        company_id
+        for company_id in target.available_company_ids
+        if company_id in user_company_ids
+    )
 
 
 def execute(request: dict[str, Any], *, config_path: Path, odoo_config: Path):
@@ -1220,15 +1418,25 @@ def execute(request: dict[str, Any], *, config_path: Path, odoo_config: Path):
                 raise RuntimeFailure(
                     "user_unavailable", "The configured user is unavailable.", exit_code=3
                 )
+            effective_company_ids = _effective_company_ids(users, target)
+            allowed_company_ids = (
+                list(effective_company_ids)
+                if request["action"] == "res.company.accounting_context.read_page"
+                else [target.company_id]
+            )
             context = {
-                "allowed_company_ids": [target.company_id],
+                "allowed_company_ids": allowed_company_ids,
                 "active_test": True,
                 "lang": request_target["language"],
                 "tz": request_target["timezone"],
             }
             env = api.Environment(cursor, users.id, context)
             return _dispatch(
-                env, request["action"], request["payload"], target.company_id
+                env,
+                request["action"],
+                request["payload"],
+                target.company_id,
+                effective_company_ids,
             )
     except RuntimeFailure:
         raise

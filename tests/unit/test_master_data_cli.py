@@ -10,6 +10,22 @@ from odoo_accounting_cli_v4.registry import load_registry
 
 
 CASES = {
+    "company.accounting_context.list": (
+        "res.company",
+        {
+            "id": 7,
+            "name": "China Company",
+            "sequence": 0,
+            "active": True,
+            "current": True,
+            "currency": {"id": 6, "code": "CNY", "decimal_places": 2},
+            "country": {"id": 48, "code": "CN", "name": "China"},
+            "fiscal_country": {"id": 48, "code": "CN", "name": "China"},
+            "chart_template": "cn_oscg",
+            "tax_calculation_rounding_method": "round_globally",
+            "fiscal_year_end": {"month": 12, "day": 31},
+        },
+    ),
     "journal.list": (
         "account.journal",
         {

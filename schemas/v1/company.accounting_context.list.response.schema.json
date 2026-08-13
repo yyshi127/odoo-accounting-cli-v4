@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/company.accounting_context.list.response.schema.json",
+  "title": "company.accounting_context.list response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "company.accounting_context.list"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{
+    "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+    "then": {
+      "properties": {
+        "request_id": {"type": "string", "format": "uuid"},
+        "status": {"const": "verified"},
+        "data": {"$ref": "#/$defs/data"},
+        "error": {"type": "null"}
+      }
+    },
+    "else": {
+      "properties": {
+        "data": {"type": "null"},
+        "error": {"$ref": "response.schema.json#/$defs/error"}
+      }
+    }
+  }],
+  "$defs": {
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items", "has_more", "next_cursor"],
+      "properties": {
+        "items": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/item"}},
+        "has_more": {"type": "boolean"},
+        "next_cursor": {"type": ["string", "null"], "minLength": 1, "maxLength": 4096}
+      }
+    },
+    "currency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code", "decimal_places"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1, "maxLength": 3},
+        "decimal_places": {"type": "integer", "minimum": 0}
+      }
+    },
+    "country": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1, "maxLength": 3},
+        "name": {"type": "string", "minLength": 1}
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "sequence", "active", "current", "currency", "country", "fiscal_country", "chart_template", "tax_calculation_rounding_method", "fiscal_year_end"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1},
+        "sequence": {"type": "integer"},
+        "active": {"type": "boolean"},
+        "current": {"type": "boolean"},
+        "currency": {"$ref": "#/$defs/currency"},
+        "country": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/country"}]},
+        "fiscal_country": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/country"}]},
+        "chart_template": {"type": ["string", "null"], "minLength": 1},
+        "tax_calculation_rounding_method": {"enum": [null, "round_per_line", "round_globally"]},
+        "fiscal_year_end": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["month", "day"],
+          "properties": {
+            "month": {"type": "integer", "minimum": 1, "maximum": 12},
+            "day": {"type": "integer", "minimum": 1, "maximum": 31}
+          }
+        }
+      }
+    }
+  }
+}

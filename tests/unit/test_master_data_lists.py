@@ -16,6 +16,7 @@ from odoo_accounting_cli_v4.registry import load_registry
 
 
 CAPABILITIES = (
+    "company.accounting_context.list",
     "journal.list",
     "tax.list",
     "payment_term.list",
@@ -90,6 +91,47 @@ def _request(
 
 
 def _rows(capability_id: str) -> list[dict]:
+    if capability_id == "company.accounting_context.list":
+        return [
+            {
+                "id": 7,
+                "name": "China Company",
+                "sequence": 0,
+                "active": True,
+                "current": True,
+                "currency": {"id": 6, "code": "CNY", "decimal_places": 2},
+                "country": {"id": 48, "code": "CN", "name": "China"},
+                "fiscal_country": {
+                    "id": 48,
+                    "code": "CN",
+                    "name": "China",
+                },
+                "chart_template": "cn_oscg",
+                "tax_calculation_rounding_method": "round_globally",
+                "fiscal_year_end": {"month": 12, "day": 31},
+            },
+            {
+                "id": 8,
+                "name": "Singapore Company",
+                "sequence": 10,
+                "active": True,
+                "current": False,
+                "currency": {"id": 37, "code": "SGD", "decimal_places": 2},
+                "country": {
+                    "id": 197,
+                    "code": "SG",
+                    "name": "Singapore",
+                },
+                "fiscal_country": {
+                    "id": 197,
+                    "code": "SG",
+                    "name": "Singapore",
+                },
+                "chart_template": "sg",
+                "tax_calculation_rounding_method": "round_globally",
+                "fiscal_year_end": {"month": 12, "day": 31},
+            },
+        ]
     if capability_id == "journal.list":
         return [
             {
@@ -248,6 +290,7 @@ def test_each_list_uses_one_scoped_keyset_read(capability_id: str) -> None:
         "next_cursor": None,
     }
     expected_after = {
+        "company.accounting_context.list": [7],
         "journal.list": [5, "sale", "INV", 9],
         "tax.list": [1, 5],
         "payment_term.list": [10, 1],
@@ -305,6 +348,10 @@ def test_request_validation_is_closed_and_capability_specific() -> None:
         ("payment_term.list", lambda row: row.update(company_id=8)),
         ("currency.list", lambda row: row.update(rounding="1e-2")),
         ("currency.list", lambda row: row.update(extra=True)),
+        (
+            "company.accounting_context.list",
+            lambda row: row.update(current="yes"),
+        ),
     ],
 )
 def test_invalid_or_out_of_scope_rows_never_become_verified(
