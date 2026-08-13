@@ -13,6 +13,7 @@ from typing import Any, Protocol
 
 
 TRIAL_BALANCE_CAPABILITY_ID = "report.trial_balance"
+BALANCE_SHEET_CAPABILITY_ID = "report.balance_sheet"
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 1000
 _CURSOR_VERSION = 1
@@ -27,7 +28,7 @@ class FinancialReportPort(Protocol):
         self,
         *,
         company_id: int,
-        date_from: str,
+        date_from: str | None,
         date_to: str,
         after_line_id: str | None,
         limit: int,
@@ -171,13 +172,37 @@ def validate_trial_balance_request(
     return context, date_from, date_to, limit, cursor
 
 
+def validate_balance_sheet_request(
+    request: Any,
+) -> tuple[dict[str, Any], None, str, int, str | None]:
+    context, parameters = _validate_envelope(request)
+    if not set(parameters) <= {"as_of", "limit", "cursor"}:
+        raise _invalid("report.balance_sheet contains an unsupported parameter.")
+    if "as_of" not in parameters or not _canonical_date(parameters["as_of"]):
+        raise _invalid("as_of must be a YYYY-MM-DD date.")
+    limit = parameters.get("limit", DEFAULT_LIMIT)
+    if not _is_integer(limit) or not 1 <= limit <= MAX_LIMIT:
+        raise _invalid(f"limit must be between 1 and {MAX_LIMIT}.")
+    cursor = parameters.get("cursor")
+    if cursor is not None and (
+        not isinstance(cursor, str) or not cursor or len(cursor) > 4096
+    ):
+        raise _invalid("cursor must be null or a non-empty cursor string.")
+    return context, None, parameters["as_of"], limit, cursor
+
+
 def _encode_cursor(
-    line_id: str, *, context: dict[str, Any], date_from: str, date_to: str
+    line_id: str,
+    *,
+    capability_id: str,
+    context: dict[str, Any],
+    date_from: str | None,
+    date_to: str,
 ) -> str:
     payload = json.dumps(
         {
             "after_line_id": line_id,
-            "capability": TRIAL_BALANCE_CAPABILITY_ID,
+            "capability": capability_id,
             "company_id": context["company_id"],
             "database": context["database"],
             "date_from": date_from,
@@ -193,7 +218,12 @@ def _encode_cursor(
 
 
 def _decode_cursor(
-    cursor: str, *, context: dict[str, Any], date_from: str, date_to: str
+    cursor: str,
+    *,
+    capability_id: str,
+    context: dict[str, Any],
+    date_from: str | None,
+    date_to: str,
 ) -> str:
     try:
         padding = "=" * (-len(cursor) % 4)
@@ -220,7 +250,7 @@ def _decode_cursor(
             "user_login",
             "version",
         }
-        or value["capability"] != TRIAL_BALANCE_CAPABILITY_ID
+        or value["capability"] != capability_id
         or value["version"] != _CURSOR_VERSION
         or not _is_integer(value["version"])
         or value["company_id"] != context["company_id"]
@@ -284,8 +314,8 @@ def _validated_page(
     port: FinancialReportPort,
     page: Any,
     *,
-    context: dict[str, Any],
-    date_from: str,
+    report_key: str,
+    date_from: str | None,
     date_to: str,
     maximum: int,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
@@ -341,9 +371,14 @@ def _validated_page(
     if (
         not isinstance(report, dict)
         or set(report) != {"key", "name"}
-        or report["key"] != "trial_balance"
+        or report["key"] != report_key
         or not _nonempty_string(report["name"])
-        or report_date != {"from": date_from, "to": date_to}
+        or not isinstance(report_date, dict)
+        or set(report_date) != {"from", "to"}
+        or not _canonical_date(report_date["from"])
+        or report_date["to"] != date_to
+        or report_date["from"] > report_date["to"]
+        or (date_from is not None and report_date["from"] != date_from)
         or not isinstance(currency, dict)
         or set(currency) != {"id", "code", "decimal_places"}
         or not _valid_id(currency["id"])
@@ -359,14 +394,25 @@ def _validated_page(
     return {"report": report, "date": report_date, "currency": currency, "basis": page["basis"]}, columns, lines
 
 
-def read_trial_balance(
-    port: FinancialReportPort, request: dict[str, Any]
+def _read_financial_report(
+    port: FinancialReportPort,
+    *,
+    capability_id: str,
+    report_key: str,
+    context: dict[str, Any],
+    date_from: str | None,
+    date_to: str,
+    limit: int,
+    cursor: str | None,
 ) -> dict[str, Any]:
-    """Read one verified page from the fixed Odoo trial-balance report."""
-
-    context, date_from, date_to, limit, cursor = validate_trial_balance_request(request)
     after_line_id = (
-        _decode_cursor(cursor, context=context, date_from=date_from, date_to=date_to)
+        _decode_cursor(
+            cursor,
+            capability_id=capability_id,
+            context=context,
+            date_from=date_from,
+            date_to=date_to,
+        )
         if cursor
         else None
     )
@@ -381,7 +427,7 @@ def read_trial_balance(
     metadata, columns, lines = _validated_page(
         port,
         page,
-        context=context,
+        report_key=report_key,
         date_from=date_from,
         date_to=date_to,
         maximum=fetch_limit,
@@ -392,6 +438,7 @@ def read_trial_balance(
     if has_more and visible:
         next_cursor = _encode_cursor(
             visible[-1]["id"],
+            capability_id=capability_id,
             context=context,
             date_from=date_from,
             date_to=date_to,
@@ -403,3 +450,39 @@ def read_trial_balance(
         "has_more": has_more,
         "next_cursor": next_cursor,
     }
+
+
+def read_trial_balance(
+    port: FinancialReportPort, request: dict[str, Any]
+) -> dict[str, Any]:
+    """Read one verified page from the fixed Odoo trial-balance report."""
+
+    context, date_from, date_to, limit, cursor = validate_trial_balance_request(request)
+    return _read_financial_report(
+        port,
+        capability_id=TRIAL_BALANCE_CAPABILITY_ID,
+        report_key="trial_balance",
+        context=context,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+        cursor=cursor,
+    )
+
+
+def read_balance_sheet(
+    port: FinancialReportPort, request: dict[str, Any]
+) -> dict[str, Any]:
+    """Read one verified page from the fixed Odoo balance-sheet report."""
+
+    context, date_from, date_to, limit, cursor = validate_balance_sheet_request(request)
+    return _read_financial_report(
+        port,
+        capability_id=BALANCE_SHEET_CAPABILITY_ID,
+        report_key="balance_sheet",
+        context=context,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+        cursor=cursor,
+    )

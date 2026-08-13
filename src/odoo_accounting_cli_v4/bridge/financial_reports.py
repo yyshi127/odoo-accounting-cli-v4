@@ -5,13 +5,25 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 
+_ACTIONS = {
+    "report.trial_balance": "account.report.trial_balance.read_page",
+    "report.balance_sheet": "account.report.balance_sheet.read_page",
+}
+
 class BridgeClient(Protocol):
     def invoke(self, action: str, payload: dict[str, Any]) -> dict[str, Any]: ...
 
 
 class OdooFinancialReportPort:
-    def __init__(self, client: BridgeClient) -> None:
+    def __init__(
+        self, client: BridgeClient, capability_id: str = "report.trial_balance"
+    ) -> None:
+        try:
+            action = _ACTIONS[capability_id]
+        except (KeyError, TypeError) as exc:
+            raise ValueError("Unsupported financial-report capability.") from exc
         self._client = client
+        self._action = action
         self._user_id: int | None = None
 
     @property
@@ -24,14 +36,14 @@ class OdooFinancialReportPort:
         self,
         *,
         company_id: int,
-        date_from: str,
+        date_from: str | None,
         date_to: str,
         after_line_id: str | None,
         limit: int,
     ) -> dict[str, Any]:
         self._user_id = None
         page = self._client.invoke(
-            "account.report.trial_balance.read_page",
+            self._action,
             {
                 "company_id": company_id,
                 "date_from": date_from,

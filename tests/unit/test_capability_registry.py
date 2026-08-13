@@ -32,6 +32,7 @@ IMPLEMENTED_READS = {
     "journal_entry.search": "journal_entry_search",
     "journal_entry.get": "journal_entry_get",
     "report.trial_balance": "report_trial_balance",
+    "report.balance_sheet": "report_balance_sheet",
 }
 
 
@@ -152,6 +153,8 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
             expected_live_test = "tests/integration/test_journal_entries_live.py"
         elif capability_id == "report.trial_balance":
             expected_live_test = "tests/integration/test_trial_balance_live.py"
+        elif capability_id == "report.balance_sheet":
+            expected_live_test = "tests/integration/test_balance_sheet_live.py"
         elif capability_id == "company.accounting_context.list":
             expected_live_test = (
                 "tests/integration/test_company_accounting_context_live.py"

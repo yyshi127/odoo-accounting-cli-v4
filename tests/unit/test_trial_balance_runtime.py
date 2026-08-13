@@ -124,12 +124,13 @@ class FakeRootReport:
 
     def get_options(self, previous):
         self.previous = copy.deepcopy(previous)
+        date_from = previous["date"]["date_from"] or "2025-01-01"
         return {
             "report_id": self.effective.id,
             "readonly_query": True,
             "all_entries": False,
             "date": {
-                "date_from": "2025-01-01",
+                "date_from": date_from,
                 "date_to": "2025-01-31",
                 "mode": "range",
                 "filter": "custom",

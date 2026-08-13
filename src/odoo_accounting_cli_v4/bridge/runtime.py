@@ -106,13 +106,25 @@ _MASTER_DATA_ACTIONS: dict[str, dict[str, Any]] = {
         "scope": "global",
     },
 }
+_FINANCIAL_REPORT_ACTIONS = {
+    "account.report.trial_balance.read_page": {
+        "xml_id": "account_reports.trial_balance_report",
+        "key": "trial_balance",
+        "mode": "range",
+    },
+    "account.report.balance_sheet.read_page": {
+        "xml_id": "account_reports.balance_sheet",
+        "key": "balance_sheet",
+        "mode": "single",
+    },
+}
 _ACTIONS = {
     "account.account.read_page",
     "res.company.accounting_context.read_page",
     *_MASTER_DATA_ACTIONS,
     "account.move.journal_entry.search_page",
     "account.move.journal_entry.get",
-    "account.report.trial_balance.read_page",
+    *_FINANCIAL_REPORT_ACTIONS,
 }
 
 
@@ -1267,7 +1279,7 @@ def _dispatch_journal_entry_get(
     }
 
 
-def _empty_trial_balance_page(
+def _empty_financial_report_page(
     env: Any,
     *,
     company_visible: bool,
@@ -1289,9 +1301,10 @@ def _empty_trial_balance_page(
     }
 
 
-def _dispatch_trial_balance(
-    env: Any, payload: dict[str, Any], company_id: int
+def _dispatch_financial_report(
+    env: Any, action: str, payload: dict[str, Any], company_id: int
 ) -> dict[str, Any]:
+    spec = _FINANCIAL_REPORT_ACTIONS[action]
     _require_keys(
         payload,
         {"company_id", "date_from", "date_to", "after_line_id", "limit"},
@@ -1301,9 +1314,15 @@ def _dispatch_trial_balance(
     if (
         not isinstance(payload["company_id"], int)
         or isinstance(payload["company_id"], bool)
-        or not _is_canonical_date(payload["date_from"])
+        or not (
+            (_is_canonical_date(payload["date_from"]) and spec["mode"] == "range")
+            or (payload["date_from"] is None and spec["mode"] == "single")
+        )
         or not _is_canonical_date(payload["date_to"])
-        or payload["date_from"] > payload["date_to"]
+        or (
+            payload["date_from"] is not None
+            and payload["date_from"] > payload["date_to"]
+        )
         or not isinstance(limit, int)
         or isinstance(limit, bool)
         or not 1 <= limit <= 1001
@@ -1329,7 +1348,7 @@ def _dispatch_trial_balance(
         env.registry.get(model_name) is not None for model_name in required_models
     )
     root_report = (
-        env.ref("account_reports.trial_balance_report", raise_if_not_found=False)
+        env.ref(spec["xml_id"], raise_if_not_found=False)
         if models_installed
         else None
     )
@@ -1341,7 +1360,7 @@ def _dispatch_trial_balance(
         and all(env[model_name].has_access("read") for model_name in required_models)
     )
     if not access_allowed:
-        return _empty_trial_balance_page(
+        return _empty_financial_report_page(
             env,
             company_visible=company_visible,
             module_installed=module_installed,
@@ -1351,9 +1370,9 @@ def _dispatch_trial_balance(
     previous_options = {
         "all_entries": False,
         "date": {
-            "date_from": payload["date_from"],
+            "date_from": payload["date_from"] or False,
             "date_to": payload["date_to"],
-            "mode": "range",
+            "mode": spec["mode"],
             "filter": "custom",
         },
     }
@@ -1366,9 +1385,13 @@ def _dispatch_trial_balance(
         or options.get("readonly_query") is not True
         or options.get("all_entries") is not False
         or not isinstance(option_date, dict)
-        or option_date.get("date_from") != payload["date_from"]
+        or not _is_canonical_date(option_date.get("date_from"))
+        or (
+            payload["date_from"] is not None
+            and option_date.get("date_from") != payload["date_from"]
+        )
         or option_date.get("date_to") != payload["date_to"]
-        or option_date.get("mode") != "range"
+        or option_date.get("mode") != spec["mode"]
         or option_date.get("filter") != "custom"
         or not isinstance(report_id, int)
         or isinstance(report_id, bool)
@@ -1515,8 +1538,11 @@ def _dispatch_trial_balance(
         "module_installed": module_installed,
         "access_allowed": access_allowed,
         "cursor_found": cursor_found,
-        "report": {"key": "trial_balance", "name": effective_report.name},
-        "date": {"from": payload["date_from"], "to": payload["date_to"]},
+        "report": {"key": spec["key"], "name": effective_report.name},
+        "date": {
+            "from": option_date["date_from"],
+            "to": option_date["date_to"],
+        },
         "currency": {
             "id": currency_id,
             "code": currencies[0]["name"],
@@ -1628,8 +1654,8 @@ def _dispatch(
         return _dispatch_journal_entry_search(env, payload, company_id)
     if action == "account.move.journal_entry.get":
         return _dispatch_journal_entry_get(env, payload, company_id)
-    if action == "account.report.trial_balance.read_page":
-        return _dispatch_trial_balance(env, payload, company_id)
+    if action in _FINANCIAL_REPORT_ACTIONS:
+        return _dispatch_financial_report(env, action, payload, company_id)
     raise RuntimeFailure(
         "bridge_protocol_error", "The bridge action is unavailable.", exit_code=7
     )

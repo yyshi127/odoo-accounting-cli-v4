@@ -61,3 +61,22 @@ def test_financial_report_port_rejects_a_noncanonical_bridge_envelope() -> None:
         )
     with pytest.raises(ValueError):
         _ = port.user_id
+
+
+def test_financial_report_port_maps_balance_sheet_to_its_fixed_action() -> None:
+    class Client:
+        def invoke(self, action, payload):
+            assert action == "account.report.balance_sheet.read_page"
+            page = _page()
+            page["report"] = {"key": "balance_sheet", "name": "Balance Sheet"}
+            return page
+
+    port = OdooFinancialReportPort(Client(), "report.balance_sheet")
+    page = port.read_page(
+        company_id=7,
+        date_from=None,
+        date_to="2025-01-31",
+        after_line_id=None,
+        limit=101,
+    )
+    assert page["report"]["key"] == "balance_sheet"
