@@ -32,8 +32,10 @@ from odoo_accounting_cli_v4.capabilities.master_data_lists import (
 from odoo_accounting_cli_v4.capabilities.financial_reports import (
     FinancialReportError,
     read_balance_sheet,
+    read_profit_and_loss,
     read_trial_balance,
     validate_balance_sheet_request,
+    validate_profit_and_loss_request,
     validate_trial_balance_request,
 )
 from odoo_accounting_cli_v4.capabilities.journal_entries import (
@@ -69,6 +71,7 @@ _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
     "journal_entry_get": get_journal_entry,
     "report_trial_balance": read_trial_balance,
     "report_balance_sheet": read_balance_sheet,
+    "report_profit_and_loss": read_profit_and_loss,
 }
 _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "account_account_list": validate_account_list_request,
@@ -83,6 +86,7 @@ _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "journal_entry_get": validate_journal_entry_get_request,
     "report_trial_balance": validate_trial_balance_request,
     "report_balance_sheet": validate_balance_sheet_request,
+    "report_profit_and_loss": validate_profit_and_loss_request,
 }
 _CAPABILITY_MODELS = {
     "account.account.list": "account.account",
@@ -95,6 +99,7 @@ _CAPABILITY_MODELS = {
     "journal_entry.get": "account.move",
     "report.trial_balance": "account.report",
     "report.balance_sheet": "account.report",
+    "report.profit_and_loss": "account.report",
 }
 
 
@@ -587,7 +592,11 @@ def _configured_port_factory(
         return OdooAccountListPort(client)
     if capability_id in {"journal_entry.search", "journal_entry.get"}:
         return OdooJournalEntryPort(client)
-    if capability_id in {"report.trial_balance", "report.balance_sheet"}:
+    if capability_id in {
+        "report.trial_balance",
+        "report.balance_sheet",
+        "report.profit_and_loss",
+    }:
         return OdooFinancialReportPort(client, capability_id)
     return OdooMasterDataPort(client, capability_id)
 

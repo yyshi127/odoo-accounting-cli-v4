@@ -8,6 +8,7 @@ from typing import Any, Protocol
 _ACTIONS = {
     "report.trial_balance": "account.report.trial_balance.read_page",
     "report.balance_sheet": "account.report.balance_sheet.read_page",
+    "report.profit_and_loss": "account.report.profit_and_loss.read_page",
 }
 
 class BridgeClient(Protocol):

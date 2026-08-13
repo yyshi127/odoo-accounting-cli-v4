@@ -117,6 +117,11 @@ _FINANCIAL_REPORT_ACTIONS = {
         "key": "balance_sheet",
         "mode": "single",
     },
+    "account.report.profit_and_loss.read_page": {
+        "xml_id": "account_reports.profit_and_loss",
+        "key": "profit_and_loss",
+        "mode": "range",
+    },
 }
 _ACTIONS = {
     "account.account.read_page",
