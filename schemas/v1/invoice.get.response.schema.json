@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/invoice.get.response.schema.json",
+  "title": "invoice.get response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "invoice.get"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{
+    "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+    "then": {
+      "properties": {
+        "request_id": {"type": "string", "format": "uuid"},
+        "status": {"const": "verified"},
+        "data": {"$ref": "#/$defs/data"},
+        "error": {"type": "null"}
+      }
+    },
+    "else": {
+      "properties": {
+        "data": {"type": "null"},
+        "error": {"$ref": "response.schema.json#/$defs/error"}
+      }
+    }
+  }],
+  "$defs": {
+    "named_ref": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1}
+      }
+    },
+    "account": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "code", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1}
+      }
+    },
+    "tax": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "name", "type_tax_use", "amount_type", "amount", "price_include"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1},
+        "type_tax_use": {"enum": ["sale", "purchase", "none"]},
+        "amount_type": {"type": "string", "minLength": 1},
+        "amount": {"$ref": "invoice.search.response.schema.json#/$defs/money"},
+        "price_include": {"type": "boolean"}
+      }
+    },
+    "line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sequence", "display_type", "name", "product", "account", "quantity", "price_unit", "discount", "price_subtotal", "price_total", "taxes"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "sequence": {"type": "integer"},
+        "display_type": {"enum": ["product", "line_section", "line_subsection", "line_note"]},
+        "name": {"type": ["string", "null"], "minLength": 1},
+        "product": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/named_ref"}]},
+        "account": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/account"}]},
+        "quantity": {"$ref": "invoice.search.response.schema.json#/$defs/money"},
+        "price_unit": {"$ref": "invoice.search.response.schema.json#/$defs/money"},
+        "discount": {"$ref": "invoice.search.response.schema.json#/$defs/money"},
+        "price_subtotal": {"$ref": "invoice.search.response.schema.json#/$defs/money"},
+        "price_total": {"$ref": "invoice.search.response.schema.json#/$defs/money"},
+        "taxes": {"type": "array", "items": {"$ref": "#/$defs/tax"}}
+      },
+      "allOf": [{
+        "if": {
+          "properties": {"display_type": {"enum": ["line_section", "line_subsection", "line_note"]}},
+          "required": ["display_type"]
+        },
+        "then": {"properties": {"account": {"type": "null"}}},
+        "else": {"properties": {"account": {"$ref": "#/$defs/account"}}}
+      }]
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "move_type", "state", "date", "invoice_date", "invoice_date_due", "ref", "payment_reference", "invoice_origin", "journal", "company_id", "currency", "partner", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "lines"],
+      "properties": {
+        "id": {"$ref": "invoice.search.response.schema.json#/$defs/item/properties/id"},
+        "name": {"$ref": "invoice.search.response.schema.json#/$defs/item/properties/name"},
+        "move_type": {"$ref": "invoice.search.response.schema.json#/$defs/item/properties/move_type"},
+        "state": {"$ref": "invoice.search.response.schema.json#/$defs/item/properties/state"},
+        "date": {"$ref": "invoice.search.response.schema.json#/$defs/item/properties/date"},
+        "invoice_date": {"$ref": "invoice.search.response.schema.json#/$defs/item/properties/invoice_date"},
+        "invoice_date_due": {"$ref": "invoice.search.response.schema.json#/$defs/item/properties/invoice_date_due"},
+        "ref": {"$ref": "invoice.search.response.schema.json#/$defs/item/properties/ref"},
+        "payment_reference": {"$ref": "invoice.search.response.schema.json#/$defs/item/properties/payment_reference"},
+        "invoice_origin": {"$ref": "invoice.search.response.schema.json#/$defs/item/properties/invoice_origin"},
+        "journal": {"$ref": "invoice.search.response.schema.json#/$defs/journal"},
+        "company_id": {"$ref": "invoice.search.response.schema.json#/$defs/item/properties/company_id"},
+        "currency": {"$ref": "invoice.search.response.schema.json#/$defs/currency"},
+        "partner": {"oneOf": [{"type": "null"}, {"$ref": "invoice.search.response.schema.json#/$defs/partner"}]},
+        "amount_untaxed": {"$ref": "invoice.search.response.schema.json#/$defs/money"},
+        "amount_tax": {"$ref": "invoice.search.response.schema.json#/$defs/money"},
+        "amount_total": {"$ref": "invoice.search.response.schema.json#/$defs/money"},
+        "amount_residual": {"$ref": "invoice.search.response.schema.json#/$defs/money"},
+        "payment_state": {"$ref": "invoice.search.response.schema.json#/$defs/item/properties/payment_state"},
+        "lines": {"type": "array", "items": {"$ref": "#/$defs/line"}}
+      }
+    }
+  }
+}

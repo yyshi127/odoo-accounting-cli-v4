@@ -22,6 +22,7 @@ from odoo_accounting_cli_v4.bridge.environment_inspection import (
     OdooEnvironmentInspectionPort,
 )
 from odoo_accounting_cli_v4.bridge.journal_entries import OdooJournalEntryPort
+from odoo_accounting_cli_v4.bridge.invoices import OdooInvoicePort
 from odoo_accounting_cli_v4.bridge.master_data import OdooMasterDataPort
 from odoo_accounting_cli_v4.bridge.partners import OdooPartnerAccountingPort
 from odoo_accounting_cli_v4.capabilities.account_account_list import (
@@ -61,6 +62,15 @@ from odoo_accounting_cli_v4.capabilities.journal_entries import (
     search_journal_entries,
     validate_journal_entry_get_request,
     validate_journal_entry_search_request,
+)
+from odoo_accounting_cli_v4.capabilities.invoices import (
+    InvoiceError,
+    get_invoice,
+    inspect_invoice_payment_status,
+    search_invoices,
+    validate_invoice_get_request,
+    validate_invoice_payment_status_request,
+    validate_invoice_search_request,
 )
 from odoo_accounting_cli_v4.capabilities.partner_accounting import (
     PartnerAccountingError,
@@ -104,6 +114,9 @@ _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
         read_environment_inspection, "diagnostic.accounting_environment.inspect"
     ),
     "partner_accounting_search": search_accounting_partners,
+    "invoice_search": search_invoices,
+    "invoice_get": get_invoice,
+    "invoice_payment_status_inspect": inspect_invoice_payment_status,
 }
 _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "account_account_list": validate_account_list_request,
@@ -131,6 +144,9 @@ _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
         "diagnostic.accounting_environment.inspect",
     ),
     "partner_accounting_search": validate_partner_accounting_search_request,
+    "invoice_search": validate_invoice_search_request,
+    "invoice_get": validate_invoice_get_request,
+    "invoice_payment_status_inspect": validate_invoice_payment_status_request,
 }
 _CAPABILITY_MODELS = {
     "account.account.list": "account.account",
@@ -150,6 +166,9 @@ _CAPABILITY_MODELS = {
     "company.accounting_configuration.inspect": "res.company",
     "diagnostic.accounting_environment.inspect": "ir.module.module",
     "partner.accounting.search": "res.partner",
+    "invoice.search": "account.move",
+    "invoice.get": "account.move",
+    "invoice.payment_status.inspect": "account.move",
 }
 
 
@@ -165,6 +184,11 @@ class CliError(RuntimeError):
         request_id: str | None = None,
         details: dict[str, Any] | None = None,
         retryable: bool = False,
+        database: str | None = None,
+        company_id: int | None = None,
+        user_id: int | None = None,
+        model: str | None = None,
+        record_ids: list[int] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -174,6 +198,11 @@ class CliError(RuntimeError):
         self.request_id = request_id
         self.details = details or {}
         self.retryable = retryable
+        self.database = database
+        self.company_id = company_id
+        self.user_id = user_id
+        self.model = model
+        self.record_ids = record_ids or []
 
 
 class _JsonArgumentParser(argparse.ArgumentParser):
@@ -271,6 +300,16 @@ def _safe_request_id(request: dict[str, Any]) -> str | None:
 
 def _safe_capability(value: object) -> str:
     return value if isinstance(value, str) and value else "cli"
+
+
+def _verified_port_user_id(port: object | None) -> int | None:
+    if port is None:
+        return None
+    try:
+        value = getattr(port, "user_id")
+    except Exception:
+        return None
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else None
 
 
 def _decode_request(raw: str) -> dict[str, Any]:
@@ -522,6 +561,7 @@ def _execute_read(
         JournalEntryError,
         FinancialReportError,
         PartnerAccountingError,
+        InvoiceError,
     ) as exc:
         raise CliError(
             exc.code,
@@ -535,6 +575,7 @@ def _execute_read(
         ) from exc
     if port_factory is None:
         port_factory = _configured_port_factory
+    port: object | None = None
     try:
         port = port_factory(capability_id, request)
         data = handler(port, request)
@@ -544,7 +585,9 @@ def _execute_read(
         JournalEntryError,
         FinancialReportError,
         PartnerAccountingError,
+        InvoiceError,
     ) as exc:
+        verified_user_id = _verified_port_user_id(port)
         raise CliError(
             exc.code,
             str(exc),
@@ -554,6 +597,18 @@ def _execute_read(
             request_id=request_id,
             details=exc.details,
             retryable=exc.retryable,
+            database=(
+                request["context"]["database"] if verified_user_id is not None else None
+            ),
+            company_id=(
+                request["context"]["company_id"] if verified_user_id is not None else None
+            ),
+            user_id=verified_user_id,
+            model=(
+                _CAPABILITY_MODELS[capability_id]
+                if verified_user_id is not None
+                else None
+            ),
         ) from exc
     except ConfigError as exc:
         if exc.code in {"unconfigured", "database_unavailable"}:
@@ -614,7 +669,12 @@ def _execute_read(
                         if capability_id == "user.accounting_access.inspect"
                         else (
                             [data["id"]]
-                            if capability_id == "journal_entry.get"
+                            if capability_id
+                            in {
+                                "journal_entry.get",
+                                "invoice.get",
+                                "invoice.payment_status.inspect",
+                            }
                             else [item["id"] for item in data["items"]]
                         )
                     )
@@ -656,6 +716,12 @@ def _configured_port_factory(
         return OdooAccountListPort(client)
     if capability_id == "partner.accounting.search":
         return OdooPartnerAccountingPort(client)
+    if capability_id in {
+        "invoice.search",
+        "invoice.get",
+        "invoice.payment_status.inspect",
+    }:
+        return OdooInvoicePort(client)
     if capability_id in {"journal_entry.search", "journal_entry.get"}:
         return OdooJournalEntryPort(client)
     if capability_id == "user.accounting_access.inspect":
@@ -741,6 +807,11 @@ def main(
                 status=exc.status,
                 details=exc.details,
                 retryable=exc.retryable,
+                database=exc.database,
+                company_id=exc.company_id,
+                user_id=exc.user_id,
+                model=exc.model,
+                record_ids=exc.record_ids,
             ),
             output_stream,
         )

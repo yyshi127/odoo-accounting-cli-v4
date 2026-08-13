@@ -44,6 +44,9 @@ IMPLEMENTED_READS = {
         "diagnostic_accounting_environment_inspect"
     ),
     "partner.accounting.search": "partner_accounting_search",
+    "invoice.search": "invoice_search",
+    "invoice.get": "invoice_get",
+    "invoice.payment_status.inspect": "invoice_payment_status_inspect",
 }
 
 
@@ -176,6 +179,12 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
             expected_live_test = "tests/integration/test_accounting_access_live.py"
         elif capability_id == "partner.accounting.search":
             expected_live_test = "tests/integration/test_partner_accounting_live.py"
+        elif capability_id in {
+            "invoice.search",
+            "invoice.get",
+            "invoice.payment_status.inspect",
+        }:
+            expected_live_test = "tests/integration/test_invoices_live.py"
         elif capability_id in {
             "company.accounting_configuration.inspect",
             "diagnostic.accounting_environment.inspect",

@@ -5,14 +5,14 @@
 - G2: in progress (source snapshot, two provenance-bound synthetic databases,
   and accounting fixture v1 passed; full payment, assets/depreciation,
   deferrals, inventory valuation, and report golden cases remain pending)
-- G3: in progress (102-ID capability matrix frozen; seventeen read implementations
+- G3: in progress (102-ID capability matrix frozen; twenty read implementations
   and specialized contracts verified; remaining specialized contracts and the
   write state machine are pending)
 - G4: passed for official generation provenance and baseline review (initial
   generation, six focused refinement rounds, official test/validate, complete
   transcript, and independent adjudication recorded; generated code remains a
   non-authoritative adapter draft)
-- G5: in progress (real dual-environment bridge and seventeen read vertical slices
+- G5: in progress (real dual-environment bridge and twenty read vertical slices
   verified; remaining reads and reports pending)
 - G6-G10: not started
 - Release readiness: not ready

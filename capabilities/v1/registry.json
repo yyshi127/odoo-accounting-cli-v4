@@ -3792,8 +3792,8 @@
         ]
       },
       "schemas": {
-        "request": "schemas/v1/request.schema.json",
-        "response": "schemas/v1/response.schema.json"
+        "request": "schemas/v1/invoice.get.request.schema.json",
+        "response": "schemas/v1/invoice.get.response.schema.json"
       },
       "requirements": {
         "modules": [
@@ -3809,27 +3809,41 @@
           "account.group_account_readonly"
         ],
         "acl": [
+          "res.company:read",
           "account.move:read",
-          "account.move.line:read"
+          "account.move.line:read",
+          "account.journal:read",
+          "account.account:read",
+          "account.tax:read",
+          "product.product:read",
+          "res.currency:read",
+          "res.partner:read"
         ]
       },
       "strategies": {
         "preview": "not_applicable_read_only",
-        "execute": "implementation_pending",
-        "verify": "real_odoo_result_reread_and_schema_validation_pending",
+        "execute": "fixed_local_odoo_readonly_composite",
+        "verify": "same_transaction_result_and_v1_schema_validation",
         "idempotency": "not_applicable_read_only",
         "reverse": "not_applicable_read_only"
       },
       "tests": {
         "unit": {
-          "status": "planned",
-          "references": [],
-          "reason": "The unit definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_invoices.py",
+            "tests/unit/test_invoice_bridge.py",
+            "tests/unit/test_invoice_runtime.py",
+            "tests/unit/test_invoice_cli.py"
+          ],
+          "reason": "Unit tests cover the closed request, response, bridge, fixed Odoo runtime, and control-CLI contracts."
         },
         "integration": {
-          "status": "planned",
-          "references": [],
-          "reason": "The integration definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_invoices_live.py"
+          ],
+          "reason": "Live tests verify the fixed invoice reads against both dedicated synthetic databases and both configured companies."
         },
         "golden": {
           "status": "planned",
@@ -3843,9 +3857,9 @@
         }
       },
       "status": {
-        "value": "disabled",
-        "reason_code": "implementation_pending",
-        "reason": "The capability is frozen in the G3 matrix but has no implementation or allowlisted handler."
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."
       },
       "routing": {
         "object": "invoice",
@@ -3870,7 +3884,7 @@
           "user_login"
         ]
       },
-      "handler_key": null
+      "handler_key": "invoice_get"
     },
     "invoice.payment_status.inspect": {
       "summary": {
@@ -3886,19 +3900,25 @@
         "models": [
           "account.move",
           "account.move.line",
-          "account.payment"
+          "account.partial.reconcile",
+          "account.payment",
+          "account.payment.method",
+          "account.payment.method.line"
         ],
         "wizards": [],
         "report_handlers": [],
         "locations": [
           "account/models/account_move.py",
           "account/models/account_move_line.py",
-          "account/models/account_payment.py"
+          "account/models/account_partial_reconcile.py",
+          "account/models/account_payment.py",
+          "account/models/account_payment_method.py",
+          "account_payment/models/account_payment_method_line.py"
         ]
       },
       "schemas": {
-        "request": "schemas/v1/request.schema.json",
-        "response": "schemas/v1/response.schema.json"
+        "request": "schemas/v1/invoice.payment_status.inspect.request.schema.json",
+        "response": "schemas/v1/invoice.payment_status.inspect.response.schema.json"
       },
       "requirements": {
         "modules": [
@@ -3914,28 +3934,43 @@
           "account.group_account_readonly"
         ],
         "acl": [
+          "res.company:read",
           "account.move:read",
           "account.move.line:read",
-          "account.payment:read"
+          "account.journal:read",
+          "account.account:read",
+          "account.partial.reconcile:read",
+          "account.payment:read",
+          "account.payment.method:read",
+          "account.payment.method.line:read",
+          "res.currency:read",
+          "res.partner:read"
         ]
       },
       "strategies": {
         "preview": "not_applicable_read_only",
-        "execute": "implementation_pending",
-        "verify": "real_odoo_result_reread_and_schema_validation_pending",
+        "execute": "fixed_local_odoo_readonly_composite",
+        "verify": "same_transaction_result_and_v1_schema_validation",
         "idempotency": "not_applicable_read_only",
         "reverse": "not_applicable_read_only"
       },
       "tests": {
         "unit": {
-          "status": "planned",
-          "references": [],
-          "reason": "The unit definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_invoices.py",
+            "tests/unit/test_invoice_bridge.py",
+            "tests/unit/test_invoice_runtime.py",
+            "tests/unit/test_invoice_cli.py"
+          ],
+          "reason": "Unit tests cover the closed request, response, bridge, fixed Odoo runtime, and control-CLI contracts."
         },
         "integration": {
-          "status": "planned",
-          "references": [],
-          "reason": "The integration definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_invoices_live.py"
+          ],
+          "reason": "Live tests verify the fixed invoice reads against both dedicated synthetic databases and both configured companies."
         },
         "golden": {
           "status": "planned",
@@ -3949,9 +3984,9 @@
         }
       },
       "status": {
-        "value": "disabled",
-        "reason_code": "implementation_pending",
-        "reason": "The capability is frozen in the G3 matrix but has no implementation or allowlisted handler."
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."
       },
       "routing": {
         "object": "invoice.payment_status",
@@ -3976,7 +4011,7 @@
           "user_login"
         ]
       },
-      "handler_key": null
+      "handler_key": "invoice_payment_status_inspect"
     },
     "invoice.post": {
       "summary": {
@@ -4104,8 +4139,8 @@
         ]
       },
       "schemas": {
-        "request": "schemas/v1/request.schema.json",
-        "response": "schemas/v1/response.schema.json"
+        "request": "schemas/v1/invoice.search.request.schema.json",
+        "response": "schemas/v1/invoice.search.response.schema.json"
       },
       "requirements": {
         "modules": [
@@ -4121,27 +4156,38 @@
           "account.group_account_readonly"
         ],
         "acl": [
+          "res.company:read",
           "account.move:read",
-          "account.move.line:read"
+          "account.move.line:read",
+          "account.journal:read",
+          "res.currency:read",
+          "res.partner:read"
         ]
       },
       "strategies": {
         "preview": "not_applicable_read_only",
-        "execute": "implementation_pending",
-        "verify": "real_odoo_result_reread_and_schema_validation_pending",
+        "execute": "fixed_local_odoo_readonly_composite",
+        "verify": "same_transaction_result_and_v1_schema_validation",
         "idempotency": "not_applicable_read_only",
         "reverse": "not_applicable_read_only"
       },
       "tests": {
         "unit": {
-          "status": "planned",
-          "references": [],
-          "reason": "The unit definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_invoices.py",
+            "tests/unit/test_invoice_bridge.py",
+            "tests/unit/test_invoice_runtime.py",
+            "tests/unit/test_invoice_cli.py"
+          ],
+          "reason": "Unit tests cover the closed request, response, cursor, bridge, fixed Odoo runtime, and control-CLI contracts."
         },
         "integration": {
-          "status": "planned",
-          "references": [],
-          "reason": "The integration definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_invoices_live.py"
+          ],
+          "reason": "Live tests verify the fixed invoice reads against both dedicated synthetic databases and both configured companies."
         },
         "golden": {
           "status": "planned",
@@ -4155,9 +4201,9 @@
         }
       },
       "status": {
-        "value": "disabled",
-        "reason_code": "implementation_pending",
-        "reason": "The capability is frozen in the G3 matrix but has no implementation or allowlisted handler."
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."
       },
       "routing": {
         "object": "invoice",
@@ -4182,7 +4228,7 @@
           "user_login"
         ]
       },
-      "handler_key": null
+      "handler_key": "invoice_search"
     },
     "invoice.singapore.pint.export": {
       "summary": {

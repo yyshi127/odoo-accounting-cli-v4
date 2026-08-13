@@ -76,6 +76,11 @@ def error_document(
     status: str = "failed",
     details: dict[str, Any] | None = None,
     retryable: bool = False,
+    database: str | None = None,
+    company_id: int | None = None,
+    user_id: int | None = None,
+    model: str | None = None,
+    record_ids: list[int] | None = None,
 ) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
@@ -91,7 +96,13 @@ def error_document(
             "details": details or {},
             "retryable": retryable,
         },
-        "odoo": _odoo_metadata(),
+        "odoo": _odoo_metadata(
+            database=database,
+            company_id=company_id,
+            user_id=user_id,
+            model=model,
+            record_ids=record_ids,
+        ),
         "audit": _audit_metadata(),
     }
 

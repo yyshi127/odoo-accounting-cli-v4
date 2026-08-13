@@ -133,12 +133,158 @@ _FINANCIAL_REPORT_ACTIONS = {
         "mode": "range",
     },
 }
+_INVOICE_ACTIONS = {
+    "account.move.invoice.search_page",
+    "account.move.invoice.get",
+    "account.move.invoice.payment_status.inspect",
+}
+_INVOICE_DOCUMENT_TYPES = (
+    "out_invoice",
+    "out_refund",
+    "in_invoice",
+    "in_refund",
+)
+_INVOICE_STATES = ("draft", "posted", "cancel")
+_INVOICE_PAYMENT_STATES = (
+    "not_paid",
+    "in_payment",
+    "paid",
+    "partial",
+    "reversed",
+    "blocked",
+    "invoicing_legacy",
+)
+_INVOICE_HEADER_FIELDS = (
+    "id",
+    "name",
+    "move_type",
+    "state",
+    "date",
+    "invoice_date",
+    "invoice_date_due",
+    "ref",
+    "payment_reference",
+    "invoice_origin",
+    "journal_id",
+    "company_id",
+    "currency_id",
+    "partner_id",
+    "amount_untaxed",
+    "amount_tax",
+    "amount_total",
+    "amount_residual",
+    "payment_state",
+)
+_INVOICE_STATUS_MOVE_FIELDS = (
+    "id",
+    "name",
+    "move_type",
+    "state",
+    "payment_state",
+    "company_id",
+    "currency_id",
+    "company_currency_id",
+    "amount_total",
+    "amount_residual",
+    "matched_payment_ids",
+)
+_INVOICE_LINE_TYPES = (
+    "product",
+    "line_section",
+    "line_subsection",
+    "line_note",
+)
+_INVOICE_LINE_FIELDS = (
+    "id",
+    "move_id",
+    "sequence",
+    "display_type",
+    "name",
+    "product_id",
+    "account_id",
+    "quantity",
+    "price_unit",
+    "discount",
+    "price_subtotal",
+    "price_total",
+    "tax_ids",
+)
+_INVOICE_TERM_LINE_FIELDS = (
+    "id",
+    "move_id",
+    "account_id",
+    "date_maturity",
+    "balance",
+    "amount_currency",
+    "amount_residual",
+    "amount_residual_currency",
+    "currency_id",
+    "reconciled",
+    "matching_number",
+)
+_INVOICE_PARTIAL_FIELDS = (
+    "id",
+    "max_date",
+    "amount",
+    "debit_amount_currency",
+    "credit_amount_currency",
+    "debit_move_id",
+    "credit_move_id",
+    "exchange_move_id",
+)
+_INVOICE_COUNTERPART_LINE_FIELDS = ("id", "move_id")
+_INVOICE_COUNTERPART_MOVE_FIELDS = (
+    "id",
+    "name",
+    "move_type",
+    "state",
+    "date",
+    "origin_payment_id",
+)
+_INVOICE_PAYMENT_FIELDS = (
+    "id",
+    "name",
+    "state",
+    "date",
+    "payment_type",
+    "partner_type",
+    "amount",
+    "currency_id",
+    "journal_id",
+    "payment_method_line_id",
+    "move_id",
+    "is_reconciled",
+    "is_matched",
+)
+_INVOICE_SEARCH_MODELS = (
+    "res.company",
+    "account.move",
+    "account.move.line",
+    "account.journal",
+    "res.currency",
+    "res.partner",
+)
+_INVOICE_GET_MODELS = (
+    *_INVOICE_SEARCH_MODELS,
+    "account.account",
+    "account.tax",
+    "product.product",
+)
+_INVOICE_STATUS_MODELS = (
+    *_INVOICE_SEARCH_MODELS,
+    "account.account",
+    "account.partial.reconcile",
+    "account.payment",
+    "account.payment.method",
+    "account.payment.method.line",
+)
 _ACTIONS = {
     "account.account.read_page",
     "res.company.accounting_context.read_page",
     *_MASTER_DATA_ACTIONS,
     "account.move.journal_entry.search_page",
     "account.move.journal_entry.get",
+    *_INVOICE_ACTIONS,
     "res.partner.accounting.search_page",
     *_FINANCIAL_REPORT_ACTIONS,
     "res.users.accounting_access.inspect",
@@ -1326,6 +1472,943 @@ def _dispatch_journal_entry_get(
     }
 
 
+def _invoice_choices_are_canonical(value: Any, allowed: tuple[str, ...]) -> bool:
+    return (
+        isinstance(value, list)
+        and all(isinstance(item, str) for item in value)
+        and len(value) == len(set(value))
+        and value == [item for item in allowed if item in value]
+    )
+
+
+def _invoice_search_payload_is_valid(payload: Any) -> bool:
+    if not isinstance(payload, dict) or set(payload) != {
+        "company_id",
+        "after",
+        "limit",
+        "filters",
+    }:
+        return False
+    if (
+        not isinstance(payload["company_id"], int)
+        or isinstance(payload["company_id"], bool)
+        or payload["company_id"] <= 0
+        or not isinstance(payload["limit"], int)
+        or isinstance(payload["limit"], bool)
+        or not 1 <= payload["limit"] <= 1001
+    ):
+        return False
+    after = payload["after"]
+    if after is not None and (
+        not isinstance(after, list)
+        or len(after) != 2
+        or not _is_canonical_date(after[0])
+        or not isinstance(after[1], int)
+        or isinstance(after[1], bool)
+        or after[1] <= 0
+    ):
+        return False
+    filters = payload["filters"]
+    if not isinstance(filters, dict) or set(filters) != {
+        "date_from",
+        "date_to",
+        "document_types",
+        "states",
+        "payment_states",
+        "journal_id",
+        "partner_id",
+        "query",
+    }:
+        return False
+    for key in ("date_from", "date_to"):
+        if filters[key] is not None and not _is_canonical_date(filters[key]):
+            return False
+    if (
+        filters["date_from"] is not None
+        and filters["date_to"] is not None
+        and filters["date_from"] > filters["date_to"]
+    ):
+        return False
+    if not _invoice_choices_are_canonical(
+        filters["document_types"], _INVOICE_DOCUMENT_TYPES
+    ) or not _invoice_choices_are_canonical(filters["states"], _INVOICE_STATES):
+        return False
+    if not _invoice_choices_are_canonical(
+        filters["payment_states"], _INVOICE_PAYMENT_STATES
+    ):
+        return False
+    for key in ("journal_id", "partner_id"):
+        value = filters[key]
+        if value is not None and (
+            not isinstance(value, int) or isinstance(value, bool) or value <= 0
+        ):
+            return False
+    query = filters["query"]
+    return query is None or (
+        isinstance(query, str)
+        and query == query.strip()
+        and 1 <= len(query) <= 200
+    )
+
+
+def _invoice_id_payload_is_valid(payload: Any) -> bool:
+    return (
+        isinstance(payload, dict)
+        and set(payload) == {"company_id", "move_id"}
+        and isinstance(payload["company_id"], int)
+        and not isinstance(payload["company_id"], bool)
+        and payload["company_id"] > 0
+        and isinstance(payload["move_id"], int)
+        and not isinstance(payload["move_id"], bool)
+        and payload["move_id"] > 0
+    )
+
+
+def _invoice_gate(
+    env: Any, company_id: int, required_models: tuple[str, ...]
+) -> tuple[bool, bool, bool]:
+    if env.registry.get("res.company") is None:
+        return False, False, False
+    company_read_allowed = bool(env["res.company"].has_access("read"))
+    company_visible = bool(
+        company_read_allowed
+        and env["res.company"].search_count([("id", "=", company_id)], limit=1)
+    )
+    module_installed = all(
+        env.registry.get(model_name) is not None
+        for model_name in required_models
+        if model_name != "res.company"
+    )
+    if not module_installed:
+        return company_visible, False, False
+    access_allowed = bool(
+        company_visible
+        and all(
+            env[model_name].has_access("read")
+            for model_name in required_models
+            if model_name != "res.company"
+        )
+    )
+    return company_visible, module_installed, access_allowed
+
+
+def _empty_invoice_result(
+    env: Any,
+    *,
+    company_visible: bool,
+    module_installed: bool,
+    access_allowed: bool,
+    result_key: str,
+) -> dict[str, Any]:
+    return {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        result_key: [] if result_key == "rows" else None,
+    }
+
+
+def _invoice_domain(
+    company_id: int, after: list[Any] | None, filters: dict[str, Any]
+) -> list[Any]:
+    from odoo.osv import expression
+
+    document_types = filters["document_types"] or list(_INVOICE_DOCUMENT_TYPES)
+    domains: list[list[Any]] = [
+        [
+            ("company_id", "=", company_id),
+            ("move_type", "in", document_types),
+        ]
+    ]
+    if filters["date_from"] is not None:
+        domains.append([("date", ">=", filters["date_from"])])
+    if filters["date_to"] is not None:
+        domains.append([("date", "<=", filters["date_to"])])
+    if filters["states"]:
+        domains.append([("state", "in", filters["states"])])
+    if filters["payment_states"]:
+        domains.append([("payment_state", "in", filters["payment_states"])])
+    if filters["journal_id"] is not None:
+        domains.append([("journal_id", "=", filters["journal_id"])])
+    if filters["partner_id"] is not None:
+        domains.append([("partner_id", "=", filters["partner_id"])])
+    if filters["query"] is not None:
+        domains.append(
+            [
+                "|",
+                "|",
+                "|",
+                ("name", "ilike", filters["query"]),
+                ("ref", "ilike", filters["query"]),
+                ("payment_reference", "ilike", filters["query"]),
+                ("invoice_origin", "ilike", filters["query"]),
+            ]
+        )
+    if after is not None:
+        domains.append(
+            [
+                "|",
+                ("date", "<", after[0]),
+                "&",
+                ("date", "=", after[0]),
+                ("id", "<", after[1]),
+            ]
+        )
+    return expression.AND(domains)
+
+
+def _invoice_header_related(
+    env: Any, moves: list[dict[str, Any]], company_id: int
+) -> dict[str, dict[int, dict[str, Any]]]:
+    journal_ids = {
+        record_id
+        for move in moves
+        if (record_id := _reference_id(move.get("journal_id"))) is not None
+    }
+    currency_ids = {
+        record_id
+        for move in moves
+        if (record_id := _reference_id(move.get("currency_id"))) is not None
+    }
+    partner_ids = {
+        record_id
+        for move in moves
+        if (record_id := _reference_id(move.get("partner_id"))) is not None
+    }
+    return {
+        "journals": _related_rows(
+            env, "account.journal", journal_ids, ("code", "name"), company_id
+        ),
+        "currencies": _related_rows(
+            env, "res.currency", currency_ids, ("name",), company_id
+        ),
+        "partners": _related_rows(
+            env, "res.partner", partner_ids, ("complete_name",), company_id
+        ),
+    }
+
+
+def _optional_date(value: Any) -> str | None:
+    return None if value in (False, None) else _date_string(value)
+
+
+def _invoice_header(
+    raw: dict[str, Any],
+    related: dict[str, dict[int, dict[str, Any]]],
+    company_id: int,
+) -> dict[str, Any]:
+    if set(raw) != set(_INVOICE_HEADER_FIELDS):
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    row = dict(raw)
+    record_id = row.get("id")
+    journal_id = _reference_id(row.pop("journal_id"))
+    row_company_id = _reference_id(row.pop("company_id"))
+    currency_id = _reference_id(row.pop("currency_id"))
+    partner_id = _reference_id(row.pop("partner_id"))
+    if (
+        not isinstance(record_id, int)
+        or isinstance(record_id, bool)
+        or record_id <= 0
+        or row_company_id != company_id
+    ):
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    row["name"] = _optional_string(row["name"])
+    row["date"] = _date_string(row["date"])
+    row["invoice_date"] = _optional_date(row["invoice_date"])
+    row["invoice_date_due"] = _optional_date(row["invoice_date_due"])
+    for field in ("ref", "payment_reference", "invoice_origin"):
+        row[field] = _optional_string(row[field])
+    row["journal"] = _journal_reference(
+        _safe_related(related, "journals", journal_id)
+    )
+    row["company_id"] = row_company_id
+    row["currency"] = _currency_reference(
+        _safe_related(related, "currencies", currency_id)
+    )
+    row["partner"] = (
+        _named_reference(_safe_related(related, "partners", partner_id))
+        if partner_id is not None
+        else None
+    )
+    for field in (
+        "amount_untaxed",
+        "amount_tax",
+        "amount_total",
+        "amount_residual",
+    ):
+        row[field] = _decimal_string(row[field])
+    return row
+
+
+def _dispatch_invoice_search(
+    env: Any, payload: dict[str, Any], company_id: int
+) -> dict[str, Any]:
+    if not _invoice_search_payload_is_valid(payload):
+        raise RuntimeFailure(
+            "bridge_protocol_error", "The bridge action payload is invalid.", exit_code=7
+        )
+    if payload["company_id"] != company_id:
+        raise RuntimeFailure(
+            "company_unavailable", "The company is unavailable.", exit_code=3
+        )
+    company_visible, module_installed, access_allowed = _invoice_gate(
+        env, company_id, _INVOICE_SEARCH_MODELS
+    )
+    if not access_allowed:
+        return _empty_invoice_result(
+            env,
+            company_visible=company_visible,
+            module_installed=module_installed,
+            access_allowed=access_allowed,
+            result_key="rows",
+        )
+    moves = (
+        env["account.move"]
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+        .search_read(
+            _invoice_domain(company_id, payload["after"], payload["filters"]),
+            fields=list(_INVOICE_HEADER_FIELDS),
+            limit=payload["limit"],
+            order="date desc,id desc",
+        )
+    )
+    related = _invoice_header_related(env, moves, company_id)
+    rows = [_invoice_header(move, related, company_id) for move in moves]
+    return {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        "rows": rows,
+    }
+
+
+def _many2many_ids(value: Any) -> list[int]:
+    if value in (False, None):
+        return []
+    if (
+        not isinstance(value, list)
+        or any(
+            not isinstance(record_id, int)
+            or isinstance(record_id, bool)
+            or record_id <= 0
+            for record_id in value
+        )
+        or len(value) != len(set(value))
+    ):
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    return sorted(value)
+
+
+def _dispatch_invoice_get(
+    env: Any, payload: dict[str, Any], company_id: int
+) -> dict[str, Any]:
+    if not _invoice_id_payload_is_valid(payload):
+        raise RuntimeFailure(
+            "bridge_protocol_error", "The bridge action payload is invalid.", exit_code=7
+        )
+    if payload["company_id"] != company_id:
+        raise RuntimeFailure(
+            "company_unavailable", "The company is unavailable.", exit_code=3
+        )
+    company_visible, module_installed, access_allowed = _invoice_gate(
+        env, company_id, _INVOICE_GET_MODELS
+    )
+    if not access_allowed:
+        return _empty_invoice_result(
+            env,
+            company_visible=company_visible,
+            module_installed=module_installed,
+            access_allowed=access_allowed,
+            result_key="invoice",
+        )
+    moves = (
+        env["account.move"]
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+        .search_read(
+            [
+                ("id", "=", payload["move_id"]),
+                ("company_id", "=", company_id),
+                ("move_type", "in", list(_INVOICE_DOCUMENT_TYPES)),
+            ],
+            fields=list(_INVOICE_HEADER_FIELDS),
+            limit=1,
+        )
+    )
+    if not moves:
+        return _empty_invoice_result(
+            env,
+            company_visible=company_visible,
+            module_installed=module_installed,
+            access_allowed=access_allowed,
+            result_key="invoice",
+        )
+    lines = (
+        env["account.move.line"]
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+        .search_read(
+            [
+                ("move_id", "=", payload["move_id"]),
+                ("display_type", "in", list(_INVOICE_LINE_TYPES)),
+            ],
+            fields=list(_INVOICE_LINE_FIELDS),
+            order="sequence,id",
+        )
+    )
+    account_ids = {
+        record_id
+        for line in lines
+        if (record_id := _reference_id(line.get("account_id"))) is not None
+    }
+    product_ids = {
+        record_id
+        for line in lines
+        if (record_id := _reference_id(line.get("product_id"))) is not None
+    }
+    line_tax_ids = {line["id"]: _many2many_ids(line.get("tax_ids")) for line in lines}
+    tax_ids = {record_id for values in line_tax_ids.values() for record_id in values}
+    accounts = _related_rows(
+        env, "account.account", account_ids, ("code", "name"), company_id
+    )
+    taxes = _related_rows(
+        env,
+        "account.tax",
+        tax_ids,
+        ("name", "type_tax_use", "amount_type", "amount", "price_include"),
+        company_id,
+    )
+    products = _related_rows(
+        env, "product.product", product_ids, ("display_name",), company_id
+    )
+    related = _invoice_header_related(env, moves, company_id)
+    invoice = _invoice_header(moves[0], related, company_id)
+    normalized_lines: list[dict[str, Any]] = []
+    for raw in lines:
+        if set(raw) != set(_INVOICE_LINE_FIELDS):
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        line = dict(raw)
+        line_id = line.get("id")
+        if (
+            not isinstance(line_id, int)
+            or isinstance(line_id, bool)
+            or line_id <= 0
+            or _reference_id(line.pop("move_id")) != invoice["id"]
+        ):
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        product_id = _reference_id(line.pop("product_id"))
+        account_id = _reference_id(line.pop("account_id"))
+        tax_values = line_tax_ids[line_id]
+        line.pop("tax_ids")
+        line["display_type"] = _optional_string(line["display_type"])
+        line["name"] = _optional_string(line["name"])
+        line["product"] = (
+            {
+                "id": product_id,
+                "name": products[product_id]["display_name"],
+            }
+            if product_id is not None and product_id in products
+            else None
+        )
+        line["account"] = (
+            _account_reference(accounts[account_id])
+            if account_id is not None and account_id in accounts
+            else None
+        )
+        if (
+            line["display_type"]
+            in {"line_section", "line_subsection", "line_note"}
+        ) != (line["account"] is None):
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        for field in (
+            "quantity",
+            "price_unit",
+            "discount",
+            "price_subtotal",
+            "price_total",
+        ):
+            line[field] = _decimal_string(line[field])
+        line["taxes"] = []
+        for tax_id in tax_values:
+            tax = taxes[tax_id]
+            if not isinstance(tax.get("price_include"), bool):
+                raise RuntimeFailure(
+                    "odoo_runtime_error",
+                    "The Odoo runtime request failed.",
+                    exit_code=7,
+                )
+            line["taxes"].append(
+                {
+                    "id": tax_id,
+                    "name": tax["name"],
+                    "type_tax_use": tax["type_tax_use"],
+                    "amount_type": tax["amount_type"],
+                    "amount": _decimal_string(tax["amount"]),
+                    "price_include": tax["price_include"],
+                }
+            )
+        normalized_lines.append(line)
+    invoice["lines"] = normalized_lines
+    return {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        "invoice": invoice,
+    }
+
+
+def _indexed_rows(
+    rows: list[dict[str, Any]], expected_ids: set[int]
+) -> dict[int, dict[str, Any]]:
+    result: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        record_id = row.get("id")
+        if (
+            not isinstance(record_id, int)
+            or isinstance(record_id, bool)
+            or record_id not in expected_ids
+            or record_id in result
+        ):
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        result[record_id] = row
+    if set(result) != expected_ids:
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    return result
+
+
+def _dispatch_invoice_payment_status(
+    env: Any, payload: dict[str, Any], company_id: int
+) -> dict[str, Any]:
+    if not _invoice_id_payload_is_valid(payload):
+        raise RuntimeFailure(
+            "bridge_protocol_error", "The bridge action payload is invalid.", exit_code=7
+        )
+    if payload["company_id"] != company_id:
+        raise RuntimeFailure(
+            "company_unavailable", "The company is unavailable.", exit_code=3
+        )
+    company_visible, module_installed, access_allowed = _invoice_gate(
+        env, company_id, _INVOICE_STATUS_MODELS
+    )
+    if not access_allowed:
+        return _empty_invoice_result(
+            env,
+            company_visible=company_visible,
+            module_installed=module_installed,
+            access_allowed=access_allowed,
+            result_key="payment_status",
+        )
+    moves = (
+        env["account.move"]
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+        .search_read(
+            [
+                ("id", "=", payload["move_id"]),
+                ("company_id", "=", company_id),
+                ("move_type", "in", list(_INVOICE_DOCUMENT_TYPES)),
+            ],
+            fields=list(_INVOICE_STATUS_MOVE_FIELDS),
+            limit=1,
+        )
+    )
+    if not moves:
+        return _empty_invoice_result(
+            env,
+            company_visible=company_visible,
+            module_installed=module_installed,
+            access_allowed=access_allowed,
+            result_key="payment_status",
+        )
+    move = dict(moves[0])
+    if set(move) != set(_INVOICE_STATUS_MOVE_FIELDS):
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    move_id = move.get("id")
+    move_company_id = _reference_id(move.pop("company_id"))
+    move_currency_id = _reference_id(move.pop("currency_id"))
+    company_currency_id = _reference_id(move.pop("company_currency_id"))
+    if (
+        not isinstance(move_id, int)
+        or isinstance(move_id, bool)
+        or move_id != payload["move_id"]
+        or move_company_id != company_id
+        or move_currency_id is None
+        or company_currency_id is None
+    ):
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+
+    term_lines = (
+        env["account.move.line"]
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+        .search_read(
+            [
+                ("move_id", "=", move_id),
+                (
+                    "account_id.account_type",
+                    "in",
+                    ["asset_receivable", "liability_payable"],
+                ),
+            ],
+            fields=list(_INVOICE_TERM_LINE_FIELDS),
+            order="id",
+        )
+    )
+    term_ids = {
+        line_id
+        for line in term_lines
+        if isinstance((line_id := line.get("id")), int)
+        and not isinstance(line_id, bool)
+        and line_id > 0
+    }
+    if len(term_ids) != len(term_lines):
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    account_ids = {
+        record_id
+        for line in term_lines
+        if (record_id := _reference_id(line.get("account_id"))) is not None
+    }
+    accounts = _related_rows(
+        env,
+        "account.account",
+        account_ids,
+        ("code", "name", "account_type"),
+        company_id,
+    )
+
+    partials: list[dict[str, Any]] = []
+    if term_ids:
+        partials = (
+            env["account.partial.reconcile"]
+            .with_context(active_test=False, allowed_company_ids=[company_id])
+            .search_read(
+                [
+                    "|",
+                    ("debit_move_id", "in", sorted(term_ids)),
+                    ("credit_move_id", "in", sorted(term_ids)),
+                ],
+                fields=list(_INVOICE_PARTIAL_FIELDS),
+                order="max_date,id",
+            )
+        )
+    partial_details: list[dict[str, Any]] = []
+    counterpart_line_ids: set[int] = set()
+    observed_partial_ids: set[int] = set()
+    for partial in partials:
+        if set(partial) != set(_INVOICE_PARTIAL_FIELDS):
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        partial_id = partial.get("id")
+        debit_line_id = _reference_id(partial["debit_move_id"])
+        credit_line_id = _reference_id(partial["credit_move_id"])
+        debit_is_invoice = debit_line_id in term_ids
+        credit_is_invoice = credit_line_id in term_ids
+        if (
+            not isinstance(partial_id, int)
+            or isinstance(partial_id, bool)
+            or partial_id <= 0
+            or partial_id in observed_partial_ids
+            or debit_is_invoice == credit_is_invoice
+        ):
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        observed_partial_ids.add(partial_id)
+        invoice_line_id = debit_line_id if debit_is_invoice else credit_line_id
+        counterpart_line_id = credit_line_id if debit_is_invoice else debit_line_id
+        if invoice_line_id is None or counterpart_line_id is None:
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        partial_details.append(
+            {
+                "raw": partial,
+                "invoice_line_id": invoice_line_id,
+                "counterpart_line_id": counterpart_line_id,
+                "invoice_amount": partial[
+                    "debit_amount_currency"
+                    if debit_is_invoice
+                    else "credit_amount_currency"
+                ],
+            }
+        )
+        counterpart_line_ids.add(counterpart_line_id)
+
+    counterpart_lines: dict[int, dict[str, Any]] = {}
+    if counterpart_line_ids:
+        rows = (
+            env["account.move.line"]
+            .with_context(active_test=False, allowed_company_ids=[company_id])
+            .search_read(
+                [("id", "in", sorted(counterpart_line_ids))],
+                fields=list(_INVOICE_COUNTERPART_LINE_FIELDS),
+                limit=len(counterpart_line_ids),
+                order="id",
+            )
+        )
+        counterpart_lines = _indexed_rows(rows, counterpart_line_ids)
+    counterpart_move_ids = {
+        record_id
+        for row in counterpart_lines.values()
+        if (record_id := _reference_id(row.get("move_id"))) is not None
+    }
+    counterpart_moves: dict[int, dict[str, Any]] = {}
+    if counterpart_move_ids:
+        rows = (
+            env["account.move"]
+            .with_context(active_test=False, allowed_company_ids=[company_id])
+            .search_read(
+                [
+                    ("id", "in", sorted(counterpart_move_ids)),
+                    ("company_id", "=", company_id),
+                ],
+                fields=list(_INVOICE_COUNTERPART_MOVE_FIELDS),
+                limit=len(counterpart_move_ids),
+                order="id",
+            )
+        )
+        counterpart_moves = _indexed_rows(rows, counterpart_move_ids)
+    payment_ids = set(_many2many_ids(move.pop("matched_payment_ids")))
+    payment_ids.update(
+        record_id
+        for row in counterpart_moves.values()
+        if (record_id := _reference_id(row.get("origin_payment_id"))) is not None
+    )
+    payment_rows: list[dict[str, Any]] = []
+    if payment_ids:
+        payment_rows = (
+            env["account.payment"]
+            .with_context(active_test=False, allowed_company_ids=[company_id])
+            .search_read(
+                [
+                    ("id", "in", sorted(payment_ids)),
+                    ("company_id", "=", company_id),
+                ],
+                fields=list(_INVOICE_PAYMENT_FIELDS),
+                limit=len(payment_ids),
+                order="date desc,id desc",
+            )
+        )
+        _indexed_rows(payment_rows, payment_ids)
+
+    method_line_ids = {
+        record_id
+        for row in payment_rows
+        if (record_id := _reference_id(row.get("payment_method_line_id"))) is not None
+    }
+    method_lines = _related_rows(
+        env,
+        "account.payment.method.line",
+        method_line_ids,
+        ("payment_method_id",),
+        company_id,
+    )
+    method_ids = {
+        record_id
+        for row in method_lines.values()
+        if (record_id := _reference_id(row.get("payment_method_id"))) is not None
+    }
+    methods = _related_rows(
+        env,
+        "account.payment.method",
+        method_ids,
+        ("code", "name"),
+        company_id,
+    )
+    journal_ids = {
+        record_id
+        for row in payment_rows
+        if (record_id := _reference_id(row.get("journal_id"))) is not None
+    }
+    journals = _related_rows(
+        env, "account.journal", journal_ids, ("code", "name"), company_id
+    )
+    currency_ids = {move_currency_id, company_currency_id}
+    currency_ids.update(
+        record_id
+        for row in term_lines
+        if (record_id := _reference_id(row.get("currency_id"))) is not None
+    )
+    currency_ids.update(
+        record_id
+        for row in payment_rows
+        if (record_id := _reference_id(row.get("currency_id"))) is not None
+    )
+    currencies = _related_rows(
+        env, "res.currency", currency_ids, ("name",), company_id
+    )
+
+    normalized_term_lines: list[dict[str, Any]] = []
+    term_currency_ids: dict[int, int] = {}
+    for raw in term_lines:
+        if set(raw) != set(_INVOICE_TERM_LINE_FIELDS):
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        line = dict(raw)
+        line_id = line["id"]
+        if _reference_id(line.pop("move_id")) != move_id:
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        account_id = _reference_id(line.pop("account_id"))
+        line_currency_id = _reference_id(line.pop("currency_id"))
+        if account_id is None or line_currency_id is None:
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        account = _account_reference(accounts[account_id])
+        account_type = accounts[account_id].get("account_type")
+        if account_type not in {"asset_receivable", "liability_payable"}:
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        account["account_type"] = account_type
+        line["account"] = account
+        line["date_maturity"] = _optional_date(line["date_maturity"])
+        for field in (
+            "balance",
+            "amount_currency",
+            "amount_residual",
+            "amount_residual_currency",
+        ):
+            line[field] = _decimal_string(line[field])
+        line["currency"] = _currency_reference(currencies[line_currency_id])
+        if not isinstance(line.get("reconciled"), bool):
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        line["matching_number"] = _optional_string(line["matching_number"])
+        term_currency_ids[line_id] = line_currency_id
+        normalized_term_lines.append(line)
+
+    reconciliations: list[dict[str, Any]] = []
+    for detail in partial_details:
+        partial = detail["raw"]
+        counterpart_line = counterpart_lines[detail["counterpart_line_id"]]
+        counterpart_move_id = _reference_id(counterpart_line.get("move_id"))
+        if counterpart_move_id is None:
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        counterpart_move = counterpart_moves[counterpart_move_id]
+        payment_id = _reference_id(counterpart_move.get("origin_payment_id"))
+        reconciliation_currency_id = term_currency_ids[detail["invoice_line_id"]]
+        reconciliations.append(
+            {
+                "id": partial["id"],
+                "date": _date_string(partial["max_date"]),
+                "amount": _decimal_string(detail["invoice_amount"]),
+                "company_amount": _decimal_string(partial["amount"]),
+                "currency": _currency_reference(
+                    currencies[reconciliation_currency_id]
+                ),
+                "company_currency": _currency_reference(
+                    currencies[company_currency_id]
+                ),
+                "counterpart_line_id": detail["counterpart_line_id"],
+                "counterpart_move": {
+                    "id": counterpart_move_id,
+                    "name": _optional_string(counterpart_move["name"]),
+                    "move_type": counterpart_move["move_type"],
+                    "state": counterpart_move["state"],
+                    "date": _date_string(counterpart_move["date"]),
+                },
+                "payment_id": payment_id,
+                "exchange_move_id": _reference_id(partial["exchange_move_id"]),
+            }
+        )
+
+    payments: list[dict[str, Any]] = []
+    for raw in payment_rows:
+        if set(raw) != set(_INVOICE_PAYMENT_FIELDS):
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        payment = dict(raw)
+        currency_id = _reference_id(payment.pop("currency_id"))
+        journal_id = _reference_id(payment.pop("journal_id"))
+        method_line_id = _reference_id(payment.pop("payment_method_line_id"))
+        payment_move_id = _reference_id(payment.pop("move_id"))
+        if currency_id is None or journal_id is None or method_line_id is None:
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        method_line = method_lines[method_line_id]
+        method_id = _reference_id(method_line.get("payment_method_id"))
+        if method_id is None:
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        payment["name"] = _optional_string(payment["name"])
+        payment["date"] = _date_string(payment["date"])
+        payment["amount"] = _decimal_string(payment["amount"])
+        payment["currency"] = _currency_reference(currencies[currency_id])
+        payment["journal"] = _journal_reference(journals[journal_id])
+        method = methods[method_id]
+        if any(
+            not isinstance(method.get(key), str) or not method[key].strip()
+            for key in ("code", "name")
+        ):
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        payment["payment_method"] = {
+            "id": method_id,
+            "code": method["code"],
+            "name": method["name"],
+        }
+        payment["move_id"] = payment_move_id
+        if not isinstance(payment.get("is_reconciled"), bool) or not isinstance(
+            payment.get("is_matched"), bool
+        ):
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        payments.append(payment)
+
+    move["name"] = _optional_string(move["name"])
+    move["company_id"] = move_company_id
+    move["currency"] = _currency_reference(currencies[move_currency_id])
+    move["company_currency"] = _currency_reference(
+        currencies[company_currency_id]
+    )
+    move["amount_total"] = _decimal_string(move["amount_total"])
+    move["amount_residual"] = _decimal_string(move["amount_residual"])
+    move["receivable_payable_lines"] = normalized_term_lines
+    move["reconciliations"] = reconciliations
+    move["payments"] = payments
+    return {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        "payment_status": move,
+    }
+
+
 def _partner_accounting_payload_is_valid(payload: Any, company_id: int) -> bool:
     if not isinstance(payload, dict) or set(payload) != {
         "company_id",
@@ -2178,6 +3261,12 @@ def _dispatch(
         return _dispatch_journal_entry_search(env, payload, company_id)
     if action == "account.move.journal_entry.get":
         return _dispatch_journal_entry_get(env, payload, company_id)
+    if action == "account.move.invoice.search_page":
+        return _dispatch_invoice_search(env, payload, company_id)
+    if action == "account.move.invoice.get":
+        return _dispatch_invoice_get(env, payload, company_id)
+    if action == "account.move.invoice.payment_status.inspect":
+        return _dispatch_invoice_payment_status(env, payload, company_id)
     if action == "res.partner.accounting.search_page":
         return _dispatch_partner_accounting_search(env, payload, company_id)
     if action in _FINANCIAL_REPORT_ACTIONS:
