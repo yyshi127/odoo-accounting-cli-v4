@@ -17,12 +17,17 @@ from odoo_accounting_cli_v4 import __version__
 from odoo_accounting_cli_v4.bridge.account_accounts import OdooAccountListPort
 from odoo_accounting_cli_v4.bridge.client import BridgeError, OdooBridgeClient
 from odoo_accounting_cli_v4.bridge.financial_reports import OdooFinancialReportPort
+from odoo_accounting_cli_v4.bridge.accounting_access import OdooAccountingAccessPort
 from odoo_accounting_cli_v4.bridge.journal_entries import OdooJournalEntryPort
 from odoo_accounting_cli_v4.bridge.master_data import OdooMasterDataPort
 from odoo_accounting_cli_v4.capabilities.account_account_list import (
     AccountListError,
     read_account_accounts,
     validate_account_list_request,
+)
+from odoo_accounting_cli_v4.capabilities.accounting_access import (
+    read_accounting_access,
+    validate_accounting_access_request,
 )
 from odoo_accounting_cli_v4.capabilities.master_data_lists import (
     MasterDataListError,
@@ -78,6 +83,7 @@ _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
     "report_profit_and_loss": read_profit_and_loss,
     "report_cash_flow": read_cash_flow,
     "report_tax": read_tax_report,
+    "user_accounting_access_inspect": read_accounting_access,
 }
 _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "account_account_list": validate_account_list_request,
@@ -95,6 +101,7 @@ _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "report_profit_and_loss": validate_profit_and_loss_request,
     "report_cash_flow": validate_cash_flow_request,
     "report_tax": validate_tax_report_request,
+    "user_accounting_access_inspect": validate_accounting_access_request,
 }
 _CAPABILITY_MODELS = {
     "account.account.list": "account.account",
@@ -110,6 +117,7 @@ _CAPABILITY_MODELS = {
     "report.profit_and_loss": "account.report",
     "report.cash_flow": "account.report",
     "report.tax": "account.report",
+    "user.accounting_access.inspect": "res.users",
 }
 
 
@@ -562,9 +570,13 @@ def _execute_read(
             []
             if capability_id.startswith("report.")
             else (
-                [data["id"]]
-                if capability_id == "journal_entry.get"
-                else [item["id"] for item in data["items"]]
+                [data["user"]["id"]]
+                if capability_id == "user.accounting_access.inspect"
+                else (
+                    [data["id"]]
+                    if capability_id == "journal_entry.get"
+                    else [item["id"] for item in data["items"]]
+                )
             )
         ),
     )
@@ -602,6 +614,8 @@ def _configured_port_factory(
         return OdooAccountListPort(client)
     if capability_id in {"journal_entry.search", "journal_entry.get"}:
         return OdooJournalEntryPort(client)
+    if capability_id == "user.accounting_access.inspect":
+        return OdooAccountingAccessPort(client)
     if capability_id in {
         "report.trial_balance",
         "report.balance_sheet",

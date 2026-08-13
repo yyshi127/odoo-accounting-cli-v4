@@ -36,6 +36,7 @@ IMPLEMENTED_READS = {
     "report.profit_and_loss": "report_profit_and_loss",
     "report.cash_flow": "report_cash_flow",
     "report.tax": "report_tax",
+    "user.accounting_access.inspect": "user_accounting_access_inspect",
 }
 
 
@@ -164,6 +165,8 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
             expected_live_test = "tests/integration/test_cash_flow_live.py"
         elif capability_id == "report.tax":
             expected_live_test = "tests/integration/test_tax_report_live.py"
+        elif capability_id == "user.accounting_access.inspect":
+            expected_live_test = "tests/integration/test_accounting_access_live.py"
         elif capability_id == "company.accounting_context.list":
             expected_live_test = (
                 "tests/integration/test_company_accounting_context_live.py"

@@ -140,7 +140,24 @@ _ACTIONS = {
     "account.move.journal_entry.search_page",
     "account.move.journal_entry.get",
     *_FINANCIAL_REPORT_ACTIONS,
+    "res.users.accounting_access.inspect",
 }
+
+_ACCOUNTING_ACCESS_GROUPS = (
+    "base.group_user",
+    "account.group_account_readonly",
+    "account.group_account_invoice",
+    "account.group_account_user",
+    "account.group_account_manager",
+)
+_ACCOUNTING_ACCESS_MODELS = (
+    "account.account",
+    "account.journal",
+    "account.move",
+    "account.move.line",
+    "account.report",
+    "account.tax",
+)
 
 
 class RuntimeFailure(RuntimeError):
@@ -1577,6 +1594,74 @@ def _dispatch(
     company_id: int,
     available_company_ids: tuple[int, ...] | None = None,
 ):
+    if action == "res.users.accounting_access.inspect":
+        _require_keys(payload, {"company_id"})
+        if (
+            not isinstance(payload["company_id"], int)
+            or isinstance(payload["company_id"], bool)
+            or payload["company_id"] != company_id
+        ):
+            raise RuntimeFailure(
+                "company_unavailable", "The company is unavailable.", exit_code=3
+            )
+        company_visible = bool(
+            env["res.company"].search_count([("id", "=", company_id)], limit=1)
+        )
+        required_models = (
+            "res.users",
+            "res.groups",
+            "ir.model.access",
+            *_ACCOUNTING_ACCESS_MODELS,
+        )
+        module_installed = all(
+            env.registry.get(model_name) is not None for model_name in required_models
+        )
+        access_allowed = bool(
+            company_visible
+            and module_installed
+            and env["res.users"].has_access("read")
+            and env["res.groups"].has_access("read")
+        )
+        if not access_allowed:
+            return {
+                "user_id": env.uid,
+                "company_visible": company_visible,
+                "module_installed": module_installed,
+                "access_allowed": access_allowed,
+                "user": {},
+                "company_id": company_id,
+                "groups": [],
+                "model_acl": [],
+            }
+        user = env.user
+        return {
+            "user_id": env.uid,
+            "company_visible": company_visible,
+            "module_installed": module_installed,
+            "access_allowed": access_allowed,
+            "user": {
+                "id": user.id,
+                "login": user.login,
+                "name": user.name,
+                "active": user.active,
+                "company_ids": sorted(user.company_ids.ids),
+            },
+            "company_id": company_id,
+            "groups": [
+                {"xml_id": xml_id, "member": user.has_group(xml_id)}
+                for xml_id in _ACCOUNTING_ACCESS_GROUPS
+            ],
+            "model_acl": [
+                {
+                    "model": model_name,
+                    **{
+                        operation: env[model_name].has_access(operation)
+                        for operation in ("read", "create", "write", "unlink")
+                    },
+                }
+                for model_name in _ACCOUNTING_ACCESS_MODELS
+            ],
+        }
     if action == "account.account.read_page":
         _require_keys(
             payload, {"company_id", "after_code", "after_id", "limit"}

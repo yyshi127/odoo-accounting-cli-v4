@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/user.accounting_access.inspect.response.schema.json",
+  "title": "user.accounting_access.inspect response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "user.accounting_access.inspect"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{
+    "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+    "then": {"properties": {"request_id": {"type": "string", "format": "uuid"}, "status": {"const": "verified"}, "data": {"$ref": "#/$defs/data"}, "error": {"type": "null"}}},
+    "else": {"properties": {"data": {"type": "null"}, "error": {"$ref": "response.schema.json#/$defs/error"}}}
+  }],
+  "$defs": {
+    "user": {"type": "object", "additionalProperties": false, "required": ["id", "login", "name", "active", "company_ids"], "properties": {"id": {"type": "integer", "minimum": 1}, "login": {"type": "string", "minLength": 1}, "name": {"type": "string", "minLength": 1}, "active": {"const": true}, "company_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "integer", "minimum": 1}}}},
+    "group": {"type": "object", "additionalProperties": false, "required": ["xml_id", "member"], "properties": {"xml_id": {"enum": ["base.group_user", "account.group_account_readonly", "account.group_account_invoice", "account.group_account_user", "account.group_account_manager"]}, "member": {"type": "boolean"}}},
+    "model_acl": {"type": "object", "additionalProperties": false, "required": ["model", "read", "create", "write", "unlink"], "properties": {"model": {"enum": ["account.account", "account.journal", "account.move", "account.move.line", "account.report", "account.tax"]}, "read": {"type": "boolean"}, "create": {"type": "boolean"}, "write": {"type": "boolean"}, "unlink": {"type": "boolean"}}},
+    "data": {"type": "object", "additionalProperties": false, "required": ["user", "company_id", "groups", "model_acl"], "properties": {"user": {"$ref": "#/$defs/user"}, "company_id": {"type": "integer", "minimum": 1}, "groups": {"type": "array", "minItems": 5, "maxItems": 5, "items": {"$ref": "#/$defs/group"}}, "model_acl": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"$ref": "#/$defs/model_acl"}}}}
+  }
+}

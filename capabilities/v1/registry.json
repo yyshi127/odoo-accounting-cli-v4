@@ -10440,8 +10440,8 @@
         ]
       },
       "schemas": {
-        "request": "schemas/v1/request.schema.json",
-        "response": "schemas/v1/response.schema.json"
+        "request": "schemas/v1/user.accounting_access.inspect.request.schema.json",
+        "response": "schemas/v1/user.accounting_access.inspect.response.schema.json"
       },
       "requirements": {
         "modules": [
@@ -10465,21 +10465,25 @@
       },
       "strategies": {
         "preview": "not_applicable_read_only",
-        "execute": "implementation_pending",
-        "verify": "real_odoo_result_reread_and_schema_validation_pending",
+        "execute": "fixed_configured_user_group_and_model_acl_inspection",
+        "verify": "single_read_only_transaction_and_response_schema_validation",
         "idempotency": "not_applicable_read_only",
         "reverse": "not_applicable_read_only"
       },
       "tests": {
         "unit": {
-          "status": "planned",
-          "references": [],
-          "reason": "The unit definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_accounting_access.py"
+          ],
+          "reason": "The fixed request, bridge action, group list, model ACL list, validation, and CLI dispatch are covered by unit tests."
         },
         "integration": {
-          "status": "planned",
-          "references": [],
-          "reason": "The integration definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_accounting_access_live.py"
+          ],
+          "reason": "The configured user, accounting groups, and fixed model ACL matrix are verified in both synthetic databases and both configured companies."
         },
         "golden": {
           "status": "planned",
@@ -10493,9 +10497,9 @@
         }
       },
       "status": {
-        "value": "disabled",
-        "reason_code": "implementation_pending",
-        "reason": "The capability is frozen in the G3 matrix but has no implementation or allowlisted handler."
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."
       },
       "routing": {
         "object": "user.accounting_access",
@@ -10520,7 +10524,7 @@
           "user_login"
         ]
       },
-      "handler_key": null
+      "handler_key": "user_accounting_access_inspect"
     },
     "validation.journal_entry.check": {
       "summary": {
