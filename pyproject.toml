@@ -21,6 +21,7 @@ where = ["src"]
 
 [tool.setuptools.data-files]
 "share/odoo-accounting-cli-v4/capabilities/v1" = ["capabilities/v1/registry.json"]
+"share/odoo-accounting-cli-v4/fixtures/v1" = ["fixtures/v1/accounting_fixture.py", "fixtures/v1/README.md"]
 "share/odoo-accounting-cli-v4/schemas/v1" = ["schemas/v1/*.json"]
 "share/odoo-accounting-cli-v4/skills/odoo-accounting-cli-v4" = ["skills/odoo-accounting-cli-v4/SKILL.md"]
 
