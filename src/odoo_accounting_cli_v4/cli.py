@@ -16,6 +16,7 @@ from typing import Any, TextIO
 from odoo_accounting_cli_v4 import __version__
 from odoo_accounting_cli_v4.bridge.account_accounts import OdooAccountListPort
 from odoo_accounting_cli_v4.bridge.client import BridgeError, OdooBridgeClient
+from odoo_accounting_cli_v4.bridge.financial_reports import OdooFinancialReportPort
 from odoo_accounting_cli_v4.bridge.journal_entries import OdooJournalEntryPort
 from odoo_accounting_cli_v4.bridge.master_data import OdooMasterDataPort
 from odoo_accounting_cli_v4.capabilities.account_account_list import (
@@ -27,6 +28,11 @@ from odoo_accounting_cli_v4.capabilities.master_data_lists import (
     MasterDataListError,
     read_master_data,
     validate_master_data_request,
+)
+from odoo_accounting_cli_v4.capabilities.financial_reports import (
+    FinancialReportError,
+    read_trial_balance,
+    validate_trial_balance_request,
 )
 from odoo_accounting_cli_v4.capabilities.journal_entries import (
     JournalEntryError,
@@ -59,6 +65,7 @@ _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
     "currency_list": partial(read_master_data, "currency.list"),
     "journal_entry_search": search_journal_entries,
     "journal_entry_get": get_journal_entry,
+    "report_trial_balance": read_trial_balance,
 }
 _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "account_account_list": validate_account_list_request,
@@ -71,6 +78,7 @@ _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "currency_list": partial(validate_master_data_request, "currency.list"),
     "journal_entry_search": validate_journal_entry_search_request,
     "journal_entry_get": validate_journal_entry_get_request,
+    "report_trial_balance": validate_trial_balance_request,
 }
 _CAPABILITY_MODELS = {
     "account.account.list": "account.account",
@@ -81,6 +89,7 @@ _CAPABILITY_MODELS = {
     "currency.list": "res.currency",
     "journal_entry.search": "account.move",
     "journal_entry.get": "account.move",
+    "report.trial_balance": "account.report",
 }
 
 
@@ -447,7 +456,12 @@ def _execute_read(
             capability=capability_id,
             request_id=request_id,
         ) from exc
-    except (AccountListError, MasterDataListError, JournalEntryError) as exc:
+    except (
+        AccountListError,
+        MasterDataListError,
+        JournalEntryError,
+        FinancialReportError,
+    ) as exc:
         raise CliError(
             exc.code,
             str(exc),
@@ -463,7 +477,12 @@ def _execute_read(
     try:
         port = port_factory(capability_id, request)
         data = handler(port, request)
-    except (AccountListError, MasterDataListError, JournalEntryError) as exc:
+    except (
+        AccountListError,
+        MasterDataListError,
+        JournalEntryError,
+        FinancialReportError,
+    ) as exc:
         raise CliError(
             exc.code,
             str(exc),
@@ -520,9 +539,13 @@ def _execute_read(
         user_id=getattr(port, "user_id", None),
         model=_CAPABILITY_MODELS[capability_id],
         record_ids=(
-            [item["id"] for item in data["items"]]
-            if capability_id != "journal_entry.get"
-            else [data["id"]]
+            []
+            if capability_id.startswith("report.")
+            else (
+                [data["id"]]
+                if capability_id == "journal_entry.get"
+                else [item["id"] for item in data["items"]]
+            )
         ),
     )
     try:
@@ -559,6 +582,8 @@ def _configured_port_factory(
         return OdooAccountListPort(client)
     if capability_id in {"journal_entry.search", "journal_entry.get"}:
         return OdooJournalEntryPort(client)
+    if capability_id == "report.trial_balance":
+        return OdooFinancialReportPort(client)
     return OdooMasterDataPort(client, capability_id)
 
 

@@ -112,6 +112,7 @@ _ACTIONS = {
     *_MASTER_DATA_ACTIONS,
     "account.move.journal_entry.search_page",
     "account.move.journal_entry.get",
+    "account.report.trial_balance.read_page",
 }
 
 
@@ -1266,6 +1267,267 @@ def _dispatch_journal_entry_get(
     }
 
 
+def _empty_trial_balance_page(
+    env: Any,
+    *,
+    company_visible: bool,
+    module_installed: bool,
+    access_allowed: bool,
+) -> dict[str, Any]:
+    return {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        "cursor_found": True,
+        "report": {},
+        "date": {},
+        "currency": {},
+        "basis": "",
+        "columns": [],
+        "lines": [],
+    }
+
+
+def _dispatch_trial_balance(
+    env: Any, payload: dict[str, Any], company_id: int
+) -> dict[str, Any]:
+    _require_keys(
+        payload,
+        {"company_id", "date_from", "date_to", "after_line_id", "limit"},
+    )
+    limit = payload["limit"]
+    after_line_id = payload["after_line_id"]
+    if (
+        not isinstance(payload["company_id"], int)
+        or isinstance(payload["company_id"], bool)
+        or not _is_canonical_date(payload["date_from"])
+        or not _is_canonical_date(payload["date_to"])
+        or payload["date_from"] > payload["date_to"]
+        or not isinstance(limit, int)
+        or isinstance(limit, bool)
+        or not 1 <= limit <= 1001
+        or not (
+            after_line_id is None
+            or (isinstance(after_line_id, str) and bool(after_line_id.strip()))
+        )
+    ):
+        raise RuntimeFailure(
+            "bridge_protocol_error", "The bridge action payload is invalid.", exit_code=7
+        )
+    if payload["company_id"] != company_id:
+        raise RuntimeFailure(
+            "company_unavailable", "The company is unavailable.", exit_code=3
+        )
+
+    company_model = env["res.company"]
+    company_visible = bool(
+        company_model.search_count([("id", "=", company_id)], limit=1)
+    )
+    required_models = ("account.report", "account.move.line", "res.currency")
+    models_installed = all(
+        env.registry.get(model_name) is not None for model_name in required_models
+    )
+    root_report = (
+        env.ref("account_reports.trial_balance_report", raise_if_not_found=False)
+        if models_installed
+        else None
+    )
+    module_installed = bool(models_installed and root_report)
+    access_allowed = bool(
+        company_visible
+        and module_installed
+        and company_model.has_access("read")
+        and all(env[model_name].has_access("read") for model_name in required_models)
+    )
+    if not access_allowed:
+        return _empty_trial_balance_page(
+            env,
+            company_visible=company_visible,
+            module_installed=module_installed,
+            access_allowed=access_allowed,
+        )
+
+    previous_options = {
+        "all_entries": False,
+        "date": {
+            "date_from": payload["date_from"],
+            "date_to": payload["date_to"],
+            "mode": "range",
+            "filter": "custom",
+        },
+    }
+    options = root_report.get_options(previous_options)
+    option_date = options.get("date") if isinstance(options, dict) else None
+    report_id = options.get("report_id") if isinstance(options, dict) else None
+    raw_columns = options.get("columns") if isinstance(options, dict) else None
+    if (
+        not isinstance(options, dict)
+        or options.get("readonly_query") is not True
+        or options.get("all_entries") is not False
+        or not isinstance(option_date, dict)
+        or option_date.get("date_from") != payload["date_from"]
+        or option_date.get("date_to") != payload["date_to"]
+        or option_date.get("mode") != "range"
+        or option_date.get("filter") != "custom"
+        or not isinstance(report_id, int)
+        or isinstance(report_id, bool)
+        or report_id <= 0
+        or not isinstance(raw_columns, list)
+        or not raw_columns
+    ):
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+
+    columns: list[dict[str, Any]] = []
+    for index, column in enumerate(raw_columns):
+        if (
+            not isinstance(column, dict)
+            or column.get("figure_type") != "monetary"
+            or not isinstance(column.get("name"), str)
+            or not column["name"].strip()
+            or not isinstance(column.get("expression_label"), str)
+            or not column["expression_label"].strip()
+        ):
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        columns.append(
+            {
+                "index": index,
+                "label": column["name"],
+                "expression_label": column["expression_label"],
+            }
+        )
+
+    effective_report = env["account.report"].browse(report_id)
+    if (
+        getattr(effective_report, "id", None) != report_id
+        or not isinstance(getattr(effective_report, "name", None), str)
+        or not effective_report.name.strip()
+    ):
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    information = effective_report.get_report_information_readonly(options)
+    raw_lines = information.get("lines") if isinstance(information, dict) else None
+    if not isinstance(raw_lines, list):
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+
+    normalized_lines: list[dict[str, Any]] = []
+    line_ids: set[str] = set()
+    for line in raw_lines:
+        raw_cells = line.get("columns") if isinstance(line, dict) else None
+        line_id = line.get("id") if isinstance(line, dict) else None
+        parent_id = line.get("parent_id") if isinstance(line, dict) else None
+        if (
+            not isinstance(line, dict)
+            or not isinstance(line_id, str)
+            or not line_id.strip()
+            or line_id in line_ids
+            or not (
+                parent_id in (False, None)
+                or (isinstance(parent_id, str) and bool(parent_id.strip()))
+            )
+            or not isinstance(line.get("name"), str)
+            or not line["name"].strip()
+            or not isinstance(line.get("level"), int)
+            or isinstance(line["level"], bool)
+            or line["level"] < 0
+            or not isinstance(line.get("unfoldable"), bool)
+            or not isinstance(raw_cells, list)
+            or len(raw_cells) != len(columns)
+        ):
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        values: list[str | None] = []
+        for index, cell in enumerate(raw_cells):
+            if (
+                not isinstance(cell, dict)
+                or cell.get("expression_label") != columns[index]["expression_label"]
+            ):
+                raise RuntimeFailure(
+                    "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+                )
+            raw_value = cell.get("no_format")
+            values.append(
+                None
+                if raw_value is None or isinstance(raw_value, bool)
+                else _decimal_string(raw_value)
+            )
+        line_ids.add(line_id)
+        normalized_lines.append(
+            {
+                "id": line_id,
+                "parent_id": None if parent_id in (False, None) else parent_id,
+                "name": line["name"],
+                "level": line["level"],
+                "unfoldable": line["unfoldable"],
+                "values": values,
+            }
+        )
+
+    start = 0
+    cursor_found = True
+    if after_line_id is not None:
+        try:
+            start = next(
+                index + 1
+                for index, line in enumerate(normalized_lines)
+                if line["id"] == after_line_id
+            )
+        except StopIteration:
+            cursor_found = False
+    visible_lines = normalized_lines[start : start + limit] if cursor_found else []
+
+    companies = company_model.search_read(
+        [("id", "=", company_id)], fields=["id", "currency_id"], limit=1
+    )
+    if len(companies) != 1 or companies[0].get("id") != company_id:
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    currency_id = _reference_id(companies[0].get("currency_id"))
+    currencies = env["res.currency"].search_read(
+        [("id", "=", currency_id)],
+        fields=["id", "name", "decimal_places"],
+        limit=1,
+    )
+    if (
+        len(currencies) != 1
+        or currencies[0].get("id") != currency_id
+        or not isinstance(currencies[0].get("name"), str)
+        or not currencies[0]["name"].strip()
+        or not isinstance(currencies[0].get("decimal_places"), int)
+        or isinstance(currencies[0]["decimal_places"], bool)
+        or currencies[0]["decimal_places"] < 0
+    ):
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    return {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        "cursor_found": cursor_found,
+        "report": {"key": "trial_balance", "name": effective_report.name},
+        "date": {"from": payload["date_from"], "to": payload["date_to"]},
+        "currency": {
+            "id": currency_id,
+            "code": currencies[0]["name"],
+            "decimal_places": currencies[0]["decimal_places"],
+        },
+        "basis": "posted_entries",
+        "columns": columns,
+        "lines": visible_lines,
+    }
+
+
 def _dispatch(
     env: Any,
     action: str,
@@ -1366,6 +1628,8 @@ def _dispatch(
         return _dispatch_journal_entry_search(env, payload, company_id)
     if action == "account.move.journal_entry.get":
         return _dispatch_journal_entry_get(env, payload, company_id)
+    if action == "account.report.trial_balance.read_page":
+        return _dispatch_trial_balance(env, payload, company_id)
     raise RuntimeFailure(
         "bridge_protocol_error", "The bridge action is unavailable.", exit_code=7
     )

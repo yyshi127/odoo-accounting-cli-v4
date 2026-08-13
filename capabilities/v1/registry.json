@@ -10088,8 +10088,8 @@
         ]
       },
       "schemas": {
-        "request": "schemas/v1/request.schema.json",
-        "response": "schemas/v1/response.schema.json"
+        "request": "schemas/v1/report.trial_balance.request.schema.json",
+        "response": "schemas/v1/report.trial_balance.response.schema.json"
       },
       "requirements": {
         "modules": [
@@ -10112,21 +10112,27 @@
       },
       "strategies": {
         "preview": "not_applicable_read_only",
-        "execute": "implementation_pending",
-        "verify": "real_odoo_result_reread_and_schema_validation_pending",
+        "execute": "fixed_read_only_odoo_trial_balance_handler",
+        "verify": "single_read_only_transaction_and_response_schema_validation",
         "idempotency": "not_applicable_read_only",
         "reverse": "not_applicable_read_only"
       },
       "tests": {
         "unit": {
-          "status": "planned",
-          "references": [],
-          "reason": "The unit definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_trial_balance.py",
+            "tests/unit/test_trial_balance_runtime.py",
+            "tests/unit/test_trial_balance_cli.py"
+          ],
+          "reason": "The fixed report contract, runtime normalization, cursor binding, and CLI dispatch are covered by unit tests."
         },
         "integration": {
-          "status": "planned",
-          "references": [],
-          "reason": "The integration definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_trial_balance_live.py"
+          ],
+          "reason": "The fixed report handler is verified in both synthetic databases and both configured companies."
         },
         "golden": {
           "status": "planned",
@@ -10140,9 +10146,9 @@
         }
       },
       "status": {
-        "value": "disabled",
-        "reason_code": "implementation_pending",
-        "reason": "The capability is frozen in the G3 matrix but has no implementation or allowlisted handler."
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The implementation is installed; availability depends on the selected database, company, user, modules, and ACLs."
       },
       "routing": {
         "object": "report",
@@ -10167,7 +10173,7 @@
           "user_login"
         ]
       },
-      "handler_key": null
+      "handler_key": "report_trial_balance"
     },
     "sale_invoice.stock_link.inspect": {
       "summary": {

@@ -31,6 +31,7 @@ IMPLEMENTED_READS = {
     "currency.list": "currency_list",
     "journal_entry.search": "journal_entry_search",
     "journal_entry.get": "journal_entry_get",
+    "report.trial_balance": "report_trial_balance",
 }
 
 
@@ -149,6 +150,8 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
         assert descriptor["tests"]["integration"]["status"] == "implemented"
         if capability_id in {"journal_entry.search", "journal_entry.get"}:
             expected_live_test = "tests/integration/test_journal_entries_live.py"
+        elif capability_id == "report.trial_balance":
+            expected_live_test = "tests/integration/test_trial_balance_live.py"
         elif capability_id == "company.accounting_context.list":
             expected_live_test = (
                 "tests/integration/test_company_accounting_context_live.py"
