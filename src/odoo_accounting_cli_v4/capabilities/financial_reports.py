@@ -15,6 +15,7 @@ from typing import Any, Protocol
 TRIAL_BALANCE_CAPABILITY_ID = "report.trial_balance"
 BALANCE_SHEET_CAPABILITY_ID = "report.balance_sheet"
 PROFIT_AND_LOSS_CAPABILITY_ID = "report.profit_and_loss"
+CASH_FLOW_CAPABILITY_ID = "report.cash_flow"
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 1000
 _CURSOR_VERSION = 1
@@ -198,6 +199,31 @@ def validate_profit_and_loss_request(
     context, parameters = _validate_envelope(request)
     if not set(parameters) <= {"date_from", "date_to", "limit", "cursor"}:
         raise _invalid("report.profit_and_loss contains an unsupported parameter.")
+    if not {"date_from", "date_to"} <= set(parameters):
+        raise _invalid("date_from and date_to are required.")
+    date_from = parameters["date_from"]
+    date_to = parameters["date_to"]
+    if not _canonical_date(date_from) or not _canonical_date(date_to):
+        raise _invalid("date_from and date_to must be YYYY-MM-DD dates.")
+    if date_from > date_to:
+        raise _invalid("date_from cannot be after date_to.")
+    limit = parameters.get("limit", DEFAULT_LIMIT)
+    if not _is_integer(limit) or not 1 <= limit <= MAX_LIMIT:
+        raise _invalid(f"limit must be between 1 and {MAX_LIMIT}.")
+    cursor = parameters.get("cursor")
+    if cursor is not None and (
+        not isinstance(cursor, str) or not cursor or len(cursor) > 4096
+    ):
+        raise _invalid("cursor must be null or a non-empty cursor string.")
+    return context, date_from, date_to, limit, cursor
+
+
+def validate_cash_flow_request(
+    request: Any,
+) -> tuple[dict[str, Any], str, str, int, str | None]:
+    context, parameters = _validate_envelope(request)
+    if not set(parameters) <= {"date_from", "date_to", "limit", "cursor"}:
+        raise _invalid("report.cash_flow contains an unsupported parameter.")
     if not {"date_from", "date_to"} <= set(parameters):
         raise _invalid("date_from and date_to are required.")
     date_from = parameters["date_from"]
@@ -526,6 +552,24 @@ def read_profit_and_loss(
         port,
         capability_id=PROFIT_AND_LOSS_CAPABILITY_ID,
         report_key="profit_and_loss",
+        context=context,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+        cursor=cursor,
+    )
+
+
+def read_cash_flow(
+    port: FinancialReportPort, request: dict[str, Any]
+) -> dict[str, Any]:
+    """Read one verified page from the fixed Odoo cash-flow report."""
+
+    context, date_from, date_to, limit, cursor = validate_cash_flow_request(request)
+    return _read_financial_report(
+        port,
+        capability_id=CASH_FLOW_CAPABILITY_ID,
+        report_key="cash_flow",
         context=context,
         date_from=date_from,
         date_to=date_to,

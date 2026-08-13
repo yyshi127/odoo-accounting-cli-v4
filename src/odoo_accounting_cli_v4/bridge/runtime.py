@@ -122,6 +122,11 @@ _FINANCIAL_REPORT_ACTIONS = {
         "key": "profit_and_loss",
         "mode": "range",
     },
+    "account.report.cash_flow.read_page": {
+        "xml_id": "account_reports.cash_flow_report",
+        "key": "cash_flow",
+        "mode": "range",
+    },
 }
 _ACTIONS = {
     "account.account.read_page",
@@ -1451,6 +1456,7 @@ def _dispatch_financial_report(
         raw_cells = line.get("columns") if isinstance(line, dict) else None
         line_id = line.get("id") if isinstance(line, dict) else None
         parent_id = line.get("parent_id") if isinstance(line, dict) else None
+        unfoldable = line.get("unfoldable", False) if isinstance(line, dict) else None
         if (
             not isinstance(line, dict)
             or not isinstance(line_id, str)
@@ -1465,7 +1471,7 @@ def _dispatch_financial_report(
             or not isinstance(line.get("level"), int)
             or isinstance(line["level"], bool)
             or line["level"] < 0
-            or not isinstance(line.get("unfoldable"), bool)
+            or not isinstance(unfoldable, bool)
             or not isinstance(raw_cells, list)
             or len(raw_cells) != len(columns)
         ):
@@ -1494,7 +1500,7 @@ def _dispatch_financial_report(
                 "parent_id": None if parent_id in (False, None) else parent_id,
                 "name": line["name"],
                 "level": line["level"],
-                "unfoldable": line["unfoldable"],
+                "unfoldable": unfoldable,
                 "values": values,
             }
         )
