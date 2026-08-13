@@ -34,10 +34,12 @@ from odoo_accounting_cli_v4.capabilities.financial_reports import (
     read_balance_sheet,
     read_cash_flow,
     read_profit_and_loss,
+    read_tax_report,
     read_trial_balance,
     validate_balance_sheet_request,
     validate_cash_flow_request,
     validate_profit_and_loss_request,
+    validate_tax_report_request,
     validate_trial_balance_request,
 )
 from odoo_accounting_cli_v4.capabilities.journal_entries import (
@@ -75,6 +77,7 @@ _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
     "report_balance_sheet": read_balance_sheet,
     "report_profit_and_loss": read_profit_and_loss,
     "report_cash_flow": read_cash_flow,
+    "report_tax": read_tax_report,
 }
 _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "account_account_list": validate_account_list_request,
@@ -91,6 +94,7 @@ _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "report_balance_sheet": validate_balance_sheet_request,
     "report_profit_and_loss": validate_profit_and_loss_request,
     "report_cash_flow": validate_cash_flow_request,
+    "report_tax": validate_tax_report_request,
 }
 _CAPABILITY_MODELS = {
     "account.account.list": "account.account",
@@ -105,6 +109,7 @@ _CAPABILITY_MODELS = {
     "report.balance_sheet": "account.report",
     "report.profit_and_loss": "account.report",
     "report.cash_flow": "account.report",
+    "report.tax": "account.report",
 }
 
 
@@ -602,6 +607,7 @@ def _configured_port_factory(
         "report.balance_sheet",
         "report.profit_and_loss",
         "report.cash_flow",
+        "report.tax",
     }:
         return OdooFinancialReportPort(client, capability_id)
     return OdooMasterDataPort(client, capability_id)

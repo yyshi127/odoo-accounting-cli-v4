@@ -10,6 +10,7 @@ _ACTIONS = {
     "report.balance_sheet": "account.report.balance_sheet.read_page",
     "report.profit_and_loss": "account.report.profit_and_loss.read_page",
     "report.cash_flow": "account.report.cash_flow.read_page",
+    "report.tax": "account.report.tax.read_page",
 }
 
 class BridgeClient(Protocol):

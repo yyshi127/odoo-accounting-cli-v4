@@ -127,6 +127,11 @@ _FINANCIAL_REPORT_ACTIONS = {
         "key": "cash_flow",
         "mode": "range",
     },
+    "account.report.tax.read_page": {
+        "xml_id": "account.generic_tax_report",
+        "key": "tax",
+        "mode": "range",
+    },
 }
 _ACTIONS = {
     "account.account.read_page",
