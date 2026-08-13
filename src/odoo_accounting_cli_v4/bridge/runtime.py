@@ -139,6 +139,7 @@ _ACTIONS = {
     *_MASTER_DATA_ACTIONS,
     "account.move.journal_entry.search_page",
     "account.move.journal_entry.get",
+    "res.partner.accounting.search_page",
     *_FINANCIAL_REPORT_ACTIONS,
     "res.users.accounting_access.inspect",
     "res.company.accounting_configuration.inspect",
@@ -1325,6 +1326,181 @@ def _dispatch_journal_entry_get(
     }
 
 
+def _partner_accounting_payload_is_valid(payload: Any, company_id: int) -> bool:
+    if not isinstance(payload, dict) or set(payload) != {
+        "company_id",
+        "after",
+        "limit",
+        "filters",
+    }:
+        return False
+    if (
+        not isinstance(payload["company_id"], int)
+        or isinstance(payload["company_id"], bool)
+        or not isinstance(payload["limit"], int)
+        or isinstance(payload["limit"], bool)
+        or not 1 <= payload["limit"] <= 1001
+    ):
+        return False
+    after = payload["after"]
+    if after is not None and (
+        not isinstance(after, list)
+        or len(after) != 2
+        or not isinstance(after[0], str)
+        or not after[0]
+        or not isinstance(after[1], int)
+        or isinstance(after[1], bool)
+        or after[1] <= 0
+    ):
+        return False
+    filters = payload["filters"]
+    if not isinstance(filters, dict) or set(filters) != {"role", "query"}:
+        return False
+    query = filters["query"]
+    return filters["role"] in {"both", "customer", "vendor"} and (
+        query is None
+        or (
+            isinstance(query, str)
+            and query == query.strip()
+            and 1 <= len(query) <= 200
+        )
+    )
+
+
+def _partner_accounting_domain(
+    company_id: int, after: list[Any] | None, filters: dict[str, Any]
+) -> list[Any]:
+    company_domain: list[Any] = [
+        "|",
+        ("company_id", "=", False),
+        ("company_id", "=", company_id),
+    ]
+    role = filters["role"]
+    if role == "customer":
+        role_domain: list[Any] = [("customer_rank", ">", 0)]
+    elif role == "vendor":
+        role_domain = [("supplier_rank", ">", 0)]
+    else:
+        role_domain = [
+            "|",
+            ("customer_rank", ">", 0),
+            ("supplier_rank", ">", 0),
+        ]
+    domains: list[list[Any]] = [company_domain, role_domain]
+    if filters["query"] is not None:
+        domains.append(
+            [
+                "|",
+                ("complete_name", "ilike", filters["query"]),
+                ("ref", "ilike", filters["query"]),
+            ]
+        )
+    if after is not None:
+        domains.append(
+            [
+                "|",
+                ("complete_name", ">", after[0]),
+                "&",
+                ("complete_name", "=", after[0]),
+                ("id", ">", after[1]),
+            ]
+        )
+    from odoo.osv import expression
+
+    return expression.AND(domains)
+
+
+def _dispatch_partner_accounting_search(
+    env: Any, payload: dict[str, Any], company_id: int
+) -> dict[str, Any]:
+    if not _partner_accounting_payload_is_valid(payload, company_id):
+        raise RuntimeFailure(
+            "bridge_protocol_error",
+            "The bridge action payload is invalid.",
+            exit_code=7,
+        )
+    if payload["company_id"] != company_id:
+        raise RuntimeFailure(
+            "company_unavailable", "The company is unavailable.", exit_code=3
+        )
+    company_visible = bool(
+        env["res.company"].search_count([("id", "=", company_id)], limit=1)
+    )
+    required_models = ("res.partner", "account.account")
+    module_installed = all(env.registry.get(name) is not None for name in required_models)
+    access_allowed = bool(
+        company_visible
+        and module_installed
+        and all(env[name].has_access("read") for name in required_models)
+    )
+    if not access_allowed:
+        return {
+            "user_id": env.uid,
+            "company_visible": company_visible,
+            "module_installed": module_installed,
+            "access_allowed": access_allowed,
+            "rows": [],
+        }
+    rows = (
+        env["res.partner"]
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+        .search_read(
+            _partner_accounting_domain(company_id, payload["after"], payload["filters"]),
+            fields=[
+                "id",
+                "complete_name",
+                "ref",
+                "active",
+                "is_company",
+                "company_id",
+                "customer_rank",
+                "supplier_rank",
+                "property_account_receivable_id",
+                "property_account_payable_id",
+            ],
+            limit=payload["limit"],
+            order="complete_name,id",
+        )
+    )
+    account_ids = {
+        account_id
+        for row in rows
+        for key in (
+            "property_account_receivable_id",
+            "property_account_payable_id",
+        )
+        if (account_id := _reference_id(row.get(key))) is not None
+    }
+    accounts = _related_rows(
+        env, "account.account", account_ids, ("code", "name"), company_id
+    )
+    normalized: list[dict[str, Any]] = []
+    for raw in rows:
+        row = dict(raw)
+        receivable_id = _reference_id(row.pop("property_account_receivable_id"))
+        payable_id = _reference_id(row.pop("property_account_payable_id"))
+        row["company_id"] = _reference_id(row["company_id"])
+        row["ref"] = _optional_string(row["ref"])
+        row["receivable_account"] = (
+            _account_reference(accounts[receivable_id])
+            if receivable_id is not None and receivable_id in accounts
+            else None
+        )
+        row["payable_account"] = (
+            _account_reference(accounts[payable_id])
+            if payable_id is not None and payable_id in accounts
+            else None
+        )
+        normalized.append(row)
+    return {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        "rows": normalized,
+    }
+
+
 def _empty_financial_report_page(
     env: Any,
     *,
@@ -2002,6 +2178,8 @@ def _dispatch(
         return _dispatch_journal_entry_search(env, payload, company_id)
     if action == "account.move.journal_entry.get":
         return _dispatch_journal_entry_get(env, payload, company_id)
+    if action == "res.partner.accounting.search_page":
+        return _dispatch_partner_accounting_search(env, payload, company_id)
     if action in _FINANCIAL_REPORT_ACTIONS:
         return _dispatch_financial_report(env, action, payload, company_id)
     raise RuntimeFailure(

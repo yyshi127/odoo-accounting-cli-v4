@@ -43,6 +43,7 @@ IMPLEMENTED_READS = {
     "diagnostic.accounting_environment.inspect": (
         "diagnostic_accounting_environment_inspect"
     ),
+    "partner.accounting.search": "partner_accounting_search",
 }
 
 
@@ -173,6 +174,8 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
             expected_live_test = "tests/integration/test_tax_report_live.py"
         elif capability_id == "user.accounting_access.inspect":
             expected_live_test = "tests/integration/test_accounting_access_live.py"
+        elif capability_id == "partner.accounting.search":
+            expected_live_test = "tests/integration/test_partner_accounting_live.py"
         elif capability_id in {
             "company.accounting_configuration.inspect",
             "diagnostic.accounting_environment.inspect",

@@ -23,6 +23,7 @@ from odoo_accounting_cli_v4.bridge.environment_inspection import (
 )
 from odoo_accounting_cli_v4.bridge.journal_entries import OdooJournalEntryPort
 from odoo_accounting_cli_v4.bridge.master_data import OdooMasterDataPort
+from odoo_accounting_cli_v4.bridge.partners import OdooPartnerAccountingPort
 from odoo_accounting_cli_v4.capabilities.account_account_list import (
     AccountListError,
     read_account_accounts,
@@ -61,6 +62,11 @@ from odoo_accounting_cli_v4.capabilities.journal_entries import (
     validate_journal_entry_get_request,
     validate_journal_entry_search_request,
 )
+from odoo_accounting_cli_v4.capabilities.partner_accounting import (
+    PartnerAccountingError,
+    search_accounting_partners,
+    validate_partner_accounting_search_request,
+)
 from odoo_accounting_cli_v4.contracts import dumps, error_document, success_document
 from odoo_accounting_cli_v4.config import ConfigError, load_runtime_config
 from odoo_accounting_cli_v4.registry import (
@@ -97,6 +103,7 @@ _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
     "diagnostic_accounting_environment_inspect": partial(
         read_environment_inspection, "diagnostic.accounting_environment.inspect"
     ),
+    "partner_accounting_search": search_accounting_partners,
 }
 _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "account_account_list": validate_account_list_request,
@@ -123,6 +130,7 @@ _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
         validate_environment_inspection_request,
         "diagnostic.accounting_environment.inspect",
     ),
+    "partner_accounting_search": validate_partner_accounting_search_request,
 }
 _CAPABILITY_MODELS = {
     "account.account.list": "account.account",
@@ -141,6 +149,7 @@ _CAPABILITY_MODELS = {
     "user.accounting_access.inspect": "res.users",
     "company.accounting_configuration.inspect": "res.company",
     "diagnostic.accounting_environment.inspect": "ir.module.module",
+    "partner.accounting.search": "res.partner",
 }
 
 
@@ -512,6 +521,7 @@ def _execute_read(
         MasterDataListError,
         JournalEntryError,
         FinancialReportError,
+        PartnerAccountingError,
     ) as exc:
         raise CliError(
             exc.code,
@@ -533,6 +543,7 @@ def _execute_read(
         MasterDataListError,
         JournalEntryError,
         FinancialReportError,
+        PartnerAccountingError,
     ) as exc:
         raise CliError(
             exc.code,
@@ -643,6 +654,8 @@ def _configured_port_factory(
     )
     if capability_id == "account.account.list":
         return OdooAccountListPort(client)
+    if capability_id == "partner.accounting.search":
+        return OdooPartnerAccountingPort(client)
     if capability_id in {"journal_entry.search", "journal_entry.get"}:
         return OdooJournalEntryPort(client)
     if capability_id == "user.accounting_access.inspect":
