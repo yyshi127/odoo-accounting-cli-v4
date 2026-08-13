@@ -51,6 +51,7 @@ IMPLEMENTED_READS = {
     "payable.open_items.list": "payable_open_items_list",
     "payment.search": "payment_search",
     "payment.get": "payment_get",
+    "reconciliation.candidates.list": "reconciliation_candidates_list",
 }
 
 
@@ -194,6 +195,10 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
             "payable.open_items.list",
         }:
             expected_live_test = "tests/integration/test_open_items_live.py"
+        elif capability_id == "reconciliation.candidates.list":
+            expected_live_test = (
+                "tests/integration/test_reconciliation_candidates_live.py"
+            )
         elif capability_id in {"payment.search", "payment.get"}:
             expected_live_test = "tests/integration/test_payments_live.py"
         elif capability_id in {
@@ -216,6 +221,54 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
         assert descriptor["tests"]["integration"]["references"] == [
             expected_live_test
         ]
+
+
+def test_reconciliation_candidates_has_the_closed_source_and_acl_gates() -> None:
+    descriptor = load_registry().describe("reconciliation.candidates.list")
+    models = [
+        "res.company",
+        "account.move.line",
+        "account.move",
+        "account.account",
+        "account.journal",
+        "res.partner",
+        "res.currency",
+        "account.reconcile.model",
+    ]
+
+    assert descriptor["source"]["modules"] == ["account", "account_accountant"]
+    assert descriptor["source"]["models"] == models
+    assert descriptor["source"]["wizards"] == ["account.reconcile.wizard"]
+    assert descriptor["source"]["locations"] == [
+        "_references/base/models/res_company.py",
+        "account/models/account_move_line.py",
+        "account/models/account_move.py",
+        "account/models/account_account.py",
+        "account/models/account_journal.py",
+        "_references/base/models/res_partner.py",
+        "_references/base/models/res_currency.py",
+        "account/models/account_reconcile_model.py",
+        "account_accountant/models/account_reconcile_model.py",
+        "account_accountant/models/account_reconcile_model_line.py",
+        "account_accountant/views/account_reconcile_views.xml",
+        "account_accountant/wizard/account_reconcile_wizard.py",
+    ]
+    assert descriptor["requirements"]["acl"] == [
+        f"{model}:read" for model in models
+    ]
+    assert descriptor["handler_key"] == "reconciliation_candidates_list"
+    assert descriptor["tests"]["unit"]["references"] == [
+        "tests/unit/test_reconciliation_candidates.py",
+        "tests/unit/test_reconciliation_candidate_bridge.py",
+        "tests/unit/test_reconciliation_candidates_runtime.py",
+        "tests/unit/test_reconciliation_candidates_cli.py",
+    ]
+    for kind in ("request", "response"):
+        schema = load_registry().load_schema(descriptor["schemas"][kind])
+        assert schema["$id"].endswith(
+            f"reconciliation.candidates.list.{kind}.schema.json"
+        )
+        assert schema["additionalProperties"] is False
 
 
 def test_payment_reads_have_the_closed_source_and_acl_gates() -> None:

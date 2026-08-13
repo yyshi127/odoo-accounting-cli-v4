@@ -8,13 +8,15 @@
 - G3: in progress (102-ID current baseline recorded; the V2/V3 semantic
   crosswalk identifies at least two additional required IDs, 52 existing
   contracts needing expansion, and nine product-boundary decisions;
-  24 read implementations are live-verified)
+  25 read implementations are live-verified, 77 capabilities remain
+  disabled/planned, and 53 versioned JSON Schema documents are retained)
 - G4: passed for official generation provenance and baseline review (initial
   generation, six focused refinement rounds, official test/validate, complete
   transcript, and independent adjudication recorded; generated code remains a
   non-authoritative adapter draft)
-- G5: in progress (real dual-environment bridge and 24 read vertical slices
-  verified; remaining reads and reports pending)
+- G5: in progress (real dual-environment bridge and 25 read vertical slices
+  verified; the registry remains a 102-ID baseline with 77 disabled/planned
+  capabilities, and remaining reads and reports are pending)
 - G6-G10: not started
 - Release readiness: not ready
 

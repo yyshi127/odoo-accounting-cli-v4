@@ -427,6 +427,7 @@ _ACTIONS = {
     *_INVOICE_ACTIONS,
     *_PAYMENT_ACTIONS,
     *_OPEN_ITEM_ACTION_SIDES,
+    "account.move.line.reconciliation_candidate.read_page",
     "res.partner.accounting.search_page",
     *_FINANCIAL_REPORT_ACTIONS,
     "res.users.accounting_access.inspect",
@@ -4915,6 +4916,17 @@ def _dispatch(
         )
     if action in _OPEN_ITEM_ACTION_SIDES:
         return _dispatch_open_item_search(env, action, payload, company_id)
+    if action == "account.move.line.reconciliation_candidate.read_page":
+        from odoo_accounting_cli_v4.bridge.reconciliation_candidates_runtime import (
+            dispatch as dispatch_reconciliation_candidates,
+        )
+
+        return dispatch_reconciliation_candidates(
+            env,
+            payload,
+            company_id,
+            failure_type=RuntimeFailure,
+        )
     if action == "res.partner.accounting.search_page":
         return _dispatch_partner_accounting_search(env, payload, company_id)
     if action in _FINANCIAL_REPORT_ACTIONS:

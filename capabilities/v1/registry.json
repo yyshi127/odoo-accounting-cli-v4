@@ -7898,20 +7898,37 @@
           "account_accountant"
         ],
         "models": [
+          "res.company",
           "account.move.line",
+          "account.move",
+          "account.account",
+          "account.journal",
+          "res.partner",
+          "res.currency",
           "account.reconcile.model"
         ],
-        "wizards": [],
+        "wizards": [
+          "account.reconcile.wizard"
+        ],
         "report_handlers": [],
         "locations": [
+          "_references/base/models/res_company.py",
           "account/models/account_move_line.py",
+          "account/models/account_move.py",
+          "account/models/account_account.py",
+          "account/models/account_journal.py",
+          "_references/base/models/res_partner.py",
+          "_references/base/models/res_currency.py",
           "account/models/account_reconcile_model.py",
-          "account_accountant/models/account_reconcile_model.py"
+          "account_accountant/models/account_reconcile_model.py",
+          "account_accountant/models/account_reconcile_model_line.py",
+          "account_accountant/views/account_reconcile_views.xml",
+          "account_accountant/wizard/account_reconcile_wizard.py"
         ]
       },
       "schemas": {
-        "request": "schemas/v1/request.schema.json",
-        "response": "schemas/v1/response.schema.json"
+        "request": "schemas/v1/reconciliation.candidates.list.request.schema.json",
+        "response": "schemas/v1/reconciliation.candidates.list.response.schema.json"
       },
       "requirements": {
         "modules": [
@@ -7928,27 +7945,40 @@
           "account.group_account_readonly"
         ],
         "acl": [
+          "res.company:read",
           "account.move.line:read",
+          "account.move:read",
+          "account.account:read",
+          "account.journal:read",
+          "res.partner:read",
+          "res.currency:read",
           "account.reconcile.model:read"
         ]
       },
       "strategies": {
         "preview": "not_applicable_read_only",
-        "execute": "implementation_pending",
-        "verify": "real_odoo_result_reread_and_schema_validation_pending",
+        "execute": "fixed_local_odoo_readonly_composite",
+        "verify": "same_transaction_acl_result_and_v1_schema_validation",
         "idempotency": "not_applicable_read_only",
         "reverse": "not_applicable_read_only"
       },
       "tests": {
         "unit": {
-          "status": "planned",
-          "references": [],
-          "reason": "The unit definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_reconciliation_candidates.py",
+            "tests/unit/test_reconciliation_candidate_bridge.py",
+            "tests/unit/test_reconciliation_candidates_runtime.py",
+            "tests/unit/test_reconciliation_candidates_cli.py"
+          ],
+          "reason": "Unit tests cover the closed request and response, stable cursor, fixed bridge action, eight-model ACL gate, company scope, ORM normalization, and control-CLI dispatch."
         },
         "integration": {
-          "status": "planned",
-          "references": [],
-          "reason": "The integration definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_reconciliation_candidates_live.py"
+          ],
+          "reason": "The live integration test verifies the fixed reconciliation-candidate read against both dedicated synthetic database aliases and both configured companies, including three-page cursor ordering, exact filters, and cross-company isolation."
         },
         "golden": {
           "status": "planned",
@@ -7962,9 +7992,9 @@
         }
       },
       "status": {
-        "value": "disabled",
-        "reason_code": "implementation_pending",
-        "reason": "The capability is frozen in the G3 matrix but has no implementation or allowlisted handler."
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."
       },
       "routing": {
         "object": "reconciliation.candidates",
@@ -7989,7 +8019,7 @@
           "user_login"
         ]
       },
-      "handler_key": null
+      "handler_key": "reconciliation_candidates_list"
     },
     "reconciliation.undo": {
       "summary": {

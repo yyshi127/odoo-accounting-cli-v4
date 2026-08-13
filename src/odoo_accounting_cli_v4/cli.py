@@ -27,6 +27,9 @@ from odoo_accounting_cli_v4.bridge.master_data import OdooMasterDataPort
 from odoo_accounting_cli_v4.bridge.open_items import OdooOpenItemsPort
 from odoo_accounting_cli_v4.bridge.partners import OdooPartnerAccountingPort
 from odoo_accounting_cli_v4.bridge.payments import OdooPaymentPort
+from odoo_accounting_cli_v4.bridge.reconciliation_candidates import (
+    OdooReconciliationCandidatesPort,
+)
 from odoo_accounting_cli_v4.capabilities.account_account_list import (
     AccountListError,
     read_account_accounts,
@@ -88,6 +91,11 @@ from odoo_accounting_cli_v4.capabilities.payments import (
     validate_payment_get_request,
     validate_payment_search_request,
 )
+from odoo_accounting_cli_v4.capabilities.reconciliation_candidates import (
+    ReconciliationCandidatesError,
+    list_reconciliation_candidates,
+    validate_reconciliation_candidates_request,
+)
 from odoo_accounting_cli_v4.capabilities.partner_accounting import (
     PartnerAccountingError,
     search_accounting_partners,
@@ -137,6 +145,7 @@ _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
     "payable_open_items_list": search_payable_open_items,
     "payment_search": search_payments,
     "payment_get": get_payment,
+    "reconciliation_candidates_list": list_reconciliation_candidates,
 }
 _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "account_account_list": validate_account_list_request,
@@ -171,6 +180,7 @@ _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "payable_open_items_list": validate_payable_open_items_list_request,
     "payment_search": validate_payment_search_request,
     "payment_get": validate_payment_get_request,
+    "reconciliation_candidates_list": validate_reconciliation_candidates_request,
 }
 _CAPABILITY_MODELS = {
     "account.account.list": "account.account",
@@ -197,6 +207,7 @@ _CAPABILITY_MODELS = {
     "payable.open_items.list": "account.move.line",
     "payment.search": "account.payment",
     "payment.get": "account.payment",
+    "reconciliation.candidates.list": "account.move.line",
 }
 
 
@@ -592,6 +603,7 @@ def _execute_read(
         InvoiceError,
         OpenItemsError,
         PaymentError,
+        ReconciliationCandidatesError,
     ) as exc:
         raise CliError(
             exc.code,
@@ -618,6 +630,7 @@ def _execute_read(
         InvoiceError,
         OpenItemsError,
         PaymentError,
+        ReconciliationCandidatesError,
     ) as exc:
         verified_user_id = _verified_port_user_id(port)
         raise CliError(
@@ -762,6 +775,8 @@ def _configured_port_factory(
         return OdooOpenItemsPort(client, capability_id)
     if capability_id in {"payment.search", "payment.get"}:
         return OdooPaymentPort(client)
+    if capability_id == "reconciliation.candidates.list":
+        return OdooReconciliationCandidatesPort(client)
     if capability_id in {"journal_entry.search", "journal_entry.get"}:
         return OdooJournalEntryPort(client)
     if capability_id == "user.accounting_access.inspect":
