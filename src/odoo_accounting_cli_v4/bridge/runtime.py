@@ -278,6 +278,49 @@ _INVOICE_STATUS_MODELS = (
     "account.payment.method",
     "account.payment.method.line",
 )
+_OPEN_ITEM_ACTION_SIDES = {
+    "account.move.line.receivable.open_items.search_page": (
+        "receivable",
+        "asset_receivable",
+    ),
+    "account.move.line.payable.open_items.search_page": (
+        "payable",
+        "liability_payable",
+    ),
+}
+_OPEN_ITEM_FIELDS = (
+    "id",
+    "date",
+    "date_maturity",
+    "name",
+    "ref",
+    "move_id",
+    "journal_id",
+    "company_id",
+    "partner_id",
+    "account_id",
+    "currency_id",
+    "company_currency_id",
+    "debit",
+    "credit",
+    "balance",
+    "amount_currency",
+    "amount_residual",
+    "amount_residual_currency",
+    "reconciled",
+    "matching_number",
+    "parent_state",
+    "account_type",
+)
+_OPEN_ITEM_MODELS = (
+    "res.company",
+    "account.move.line",
+    "account.move",
+    "account.account",
+    "account.journal",
+    "res.partner",
+    "res.currency",
+)
 _ACTIONS = {
     "account.account.read_page",
     "res.company.accounting_context.read_page",
@@ -285,6 +328,7 @@ _ACTIONS = {
     "account.move.journal_entry.search_page",
     "account.move.journal_entry.get",
     *_INVOICE_ACTIONS,
+    *_OPEN_ITEM_ACTION_SIDES,
     "res.partner.accounting.search_page",
     *_FINANCIAL_REPORT_ACTIONS,
     "res.users.accounting_access.inspect",
@@ -2409,6 +2453,473 @@ def _dispatch_invoice_payment_status(
     }
 
 
+def _open_item_payload_is_valid(payload: Any) -> bool:
+    if not isinstance(payload, dict) or set(payload) != {
+        "company_id",
+        "after",
+        "limit",
+        "filters",
+    }:
+        return False
+    if (
+        not isinstance(payload["company_id"], int)
+        or isinstance(payload["company_id"], bool)
+        or payload["company_id"] <= 0
+        or not isinstance(payload["limit"], int)
+        or isinstance(payload["limit"], bool)
+        or not 1 <= payload["limit"] <= 1001
+    ):
+        return False
+    after = payload["after"]
+    if after is not None and (
+        not isinstance(after, list)
+        or len(after) != 2
+        or not _is_canonical_date(after[0])
+        or not isinstance(after[1], int)
+        or isinstance(after[1], bool)
+        or after[1] <= 0
+    ):
+        return False
+    filters = payload["filters"]
+    if not isinstance(filters, dict) or set(filters) != {
+        "date_from",
+        "date_to",
+        "due_date_from",
+        "due_date_to",
+        "partner_id",
+        "account_id",
+        "journal_id",
+        "currency_id",
+        "query",
+    }:
+        return False
+    for field in ("date_from", "date_to", "due_date_from", "due_date_to"):
+        if filters[field] is not None and not _is_canonical_date(filters[field]):
+            return False
+    if (
+        filters["date_from"] is not None
+        and filters["date_to"] is not None
+        and filters["date_from"] > filters["date_to"]
+    ) or (
+        filters["due_date_from"] is not None
+        and filters["due_date_to"] is not None
+        and filters["due_date_from"] > filters["due_date_to"]
+    ):
+        return False
+    for field in ("partner_id", "account_id", "journal_id", "currency_id"):
+        value = filters[field]
+        if value is not None and (
+            not isinstance(value, int) or isinstance(value, bool) or value <= 0
+        ):
+            return False
+    query = filters["query"]
+    return query is None or (
+        isinstance(query, str)
+        and query == query.strip()
+        and 1 <= len(query) <= 200
+    )
+
+
+def _open_item_gate(env: Any, company_id: int) -> tuple[bool, bool, bool]:
+    company_installed = env.registry.get("res.company") is not None
+    company_read_allowed = bool(
+        company_installed and env["res.company"].has_access("read")
+    )
+    company_visible = bool(
+        company_read_allowed
+        and env["res.company"].search_count([("id", "=", company_id)], limit=1)
+    )
+    module_installed = all(
+        env.registry.get(model_name) is not None
+        for model_name in _OPEN_ITEM_MODELS
+    )
+    access_allowed = bool(
+        company_visible
+        and module_installed
+        and all(env[model_name].has_access("read") for model_name in _OPEN_ITEM_MODELS)
+    )
+    return company_visible, module_installed, access_allowed
+
+
+def _open_item_domain(
+    company_id: int,
+    account_type: str,
+    after: list[Any] | None,
+    filters: dict[str, Any],
+) -> list[Any]:
+    from odoo.fields import Domain
+
+    domains: list[list[Any]] = [
+        [
+            ("company_id", "=", company_id),
+            ("parent_state", "=", "posted"),
+            ("account_type", "=", account_type),
+            ("account_id.reconcile", "=", True),
+            ("reconciled", "=", False),
+        ]
+    ]
+    for filter_name, model_field, operator in (
+        ("date_from", "date", ">="),
+        ("date_to", "date", "<="),
+        ("due_date_from", "date_maturity", ">="),
+        ("due_date_to", "date_maturity", "<="),
+        ("partner_id", "partner_id", "="),
+        ("account_id", "account_id", "="),
+        ("journal_id", "journal_id", "="),
+        ("currency_id", "currency_id", "="),
+    ):
+        if filters[filter_name] is not None:
+            domains.append([(model_field, operator, filters[filter_name])])
+    if filters["query"] is not None:
+        domains.append(
+            list(
+                Domain.OR(
+                    [
+                        [("move_id.name", "ilike", filters["query"])],
+                        [("ref", "ilike", filters["query"])],
+                        [("name", "ilike", filters["query"])],
+                        [("partner_id.name", "ilike", filters["query"])],
+                    ]
+                )
+            )
+        )
+    if after is not None:
+        domains.append(
+            [
+                "|",
+                ("date", "<", after[0]),
+                "&",
+                ("date", "=", after[0]),
+                ("id", "<", after[1]),
+            ]
+        )
+    return list(Domain.AND(domains))
+
+
+def _open_item_related(
+    env: Any, rows: list[dict[str, Any]], company_id: int
+) -> dict[str, dict[int, dict[str, Any]]]:
+    def ids(field: str) -> set[int]:
+        return {
+            record_id
+            for row in rows
+            if (record_id := _reference_id(row.get(field))) is not None
+        }
+
+    currency_ids = ids("currency_id") | ids("company_currency_id")
+    return {
+        "moves": _related_rows(
+            env,
+            "account.move",
+            ids("move_id"),
+            ("name", "move_type", "state", "company_id"),
+            company_id,
+        ),
+        "journals": _related_rows(
+            env,
+            "account.journal",
+            ids("journal_id"),
+            ("code", "name", "company_id"),
+            company_id,
+        ),
+        "partners": _related_rows(
+            env,
+            "res.partner",
+            ids("partner_id"),
+            ("complete_name", "ref", "company_id"),
+            company_id,
+        ),
+        "accounts": _related_rows(
+            env,
+            "account.account",
+            ids("account_id"),
+            (
+                "code",
+                "name",
+                "account_type",
+                "non_trade",
+                "reconcile",
+                "company_ids",
+            ),
+            company_id,
+        ),
+        "currencies": _related_rows(
+            env,
+            "res.currency",
+            currency_ids,
+            ("name",),
+            company_id,
+        ),
+    }
+
+
+def _open_item_runtime_failure() -> RuntimeFailure:
+    return RuntimeFailure(
+        "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+    )
+
+
+def _open_item_optional_text(value: Any) -> str | None:
+    if value in (False, None, ""):
+        return None
+    if isinstance(value, str):
+        return value
+    raise _open_item_runtime_failure()
+
+
+def _open_item_required_text(value: Any) -> str:
+    if isinstance(value, str) and value:
+        return value
+    raise _open_item_runtime_failure()
+
+
+def _open_item_company_scope(env: Any, company_id: int) -> set[int]:
+    rows = (
+        env["res.company"]
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+        .search_read(
+            [("id", "=", company_id)],
+            fields=["id", "parent_path"],
+            limit=1,
+            order="id",
+        )
+    )
+    if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+        raise _open_item_runtime_failure()
+    row = rows[0]
+    if set(row) != {"id", "parent_path"} or row["id"] != company_id:
+        raise _open_item_runtime_failure()
+    parent_path = row["parent_path"]
+    if not isinstance(parent_path, str) or not parent_path.endswith("/"):
+        raise _open_item_runtime_failure()
+    parts = parent_path[:-1].split("/")
+    try:
+        company_scope = {int(part) for part in parts}
+    except (TypeError, ValueError) as exc:
+        raise _open_item_runtime_failure() from exc
+    if (
+        not parts
+        or any(not part.isdigit() or part.startswith("0") for part in parts)
+        or len(company_scope) != len(parts)
+        or any(value <= 0 for value in company_scope)
+        or int(parts[-1]) != company_id
+    ):
+        raise _open_item_runtime_failure()
+    return company_scope
+
+
+def _open_item_journal_reference(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "code": _open_item_required_text(row.get("code")),
+        "name": _open_item_required_text(row.get("name")),
+    }
+
+
+def _open_item_account_reference(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "code": _open_item_required_text(row.get("code")),
+        "name": _open_item_required_text(row.get("name")),
+    }
+
+
+def _open_item_currency_reference(row: dict[str, Any]) -> dict[str, Any]:
+    code = _open_item_required_text(row.get("name"))
+    if len(code) > 3:
+        raise _open_item_runtime_failure()
+    return {"id": row["id"], "code": code}
+
+
+def _dispatch_open_item_search(
+    env: Any, action: str, payload: dict[str, Any], company_id: int
+) -> dict[str, Any]:
+    if not _open_item_payload_is_valid(payload):
+        raise RuntimeFailure(
+            "bridge_protocol_error",
+            "The bridge action payload is invalid.",
+            exit_code=7,
+        )
+    if payload["company_id"] != company_id:
+        raise RuntimeFailure(
+            "company_unavailable", "The company is unavailable.", exit_code=3
+        )
+    side, account_type = _OPEN_ITEM_ACTION_SIDES[action]
+    company_visible, module_installed, access_allowed = _open_item_gate(
+        env, company_id
+    )
+    if not access_allowed:
+        return {
+            "user_id": env.uid,
+            "company_visible": company_visible,
+            "module_installed": module_installed,
+            "access_allowed": access_allowed,
+            "rows": [],
+        }
+    company_scope = _open_item_company_scope(env, company_id)
+    raw_rows = (
+        env["account.move.line"]
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+        .search_read(
+            _open_item_domain(
+                company_id, account_type, payload["after"], payload["filters"]
+            ),
+            fields=list(_OPEN_ITEM_FIELDS),
+            limit=payload["limit"],
+            order="date desc,id desc",
+        )
+    )
+    related = _open_item_related(env, raw_rows, company_id)
+    normalized: list[dict[str, Any]] = []
+    observed_ids: set[int] = set()
+    allowed_move_types = {
+        "entry",
+        "out_invoice",
+        "out_refund",
+        "in_invoice",
+        "in_refund",
+        "out_receipt",
+        "in_receipt",
+    }
+    for raw in raw_rows:
+        if not isinstance(raw, dict) or set(raw) != set(_OPEN_ITEM_FIELDS):
+            raise _open_item_runtime_failure()
+        row = dict(raw)
+        record_id = row.get("id")
+        if (
+            not isinstance(record_id, int)
+            or isinstance(record_id, bool)
+            or record_id <= 0
+            or record_id in observed_ids
+        ):
+            raise _open_item_runtime_failure()
+        observed_ids.add(record_id)
+        move_id = _reference_id(row.pop("move_id"))
+        journal_id = _reference_id(row.pop("journal_id"))
+        row_company_id = _reference_id(row.pop("company_id"))
+        partner_id = _reference_id(row.pop("partner_id"))
+        account_id = _reference_id(row.pop("account_id"))
+        currency_id = _reference_id(row.pop("currency_id"))
+        company_currency_id = _reference_id(row.pop("company_currency_id"))
+        if (
+            row_company_id != company_id
+            or move_id is None
+            or journal_id is None
+            or account_id is None
+            or currency_id is None
+            or company_currency_id is None
+            or row.pop("parent_state") != "posted"
+            or row.pop("account_type") != account_type
+            or row.get("reconciled") is not False
+        ):
+            raise _open_item_runtime_failure()
+
+        move = _safe_related(related, "moves", move_id)
+        journal = _safe_related(related, "journals", journal_id)
+        account = _safe_related(related, "accounts", account_id)
+        currency = _safe_related(related, "currencies", currency_id)
+        company_currency = _safe_related(
+            related, "currencies", company_currency_id
+        )
+        move_company_id = _reference_id(move.get("company_id"))
+        journal_company_id = _reference_id(journal.get("company_id"))
+        account_company_ids = account.get("company_ids")
+        if (
+            move_company_id != company_id
+            or journal_company_id not in company_scope
+            or not isinstance(move.get("name"), str)
+            or not move["name"]
+            or move.get("move_type") not in allowed_move_types
+            or move.get("state") != "posted"
+            or not isinstance(account_company_ids, list)
+            or any(
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or value <= 0
+                for value in account_company_ids
+            )
+            or not company_scope.intersection(account_company_ids)
+            or account.get("account_type") != account_type
+            or account.get("reconcile") is not True
+            or not isinstance(account.get("non_trade"), bool)
+        ):
+            raise _open_item_runtime_failure()
+
+        partner = None
+        if partner_id is not None:
+            partner_row = _safe_related(related, "partners", partner_id)
+            partner_company_id = _reference_id(partner_row.get("company_id"))
+            if partner_company_id is not None and partner_company_id not in company_scope:
+                raise _open_item_runtime_failure()
+            partner = {
+                "id": partner_id,
+                "name": _open_item_optional_text(
+                    partner_row.get("complete_name")
+                ),
+                "reference": _open_item_optional_text(partner_row.get("ref")),
+            }
+
+        row["side"] = side
+        row["date"] = _date_string(row["date"])
+        row["due_date"] = (
+            None
+            if row.pop("date_maturity") in (False, None)
+            else _date_string(raw["date_maturity"])
+        )
+        row["name"] = _open_item_optional_text(row["name"])
+        row["ref"] = _open_item_optional_text(row["ref"])
+        row["matching_number"] = _open_item_optional_text(
+            row["matching_number"]
+        )
+        row["move"] = {
+            "id": move_id,
+            "name": move["name"],
+            "move_type": move["move_type"],
+            "state": move["state"],
+        }
+        row["journal"] = _open_item_journal_reference(journal)
+        row["company_id"] = company_id
+        row["partner"] = partner
+        row["account"] = {
+            **_open_item_account_reference(account),
+            "account_type": account["account_type"],
+            "non_trade": account["non_trade"],
+        }
+        row["currency"] = _open_item_currency_reference(currency)
+        row["company_currency"] = _open_item_currency_reference(company_currency)
+        raw_amounts = {
+            field: row[field]
+            for field in (
+                "debit",
+                "credit",
+                "balance",
+                "amount_currency",
+                "amount_residual",
+                "amount_residual_currency",
+            )
+        }
+        try:
+            balanced = (
+                Decimal(str(raw_amounts["debit"]))
+                - Decimal(str(raw_amounts["credit"]))
+                == Decimal(str(raw_amounts["balance"]))
+            )
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise _open_item_runtime_failure() from exc
+        if not balanced:
+            raise _open_item_runtime_failure()
+        for field, value in raw_amounts.items():
+            row[field] = _decimal_string(value)
+        normalized.append(row)
+    return {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        "rows": normalized,
+    }
+
+
 def _partner_accounting_payload_is_valid(payload: Any, company_id: int) -> bool:
     if not isinstance(payload, dict) or set(payload) != {
         "company_id",
@@ -3267,6 +3778,8 @@ def _dispatch(
         return _dispatch_invoice_get(env, payload, company_id)
     if action == "account.move.invoice.payment_status.inspect":
         return _dispatch_invoice_payment_status(env, payload, company_id)
+    if action in _OPEN_ITEM_ACTION_SIDES:
+        return _dispatch_open_item_search(env, action, payload, company_id)
     if action == "res.partner.accounting.search_page":
         return _dispatch_partner_accounting_search(env, payload, company_id)
     if action in _FINANCIAL_REPORT_ACTIONS:

@@ -47,6 +47,8 @@ IMPLEMENTED_READS = {
     "invoice.search": "invoice_search",
     "invoice.get": "invoice_get",
     "invoice.payment_status.inspect": "invoice_payment_status_inspect",
+    "receivable.open_items.list": "receivable_open_items_list",
+    "payable.open_items.list": "payable_open_items_list",
 }
 
 
@@ -185,6 +187,11 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
             "invoice.payment_status.inspect",
         }:
             expected_live_test = "tests/integration/test_invoices_live.py"
+        elif capability_id in {
+            "receivable.open_items.list",
+            "payable.open_items.list",
+        }:
+            expected_live_test = "tests/integration/test_open_items_live.py"
         elif capability_id in {
             "company.accounting_configuration.inspect",
             "diagnostic.accounting_environment.inspect",

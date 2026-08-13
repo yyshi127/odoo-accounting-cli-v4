@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/receivable.open_items.list.response.schema.json",
+  "title": "receivable.open_items.list response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "receivable.open_items.list"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{
+    "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+    "then": {
+      "properties": {
+        "request_id": {"type": "string", "format": "uuid"},
+        "status": {"const": "verified"},
+        "data": {"$ref": "#/$defs/data"},
+        "error": {"type": "null"}
+      }
+    },
+    "else": {
+      "properties": {
+        "data": {"type": "null"},
+        "error": {"$ref": "response.schema.json#/$defs/error"}
+      }
+    }
+  }],
+  "$defs": {
+    "decimal": {
+      "type": "string",
+      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
+    },
+    "nullableText": {
+      "oneOf": [{"type": "null"}, {"type": "string", "minLength": 1}]
+    },
+    "currency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1, "maxLength": 3}
+      }
+    },
+    "move": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "move_type", "state"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1},
+        "move_type": {
+          "enum": ["entry", "out_invoice", "out_refund", "in_invoice", "in_refund", "out_receipt", "in_receipt"]
+        },
+        "state": {"const": "posted"}
+      }
+    },
+    "journal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1, "maxLength": 5},
+        "name": {"type": "string", "minLength": 1}
+      }
+    },
+    "partner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "reference"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"$ref": "#/$defs/nullableText"},
+        "reference": {"$ref": "#/$defs/nullableText"}
+      }
+    },
+    "account": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code", "name", "account_type", "non_trade"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "account_type": {"const": "asset_receivable"},
+        "non_trade": {"type": "boolean"}
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "side", "date", "due_date", "name", "ref", "move", "journal", "company_id", "partner", "account", "currency", "company_currency", "debit", "credit", "balance", "amount_currency", "amount_residual", "amount_residual_currency", "reconciled", "matching_number"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "side": {"const": "receivable"},
+        "date": {"type": "string", "format": "date"},
+        "due_date": {
+          "oneOf": [{"type": "null"}, {"type": "string", "format": "date"}]
+        },
+        "name": {"$ref": "#/$defs/nullableText"},
+        "ref": {"$ref": "#/$defs/nullableText"},
+        "move": {"$ref": "#/$defs/move"},
+        "journal": {"$ref": "#/$defs/journal"},
+        "company_id": {"type": "integer", "minimum": 1},
+        "partner": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/partner"}]},
+        "account": {"$ref": "#/$defs/account"},
+        "currency": {"$ref": "#/$defs/currency"},
+        "company_currency": {"$ref": "#/$defs/currency"},
+        "debit": {"$ref": "#/$defs/decimal"},
+        "credit": {"$ref": "#/$defs/decimal"},
+        "balance": {"$ref": "#/$defs/decimal"},
+        "amount_currency": {"$ref": "#/$defs/decimal"},
+        "amount_residual": {"$ref": "#/$defs/decimal"},
+        "amount_residual_currency": {"$ref": "#/$defs/decimal"},
+        "reconciled": {"const": false},
+        "matching_number": {"$ref": "#/$defs/nullableText"}
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items", "has_more", "next_cursor"],
+      "properties": {
+        "items": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/item"}},
+        "has_more": {"type": "boolean"},
+        "next_cursor": {"type": ["string", "null"], "minLength": 1, "maxLength": 4096}
+      }
+    }
+  }
+}
