@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/diagnostic.accounting_environment.inspect.response.schema.json",
+  "title": "diagnostic.accounting_environment.inspect response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"}, "request_id": {"type": ["string", "null"], "format": "uuid"}, "success": {"type": "boolean"},
+    "capability": {"const": "diagnostic.accounting_environment.inspect"}, "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]}, "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]}, "odoo": {"$ref": "response.schema.json#/$defs/odoo"}, "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{"if": {"properties": {"success": {"const": true}}, "required": ["success"]}, "then": {"properties": {"request_id": {"type": "string", "format": "uuid"}, "status": {"const": "verified"}, "data": {"$ref": "#/$defs/data"}, "error": {"type": "null"}}}, "else": {"properties": {"data": {"type": "null"}, "error": {"$ref": "response.schema.json#/$defs/error"}}}}],
+  "$defs": {
+    "named": {"type": "object", "additionalProperties": false, "required": ["id", "name"], "properties": {"id": {"type": "integer", "minimum": 1}, "name": {"type": "string", "minLength": 1}}},
+    "user": {"type": "object", "additionalProperties": false, "required": ["id", "login"], "properties": {"id": {"type": "integer", "minimum": 1}, "login": {"type": "string", "minLength": 1}}},
+    "module": {"type": "object", "additionalProperties": false, "required": ["name", "state", "version"], "properties": {"name": {"enum": ["account", "account_reports", "base"]}, "state": {"type": "string", "minLength": 1}, "version": {"type": ["string", "null"], "minLength": 1}}},
+    "model": {"type": "object", "additionalProperties": false, "required": ["model", "available", "read"], "properties": {"model": {"enum": ["account.account", "account.journal", "account.move", "account.move.line", "account.report", "account.tax", "ir.module.module", "res.company", "res.users"]}, "available": {"type": "boolean"}, "read": {"type": "boolean"}}},
+    "data": {"type": "object", "additionalProperties": false, "required": ["company", "user", "modules", "models", "transaction_read_only"], "properties": {"company": {"$ref": "#/$defs/named"}, "user": {"$ref": "#/$defs/user"}, "modules": {"type": "array", "minItems": 3, "maxItems": 3, "prefixItems": [{"allOf": [{"$ref": "#/$defs/module"}, {"properties": {"name": {"const": "account"}}}]}, {"allOf": [{"$ref": "#/$defs/module"}, {"properties": {"name": {"const": "account_reports"}}}]}, {"allOf": [{"$ref": "#/$defs/module"}, {"properties": {"name": {"const": "base"}}}]}], "items": false}, "models": {"type": "array", "minItems": 9, "maxItems": 9, "prefixItems": [{"allOf": [{"$ref": "#/$defs/model"}, {"properties": {"model": {"const": "account.account"}}}]}, {"allOf": [{"$ref": "#/$defs/model"}, {"properties": {"model": {"const": "account.journal"}}}]}, {"allOf": [{"$ref": "#/$defs/model"}, {"properties": {"model": {"const": "account.move"}}}]}, {"allOf": [{"$ref": "#/$defs/model"}, {"properties": {"model": {"const": "account.move.line"}}}]}, {"allOf": [{"$ref": "#/$defs/model"}, {"properties": {"model": {"const": "account.report"}}}]}, {"allOf": [{"$ref": "#/$defs/model"}, {"properties": {"model": {"const": "account.tax"}}}]}, {"allOf": [{"$ref": "#/$defs/model"}, {"properties": {"model": {"const": "ir.module.module"}}}]}, {"allOf": [{"$ref": "#/$defs/model"}, {"properties": {"model": {"const": "res.company"}}}]}, {"allOf": [{"$ref": "#/$defs/model"}, {"properties": {"model": {"const": "res.users"}}}]}], "items": false}, "transaction_read_only": {"const": true}}}
+  }
+}

@@ -141,6 +141,8 @@ _ACTIONS = {
     "account.move.journal_entry.get",
     *_FINANCIAL_REPORT_ACTIONS,
     "res.users.accounting_access.inspect",
+    "res.company.accounting_configuration.inspect",
+    "accounting.environment.diagnostic.inspect",
 }
 
 _ACCOUNTING_ACCESS_GROUPS = (
@@ -157,6 +159,18 @@ _ACCOUNTING_ACCESS_MODELS = (
     "account.move.line",
     "account.report",
     "account.tax",
+)
+_DIAGNOSTIC_MODULES = ("account", "account_reports", "base")
+_DIAGNOSTIC_MODELS = (
+    "account.account",
+    "account.journal",
+    "account.move",
+    "account.move.line",
+    "account.report",
+    "account.tax",
+    "ir.module.module",
+    "res.company",
+    "res.users",
 )
 
 
@@ -1587,6 +1601,235 @@ def _dispatch_financial_report(
     }
 
 
+def _single_related_row(
+    env: Any, model_name: str, record_id: int | None, fields: list[str]
+) -> dict[str, Any] | None:
+    if record_id is None:
+        return None
+    rows = env[model_name].search_read(
+        [("id", "=", record_id)], fields=["id", *fields], limit=1
+    )
+    if len(rows) != 1 or rows[0].get("id") != record_id:
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    return rows[0]
+
+
+def _dispatch_company_accounting_configuration(
+    env: Any, payload: dict[str, Any], company_id: int
+) -> dict[str, Any]:
+    _require_keys(payload, {"company_id"})
+    if payload["company_id"] != company_id:
+        raise RuntimeFailure(
+            "company_unavailable", "The company is unavailable.", exit_code=3
+        )
+    required_models = ("res.company", "res.currency", "res.country", "account.account")
+    company_visible = bool(
+        env["res.company"].search_count([("id", "=", company_id)], limit=1)
+    )
+    module_installed = all(
+        env.registry.get(model_name) is not None for model_name in required_models
+    )
+    access_allowed = bool(
+        company_visible
+        and module_installed
+        and all(env[model_name].has_access("read") for model_name in required_models)
+    )
+    if not access_allowed:
+        return {
+            "user_id": env.uid,
+            "company_visible": company_visible,
+            "module_installed": module_installed,
+            "access_allowed": access_allowed,
+            "data": {},
+        }
+    fields = [
+        "id",
+        "name",
+        "currency_id",
+        "country_id",
+        "account_fiscal_country_id",
+        "chart_template",
+        "tax_calculation_rounding_method",
+        "fiscalyear_last_month",
+        "fiscalyear_last_day",
+        "anglo_saxon_accounting",
+        "bank_account_code_prefix",
+        "cash_account_code_prefix",
+        "transfer_account_code_prefix",
+        "account_journal_suspense_account_id",
+        "account_default_pos_receivable_account_id",
+        "account_opening_move_id",
+        "account_opening_date",
+    ]
+    rows = env["res.company"].with_context(active_test=False).search_read(
+        [("id", "=", company_id)], fields=fields, limit=1
+    )
+    if len(rows) != 1 or rows[0].get("id") != company_id:
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    row = rows[0]
+    currency_id = _reference_id(row["currency_id"])
+    country_id = _reference_id(row["country_id"])
+    fiscal_country_id = _reference_id(row["account_fiscal_country_id"])
+    suspense_id = _reference_id(row["account_journal_suspense_account_id"])
+    pos_receivable_id = _reference_id(row["account_default_pos_receivable_account_id"])
+    currency = _single_related_row(env, "res.currency", currency_id, ["name"])
+    country = _single_related_row(env, "res.country", country_id, ["name", "code"])
+    fiscal_country = _single_related_row(
+        env, "res.country", fiscal_country_id, ["name", "code"]
+    )
+    suspense = _single_related_row(env, "account.account", suspense_id, ["code", "name"])
+    pos_receivable = _single_related_row(
+        env, "account.account", pos_receivable_id, ["code", "name"]
+    )
+    if currency is None:
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    try:
+        fiscal_month = int(row["fiscalyear_last_month"])
+    except (TypeError, ValueError) as exc:
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        ) from exc
+    data = {
+        "company": {"id": row["id"], "name": row["name"]},
+        "currency": {"id": currency["id"], "code": currency["name"]},
+        "country": None
+        if country is None
+        else {
+            "id": country["id"],
+            "code": country["code"],
+            "name": country["name"],
+        },
+        "fiscal_country": None
+        if fiscal_country is None
+        else {
+            "id": fiscal_country["id"],
+            "code": fiscal_country["code"],
+            "name": fiscal_country["name"],
+        },
+        "chart_template": _optional_string(row["chart_template"]),
+        "tax_calculation_rounding_method": row["tax_calculation_rounding_method"],
+        "fiscal_year_end": {"month": fiscal_month, "day": row["fiscalyear_last_day"]},
+        "anglo_saxon_accounting": row["anglo_saxon_accounting"],
+        "account_code_prefixes": {
+            "bank": _optional_string(row["bank_account_code_prefix"]),
+            "cash": _optional_string(row["cash_account_code_prefix"]),
+            "transfer": _optional_string(row["transfer_account_code_prefix"]),
+        },
+        "suspense_account": None
+        if suspense is None
+        else {
+            "id": suspense["id"],
+            "code": suspense["code"],
+            "name": suspense["name"],
+        },
+        "pos_receivable_account": None
+        if pos_receivable is None
+        else {
+            "id": pos_receivable["id"],
+            "code": pos_receivable["code"],
+            "name": pos_receivable["name"],
+        },
+        "opening": {
+            "date": None
+            if row["account_opening_date"] in (False, None)
+            else _date_string(row["account_opening_date"]),
+            "move_id": _reference_id(row["account_opening_move_id"]),
+        },
+    }
+    return {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        "data": data,
+    }
+
+
+def _dispatch_accounting_environment_diagnostic(
+    env: Any, payload: dict[str, Any], company_id: int
+) -> dict[str, Any]:
+    _require_keys(payload, {"company_id"})
+    if payload["company_id"] != company_id:
+        raise RuntimeFailure(
+            "company_unavailable", "The company is unavailable.", exit_code=3
+        )
+    company_visible = bool(
+        env["res.company"].search_count([("id", "=", company_id)], limit=1)
+    )
+    module_installed = all(
+        env.registry.get(model_name) is not None for model_name in _DIAGNOSTIC_MODELS
+    )
+    access_allowed = bool(
+        company_visible
+        and module_installed
+        and env["res.company"].has_access("read")
+        and env["res.users"].has_access("read")
+        and env["ir.module.module"].has_access("read")
+    )
+    if not access_allowed:
+        return {
+            "user_id": env.uid,
+            "company_visible": company_visible,
+            "module_installed": module_installed,
+            "access_allowed": access_allowed,
+            "data": {},
+        }
+    company_rows = env["res.company"].search_read(
+        [("id", "=", company_id)], fields=["id", "name"], limit=1
+    )
+    module_rows = env["ir.module.module"].search_read(
+        [("name", "in", list(_DIAGNOSTIC_MODULES))],
+        fields=["name", "state", "latest_version"],
+        order="name",
+    )
+    if len(company_rows) != 1 or company_rows[0].get("id") != company_id:
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    if [row.get("name") for row in module_rows] != list(_DIAGNOSTIC_MODULES):
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    modules = [
+        {
+            "name": row["name"],
+            "state": row["state"],
+            "version": _optional_string(row["latest_version"]),
+        }
+        for row in module_rows
+    ]
+    data = {
+        "company": company_rows[0],
+        "user": {"id": env.user.id, "login": env.user.login},
+        "modules": modules,
+        "models": [
+            {
+                "model": model_name,
+                "available": env.registry.get(model_name) is not None,
+                "read": bool(
+                    env.registry.get(model_name) is not None
+                    and env[model_name].has_access("read")
+                ),
+            }
+            for model_name in _DIAGNOSTIC_MODELS
+        ],
+        "transaction_read_only": True,
+    }
+    return {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        "data": data,
+    }
+
+
 def _dispatch(
     env: Any,
     action: str,
@@ -1594,6 +1837,10 @@ def _dispatch(
     company_id: int,
     available_company_ids: tuple[int, ...] | None = None,
 ):
+    if action == "res.company.accounting_configuration.inspect":
+        return _dispatch_company_accounting_configuration(env, payload, company_id)
+    if action == "accounting.environment.diagnostic.inspect":
+        return _dispatch_accounting_environment_diagnostic(env, payload, company_id)
     if action == "res.users.accounting_access.inspect":
         _require_keys(payload, {"company_id"})
         if (

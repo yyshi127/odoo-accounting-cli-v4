@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/company.accounting_configuration.inspect.response.schema.json",
+  "title": "company.accounting_configuration.inspect response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"}, "request_id": {"type": ["string", "null"], "format": "uuid"}, "success": {"type": "boolean"},
+    "capability": {"const": "company.accounting_configuration.inspect"}, "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]}, "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]}, "odoo": {"$ref": "response.schema.json#/$defs/odoo"}, "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{"if": {"properties": {"success": {"const": true}}, "required": ["success"]}, "then": {"properties": {"request_id": {"type": "string", "format": "uuid"}, "status": {"const": "verified"}, "data": {"$ref": "#/$defs/data"}, "error": {"type": "null"}}}, "else": {"properties": {"data": {"type": "null"}, "error": {"$ref": "response.schema.json#/$defs/error"}}}}],
+  "$defs": {
+    "named": {"type": "object", "additionalProperties": false, "required": ["id", "name"], "properties": {"id": {"type": "integer", "minimum": 1}, "name": {"type": "string", "minLength": 1}}},
+    "coded": {"type": "object", "additionalProperties": false, "required": ["id", "code", "name"], "properties": {"id": {"type": "integer", "minimum": 1}, "code": {"type": "string", "minLength": 1}, "name": {"type": "string", "minLength": 1}}},
+    "currency": {"type": "object", "additionalProperties": false, "required": ["id", "code"], "properties": {"id": {"type": "integer", "minimum": 1}, "code": {"type": "string", "minLength": 1, "maxLength": 3}}},
+    "account": {"type": "object", "additionalProperties": false, "required": ["id", "code", "name"], "properties": {"id": {"type": "integer", "minimum": 1}, "code": {"type": "string", "minLength": 1}, "name": {"type": "string", "minLength": 1}}},
+    "data": {"type": "object", "additionalProperties": false, "required": ["company", "currency", "country", "fiscal_country", "chart_template", "tax_calculation_rounding_method", "fiscal_year_end", "anglo_saxon_accounting", "account_code_prefixes", "suspense_account", "pos_receivable_account", "opening"], "properties": {
+      "company": {"$ref": "#/$defs/named"}, "currency": {"$ref": "#/$defs/currency"}, "country": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/coded"}]}, "fiscal_country": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/coded"}]},
+      "chart_template": {"type": ["string", "null"], "minLength": 1}, "tax_calculation_rounding_method": {"enum": ["round_per_line", "round_globally"]},
+      "fiscal_year_end": {"type": "object", "additionalProperties": false, "required": ["month", "day"], "properties": {"month": {"type": "integer", "minimum": 1, "maximum": 12}, "day": {"type": "integer", "minimum": 1, "maximum": 31}}},
+      "anglo_saxon_accounting": {"type": "boolean"},
+      "account_code_prefixes": {"type": "object", "additionalProperties": false, "required": ["bank", "cash", "transfer"], "properties": {"bank": {"type": ["string", "null"], "minLength": 1}, "cash": {"type": ["string", "null"], "minLength": 1}, "transfer": {"type": ["string", "null"], "minLength": 1}}},
+      "suspense_account": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/account"}]}, "pos_receivable_account": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/account"}]},
+      "opening": {"type": "object", "additionalProperties": false, "required": ["date", "move_id"], "properties": {"date": {"type": ["string", "null"], "format": "date"}, "move_id": {"type": ["integer", "null"], "minimum": 1}}}
+    }}
+  }
+}

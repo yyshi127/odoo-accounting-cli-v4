@@ -18,6 +18,9 @@ from odoo_accounting_cli_v4.bridge.account_accounts import OdooAccountListPort
 from odoo_accounting_cli_v4.bridge.client import BridgeError, OdooBridgeClient
 from odoo_accounting_cli_v4.bridge.financial_reports import OdooFinancialReportPort
 from odoo_accounting_cli_v4.bridge.accounting_access import OdooAccountingAccessPort
+from odoo_accounting_cli_v4.bridge.environment_inspection import (
+    OdooEnvironmentInspectionPort,
+)
 from odoo_accounting_cli_v4.bridge.journal_entries import OdooJournalEntryPort
 from odoo_accounting_cli_v4.bridge.master_data import OdooMasterDataPort
 from odoo_accounting_cli_v4.capabilities.account_account_list import (
@@ -28,6 +31,10 @@ from odoo_accounting_cli_v4.capabilities.account_account_list import (
 from odoo_accounting_cli_v4.capabilities.accounting_access import (
     read_accounting_access,
     validate_accounting_access_request,
+)
+from odoo_accounting_cli_v4.capabilities.environment_inspection import (
+    read_environment_inspection,
+    validate_environment_inspection_request,
 )
 from odoo_accounting_cli_v4.capabilities.master_data_lists import (
     MasterDataListError,
@@ -84,6 +91,12 @@ _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
     "report_cash_flow": read_cash_flow,
     "report_tax": read_tax_report,
     "user_accounting_access_inspect": read_accounting_access,
+    "company_accounting_configuration_inspect": partial(
+        read_environment_inspection, "company.accounting_configuration.inspect"
+    ),
+    "diagnostic_accounting_environment_inspect": partial(
+        read_environment_inspection, "diagnostic.accounting_environment.inspect"
+    ),
 }
 _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "account_account_list": validate_account_list_request,
@@ -102,6 +115,14 @@ _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "report_cash_flow": validate_cash_flow_request,
     "report_tax": validate_tax_report_request,
     "user_accounting_access_inspect": validate_accounting_access_request,
+    "company_accounting_configuration_inspect": partial(
+        validate_environment_inspection_request,
+        "company.accounting_configuration.inspect",
+    ),
+    "diagnostic_accounting_environment_inspect": partial(
+        validate_environment_inspection_request,
+        "diagnostic.accounting_environment.inspect",
+    ),
 }
 _CAPABILITY_MODELS = {
     "account.account.list": "account.account",
@@ -118,6 +139,8 @@ _CAPABILITY_MODELS = {
     "report.cash_flow": "account.report",
     "report.tax": "account.report",
     "user.accounting_access.inspect": "res.users",
+    "company.accounting_configuration.inspect": "res.company",
+    "diagnostic.accounting_environment.inspect": "ir.module.module",
 }
 
 
@@ -570,12 +593,20 @@ def _execute_read(
             []
             if capability_id.startswith("report.")
             else (
-                [data["user"]["id"]]
-                if capability_id == "user.accounting_access.inspect"
+                [data["company"]["id"]]
+                if capability_id == "company.accounting_configuration.inspect"
                 else (
-                    [data["id"]]
-                    if capability_id == "journal_entry.get"
-                    else [item["id"] for item in data["items"]]
+                    []
+                    if capability_id == "diagnostic.accounting_environment.inspect"
+                    else (
+                        [data["user"]["id"]]
+                        if capability_id == "user.accounting_access.inspect"
+                        else (
+                            [data["id"]]
+                            if capability_id == "journal_entry.get"
+                            else [item["id"] for item in data["items"]]
+                        )
+                    )
                 )
             )
         ),
@@ -616,6 +647,11 @@ def _configured_port_factory(
         return OdooJournalEntryPort(client)
     if capability_id == "user.accounting_access.inspect":
         return OdooAccountingAccessPort(client)
+    if capability_id in {
+        "company.accounting_configuration.inspect",
+        "diagnostic.accounting_environment.inspect",
+    }:
+        return OdooEnvironmentInspectionPort(client, capability_id)
     if capability_id in {
         "report.trial_balance",
         "report.balance_sheet",
