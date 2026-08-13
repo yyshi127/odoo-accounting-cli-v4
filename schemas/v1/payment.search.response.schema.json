@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/payment.search.response.schema.json",
+  "title": "payment.search response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "payment.search"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{
+    "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+    "then": {
+      "properties": {
+        "request_id": {"type": "string", "format": "uuid"},
+        "status": {"const": "verified"},
+        "data": {"$ref": "#/$defs/data"},
+        "error": {"type": "null"}
+      }
+    },
+    "else": {
+      "properties": {
+        "data": {"type": "null"},
+        "error": {"$ref": "response.schema.json#/$defs/error"}
+      }
+    }
+  }],
+  "$defs": {
+    "text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nullableText": {
+      "oneOf": [{"type": "null"}, {"$ref": "#/$defs/text"}]
+    },
+    "money": {
+      "type": "string",
+      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
+    },
+    "nonnegativeMoney": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
+    },
+    "currency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1, "maxLength": 3}
+      }
+    },
+    "journal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1, "maxLength": 5},
+        "name": {"$ref": "#/$defs/text"}
+      }
+    },
+    "partner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"$ref": "#/$defs/nullableText"}
+      }
+    },
+    "paymentMethodLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "journal_id"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"$ref": "#/$defs/nullableText"},
+        "journal_id": {"type": ["integer", "null"], "minimum": 1}
+      }
+    },
+    "paymentMethod": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code", "name", "payment_type"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"$ref": "#/$defs/text"},
+        "name": {"$ref": "#/$defs/text"},
+        "payment_type": {"enum": ["inbound", "outbound"]}
+      }
+    },
+    "payment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "name", "date", "state", "payment_type", "partner_type",
+        "amount", "amount_signed", "amount_company_currency_signed",
+        "currency", "company_currency", "company_id", "partner", "journal",
+        "memo", "payment_reference", "payment_method_line", "payment_method",
+        "move_id", "is_reconciled", "is_matched"
+      ],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"$ref": "#/$defs/nullableText"},
+        "date": {"type": "string", "format": "date"},
+        "state": {"enum": ["draft", "in_process", "paid", "canceled", "rejected"]},
+        "payment_type": {"enum": ["inbound", "outbound"]},
+        "partner_type": {"enum": ["customer", "supplier"]},
+        "amount": {"$ref": "#/$defs/nonnegativeMoney"},
+        "amount_signed": {"$ref": "#/$defs/money"},
+        "amount_company_currency_signed": {"$ref": "#/$defs/money"},
+        "currency": {"$ref": "#/$defs/currency"},
+        "company_currency": {"$ref": "#/$defs/currency"},
+        "company_id": {"type": "integer", "minimum": 1},
+        "partner": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/partner"}]},
+        "journal": {"$ref": "#/$defs/journal"},
+        "memo": {"$ref": "#/$defs/nullableText"},
+        "payment_reference": {"$ref": "#/$defs/nullableText"},
+        "payment_method_line": {"$ref": "#/$defs/paymentMethodLine"},
+        "payment_method": {"$ref": "#/$defs/paymentMethod"},
+        "move_id": {"type": ["integer", "null"], "minimum": 1},
+        "is_reconciled": {"type": "boolean"},
+        "is_matched": {"type": "boolean"}
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items", "has_more", "next_cursor"],
+      "properties": {
+        "items": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/payment"}},
+        "has_more": {"type": "boolean"},
+        "next_cursor": {"type": ["string", "null"], "minLength": 1, "maxLength": 4096}
+      }
+    }
+  }
+}

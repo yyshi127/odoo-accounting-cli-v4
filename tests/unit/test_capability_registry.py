@@ -49,6 +49,8 @@ IMPLEMENTED_READS = {
     "invoice.payment_status.inspect": "invoice_payment_status_inspect",
     "receivable.open_items.list": "receivable_open_items_list",
     "payable.open_items.list": "payable_open_items_list",
+    "payment.search": "payment_search",
+    "payment.get": "payment_get",
 }
 
 
@@ -192,6 +194,8 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
             "payable.open_items.list",
         }:
             expected_live_test = "tests/integration/test_open_items_live.py"
+        elif capability_id in {"payment.search", "payment.get"}:
+            expected_live_test = "tests/integration/test_payments_live.py"
         elif capability_id in {
             "company.accounting_configuration.inspect",
             "diagnostic.accounting_environment.inspect",
@@ -212,6 +216,45 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
         assert descriptor["tests"]["integration"]["references"] == [
             expected_live_test
         ]
+
+
+def test_payment_reads_have_the_closed_source_and_acl_gates() -> None:
+    registry = load_registry()
+    search = registry.describe("payment.search")
+    get = registry.describe("payment.get")
+
+    search_models = [
+        "res.company",
+        "account.payment",
+        "account.payment.method",
+        "account.payment.method.line",
+        "res.currency",
+        "res.partner",
+        "account.journal",
+        "account.move",
+    ]
+    get_only_models = [
+        "account.move.line",
+        "account.account",
+        "account.partial.reconcile",
+    ]
+    assert search["source"]["models"] == search_models
+    assert get["source"]["models"] == search_models + get_only_models
+    assert search["requirements"]["acl"] == [
+        f"{model}:read" for model in search_models
+    ]
+    assert get["requirements"]["acl"] == [
+        f"{model}:read" for model in search_models + get_only_models
+    ]
+
+    for capability_id in ("payment.search", "payment.get"):
+        descriptor = registry.describe(capability_id)
+        for kind in ("request", "response"):
+            schema = registry.load_schema(descriptor["schemas"][kind])
+            assert schema["$id"].endswith(
+                f"{capability_id}.{kind}.schema.json"
+            )
+            assert schema["additionalProperties"] is False
 
 
 def test_registry_schema_references_resolve_to_public_files() -> None:

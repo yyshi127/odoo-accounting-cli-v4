@@ -278,6 +278,103 @@ _INVOICE_STATUS_MODELS = (
     "account.payment.method",
     "account.payment.method.line",
 )
+_PAYMENT_ACTIONS = {
+    "account.payment.search_page",
+    "account.payment.get",
+}
+_PAYMENT_STATES = ("draft", "in_process", "paid", "canceled", "rejected")
+_PAYMENT_TYPES = ("inbound", "outbound")
+_PAYMENT_PARTNER_TYPES = ("customer", "supplier")
+_PAYMENT_DOCUMENT_TYPES = (
+    "out_invoice",
+    "out_refund",
+    "in_invoice",
+    "in_refund",
+    "out_receipt",
+    "in_receipt",
+)
+_PAYMENT_SALE_DOCUMENT_TYPES = {"out_invoice", "out_refund", "out_receipt"}
+_PAYMENT_PURCHASE_DOCUMENT_TYPES = {"in_invoice", "in_refund", "in_receipt"}
+_PAYMENT_DOCUMENT_STATES = {"draft", "posted", "cancel"}
+_PAYMENT_DOCUMENT_PAYMENT_STATES = {
+    "not_paid",
+    "in_payment",
+    "paid",
+    "partial",
+    "reversed",
+    "blocked",
+    "invoicing_legacy",
+}
+_PAYMENT_FIELDS = (
+    "id",
+    "name",
+    "date",
+    "state",
+    "payment_type",
+    "partner_type",
+    "amount",
+    "amount_signed",
+    "amount_company_currency_signed",
+    "currency_id",
+    "company_currency_id",
+    "company_id",
+    "partner_id",
+    "journal_id",
+    "memo",
+    "payment_reference",
+    "payment_method_line_id",
+    "move_id",
+    "is_reconciled",
+    "is_matched",
+)
+_PAYMENT_JOURNAL_FIELDS = ("id", "code", "name", "company_id")
+_PAYMENT_CURRENCY_FIELDS = ("id", "name")
+_PAYMENT_PARTNER_FIELDS = ("id", "name", "company_id")
+_PAYMENT_METHOD_LINE_FIELDS = (
+    "id",
+    "name",
+    "journal_id",
+    "payment_method_id",
+)
+_PAYMENT_METHOD_FIELDS = ("id", "code", "name", "payment_type")
+_PAYMENT_MOVE_FIELDS = (
+    "id",
+    "name",
+    "state",
+    "date",
+    "move_type",
+    "payment_state",
+    "company_id",
+)
+_PAYMENT_MOVE_LINE_FIELDS = ("id", "move_id", "account_id", "company_id")
+_PAYMENT_ACCOUNT_FIELDS = (
+    "id",
+    "account_type",
+    "reconcile",
+)
+_PAYMENT_PARTIAL_FIELDS = (
+    "id",
+    "debit_move_id",
+    "credit_move_id",
+    "exchange_move_id",
+    "company_id",
+)
+_PAYMENT_SEARCH_MODELS = (
+    "res.company",
+    "account.payment",
+    "account.move",
+    "account.journal",
+    "res.currency",
+    "res.partner",
+    "account.payment.method.line",
+    "account.payment.method",
+)
+_PAYMENT_GET_MODELS = (
+    *_PAYMENT_SEARCH_MODELS,
+    "account.move.line",
+    "account.account",
+    "account.partial.reconcile",
+)
 _OPEN_ITEM_ACTION_SIDES = {
     "account.move.line.receivable.open_items.search_page": (
         "receivable",
@@ -328,6 +425,7 @@ _ACTIONS = {
     "account.move.journal_entry.search_page",
     "account.move.journal_entry.get",
     *_INVOICE_ACTIONS,
+    *_PAYMENT_ACTIONS,
     *_OPEN_ITEM_ACTION_SIDES,
     "res.partner.accounting.search_page",
     *_FINANCIAL_REPORT_ACTIONS,
@@ -2453,6 +2551,1031 @@ def _dispatch_invoice_payment_status(
     }
 
 
+def _payment_runtime_failure() -> RuntimeFailure:
+    return RuntimeFailure(
+        "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+    )
+
+
+def _payment_search_payload_is_valid(payload: Any) -> bool:
+    if not isinstance(payload, dict) or set(payload) != {
+        "company_id",
+        "after",
+        "limit",
+        "filters",
+    }:
+        return False
+    if (
+        not isinstance(payload["company_id"], int)
+        or isinstance(payload["company_id"], bool)
+        or payload["company_id"] <= 0
+        or not isinstance(payload["limit"], int)
+        or isinstance(payload["limit"], bool)
+        or not 1 <= payload["limit"] <= 1001
+    ):
+        return False
+    after = payload["after"]
+    if after is not None and (
+        not isinstance(after, list)
+        or len(after) != 2
+        or not _is_canonical_date(after[0])
+        or not isinstance(after[1], int)
+        or isinstance(after[1], bool)
+        or after[1] <= 0
+    ):
+        return False
+    filters = payload["filters"]
+    if not isinstance(filters, dict) or set(filters) != {
+        "date_from",
+        "date_to",
+        "states",
+        "payment_types",
+        "partner_types",
+        "journal_id",
+        "partner_id",
+        "currency_id",
+        "query",
+    }:
+        return False
+    for field in ("date_from", "date_to"):
+        if filters[field] is not None and not _is_canonical_date(filters[field]):
+            return False
+    if (
+        filters["date_from"] is not None
+        and filters["date_to"] is not None
+        and filters["date_from"] > filters["date_to"]
+    ):
+        return False
+    if not _invoice_choices_are_canonical(
+        filters["states"], _PAYMENT_STATES
+    ) or not _invoice_choices_are_canonical(
+        filters["payment_types"], _PAYMENT_TYPES
+    ) or not _invoice_choices_are_canonical(
+        filters["partner_types"], _PAYMENT_PARTNER_TYPES
+    ):
+        return False
+    for field in ("journal_id", "partner_id", "currency_id"):
+        value = filters[field]
+        if value is not None and (
+            not isinstance(value, int) or isinstance(value, bool) or value <= 0
+        ):
+            return False
+    query = filters["query"]
+    return query is None or (
+        isinstance(query, str)
+        and query == query.strip()
+        and 1 <= len(query) <= 200
+    )
+
+
+def _payment_get_payload_is_valid(payload: Any) -> bool:
+    return (
+        isinstance(payload, dict)
+        and set(payload) == {"company_id", "payment_id"}
+        and isinstance(payload["company_id"], int)
+        and not isinstance(payload["company_id"], bool)
+        and payload["company_id"] > 0
+        and isinstance(payload["payment_id"], int)
+        and not isinstance(payload["payment_id"], bool)
+        and payload["payment_id"] > 0
+    )
+
+
+def _payment_gate(
+    env: Any, company_id: int, required_models: tuple[str, ...]
+) -> tuple[bool, bool, bool]:
+    installed = {
+        model_name: env.registry.get(model_name) is not None
+        for model_name in required_models
+    }
+    company_read_allowed = bool(
+        installed["res.company"] and env["res.company"].has_access("read")
+    )
+    company_visible = bool(
+        company_read_allowed
+        and env["res.company"].search_count([("id", "=", company_id)], limit=1)
+    )
+    module_installed = all(installed.values())
+    access_allowed = bool(
+        company_visible
+        and module_installed
+        and all(
+            env[model_name].has_access("read")
+            for model_name in required_models
+            if model_name != "res.company"
+        )
+    )
+    return company_visible, module_installed, access_allowed
+
+
+def _empty_payment_result(
+    env: Any,
+    *,
+    company_visible: bool,
+    module_installed: bool,
+    access_allowed: bool,
+    result_key: str,
+) -> dict[str, Any]:
+    return {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        result_key: [] if result_key == "rows" else None,
+    }
+
+
+def _payment_company_scope(env: Any, company_id: int) -> list[int]:
+    rows = (
+        env["res.company"]
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+        .search_read(
+            [("id", "=", company_id)],
+            fields=["id", "parent_path"],
+            limit=1,
+            order="id",
+        )
+    )
+    if (
+        not isinstance(rows, list)
+        or len(rows) != 1
+        or not isinstance(rows[0], dict)
+        or set(rows[0]) != {"id", "parent_path"}
+        or rows[0].get("id") != company_id
+    ):
+        raise _payment_runtime_failure()
+    return _payment_company_path(rows[0], company_id)
+
+
+def _payment_company_path(row: dict[str, Any], company_id: int) -> list[int]:
+    if set(row) != {"id", "parent_path"} or row.get("id") != company_id:
+        raise _payment_runtime_failure()
+    parent_path = row.get("parent_path")
+    if not isinstance(parent_path, str) or not parent_path.endswith("/"):
+        raise _payment_runtime_failure()
+    parts = parent_path[:-1].split("/")
+    if (
+        not parts
+        or any(not part.isdigit() or part.startswith("0") for part in parts)
+    ):
+        raise _payment_runtime_failure()
+    scope = [int(part) for part in parts]
+    if (
+        any(value <= 0 for value in scope)
+        or len(scope) != len(set(scope))
+        or scope[-1] != company_id
+    ):
+        raise _payment_runtime_failure()
+    return scope
+
+
+def _payment_graph_scope(
+    env: Any, company_id: int, available_company_ids: tuple[int, ...]
+) -> list[int]:
+    if (
+        not available_company_ids
+        or company_id not in available_company_ids
+        or len(available_company_ids) != len(set(available_company_ids))
+        or any(
+            not isinstance(value, int)
+            or isinstance(value, bool)
+            or value <= 0
+            for value in available_company_ids
+        )
+    ):
+        raise _payment_runtime_failure()
+    configured_ids = [
+        company_id,
+        *sorted(value for value in available_company_ids if value != company_id),
+    ]
+    rows = (
+        env["res.company"]
+        .with_context(
+            active_test=False,
+            allowed_company_ids=configured_ids,
+        )
+        .search_read(
+            [("id", "in", configured_ids)],
+            fields=["id", "parent_path"],
+            limit=len(configured_ids),
+            order="id",
+        )
+    )
+    if not isinstance(rows, list):
+        raise _payment_runtime_failure()
+    paths: dict[int, list[int]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            raise _payment_runtime_failure()
+        record_id = row.get("id")
+        if (
+            not isinstance(record_id, int)
+            or isinstance(record_id, bool)
+            or record_id not in available_company_ids
+            or record_id in paths
+        ):
+            raise _payment_runtime_failure()
+        paths[record_id] = _payment_company_path(row, record_id)
+    if company_id not in paths:
+        raise _payment_runtime_failure()
+    root_company_id = paths[company_id][0]
+    same_root_ids = sorted(
+        record_id
+        for record_id, path in paths.items()
+        if path[0] == root_company_id
+    )
+    if company_id not in same_root_ids:
+        raise _payment_runtime_failure()
+    return [company_id, *(value for value in same_root_ids if value != company_id)]
+
+
+def _payment_domain(
+    company_id: int, after: list[Any] | None, filters: dict[str, Any]
+) -> list[Any]:
+    from odoo.fields import Domain
+
+    domains: list[list[Any]] = [[("company_id", "=", company_id)]]
+    for filter_name, model_field, operator in (
+        ("date_from", "date", ">="),
+        ("date_to", "date", "<="),
+        ("states", "state", "in"),
+        ("payment_types", "payment_type", "in"),
+        ("partner_types", "partner_type", "in"),
+        ("journal_id", "journal_id", "="),
+        ("partner_id", "partner_id", "="),
+        ("currency_id", "currency_id", "="),
+    ):
+        if filters[filter_name] not in (None, []):
+            domains.append(
+                [(model_field, operator, filters[filter_name])]
+            )
+    if filters["query"] is not None:
+        domains.append(
+            [
+                "|",
+                "|",
+                ("name", "ilike", filters["query"]),
+                ("memo", "ilike", filters["query"]),
+                ("payment_reference", "ilike", filters["query"]),
+            ]
+        )
+    if after is not None:
+        domains.append(
+            [
+                "|",
+                ("date", "<", after[0]),
+                "&",
+                ("date", "=", after[0]),
+                ("id", "<", after[1]),
+            ]
+        )
+    return list(Domain.AND(domains))
+
+
+def _payment_read_index(
+    env: Any,
+    model_name: str,
+    record_ids: set[int],
+    domain: list[Any],
+    fields: tuple[str, ...],
+    company_id: int,
+    *,
+    allowed_company_ids: list[int] | None = None,
+) -> dict[int, dict[str, Any]]:
+    if not record_ids:
+        return {}
+    rows = (
+        env[model_name]
+        .with_context(
+            active_test=False,
+            allowed_company_ids=allowed_company_ids or [company_id],
+        )
+        .search_read(
+            domain,
+            fields=list(fields),
+            limit=len(record_ids),
+            order="id",
+        )
+    )
+    result: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        if not isinstance(row, dict) or set(row) != set(fields):
+            raise _payment_runtime_failure()
+        record_id = row.get("id")
+        if (
+            not isinstance(record_id, int)
+            or isinstance(record_id, bool)
+            or record_id not in record_ids
+            or record_id in result
+        ):
+            raise _payment_runtime_failure()
+        result[record_id] = row
+    if set(result) != record_ids:
+        raise _payment_runtime_failure()
+    return result
+
+
+def _payment_optional_text(value: Any) -> str | None:
+    if value is False or value is None:
+        return None
+    if isinstance(value, str) and len(value) > 0:
+        return value
+    raise _payment_runtime_failure()
+
+
+def _payment_required_text(value: Any) -> str:
+    if isinstance(value, str) and len(value) > 0:
+        return value
+    raise _payment_runtime_failure()
+
+
+def _payment_related(
+    env: Any,
+    raw_rows: list[dict[str, Any]],
+    company_id: int,
+    company_scope: list[int],
+) -> dict[str, dict[int, dict[str, Any]]]:
+    journal_ids: set[int] = set()
+    currency_ids: set[int] = set()
+    partner_ids: set[int] = set()
+    method_line_ids: set[int] = set()
+    move_ids: set[int] = set()
+    for raw in raw_rows:
+        if not isinstance(raw, dict) or set(raw) != set(_PAYMENT_FIELDS):
+            raise _payment_runtime_failure()
+        if _reference_id(raw.get("company_id")) != company_id:
+            raise _payment_runtime_failure()
+        journal_id = _reference_id(raw.get("journal_id"))
+        currency_id = _reference_id(raw.get("currency_id"))
+        company_currency_id = _reference_id(raw.get("company_currency_id"))
+        method_line_id = _reference_id(raw.get("payment_method_line_id"))
+        if (
+            journal_id is None
+            or currency_id is None
+            or company_currency_id is None
+            or method_line_id is None
+        ):
+            raise _payment_runtime_failure()
+        journal_ids.add(journal_id)
+        currency_ids.update((currency_id, company_currency_id))
+        method_line_ids.add(method_line_id)
+        partner_id = _reference_id(raw.get("partner_id"))
+        if partner_id is not None:
+            partner_ids.add(partner_id)
+        move_id = _reference_id(raw.get("move_id"))
+        if move_id is not None:
+            move_ids.add(move_id)
+
+    journals = _payment_read_index(
+        env,
+        "account.journal",
+        journal_ids,
+        [
+            ("id", "in", sorted(journal_ids)),
+            ("company_id", "in", company_scope),
+        ],
+        _PAYMENT_JOURNAL_FIELDS,
+        company_id,
+    )
+    currencies = _payment_read_index(
+        env,
+        "res.currency",
+        currency_ids,
+        [("id", "in", sorted(currency_ids))],
+        _PAYMENT_CURRENCY_FIELDS,
+        company_id,
+    )
+    partners = _payment_read_index(
+        env,
+        "res.partner",
+        partner_ids,
+        [
+            ("id", "in", sorted(partner_ids)),
+            ("company_id", "in", [False, *company_scope]),
+        ],
+        _PAYMENT_PARTNER_FIELDS,
+        company_id,
+    )
+    method_lines = _payment_read_index(
+        env,
+        "account.payment.method.line",
+        method_line_ids,
+        [
+            ("id", "in", sorted(method_line_ids)),
+            ("journal_id", "in", [False, *sorted(journal_ids)]),
+        ],
+        _PAYMENT_METHOD_LINE_FIELDS,
+        company_id,
+    )
+    method_ids = {
+        method_id
+        for line in method_lines.values()
+        if (method_id := _reference_id(line.get("payment_method_id"))) is not None
+    }
+    if len(method_ids) == 0 and method_line_ids:
+        raise _payment_runtime_failure()
+    methods = _payment_read_index(
+        env,
+        "account.payment.method",
+        method_ids,
+        [("id", "in", sorted(method_ids))],
+        _PAYMENT_METHOD_FIELDS,
+        company_id,
+    )
+    moves = _payment_read_index(
+        env,
+        "account.move",
+        move_ids,
+        [
+            ("id", "in", sorted(move_ids)),
+            ("company_id", "=", company_id),
+        ],
+        _PAYMENT_MOVE_FIELDS,
+        company_id,
+    )
+    return {
+        "journals": journals,
+        "currencies": currencies,
+        "partners": partners,
+        "method_lines": method_lines,
+        "methods": methods,
+        "moves": moves,
+    }
+
+
+def _payment_common(
+    raw: dict[str, Any],
+    related: dict[str, dict[int, dict[str, Any]]],
+    company_id: int,
+    company_scope: list[int],
+) -> dict[str, Any]:
+    if set(raw) != set(_PAYMENT_FIELDS):
+        raise _payment_runtime_failure()
+    row = dict(raw)
+    record_id = row.get("id")
+    currency_id = _reference_id(row.pop("currency_id"))
+    company_currency_id = _reference_id(row.pop("company_currency_id"))
+    row_company_id = _reference_id(row.pop("company_id"))
+    partner_id = _reference_id(row.pop("partner_id"))
+    journal_id = _reference_id(row.pop("journal_id"))
+    method_line_id = _reference_id(row.pop("payment_method_line_id"))
+    move_id = _reference_id(row.pop("move_id"))
+    if (
+        not isinstance(record_id, int)
+        or isinstance(record_id, bool)
+        or record_id <= 0
+        or row_company_id != company_id
+        or currency_id is None
+        or company_currency_id is None
+        or journal_id is None
+        or method_line_id is None
+        or row.get("state") not in _PAYMENT_STATES
+        or row.get("payment_type") not in _PAYMENT_TYPES
+        or row.get("partner_type") not in _PAYMENT_PARTNER_TYPES
+        or not isinstance(row.get("is_reconciled"), bool)
+        or not isinstance(row.get("is_matched"), bool)
+    ):
+        raise _payment_runtime_failure()
+
+    journal = related["journals"][journal_id]
+    journal_company_id = _reference_id(journal.get("company_id"))
+    journal_code = _payment_required_text(journal.get("code"))
+    journal_name = _payment_required_text(journal.get("name"))
+    if journal_company_id not in company_scope or len(journal_code) > 5:
+        raise _payment_runtime_failure()
+
+    currency = related["currencies"][currency_id]
+    company_currency = related["currencies"][company_currency_id]
+    currency_code = _payment_required_text(currency.get("name"))
+    company_currency_code = _payment_required_text(company_currency.get("name"))
+    if len(currency_code) > 3 or len(company_currency_code) > 3:
+        raise _payment_runtime_failure()
+
+    partner = None
+    if partner_id is not None:
+        partner_row = related["partners"][partner_id]
+        partner_company_id = _reference_id(partner_row.get("company_id"))
+        if partner_company_id is not None and partner_company_id not in company_scope:
+            raise _payment_runtime_failure()
+        partner = {
+            "id": partner_id,
+            "name": _payment_optional_text(partner_row.get("name")),
+        }
+
+    method_line = related["method_lines"][method_line_id]
+    line_journal_id = _reference_id(method_line.get("journal_id"))
+    method_id = _reference_id(method_line.get("payment_method_id"))
+    if (
+        method_id is None
+        or (line_journal_id is not None and line_journal_id != journal_id)
+    ):
+        raise _payment_runtime_failure()
+    method = related["methods"][method_id]
+    method_code = _payment_required_text(method.get("code"))
+    method_name = _payment_required_text(method.get("name"))
+    if method.get("payment_type") != row["payment_type"]:
+        raise _payment_runtime_failure()
+
+    journal_entry = None
+    if move_id is not None:
+        move = related["moves"][move_id]
+        if (
+            _reference_id(move.get("company_id")) != company_id
+            or move.get("move_type") != "entry"
+            or move.get("state") not in _PAYMENT_DOCUMENT_STATES
+        ):
+            raise _payment_runtime_failure()
+        journal_entry = {
+            "id": move_id,
+            "name": _payment_optional_text(move.get("name")),
+            "state": move["state"],
+            "date": _date_string(move.get("date")),
+        }
+
+    row["name"] = _payment_optional_text(row.get("name"))
+    row["date"] = _date_string(row.get("date"))
+    row["memo"] = _payment_optional_text(row.get("memo"))
+    row["payment_reference"] = _payment_optional_text(
+        row.get("payment_reference")
+    )
+    amount = _decimal_string(row.get("amount"))
+    amount_signed = _decimal_string(row.get("amount_signed"))
+    company_signed = _decimal_string(row.get("amount_company_currency_signed"))
+    amount_decimal = Decimal(amount)
+    signed_decimal = Decimal(amount_signed)
+    expected_signed = (
+        amount_decimal if row["payment_type"] == "inbound" else -amount_decimal
+    )
+    if (
+        amount_decimal < 0
+        or signed_decimal != expected_signed
+    ):
+        raise _payment_runtime_failure()
+    row["amount"] = amount
+    row["amount_signed"] = amount_signed
+    row["amount_company_currency_signed"] = company_signed
+    row["currency"] = {"id": currency_id, "code": currency_code}
+    row["company_currency"] = {
+        "id": company_currency_id,
+        "code": company_currency_code,
+    }
+    row["company_id"] = company_id
+    row["partner"] = partner
+    row["journal"] = {
+        "id": journal_id,
+        "code": journal_code,
+        "name": journal_name,
+    }
+    row["payment_method_line"] = {
+        "id": method_line_id,
+        "name": _payment_optional_text(method_line.get("name")),
+        "journal_id": line_journal_id,
+    }
+    row["payment_method"] = {
+        "id": method_id,
+        "code": method_code,
+        "name": method_name,
+        "payment_type": method["payment_type"],
+    }
+    row["move_id"] = move_id
+    row["journal_entry"] = journal_entry
+    return row
+
+
+def _dispatch_payment_search(
+    env: Any, payload: dict[str, Any], company_id: int
+) -> dict[str, Any]:
+    if not _payment_search_payload_is_valid(payload):
+        raise RuntimeFailure(
+            "bridge_protocol_error", "The bridge action payload is invalid.", exit_code=7
+        )
+    if payload["company_id"] != company_id:
+        raise RuntimeFailure(
+            "company_unavailable", "The company is unavailable.", exit_code=3
+        )
+    company_visible, module_installed, access_allowed = _payment_gate(
+        env, company_id, _PAYMENT_SEARCH_MODELS
+    )
+    if not access_allowed:
+        return _empty_payment_result(
+            env,
+            company_visible=company_visible,
+            module_installed=module_installed,
+            access_allowed=access_allowed,
+            result_key="rows",
+        )
+    company_scope = _payment_company_scope(env, company_id)
+    raw_rows = (
+        env["account.payment"]
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+        .search_read(
+            _payment_domain(company_id, payload["after"], payload["filters"]),
+            fields=list(_PAYMENT_FIELDS),
+            limit=payload["limit"],
+            order="date desc,id desc",
+        )
+    )
+    if not isinstance(raw_rows, list):
+        raise _payment_runtime_failure()
+    related = _payment_related(env, raw_rows, company_id, company_scope)
+    rows: list[dict[str, Any]] = []
+    previous = tuple(payload["after"]) if payload["after"] is not None else None
+    observed_ids: set[int] = set()
+    for raw in raw_rows:
+        row = _payment_common(raw, related, company_id, company_scope)
+        current = (row["date"], row["id"])
+        if row["id"] in observed_ids or (previous is not None and current >= previous):
+            raise _payment_runtime_failure()
+        observed_ids.add(row["id"])
+        previous = current
+        row.pop("journal_entry")
+        rows.append(row)
+    return {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        "rows": rows,
+    }
+
+
+def _payment_document(
+    raw: dict[str, Any], *, record_id: int, graph_scope: list[int]
+) -> dict[str, Any]:
+    if (
+        set(raw) != set(_PAYMENT_MOVE_FIELDS)
+        or raw.get("id") != record_id
+        or _reference_id(raw.get("company_id")) not in graph_scope
+        or raw.get("move_type") not in _PAYMENT_DOCUMENT_TYPES
+        or raw.get("state") not in _PAYMENT_DOCUMENT_STATES
+        or raw.get("payment_state") not in _PAYMENT_DOCUMENT_PAYMENT_STATES
+    ):
+        raise _payment_runtime_failure()
+    _date_string(raw.get("date"))
+    return {
+        "id": record_id,
+        "name": _payment_optional_text(raw.get("name")),
+        "move_type": raw["move_type"],
+        "state": raw["state"],
+        "payment_state": raw["payment_state"],
+        "company_id": _reference_id(raw.get("company_id")),
+    }
+
+
+def _payment_read_documents(
+    env: Any,
+    record_ids: set[int],
+    company_id: int,
+    graph_scope: list[int],
+) -> list[dict[str, Any]]:
+    rows = _payment_read_index(
+        env,
+        "account.move",
+        record_ids,
+        [
+            ("id", "in", sorted(record_ids)),
+            ("company_id", "in", graph_scope),
+            ("move_type", "in", list(_PAYMENT_DOCUMENT_TYPES)),
+        ],
+        _PAYMENT_MOVE_FIELDS,
+        company_id,
+        allowed_company_ids=graph_scope,
+    )
+    return [
+        _payment_document(
+            rows[record_id], record_id=record_id, graph_scope=graph_scope
+        )
+        for record_id in sorted(rows)
+    ]
+
+
+def _payment_read_direct_documents(
+    env: Any,
+    record_ids: set[int],
+    company_id: int,
+    graph_scope: list[int],
+) -> list[dict[str, Any]]:
+    rows = _payment_read_index(
+        env,
+        "account.move",
+        record_ids,
+        [
+            ("id", "in", sorted(record_ids)),
+            ("company_id", "in", graph_scope),
+        ],
+        _PAYMENT_MOVE_FIELDS,
+        company_id,
+        allowed_company_ids=graph_scope,
+    )
+    document_ids: set[int] = set()
+    for record_id, row in rows.items():
+        if (
+            _reference_id(row.get("company_id")) not in graph_scope
+            or row.get("state") not in _PAYMENT_DOCUMENT_STATES
+            or not isinstance(row.get("move_type"), str)
+            or not row["move_type"]
+        ):
+            raise _payment_runtime_failure()
+        _payment_optional_text(row.get("name"))
+        _date_string(row.get("date"))
+        if row["move_type"] in _PAYMENT_DOCUMENT_TYPES:
+            document_ids.add(record_id)
+    return [
+        _payment_document(
+            rows[record_id], record_id=record_id, graph_scope=graph_scope
+        )
+        for record_id in sorted(document_ids)
+    ]
+
+
+def _payment_reconciled_documents(
+    env: Any,
+    *,
+    payment_move_id: int | None,
+    company_id: int,
+    company_scope: list[int],
+    graph_scope: list[int],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    if payment_move_id is None:
+        return [], []
+    payment_lines = (
+        env["account.move.line"]
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+        .search_read(
+            [
+                ("move_id", "=", payment_move_id),
+                ("company_id", "=", company_id),
+                (
+                    "account_id.account_type",
+                    "in",
+                    ["asset_receivable", "liability_payable"],
+                ),
+            ],
+            fields=list(_PAYMENT_MOVE_LINE_FIELDS),
+            order="id",
+        )
+    )
+    payment_line_accounts: dict[int, int] = {}
+    account_ids: set[int] = set()
+    for line in payment_lines:
+        if not isinstance(line, dict) or set(line) != set(_PAYMENT_MOVE_LINE_FIELDS):
+            raise _payment_runtime_failure()
+        line_id = line.get("id")
+        account_id = _reference_id(line.get("account_id"))
+        if (
+            not isinstance(line_id, int)
+            or isinstance(line_id, bool)
+            or line_id <= 0
+            or line_id in payment_line_accounts
+            or _reference_id(line.get("move_id")) != payment_move_id
+            or _reference_id(line.get("company_id")) != company_id
+            or account_id is None
+        ):
+            raise _payment_runtime_failure()
+        payment_line_accounts[line_id] = account_id
+        account_ids.add(account_id)
+    if not payment_line_accounts:
+        return [], []
+
+    accounts = _payment_read_index(
+        env,
+        "account.account",
+        account_ids,
+        [
+            ("id", "in", sorted(account_ids)),
+            ("company_ids", "in", company_scope),
+        ],
+        _PAYMENT_ACCOUNT_FIELDS,
+        company_id,
+    )
+    for account in accounts.values():
+        if (
+            account.get("account_type")
+            not in {"asset_receivable", "liability_payable"}
+            or account.get("reconcile") is not True
+        ):
+            raise _payment_runtime_failure()
+
+    payment_line_ids = set(payment_line_accounts)
+    partials = (
+        env["account.partial.reconcile"]
+        .with_context(active_test=False, allowed_company_ids=graph_scope)
+        .search_read(
+            [
+                ("company_id", "in", graph_scope),
+                "|",
+                ("debit_move_id", "in", sorted(payment_line_ids)),
+                ("credit_move_id", "in", sorted(payment_line_ids)),
+            ],
+            fields=list(_PAYMENT_PARTIAL_FIELDS),
+            order="id",
+        )
+    )
+    counterpart_accounts: dict[int, int] = {}
+    observed_partial_ids: set[int] = set()
+    for partial in partials:
+        if not isinstance(partial, dict) or set(partial) != set(
+            _PAYMENT_PARTIAL_FIELDS
+        ):
+            raise _payment_runtime_failure()
+        partial_id = partial.get("id")
+        debit_line_id = _reference_id(partial.get("debit_move_id"))
+        credit_line_id = _reference_id(partial.get("credit_move_id"))
+        debit_is_payment = debit_line_id in payment_line_ids
+        credit_is_payment = credit_line_id in payment_line_ids
+        _reference_id(partial.get("exchange_move_id"))
+        if (
+            not isinstance(partial_id, int)
+            or isinstance(partial_id, bool)
+            or partial_id <= 0
+            or partial_id in observed_partial_ids
+            or _reference_id(partial.get("company_id")) not in graph_scope
+            or not (debit_is_payment or credit_is_payment)
+        ):
+            raise _payment_runtime_failure()
+        observed_partial_ids.add(partial_id)
+        if debit_is_payment and credit_is_payment:
+            if (
+                debit_line_id == credit_line_id
+                or payment_line_accounts[debit_line_id]
+                != payment_line_accounts[credit_line_id]
+            ):
+                raise _payment_runtime_failure()
+            continue
+        payment_line_id = debit_line_id if debit_is_payment else credit_line_id
+        counterpart_line_id = credit_line_id if debit_is_payment else debit_line_id
+        if payment_line_id is None or counterpart_line_id is None:
+            raise _payment_runtime_failure()
+        expected_account_id = payment_line_accounts[payment_line_id]
+        previous_account_id = counterpart_accounts.setdefault(
+            counterpart_line_id, expected_account_id
+        )
+        if previous_account_id != expected_account_id:
+            raise _payment_runtime_failure()
+
+    counterpart_line_ids = set(counterpart_accounts)
+    counterpart_lines = _payment_read_index(
+        env,
+        "account.move.line",
+        counterpart_line_ids,
+        [
+            ("id", "in", sorted(counterpart_line_ids)),
+            ("company_id", "in", graph_scope),
+        ],
+        _PAYMENT_MOVE_LINE_FIELDS,
+        company_id,
+        allowed_company_ids=graph_scope,
+    )
+    counterpart_move_ids: set[int] = set()
+    counterpart_line_companies: dict[int, int] = {}
+    counterpart_line_moves: dict[int, int] = {}
+    for line_id, line in counterpart_lines.items():
+        move_id = _reference_id(line.get("move_id"))
+        account_id = _reference_id(line.get("account_id"))
+        line_company_id = _reference_id(line.get("company_id"))
+        if (
+            move_id is None
+            or account_id != counterpart_accounts[line_id]
+            or line_company_id not in graph_scope
+        ):
+            raise _payment_runtime_failure()
+        counterpart_move_ids.add(move_id)
+        counterpart_line_companies[line_id] = line_company_id
+        counterpart_line_moves[line_id] = move_id
+
+    counterpart_moves = _payment_read_index(
+        env,
+        "account.move",
+        counterpart_move_ids,
+        [
+            ("id", "in", sorted(counterpart_move_ids)),
+            ("company_id", "in", graph_scope),
+        ],
+        _PAYMENT_MOVE_FIELDS,
+        company_id,
+        allowed_company_ids=graph_scope,
+    )
+    for line_id, move_id in counterpart_line_moves.items():
+        if _reference_id(counterpart_moves[move_id].get("company_id")) != (
+            counterpart_line_companies[line_id]
+        ):
+            raise _payment_runtime_failure()
+    document_ids: set[int] = set()
+    for move_id, move in counterpart_moves.items():
+        if (
+            _reference_id(move.get("company_id")) not in graph_scope
+            or move.get("state") not in _PAYMENT_DOCUMENT_STATES
+            or not isinstance(move.get("move_type"), str)
+            or not move["move_type"]
+        ):
+            raise _payment_runtime_failure()
+        _payment_optional_text(move.get("name"))
+        _date_string(move.get("date"))
+        if move["move_type"] in _PAYMENT_DOCUMENT_TYPES:
+            document_ids.add(move_id)
+
+    documents = _payment_read_documents(
+        env, document_ids, company_id, graph_scope
+    )
+    invoices = [
+        document
+        for document in documents
+        if document["move_type"] in _PAYMENT_SALE_DOCUMENT_TYPES
+    ]
+    bills = [
+        document
+        for document in documents
+        if document["move_type"] in _PAYMENT_PURCHASE_DOCUMENT_TYPES
+    ]
+    return invoices, bills
+
+
+def _dispatch_payment_get(
+    env: Any,
+    payload: dict[str, Any],
+    company_id: int,
+    available_company_ids: tuple[int, ...],
+) -> dict[str, Any]:
+    if not _payment_get_payload_is_valid(payload):
+        raise RuntimeFailure(
+            "bridge_protocol_error", "The bridge action payload is invalid.", exit_code=7
+        )
+    if payload["company_id"] != company_id:
+        raise RuntimeFailure(
+            "company_unavailable", "The company is unavailable.", exit_code=3
+        )
+    company_visible, module_installed, access_allowed = _payment_gate(
+        env, company_id, _PAYMENT_GET_MODELS
+    )
+    if not access_allowed:
+        return _empty_payment_result(
+            env,
+            company_visible=company_visible,
+            module_installed=module_installed,
+            access_allowed=access_allowed,
+            result_key="payment",
+        )
+    company_scope = _payment_company_scope(env, company_id)
+    graph_scope = _payment_graph_scope(
+        env, company_id, available_company_ids
+    )
+    fields = [*_PAYMENT_FIELDS, "invoice_ids"]
+    rows = (
+        env["account.payment"]
+        .with_context(active_test=False, allowed_company_ids=graph_scope)
+        .search_read(
+            [
+                ("id", "=", payload["payment_id"]),
+                ("company_id", "=", company_id),
+            ],
+            fields=fields,
+            limit=1,
+            order="id",
+        )
+    )
+    if not rows:
+        return _empty_payment_result(
+            env,
+            company_visible=company_visible,
+            module_installed=module_installed,
+            access_allowed=access_allowed,
+            result_key="payment",
+        )
+    if (
+        not isinstance(rows, list)
+        or len(rows) != 1
+        or not isinstance(rows[0], dict)
+        or set(rows[0]) != set(fields)
+    ):
+        raise _payment_runtime_failure()
+    raw = dict(rows[0])
+    invoice_ids = set(_many2many_ids(raw.pop("invoice_ids")))
+    related = _payment_related(env, [raw], company_id, company_scope)
+    payment = _payment_common(raw, related, company_id, company_scope)
+    if payment["id"] != payload["payment_id"]:
+        raise _payment_runtime_failure()
+    direct_documents = _payment_read_direct_documents(
+        env, invoice_ids, company_id, graph_scope
+    )
+    reconciled_invoices, reconciled_bills = _payment_reconciled_documents(
+        env,
+        payment_move_id=payment["move_id"],
+        company_id=company_id,
+        company_scope=company_scope,
+        graph_scope=graph_scope,
+    )
+    payment["invoice_ids"] = direct_documents
+    payment["reconciled_invoices"] = reconciled_invoices
+    payment["reconciled_bills"] = reconciled_bills
+    return {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        "payment": payment,
+    }
+
+
 def _open_item_payload_is_valid(payload: Any) -> bool:
     if not isinstance(payload, dict) or set(payload) != {
         "company_id",
@@ -3778,6 +4901,18 @@ def _dispatch(
         return _dispatch_invoice_get(env, payload, company_id)
     if action == "account.move.invoice.payment_status.inspect":
         return _dispatch_invoice_payment_status(env, payload, company_id)
+    if action == "account.payment.search_page":
+        return _dispatch_payment_search(env, payload, company_id)
+    if action == "account.payment.get":
+        if available_company_ids is None:
+            raise RuntimeFailure(
+                "bridge_protocol_error",
+                "The bridge action payload is invalid.",
+                exit_code=7,
+            )
+        return _dispatch_payment_get(
+            env, payload, company_id, available_company_ids
+        )
     if action in _OPEN_ITEM_ACTION_SIDES:
         return _dispatch_open_item_search(env, action, payload, company_id)
     if action == "res.partner.accounting.search_page":
@@ -3837,11 +4972,19 @@ def execute(request: dict[str, Any], *, config_path: Path, odoo_config: Path):
                     "user_unavailable", "The configured user is unavailable.", exit_code=3
                 )
             effective_company_ids = _effective_company_ids(users, target)
-            allowed_company_ids = (
-                list(effective_company_ids)
-                if request["action"] == "res.company.accounting_context.read_page"
-                else [target.company_id]
-            )
+            if request["action"] == "res.company.accounting_context.read_page":
+                allowed_company_ids = list(effective_company_ids)
+            elif request["action"] == "account.payment.get":
+                allowed_company_ids = [
+                    target.company_id,
+                    *(
+                        value
+                        for value in effective_company_ids
+                        if value != target.company_id
+                    ),
+                ]
+            else:
+                allowed_company_ids = [target.company_id]
             context = {
                 "allowed_company_ids": allowed_company_ids,
                 "active_test": True,

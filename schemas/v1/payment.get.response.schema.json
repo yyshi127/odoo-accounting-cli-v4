@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/payment.get.response.schema.json",
+  "title": "payment.get response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "payment.get"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{
+    "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+    "then": {
+      "properties": {
+        "request_id": {"type": "string", "format": "uuid"},
+        "status": {"const": "verified"},
+        "data": {"$ref": "#/$defs/data"},
+        "error": {"type": "null"}
+      }
+    },
+    "else": {
+      "properties": {
+        "data": {"type": "null"},
+        "error": {"$ref": "response.schema.json#/$defs/error"}
+      }
+    }
+  }],
+  "$defs": {
+    "journalEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "state", "date"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"$ref": "payment.search.response.schema.json#/$defs/nullableText"},
+        "state": {"enum": ["draft", "posted", "cancel"]},
+        "date": {"type": "string", "format": "date"}
+      }
+    },
+    "document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "move_type", "state", "payment_state", "company_id"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"$ref": "payment.search.response.schema.json#/$defs/nullableText"},
+        "move_type": {"enum": ["out_invoice", "out_refund", "out_receipt", "in_invoice", "in_refund", "in_receipt"]},
+        "state": {"enum": ["draft", "posted", "cancel"]},
+        "payment_state": {"enum": ["not_paid", "in_payment", "paid", "partial", "reversed", "blocked", "invoicing_legacy"]},
+        "company_id": {"type": "integer", "minimum": 1}
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "name", "date", "state", "payment_type", "partner_type",
+        "amount", "amount_signed", "amount_company_currency_signed",
+        "currency", "company_currency", "company_id", "partner", "journal",
+        "memo", "payment_reference", "payment_method_line", "payment_method",
+        "move_id", "is_reconciled", "is_matched", "journal_entry", "invoice_ids",
+        "reconciled_invoices", "reconciled_bills"
+      ],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"$ref": "payment.search.response.schema.json#/$defs/nullableText"},
+        "date": {"type": "string", "format": "date"},
+        "state": {"enum": ["draft", "in_process", "paid", "canceled", "rejected"]},
+        "payment_type": {"enum": ["inbound", "outbound"]},
+        "partner_type": {"enum": ["customer", "supplier"]},
+        "amount": {"$ref": "payment.search.response.schema.json#/$defs/nonnegativeMoney"},
+        "amount_signed": {"$ref": "payment.search.response.schema.json#/$defs/money"},
+        "amount_company_currency_signed": {"$ref": "payment.search.response.schema.json#/$defs/money"},
+        "currency": {"$ref": "payment.search.response.schema.json#/$defs/currency"},
+        "company_currency": {"$ref": "payment.search.response.schema.json#/$defs/currency"},
+        "company_id": {"type": "integer", "minimum": 1},
+        "partner": {"oneOf": [{"type": "null"}, {"$ref": "payment.search.response.schema.json#/$defs/partner"}]},
+        "journal": {"$ref": "payment.search.response.schema.json#/$defs/journal"},
+        "memo": {"$ref": "payment.search.response.schema.json#/$defs/nullableText"},
+        "payment_reference": {"$ref": "payment.search.response.schema.json#/$defs/nullableText"},
+        "payment_method_line": {"$ref": "payment.search.response.schema.json#/$defs/paymentMethodLine"},
+        "payment_method": {"$ref": "payment.search.response.schema.json#/$defs/paymentMethod"},
+        "move_id": {"type": ["integer", "null"], "minimum": 1},
+        "is_reconciled": {"type": "boolean"},
+        "is_matched": {"type": "boolean"},
+        "journal_entry": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/journalEntry"}]},
+        "invoice_ids": {"type": "array", "items": {"$ref": "#/$defs/document"}},
+        "reconciled_invoices": {"type": "array", "items": {"$ref": "#/$defs/document"}},
+        "reconciled_bills": {"type": "array", "items": {"$ref": "#/$defs/document"}}
+      }
+    }
+  }
+}
