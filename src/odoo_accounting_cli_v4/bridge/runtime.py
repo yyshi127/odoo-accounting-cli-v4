@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 from contextlib import contextmanager
+from datetime import date as date_type
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, TextIO
@@ -108,6 +109,8 @@ _MASTER_DATA_ACTIONS: dict[str, dict[str, Any]] = {
 _ACTIONS = {
     "account.account.read_page",
     *_MASTER_DATA_ACTIONS,
+    "account.move.journal_entry.search_page",
+    "account.move.journal_entry.get",
 }
 
 
@@ -492,11 +495,11 @@ def _reference(value: Any, *, label: str) -> dict[str, Any] | None:
 
 
 def _decimal_string(value: Any) -> str:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
         raise RuntimeFailure(
             "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
         )
-    decimal_value = Decimal(value) if isinstance(value, int) else Decimal(str(value))
+    decimal_value = value if isinstance(value, Decimal) else Decimal(str(value))
     if not decimal_value.is_finite():
         raise RuntimeFailure(
             "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
@@ -505,6 +508,593 @@ def _decimal_string(value: Any) -> str:
         return "0"
     text = format(decimal_value, "f")
     return text.rstrip("0").rstrip(".") if "." in text else text
+
+
+def _date_string(value: Any) -> str:
+    if isinstance(value, date_type):
+        return value.isoformat()
+    if isinstance(value, str):
+        try:
+            parsed = date_type.fromisoformat(value)
+        except ValueError as exc:
+            raise RuntimeFailure(
+                "odoo_runtime_error",
+                "The Odoo runtime request failed.",
+                exit_code=7,
+            ) from exc
+        if parsed.isoformat() == value:
+            return value
+    raise RuntimeFailure(
+        "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+    )
+
+
+def _is_canonical_date(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    try:
+        return date_type.fromisoformat(value).isoformat() == value
+    except ValueError:
+        return False
+
+
+def _optional_string(value: Any) -> str | None:
+    if value is False or value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    raise RuntimeFailure(
+        "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+    )
+
+
+def _related_rows(
+    env: Any,
+    model_name: str,
+    record_ids: set[int],
+    fields: tuple[str, ...],
+    company_id: int,
+) -> dict[int, dict[str, Any]]:
+    if not record_ids:
+        return {}
+    rows = (
+        env[model_name]
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+        .search_read(
+            [("id", "in", sorted(record_ids))],
+            fields=["id", *fields],
+            limit=len(record_ids),
+            order="id",
+        )
+    )
+    result: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        record_id = row.get("id")
+        if (
+            not isinstance(record_id, int)
+            or isinstance(record_id, bool)
+            or record_id not in record_ids
+            or record_id in result
+        ):
+            raise RuntimeFailure(
+                "odoo_runtime_error",
+                "The Odoo runtime request failed.",
+                exit_code=7,
+            )
+        result[record_id] = row
+    if set(result) != record_ids:
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    return result
+
+
+def _journal_reference(row: dict[str, Any]) -> dict[str, Any]:
+    if any(
+        not isinstance(row.get(key), str) or not row[key].strip()
+        for key in ("code", "name")
+    ):
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    return {"id": row["id"], "code": row["code"], "name": row["name"]}
+
+
+def _currency_reference(row: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(row.get("name"), str) or not row["name"].strip():
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    return {"id": row["id"], "code": row["name"]}
+
+
+def _named_reference(row: dict[str, Any]) -> dict[str, Any]:
+    name = row.get("complete_name")
+    if not isinstance(name, str) or not name.strip():
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    return {"id": row["id"], "name": name}
+
+
+def _account_reference(row: dict[str, Any]) -> dict[str, Any]:
+    if any(
+        not isinstance(row.get(key), str) or not row[key].strip()
+        for key in ("code", "name")
+    ):
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    return {"id": row["id"], "code": row["code"], "name": row["name"]}
+
+
+def _journal_entry_filters_are_valid(filters: Any) -> bool:
+    if not isinstance(filters, dict) or set(filters) != {
+        "date_from",
+        "date_to",
+        "states",
+        "journal_id",
+        "partner_id",
+        "query",
+    }:
+        return False
+    for key in ("date_from", "date_to"):
+        value = filters[key]
+        if value is not None and not _is_canonical_date(value):
+            return False
+    if (
+        filters["date_from"] is not None
+        and filters["date_to"] is not None
+        and filters["date_from"] > filters["date_to"]
+    ):
+        return False
+    states = filters["states"]
+    if not isinstance(states, list) or any(
+        not isinstance(state, str) for state in states
+    ):
+        return False
+    canonical_states = [state for state in ("draft", "posted", "cancel") if state in states]
+    if (
+        states != canonical_states
+        or len(states) != len(set(states))
+    ):
+        return False
+    for key in ("journal_id", "partner_id"):
+        value = filters[key]
+        if value is not None and (
+            not isinstance(value, int) or isinstance(value, bool) or value <= 0
+        ):
+            return False
+    query = filters["query"]
+    return query is None or (
+        isinstance(query, str)
+        and query == query.strip()
+        and 1 <= len(query) <= 200
+    )
+
+
+def _journal_entry_gate(
+    env: Any, company_id: int, *, include_accounts: bool
+) -> tuple[bool, bool, bool]:
+    company_visible = bool(
+        env["res.company"].search_count([("id", "=", company_id)], limit=1)
+    )
+    models = [
+        "account.move",
+        "account.move.line",
+        "account.journal",
+        "res.currency",
+        "res.partner",
+    ]
+    if include_accounts:
+        models.append("account.account")
+    module_installed = all(env.registry.get(model_name) is not None for model_name in models)
+    access_allowed = bool(
+        company_visible
+        and module_installed
+        and all(env[model_name].has_access("read") for model_name in models)
+    )
+    return company_visible, module_installed, access_allowed
+
+
+def _journal_entry_domain(
+    company_id: int,
+    after: list[Any] | None,
+    filters: dict[str, Any],
+) -> list[Any]:
+    from odoo.osv import expression
+
+    domains: list[list[Any]] = [
+        [("company_id", "=", company_id), ("move_type", "=", "entry")]
+    ]
+    if filters["date_from"] is not None:
+        domains.append([("date", ">=", filters["date_from"])])
+    if filters["date_to"] is not None:
+        domains.append([("date", "<=", filters["date_to"])])
+    if filters["states"]:
+        domains.append([("state", "in", filters["states"])])
+    if filters["journal_id"] is not None:
+        domains.append([("journal_id", "=", filters["journal_id"])])
+    if filters["partner_id"] is not None:
+        domains.append([("partner_id", "=", filters["partner_id"])])
+    if filters["query"] is not None:
+        domains.append(
+            ["|", ("name", "ilike", filters["query"]), ("ref", "ilike", filters["query"])]
+        )
+    if after is not None:
+        domains.append(
+            [
+                "|",
+                ("date", "<", after[0]),
+                "&",
+                ("date", "=", after[0]),
+                ("id", "<", after[1]),
+            ]
+        )
+    return expression.AND(domains)
+
+
+def _journal_entry_related(
+    env: Any, moves: list[dict[str, Any]], lines: list[dict[str, Any]], company_id: int
+) -> dict[str, dict[int, dict[str, Any]]]:
+    journal_ids = {
+        journal_id
+        for row in moves
+        if (journal_id := _reference_id(row["journal_id"])) is not None
+    }
+    currency_ids = {
+        currency_id
+        for row in moves
+        if (currency_id := _reference_id(row["company_currency_id"])) is not None
+    }
+    partner_ids = {
+        partner_id
+        for row in [*moves, *lines]
+        if (partner_id := _reference_id(row.get("partner_id"))) is not None
+    }
+    account_ids = {
+        account_id
+        for row in lines
+        if (account_id := _reference_id(row.get("account_id"))) is not None
+    }
+    currency_ids.update(
+        currency_id
+        for row in lines
+        for key in ("company_currency_id", "currency_id")
+        if (currency_id := _reference_id(row.get(key))) is not None
+    )
+    return {
+        "journals": _related_rows(
+            env, "account.journal", journal_ids, ("code", "name"), company_id
+        ),
+        "currencies": _related_rows(
+            env, "res.currency", currency_ids, ("name",), company_id
+        ),
+        "partners": _related_rows(
+            env, "res.partner", partner_ids, ("complete_name",), company_id
+        ),
+        "accounts": _related_rows(
+            env, "account.account", account_ids, ("code", "name"), company_id
+        ),
+    }
+
+
+def _safe_related(
+    related: dict[str, dict[int, dict[str, Any]]], group: str, record_id: int | None
+) -> dict[str, Any]:
+    if record_id is None:
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    try:
+        return related[group][record_id]
+    except KeyError as exc:
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        ) from exc
+
+
+def _journal_entry_header(
+    move: dict[str, Any], related: dict[str, dict[int, dict[str, Any]]]
+) -> dict[str, Any]:
+    journal_id = _reference_id(move.pop("journal_id"))
+    company_id = _reference_id(move.pop("company_id"))
+    currency_id = _reference_id(move.pop("company_currency_id"))
+    partner_id = _reference_id(move.pop("partner_id"))
+    move["name"] = _optional_string(move["name"])
+    move["date"] = _date_string(move["date"])
+    move["ref"] = _optional_string(move["ref"])
+    move["journal"] = _journal_reference(_safe_related(related, "journals", journal_id))
+    move["company_id"] = company_id
+    move["currency"] = _currency_reference(
+        _safe_related(related, "currencies", currency_id)
+    )
+    move["partner"] = (
+        _named_reference(_safe_related(related, "partners", partner_id))
+        if partner_id is not None
+        else None
+    )
+    return move
+
+
+def _dispatch_journal_entry_search(
+    env: Any, payload: dict[str, Any], company_id: int
+) -> dict[str, Any]:
+    _require_keys(payload, {"company_id", "after", "limit", "filters"})
+    after = payload["after"]
+    limit = payload["limit"]
+    if (
+        not isinstance(payload["company_id"], int)
+        or isinstance(payload["company_id"], bool)
+        or not isinstance(limit, int)
+        or isinstance(limit, bool)
+        or not 1 <= limit <= 1001
+        or (
+            after is not None
+            and (
+                not isinstance(after, list)
+                or len(after) != 2
+                or not _is_canonical_date(after[0])
+                or not isinstance(after[1], int)
+                or isinstance(after[1], bool)
+                or after[1] <= 0
+            )
+        )
+        or not _journal_entry_filters_are_valid(payload["filters"])
+    ):
+        raise RuntimeFailure(
+            "bridge_protocol_error", "The bridge action payload is invalid.", exit_code=7
+        )
+    if payload["company_id"] != company_id:
+        raise RuntimeFailure(
+            "company_unavailable", "The company is unavailable.", exit_code=3
+        )
+    company_visible, module_installed, access_allowed = _journal_entry_gate(
+        env, company_id, include_accounts=False
+    )
+    if not access_allowed:
+        return {
+            "user_id": env.uid,
+            "company_visible": company_visible,
+            "module_installed": module_installed,
+            "access_allowed": access_allowed,
+            "rows": [],
+        }
+    move_fields = [
+        "id",
+        "name",
+        "date",
+        "state",
+        "ref",
+        "journal_id",
+        "company_id",
+        "company_currency_id",
+        "partner_id",
+    ]
+    moves = (
+        env["account.move"]
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+        .search_read(
+            _journal_entry_domain(company_id, after, payload["filters"]),
+            fields=move_fields,
+            limit=limit,
+            order="date desc,id desc",
+        )
+    )
+    move_ids = [row["id"] for row in moves]
+    lines = []
+    if move_ids:
+        lines = (
+            env["account.move.line"]
+            .with_context(active_test=False, allowed_company_ids=[company_id])
+            .search_read(
+                [("move_id", "in", move_ids)],
+                fields=["id", "move_id", "debit", "credit", "balance"],
+                order="move_id,id",
+            )
+        )
+    totals = {
+        move_id: {"debit": Decimal(0), "credit": Decimal(0), "balance": Decimal(0)}
+        for move_id in move_ids
+    }
+    for line in lines:
+        move_id = _reference_id(line["move_id"])
+        if move_id not in totals:
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        for field in ("debit", "credit", "balance"):
+            value = line[field]
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise RuntimeFailure(
+                    "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+                )
+            totals[move_id][field] += Decimal(str(value))
+    related = _journal_entry_related(env, moves, [], company_id)
+    rows = []
+    observed_move_ids: set[int] = set()
+    for move in moves:
+        move_id = move["id"]
+        if (
+            not isinstance(move_id, int)
+            or isinstance(move_id, bool)
+            or move_id <= 0
+            or move_id in observed_move_ids
+        ):
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        observed_move_ids.add(move_id)
+        row = _journal_entry_header(move, related)
+        row.update(
+            {
+                field: _decimal_string(value)
+                for field, value in totals[move_id].items()
+            }
+        )
+        rows.append(row)
+    return {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        "rows": rows,
+    }
+
+
+def _dispatch_journal_entry_get(
+    env: Any, payload: dict[str, Any], company_id: int
+) -> dict[str, Any]:
+    _require_keys(payload, {"company_id", "move_id"})
+    if (
+        not isinstance(payload["company_id"], int)
+        or isinstance(payload["company_id"], bool)
+        or not isinstance(payload["move_id"], int)
+        or isinstance(payload["move_id"], bool)
+        or payload["move_id"] <= 0
+    ):
+        raise RuntimeFailure(
+            "bridge_protocol_error", "The bridge action payload is invalid.", exit_code=7
+        )
+    if payload["company_id"] != company_id:
+        raise RuntimeFailure(
+            "company_unavailable", "The company is unavailable.", exit_code=3
+        )
+    company_visible, module_installed, access_allowed = _journal_entry_gate(
+        env, company_id, include_accounts=True
+    )
+    if not access_allowed:
+        return {
+            "user_id": env.uid,
+            "company_visible": company_visible,
+            "module_installed": module_installed,
+            "access_allowed": access_allowed,
+            "entry": None,
+        }
+    move_fields = [
+        "id",
+        "name",
+        "date",
+        "state",
+        "ref",
+        "journal_id",
+        "company_id",
+        "company_currency_id",
+        "partner_id",
+    ]
+    moves = (
+        env["account.move"]
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+        .search_read(
+            [
+                ("id", "=", payload["move_id"]),
+                ("company_id", "=", company_id),
+                ("move_type", "=", "entry"),
+            ],
+            fields=move_fields,
+            limit=1,
+        )
+    )
+    if not moves:
+        return {
+            "user_id": env.uid,
+            "company_visible": company_visible,
+            "module_installed": module_installed,
+            "access_allowed": access_allowed,
+            "entry": None,
+        }
+    lines = (
+        env["account.move.line"]
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+        .search_read(
+            [("move_id", "=", payload["move_id"])],
+            fields=[
+                "id",
+                "move_id",
+                "sequence",
+                "display_type",
+                "name",
+                "account_id",
+                "partner_id",
+                "debit",
+                "credit",
+                "balance",
+                "company_currency_id",
+                "amount_currency",
+                "currency_id",
+                "date_maturity",
+                "reconciled",
+                "matching_number",
+            ],
+            order="sequence,id",
+        )
+    )
+    related = _journal_entry_related(env, moves, lines, company_id)
+    entry = _journal_entry_header(moves[0], related)
+    totals = {"debit": Decimal(0), "credit": Decimal(0), "balance": Decimal(0)}
+    normalized_lines = []
+    for line in lines:
+        if _reference_id(line.pop("move_id")) != entry["id"]:
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        account_id = _reference_id(line.pop("account_id"))
+        partner_id = _reference_id(line.pop("partner_id"))
+        company_currency_id = _reference_id(line.pop("company_currency_id"))
+        currency_id = _reference_id(line.pop("currency_id"))
+        line["display_type"] = _optional_string(line["display_type"])
+        line["name"] = _optional_string(line["name"])
+        line["partner"] = (
+            _named_reference(_safe_related(related, "partners", partner_id))
+            if partner_id is not None
+            else None
+        )
+        line["account"] = (
+            _account_reference(_safe_related(related, "accounts", account_id))
+            if account_id is not None
+            else None
+        )
+        if (
+            line["display_type"] in {"line_section", "line_subsection", "line_note"}
+            and line["account"] is not None
+        ) or (
+            line["display_type"] not in {"line_section", "line_subsection", "line_note"}
+            and line["account"] is None
+        ):
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        line["company_currency"] = _currency_reference(
+            _safe_related(related, "currencies", company_currency_id)
+        )
+        line["currency"] = (
+            _currency_reference(_safe_related(related, "currencies", currency_id))
+            if currency_id is not None
+            else None
+        )
+        line["date_maturity"] = (
+            _date_string(line["date_maturity"])
+            if line["date_maturity"] not in (False, None)
+            else None
+        )
+        line["matching_number"] = _optional_string(line["matching_number"])
+        for field in ("debit", "credit", "balance", "amount_currency"):
+            raw = line[field]
+            line[field] = _decimal_string(raw)
+            if field in totals:
+                totals[field] += Decimal(str(raw))
+        normalized_lines.append(line)
+    entry["lines"] = normalized_lines
+    entry["totals"] = {
+        field: _decimal_string(value) for field, value in totals.items()
+    }
+    return {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        "entry": entry,
+    }
 
 
 def _dispatch(env: Any, action: str, payload: dict[str, Any], company_id: int):
@@ -587,6 +1177,10 @@ def _dispatch(env: Any, action: str, payload: dict[str, Any], company_id: int):
         }
     if action in _MASTER_DATA_ACTIONS:
         return _dispatch_master_data(env, action, payload, company_id)
+    if action == "account.move.journal_entry.search_page":
+        return _dispatch_journal_entry_search(env, payload, company_id)
+    if action == "account.move.journal_entry.get":
+        return _dispatch_journal_entry_get(env, payload, company_id)
     raise RuntimeFailure(
         "bridge_protocol_error", "The bridge action is unavailable.", exit_code=7
     )

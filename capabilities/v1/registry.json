@@ -4500,8 +4500,8 @@
         ]
       },
       "schemas": {
-        "request": "schemas/v1/request.schema.json",
-        "response": "schemas/v1/response.schema.json"
+        "request": "schemas/v1/journal_entry.get.request.schema.json",
+        "response": "schemas/v1/journal_entry.get.response.schema.json"
       },
       "requirements": {
         "modules": [
@@ -4517,27 +4517,39 @@
           "account.group_account_readonly"
         ],
         "acl": [
+          "res.company:read",
           "account.move:read",
-          "account.move.line:read"
+          "account.move.line:read",
+          "account.journal:read",
+          "account.account:read",
+          "res.currency:read",
+          "res.partner:read"
         ]
       },
       "strategies": {
         "preview": "not_applicable_read_only",
-        "execute": "implementation_pending",
-        "verify": "real_odoo_result_reread_and_schema_validation_pending",
+        "execute": "fixed_local_odoo_readonly_composite",
+        "verify": "same_transaction_result_and_v1_schema_validation",
         "idempotency": "not_applicable_read_only",
         "reverse": "not_applicable_read_only"
       },
       "tests": {
         "unit": {
-          "status": "planned",
-          "references": [],
-          "reason": "The unit definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_journal_entries.py",
+            "tests/unit/test_journal_entry_bridge.py",
+            "tests/unit/test_journal_entry_runtime.py",
+            "tests/unit/test_journal_entry_cli.py"
+          ],
+          "reason": "Unit tests cover the closed request, response, cursor, bridge, and fixed Odoo runtime contracts."
         },
         "integration": {
-          "status": "planned",
-          "references": [],
-          "reason": "The integration definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_journal_entries_live.py"
+          ],
+          "reason": "Live tests verify both fixed journal-entry reads against both dedicated synthetic databases and both configured companies."
         },
         "golden": {
           "status": "planned",
@@ -4551,9 +4563,9 @@
         }
       },
       "status": {
-        "value": "disabled",
-        "reason_code": "implementation_pending",
-        "reason": "The capability is frozen in the G3 matrix but has no implementation or allowlisted handler."
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Static registry metadata does not declare target-specific runtime availability; availability is evaluated for each configured database, company, and user."
       },
       "routing": {
         "object": "journal_entry",
@@ -4578,7 +4590,7 @@
           "user_login"
         ]
       },
-      "handler_key": null
+      "handler_key": "journal_entry_get"
     },
     "journal_entry.post": {
       "summary": {
@@ -4814,8 +4826,8 @@
         ]
       },
       "schemas": {
-        "request": "schemas/v1/request.schema.json",
-        "response": "schemas/v1/response.schema.json"
+        "request": "schemas/v1/journal_entry.search.request.schema.json",
+        "response": "schemas/v1/journal_entry.search.response.schema.json"
       },
       "requirements": {
         "modules": [
@@ -4831,27 +4843,38 @@
           "account.group_account_readonly"
         ],
         "acl": [
+          "res.company:read",
           "account.move:read",
-          "account.move.line:read"
+          "account.move.line:read",
+          "account.journal:read",
+          "res.currency:read",
+          "res.partner:read"
         ]
       },
       "strategies": {
         "preview": "not_applicable_read_only",
-        "execute": "implementation_pending",
-        "verify": "real_odoo_result_reread_and_schema_validation_pending",
+        "execute": "fixed_local_odoo_readonly_composite",
+        "verify": "same_transaction_result_and_v1_schema_validation",
         "idempotency": "not_applicable_read_only",
         "reverse": "not_applicable_read_only"
       },
       "tests": {
         "unit": {
-          "status": "planned",
-          "references": [],
-          "reason": "The unit definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_journal_entries.py",
+            "tests/unit/test_journal_entry_bridge.py",
+            "tests/unit/test_journal_entry_runtime.py",
+            "tests/unit/test_journal_entry_cli.py"
+          ],
+          "reason": "Unit tests cover the closed request, response, cursor, bridge, and fixed Odoo runtime contracts."
         },
         "integration": {
-          "status": "planned",
-          "references": [],
-          "reason": "The integration definition is frozen; implementation evidence is pending."
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_journal_entries_live.py"
+          ],
+          "reason": "Live tests verify both fixed journal-entry reads against both dedicated synthetic databases and both configured companies."
         },
         "golden": {
           "status": "planned",
@@ -4865,9 +4888,9 @@
         }
       },
       "status": {
-        "value": "disabled",
-        "reason_code": "implementation_pending",
-        "reason": "The capability is frozen in the G3 matrix but has no implementation or allowlisted handler."
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Static registry metadata does not declare target-specific runtime availability; availability is evaluated for each configured database, company, and user."
       },
       "routing": {
         "object": "journal_entry",
@@ -4892,7 +4915,7 @@
           "user_login"
         ]
       },
-      "handler_key": null
+      "handler_key": "journal_entry_search"
     },
     "localization.china.configuration.inspect": {
       "summary": {

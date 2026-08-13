@@ -28,6 +28,8 @@ IMPLEMENTED_READS = {
     "tax.list": "tax_list",
     "payment_term.list": "payment_term_list",
     "currency.list": "currency_list",
+    "journal_entry.search": "journal_entry_search",
+    "journal_entry.get": "journal_entry_get",
 }
 
 
@@ -144,11 +146,14 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
         assert descriptor["status"]["reason_code"] == "runtime_context_required"
         assert descriptor["tests"]["unit"]["status"] == "implemented"
         assert descriptor["tests"]["integration"]["status"] == "implemented"
-        expected_live_test = (
-            "tests/integration/test_account_account_list_live.py"
-            if capability_id == "account.account.list"
-            else "tests/integration/test_master_data_lists_live.py"
-        )
+        if capability_id in {"journal_entry.search", "journal_entry.get"}:
+            expected_live_test = "tests/integration/test_journal_entries_live.py"
+        else:
+            expected_live_test = (
+                "tests/integration/test_account_account_list_live.py"
+                if capability_id == "account.account.list"
+                else "tests/integration/test_master_data_lists_live.py"
+            )
         assert descriptor["tests"]["integration"]["references"] == [
             expected_live_test
         ]
