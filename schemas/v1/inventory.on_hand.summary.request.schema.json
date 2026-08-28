@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/inventory.on_hand.summary.request.schema.json",
+  "title": "inventory.on_hand.summary request",
+  "type": "object",
+  "allOf": [
+    {"$ref": "request.schema.json"},
+    {"properties": {"parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "warehouse_id": {"type": ["integer", "null"], "minimum": 1, "default": null},
+        "location_id": {"type": ["integer", "null"], "minimum": 1, "default": null},
+        "product_id": {"type": ["integer", "null"], "minimum": 1, "default": null}
+      }
+    }}}
+  ]
+}

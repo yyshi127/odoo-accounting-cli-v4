@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/report.inventory_valuation.request.schema.json",
+  "title": "report.inventory_valuation request",
+  "type": "object",
+  "allOf": [
+    {"$ref": "request.schema.json"},
+    {
+      "properties": {
+        "context": {
+          "allOf": [
+            {"$ref": "request.schema.json#/$defs/context"},
+            {
+              "properties": {
+                "database": {"type": "string", "pattern": "\\S"},
+                "user_login": {"type": "string", "pattern": "\\S"},
+                "language": {"type": "string", "pattern": "\\S"},
+                "timezone": {"type": "string", "pattern": "\\S"}
+              }
+            }
+          ]
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "date": {"type": ["string", "null"], "format": "date", "default": null}
+          }
+        }
+      }
+    }
+  ]
+}

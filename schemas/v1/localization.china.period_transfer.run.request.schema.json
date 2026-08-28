@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/localization.china.period_transfer.run.request.schema.json",
+  "title": "localization.china.period_transfer.run request",
+  "type": "object",
+  "allOf": [
+    {"$ref": "request.schema.json"},
+    {
+      "properties": {
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["run_date"],
+          "properties": {
+            "run_date": {"type": "string", "format": "date"}
+          }
+        }
+      }
+    }
+  ]
+}

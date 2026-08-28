@@ -42,12 +42,15 @@ def test_capabilities_list_is_stable_machine_readable_json() -> None:
     }
     listed_ids = [item["id"] for item in document["data"]["capabilities"]]
     assert listed_ids == list(load_registry().ids())
-    assert len(listed_ids) == 102
-    assert next(
-        item
-        for item in document["data"]["capabilities"]
-        if item["id"] == "journal_entry.post"
-    )["status"]["reason_code"] == "implementation_pending"
+    assert len(listed_ids) == 272
+    assert (
+        next(
+            item
+            for item in document["data"]["capabilities"]
+            if item["id"] == "journal_entry.post"
+        )["status"]["reason_code"]
+        == "runtime_context_required"
+    )
     assert len(document["data"]["registry_digest"]) == 64
 
 
@@ -101,9 +104,7 @@ def test_read_help_needs_no_odoo_configuration() -> None:
     project_root = Path(__file__).resolve().parents[2]
     existing_pythonpath = environment.get("PYTHONPATH")
     environment["PYTHONPATH"] = os.pathsep.join(
-        part
-        for part in (str(project_root / "src"), existing_pythonpath)
-        if part
+        part for part in (str(project_root / "src"), existing_pythonpath) if part
     )
 
     result = subprocess.run(
@@ -125,9 +126,7 @@ def test_subprocess_preserves_nonzero_json_error_exit_code() -> None:
     environment = os.environ.copy()
     existing_pythonpath = environment.get("PYTHONPATH")
     environment["PYTHONPATH"] = os.pathsep.join(
-        part
-        for part in (str(project_root / "src"), existing_pythonpath)
-        if part
+        part for part in (str(project_root / "src"), existing_pythonpath) if part
     )
     result = subprocess.run(
         [
@@ -155,9 +154,7 @@ def test_subprocess_argument_error_is_json_and_exit_two() -> None:
     environment = os.environ.copy()
     existing_pythonpath = environment.get("PYTHONPATH")
     environment["PYTHONPATH"] = os.pathsep.join(
-        part
-        for part in (str(project_root / "src"), existing_pythonpath)
-        if part
+        part for part in (str(project_root / "src"), existing_pythonpath) if part
     )
     result = subprocess.run(
         [

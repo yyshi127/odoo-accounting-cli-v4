@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/multicurrency.revaluation.generate_entries.request.schema.json",
+  "title": "multicurrency.revaluation.generate_entries request",
+  "type": "object",
+  "allOf": [
+    {"$ref": "request.schema.json"},
+    {
+      "properties": {
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "date",
+            "reversal_date",
+            "journal_id",
+            "expense_provision_account_id",
+            "income_provision_account_id"
+          ],
+          "properties": {
+            "date": {"type": "string", "format": "date"},
+            "reversal_date": {"type": "string", "format": "date"},
+            "journal_id": {"type": "integer", "minimum": 1},
+            "expense_provision_account_id": {"type": "integer", "minimum": 1},
+            "income_provision_account_id": {"type": "integer", "minimum": 1}
+          }
+        }
+      }
+    }
+  ]
+}

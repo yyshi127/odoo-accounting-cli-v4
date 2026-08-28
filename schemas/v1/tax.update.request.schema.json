@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/tax.update.request.schema.json",
+  "title": "tax.update request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": "string", "format": "uuid", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"},
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tax_id", "changes"],
+      "properties": {
+        "tax_id": {"type": "integer", "minimum": 1},
+        "changes": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "name": {"$ref": "#/$defs/name"},
+            "type_tax_use": {"enum": ["sale", "purchase", "none"]},
+            "amount_type": {"enum": ["fixed", "percent", "division"]},
+            "amount": {"type": "number", "minimum": -1000000, "maximum": 1000000},
+            "sequence": {"type": "integer", "minimum": 0},
+            "tax_group_id": {"type": ["integer", "null"], "minimum": 1},
+            "invoice_label": {"$ref": "#/$defs/nullableText"},
+            "price_include_override": {"enum": ["tax_included", "tax_excluded", null]},
+            "include_base_amount": {"type": "boolean"},
+            "is_base_affected": {"type": "boolean"}
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "name": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"},
+    "nullableText": {"type": ["string", "null"], "minLength": 1, "maxLength": 256, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"}
+  }
+}

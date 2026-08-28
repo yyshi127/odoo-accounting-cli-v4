@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/asset.get.response.schema.json",
+  "title": "asset.get response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "asset.get"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{
+    "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+    "then": {
+      "properties": {
+        "request_id": {"type": "string", "format": "uuid"},
+        "status": {"const": "verified"},
+        "data": {"$ref": "#/$defs/data"},
+        "error": {"type": "null"}
+      }
+    },
+    "else": {
+      "properties": {
+        "data": {"type": "null"},
+        "error": {"$ref": "response.schema.json#/$defs/error"}
+      }
+    }
+  }],
+  "$defs": {
+    "money": {"type": "string", "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"},
+    "currency": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "code"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1, "maxLength": 3}
+      }
+    },
+    "account": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "code", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1}
+      }
+    },
+    "nullable_account": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/account"}]},
+    "journal": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "code", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1}
+      }
+    },
+    "accounts": {
+      "type": "object", "additionalProperties": false,
+      "required": ["asset", "depreciation", "expense"],
+      "properties": {
+        "asset": {"$ref": "#/$defs/nullable_account"},
+        "depreciation": {"$ref": "#/$defs/nullable_account"},
+        "expense": {"$ref": "#/$defs/nullable_account"}
+      }
+    },
+    "values": {
+      "type": "object", "additionalProperties": false,
+      "required": ["original", "salvage", "depreciable", "book", "residual"],
+      "properties": {
+        "original": {"$ref": "#/$defs/money"},
+        "salvage": {"$ref": "#/$defs/money"},
+        "depreciable": {"$ref": "#/$defs/money"},
+        "book": {"$ref": "#/$defs/money"},
+        "residual": {"$ref": "#/$defs/money"}
+      }
+    },
+    "method": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "number", "period", "progress_factor", "prorata_computation_type"],
+      "properties": {
+        "type": {"enum": ["linear", "degressive", "degressive_then_linear"]},
+        "number": {"type": "integer", "minimum": 0},
+        "period": {"enum": ["1", "12"]},
+        "progress_factor": {"$ref": "#/$defs/money"},
+        "prorata_computation_type": {"enum": ["none", "constant_periods", "daily_computation"]}
+      }
+    },
+    "dates": {
+      "type": "object", "additionalProperties": false,
+      "required": ["acquisition", "prorata", "disposal"],
+      "properties": {
+        "acquisition": {"type": "string", "format": "date"},
+        "prorata": {"type": "string", "format": "date"},
+        "disposal": {"type": ["string", "null"], "format": "date"}
+      }
+    },
+    "data": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "name", "state", "active", "company_id", "currency", "accounts", "journal", "values", "method", "dates"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1},
+        "state": {"enum": ["draft", "open", "paused", "close", "cancelled"]},
+        "active": {"type": "boolean"},
+        "company_id": {"type": "integer", "minimum": 1},
+        "currency": {"$ref": "#/$defs/currency"},
+        "accounts": {"$ref": "#/$defs/accounts"},
+        "journal": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/journal"}]},
+        "values": {"$ref": "#/$defs/values"},
+        "method": {"$ref": "#/$defs/method"},
+        "dates": {"$ref": "#/$defs/dates"}
+      }
+    }
+  }
+}

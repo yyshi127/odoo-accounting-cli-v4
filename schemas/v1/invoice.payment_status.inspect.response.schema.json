@@ -74,7 +74,7 @@
     },
     "reconciliation": {
       "type": "object", "additionalProperties": false,
-      "required": ["id", "date", "amount", "company_amount", "currency", "company_currency", "counterpart_line_id", "counterpart_move", "payment_id", "exchange_move_id"],
+      "required": ["id", "date", "amount", "company_amount", "currency", "company_currency", "invoice_line_id", "counterpart_line_id", "counterpart_move", "payment_id", "exchange_move_id"],
       "properties": {
         "id": {"type": "integer", "minimum": 1},
         "date": {"type": "string", "format": "date"},
@@ -82,10 +82,24 @@
         "company_amount": {"$ref": "invoice.search.response.schema.json#/$defs/money"},
         "currency": {"$ref": "invoice.search.response.schema.json#/$defs/currency"},
         "company_currency": {"$ref": "invoice.search.response.schema.json#/$defs/currency"},
+        "invoice_line_id": {"type": "integer", "minimum": 1},
         "counterpart_line_id": {"type": "integer", "minimum": 1},
         "counterpart_move": {"$ref": "#/$defs/counterpart_move"},
         "payment_id": {"type": ["integer", "null"], "minimum": 1},
         "exchange_move_id": {"type": ["integer", "null"], "minimum": 1}
+      }
+    },
+    "outstanding_item": {
+      "type": "object", "additionalProperties": false,
+      "required": ["line_id", "move_id", "payment_id", "date", "label", "amount", "currency"],
+      "properties": {
+        "line_id": {"type": "integer", "minimum": 1},
+        "move_id": {"type": "integer", "minimum": 1},
+        "payment_id": {"type": ["integer", "null"], "minimum": 1},
+        "date": {"type": "string", "format": "date"},
+        "label": {"type": "string", "minLength": 1},
+        "amount": {"allOf": [{"$ref": "invoice.search.response.schema.json#/$defs/money"}, {"pattern": "^(?:0\\.[0-9]*[1-9][0-9]*|[1-9][0-9]*(?:\\.[0-9]+)?)$"}]},
+        "currency": {"$ref": "invoice.search.response.schema.json#/$defs/currency"}
       }
     },
     "payment_method": {
@@ -118,7 +132,7 @@
     },
     "data": {
       "type": "object", "additionalProperties": false,
-      "required": ["id", "name", "move_type", "state", "payment_state", "company_id", "currency", "company_currency", "amount_total", "amount_residual", "receivable_payable_lines", "reconciliations", "payments"],
+      "required": ["id", "name", "move_type", "state", "payment_state", "company_id", "currency", "company_currency", "amount_total", "amount_residual", "receivable_payable_lines", "reconciliations", "payments", "outstanding_items"],
       "properties": {
         "id": {"type": "integer", "minimum": 1},
         "name": {"type": ["string", "null"], "minLength": 1},
@@ -132,7 +146,8 @@
         "amount_residual": {"$ref": "invoice.search.response.schema.json#/$defs/money"},
         "receivable_payable_lines": {"type": "array", "items": {"$ref": "#/$defs/receivable_payable_line"}},
         "reconciliations": {"type": "array", "items": {"$ref": "#/$defs/reconciliation"}},
-        "payments": {"type": "array", "items": {"$ref": "#/$defs/payment"}}
+        "payments": {"type": "array", "items": {"$ref": "#/$defs/payment"}},
+        "outstanding_items": {"type": "array", "items": {"$ref": "#/$defs/outstanding_item"}}
       }
     }
   }

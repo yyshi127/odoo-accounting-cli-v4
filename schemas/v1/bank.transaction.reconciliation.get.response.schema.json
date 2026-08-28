@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/bank.transaction.reconciliation.get.response.schema.json",
+  "title": "bank.transaction.reconciliation.get response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "bank.transaction.reconciliation.get"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{
+    "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+    "then": {"properties": {"request_id": {"type": "string", "format": "uuid"}, "status": {"const": "verified"}, "data": {"$ref": "#/$defs/data"}, "error": {"type": "null"}}},
+    "else": {"properties": {"data": {"type": "null"}, "error": {"$ref": "response.schema.json#/$defs/error"}}}
+  }],
+  "$defs": {
+    "decimal": {"type": "string", "maxLength": 256, "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"},
+    "nullableId": {"type": ["integer", "null"], "minimum": 1},
+    "line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "account_id", "partner_id", "currency_id", "balance", "amount_currency", "amount_residual", "amount_residual_currency"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "account_id": {"type": "integer", "minimum": 1},
+        "partner_id": {"$ref": "#/$defs/nullableId"},
+        "currency_id": {"type": "integer", "minimum": 1},
+        "balance": {"$ref": "#/$defs/decimal"},
+        "amount_currency": {"$ref": "#/$defs/decimal"},
+        "amount_residual": {"$ref": "#/$defs/decimal"},
+        "amount_residual_currency": {"$ref": "#/$defs/decimal"}
+      }
+    },
+    "transaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "company_id", "move_id", "move_state", "date", "journal_id", "partner_id", "amount", "currency_id", "foreign_currency_id", "amount_currency", "amount_residual", "is_reconciled", "checked"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "company_id": {"type": "integer", "minimum": 1},
+        "move_id": {"type": "integer", "minimum": 1},
+        "move_state": {"enum": ["draft", "posted", "cancel"]},
+        "date": {"type": "string", "format": "date"},
+        "journal_id": {"type": "integer", "minimum": 1},
+        "partner_id": {"$ref": "#/$defs/nullableId"},
+        "amount": {"$ref": "#/$defs/decimal"},
+        "currency_id": {"type": "integer", "minimum": 1},
+        "foreign_currency_id": {"$ref": "#/$defs/nullableId"},
+        "amount_currency": {"$ref": "#/$defs/decimal"},
+        "amount_residual": {"$ref": "#/$defs/decimal"},
+        "is_reconciled": {"type": "boolean"},
+        "checked": {"type": "boolean"}
+      }
+    },
+    "matchedLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bank_move_line_id", "source_line_id", "source_move_id", "account_id", "partner_id", "currency_id", "applied_balance", "applied_amount_currency", "source_amount_residual", "source_amount_residual_currency", "full_reconcile_id"],
+      "properties": {
+        "bank_move_line_id": {"type": "integer", "minimum": 1},
+        "source_line_id": {"type": "integer", "minimum": 1},
+        "source_move_id": {"type": "integer", "minimum": 1},
+        "account_id": {"type": "integer", "minimum": 1},
+        "partner_id": {"$ref": "#/$defs/nullableId"},
+        "currency_id": {"type": "integer", "minimum": 1},
+        "applied_balance": {"$ref": "#/$defs/decimal"},
+        "applied_amount_currency": {"$ref": "#/$defs/decimal"},
+        "source_amount_residual": {"$ref": "#/$defs/decimal"},
+        "source_amount_residual_currency": {"$ref": "#/$defs/decimal"},
+        "full_reconcile_id": {"$ref": "#/$defs/nullableId"}
+      }
+    },
+    "writeoffLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "account_id", "partner_id", "currency_id", "balance", "amount_currency"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1},
+        "account_id": {"type": "integer", "minimum": 1},
+        "partner_id": {"$ref": "#/$defs/nullableId"},
+        "currency_id": {"type": "integer", "minimum": 1},
+        "balance": {"$ref": "#/$defs/decimal"},
+        "amount_currency": {"$ref": "#/$defs/decimal"}
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transaction", "liquidity_line", "suspense_line", "matched_lines", "writeoff_lines", "payment_ids"],
+      "properties": {
+        "transaction": {"$ref": "#/$defs/transaction"},
+        "liquidity_line": {"$ref": "#/$defs/line"},
+        "suspense_line": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/line"}]},
+        "matched_lines": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/matchedLine"}},
+        "writeoff_lines": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/writeoffLine"}},
+        "payment_ids": {"type": "array", "maxItems": 1000, "uniqueItems": true, "items": {"type": "integer", "minimum": 1}}
+      }
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/company.lock_dates.inspect.response.schema.json",
+  "title": "company.lock_dates.inspect response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "company.lock_dates.inspect"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{"if": {"properties": {"success": {"const": true}}, "required": ["success"]}, "then": {"properties": {"request_id": {"type": "string", "format": "uuid"}, "status": {"const": "verified"}, "data": {"$ref": "#/$defs/data"}, "error": {"type": "null"}}}, "else": {"properties": {"data": {"type": "null"}, "error": {"$ref": "response.schema.json#/$defs/error"}}}}],
+  "$defs": {
+    "locks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fiscalyear_lock_date", "tax_lock_date", "sale_lock_date", "purchase_lock_date", "hard_lock_date"],
+      "properties": {
+        "fiscalyear_lock_date": {"type": ["string", "null"], "format": "date"},
+        "tax_lock_date": {"type": ["string", "null"], "format": "date"},
+        "sale_lock_date": {"type": ["string", "null"], "format": "date"},
+        "purchase_lock_date": {"type": ["string", "null"], "format": "date"},
+        "hard_lock_date": {"type": ["string", "null"], "format": "date"}
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["company_id", "configured", "effective"],
+      "properties": {
+        "company_id": {"type": "integer", "minimum": 1},
+        "configured": {"$ref": "#/$defs/locks"},
+        "effective": {"$ref": "#/$defs/locks"}
+      }
+    }
+  }
+}

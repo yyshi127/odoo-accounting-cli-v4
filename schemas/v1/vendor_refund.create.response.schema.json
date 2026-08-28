@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/vendor_refund.create.response.schema.json",
+  "title": "vendor_refund.create response",
+  "type": "object",
+  "allOf": [
+    {"$ref": "response.schema.json"},
+    {
+      "properties": {
+        "capability": {"const": "vendor_refund.create"},
+        "data": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "core-write-result.schema.json"}
+          ]
+        }
+      }
+    },
+    {
+      "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+      "then": {
+        "properties": {
+          "status": {"const": "verified"},
+          "data": {"$ref": "core-write-result.schema.json"},
+          "error": {"type": "null"}
+        }
+      }
+    }
+  ]
+}

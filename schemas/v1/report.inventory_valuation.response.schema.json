@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/report.inventory_valuation.response.schema.json",
+  "title": "report.inventory_valuation response",
+  "type": "object",
+  "allOf": [
+    {"$ref": "response.schema.json"},
+    {
+      "properties": {
+        "capability": {"const": "report.inventory_valuation"},
+        "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+          "then": {
+            "properties": {
+              "request_id": {"type": "string", "format": "uuid"},
+              "status": {"const": "verified"},
+              "data": {"$ref": "#/$defs/data"},
+              "error": {"type": "null"}
+            }
+          },
+          "else": {
+            "properties": {
+              "data": {"type": "null"},
+              "error": {"$ref": "response.schema.json#/$defs/error"}
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "decimal": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
+    },
+    "nonnegativeDecimal": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
+    },
+    "namedRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1}
+      }
+    },
+    "account": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1}
+      }
+    },
+    "currency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1, "maxLength": 3}
+      }
+    },
+    "accountItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["account", "initial_balance", "ending_stock", "variation_debit", "variation_credit"],
+      "properties": {
+        "account": {"$ref": "#/$defs/account"},
+        "initial_balance": {"$ref": "#/$defs/decimal"},
+        "ending_stock": {"$ref": "#/$defs/decimal"},
+        "variation_debit": {"$ref": "#/$defs/nonnegativeDecimal"},
+        "variation_credit": {"$ref": "#/$defs/nonnegativeDecimal"}
+      }
+    },
+    "nullableDecimal": {
+      "oneOf": [{"type": "null"}, {"$ref": "#/$defs/decimal"}]
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "as_of_date",
+        "company",
+        "currency",
+        "initial_balance",
+        "ending_stock",
+        "stock_variation",
+        "inventory_loss",
+        "not_invoiced_delivered_goods",
+        "not_invoiced_received_goods",
+        "cost_of_production",
+        "accounts"
+      ],
+      "properties": {
+        "as_of_date": {"type": ["string", "null"], "format": "date"},
+        "company": {"$ref": "#/$defs/namedRef"},
+        "currency": {"$ref": "#/$defs/currency"},
+        "initial_balance": {"$ref": "#/$defs/decimal"},
+        "ending_stock": {"$ref": "#/$defs/decimal"},
+        "stock_variation": {"$ref": "#/$defs/decimal"},
+        "inventory_loss": {"$ref": "#/$defs/nullableDecimal"},
+        "not_invoiced_delivered_goods": {"$ref": "#/$defs/nullableDecimal"},
+        "not_invoiced_received_goods": {"$ref": "#/$defs/nullableDecimal"},
+        "cost_of_production": {"$ref": "#/$defs/nullableDecimal"},
+        "accounts": {"type": "array", "items": {"$ref": "#/$defs/accountItem"}}
+      }
+    }
+  }
+}

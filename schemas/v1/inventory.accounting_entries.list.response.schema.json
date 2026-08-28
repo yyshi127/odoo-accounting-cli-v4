@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/inventory.accounting_entries.list.response.schema.json",
+  "title": "inventory.accounting_entries.list response",
+  "type": "object",
+  "allOf": [
+    {"$ref": "response.schema.json"},
+    {
+      "properties": {
+        "capability": {"const": "inventory.accounting_entries.list"},
+        "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+          "then": {
+            "properties": {
+              "request_id": {"type": "string", "format": "uuid"},
+              "status": {"const": "verified"},
+              "data": {"$ref": "#/$defs/data"},
+              "error": {"type": "null"}
+            }
+          },
+          "else": {
+            "properties": {
+              "data": {"type": "null"},
+              "error": {"$ref": "response.schema.json#/$defs/error"}
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "decimal": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
+    },
+    "nonnegativeDecimal": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
+    },
+    "nullableText": {
+      "oneOf": [{"type": "null"}, {"type": "string", "minLength": 1}]
+    },
+    "namedRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1}
+      }
+    },
+    "account": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1}
+      }
+    },
+    "currency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1, "maxLength": 3}
+      }
+    },
+    "journal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1, "maxLength": 5},
+        "name": {"type": "string", "minLength": 1}
+      }
+    },
+    "accountingLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "account", "debit", "credit", "balance"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "account": {"$ref": "#/$defs/account"},
+        "debit": {"$ref": "#/$defs/nonnegativeDecimal"},
+        "credit": {"$ref": "#/$defs/nonnegativeDecimal"},
+        "balance": {"$ref": "#/$defs/decimal"}
+      }
+    },
+    "accountMove": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "date", "state", "journal"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"$ref": "#/$defs/nullableText"},
+        "date": {"type": "string", "format": "date"},
+        "state": {"const": "posted"},
+        "journal": {"$ref": "#/$defs/journal"}
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "date",
+        "company_id",
+        "reference",
+        "state",
+        "product",
+        "quantity",
+        "uom",
+        "value",
+        "is_in",
+        "is_out",
+        "account_move",
+        "lines",
+        "company_currency"
+      ],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "date": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "company_id": {"type": "integer", "minimum": 1},
+        "reference": {"$ref": "#/$defs/nullableText"},
+        "state": {"const": "done"},
+        "product": {"$ref": "#/$defs/namedRef"},
+        "quantity": {"$ref": "#/$defs/decimal"},
+        "uom": {"$ref": "#/$defs/namedRef"},
+        "value": {"$ref": "#/$defs/decimal"},
+        "is_in": {"type": "boolean"},
+        "is_out": {"type": "boolean"},
+        "account_move": {"$ref": "#/$defs/accountMove"},
+        "lines": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/accountingLine"}},
+        "company_currency": {"$ref": "#/$defs/currency"}
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items", "has_more", "next_cursor"],
+      "properties": {
+        "items": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/item"}},
+        "has_more": {"type": "boolean"},
+        "next_cursor": {"type": ["string", "null"], "minLength": 1, "maxLength": 4096}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"has_more": {"const": true}}, "required": ["has_more"]},
+          "then": {
+            "properties": {
+              "items": {"type": "array", "minItems": 1},
+              "next_cursor": {"type": "string"}
+            }
+          },
+          "else": {"properties": {"next_cursor": {"type": "null"}}}
+        }
+      ]
+    }
+  }
+}

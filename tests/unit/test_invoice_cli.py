@@ -68,6 +68,7 @@ def _payment_status() -> dict:
         "receivable_payable_lines": [],
         "reconciliations": [],
         "payments": [],
+        "outstanding_items": [],
     }
 
 

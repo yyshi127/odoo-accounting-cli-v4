@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/invoice.analysis.search.response.schema.json",
+  "title": "invoice.analysis.search response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "invoice.analysis.search"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{"if": {"properties": {"success": {"const": true}}, "required": ["success"]}, "then": {"properties": {"request_id": {"type": "string", "format": "uuid"}, "status": {"const": "verified"}, "data": {"$ref": "#/$defs/data"}, "error": {"type": "null"}}}, "else": {"properties": {"data": {"type": "null"}, "error": {"$ref": "response.schema.json#/$defs/error"}}}}],
+  "$defs": {
+    "named": {"type": "object", "additionalProperties": false, "required": ["id", "name"], "properties": {"id": {"type": "integer", "minimum": 1}, "name": {"type": "string", "minLength": 1}}},
+    "currency": {"type": "object", "additionalProperties": false, "required": ["id", "code"], "properties": {"id": {"type": "integer", "minimum": 1}, "code": {"type": "string", "minLength": 1, "maxLength": 3}}},
+    "decimal": {"type": "string", "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"},
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "invoice", "journal", "company_id", "company_currency", "partner", "move_type", "state", "payment_state", "invoice_date", "due_date", "product", "uom", "currency", "quantity", "untaxed_amount_currency", "untaxed_amount", "total_amount", "total_amount_currency", "average_price", "margin", "inventory_value"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "invoice": {"$ref": "#/$defs/named"},
+        "journal": {"$ref": "#/$defs/named"},
+        "company_id": {"type": "integer", "minimum": 1},
+        "company_currency": {"$ref": "#/$defs/currency"},
+        "partner": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/named"}]},
+        "move_type": {"enum": ["out_invoice", "out_refund", "in_invoice", "in_refund"]},
+        "state": {"enum": ["draft", "posted", "cancel"]},
+        "payment_state": {"type": ["string", "null"], "enum": ["not_paid", "in_payment", "paid", "partial", "reversed", "blocked", "invoicing_legacy", null]},
+        "invoice_date": {"type": ["string", "null"], "format": "date"},
+        "due_date": {"type": ["string", "null"], "format": "date"},
+        "product": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/named"}]},
+        "uom": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/named"}]},
+        "currency": {"$ref": "#/$defs/currency"},
+        "quantity": {"$ref": "#/$defs/decimal"},
+        "untaxed_amount_currency": {"$ref": "#/$defs/decimal"},
+        "untaxed_amount": {"$ref": "#/$defs/decimal"},
+        "total_amount": {"$ref": "#/$defs/decimal"},
+        "total_amount_currency": {"$ref": "#/$defs/decimal"},
+        "average_price": {"$ref": "#/$defs/decimal"},
+        "margin": {"$ref": "#/$defs/decimal"},
+        "inventory_value": {"$ref": "#/$defs/decimal"}
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items", "has_more", "next_cursor"],
+      "properties": {
+        "items": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/item"}},
+        "has_more": {"type": "boolean"},
+        "next_cursor": {"type": ["string", "null"], "minLength": 1, "maxLength": 4096}
+      },
+      "allOf": [{"if": {"properties": {"has_more": {"const": true}}, "required": ["has_more"]}, "then": {"properties": {"items": {"type": "array", "minItems": 1}, "next_cursor": {"type": "string"}}}, "else": {"properties": {"next_cursor": {"type": "null"}}}}]
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/vendor_refund.create.request.schema.json",
+  "title": "vendor_refund.create request",
+  "type": "object",
+  "allOf": [
+    {"$ref": "request.schema.json"},
+    {
+      "properties": {
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["move_id", "date", "reason"],
+          "properties": {
+            "move_id": {"type": "integer", "minimum": 1},
+            "date": {"type": "string", "format": "date"},
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"
+            },
+            "lines": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 500,
+              "items": {
+                "$ref": "invoice.lines.replace.request.schema.json#/$defs/invoice_line"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

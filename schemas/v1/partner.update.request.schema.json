@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/partner.update.request.schema.json",
+  "title": "partner.update request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["partner_id", "changes"],
+      "properties": {
+        "partner_id": {"type": "integer", "minimum": 1},
+        "changes": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "name": {"$ref": "#/$defs/markerSafeText256"},
+            "company_type": {"enum": ["person", "company"]},
+            "vat": {"$ref": "#/$defs/nullableText64"},
+            "reference": {"$ref": "#/$defs/nullableMarkerSafeText128"},
+            "email": {"$ref": "#/$defs/nullableText320"},
+            "phone": {"$ref": "#/$defs/nullableText64"},
+            "mobile": {"$ref": "#/$defs/nullableText64"},
+            "street": {"$ref": "#/$defs/nullableText256"},
+            "street2": {"$ref": "#/$defs/nullableText256"},
+            "city": {"$ref": "#/$defs/nullableText256"},
+            "zip": {"$ref": "#/$defs/nullableText64"},
+            "state_id": {"type": ["integer", "null"], "minimum": 1},
+            "country_id": {"type": ["integer", "null"], "minimum": 1},
+            "language": {"$ref": "#/$defs/nullableText16"}
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "markerSafeText256": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^(?![\\s\\S]*\\[ODACV4:)(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"
+    },
+    "nullableMarkerSafeText128": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?![\\s\\S]*\\[ODACV4:)(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"
+    },
+    "nullableText320": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 320,
+      "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"
+    },
+    "nullableText256": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"
+    },
+    "nullableText64": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"
+    },
+    "nullableText16": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 16,
+      "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"
+    }
+  }
+}

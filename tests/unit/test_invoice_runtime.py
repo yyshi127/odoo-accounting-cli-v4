@@ -12,7 +12,6 @@ import pytest
 from odoo_accounting_cli_v4.bridge import runtime
 from odoo_accounting_cli_v4.bridge.runtime import RuntimeFailure
 
-
 SEARCH_ACTION = "account.move.invoice.search_page"
 GET_ACTION = "account.move.invoice.get"
 STATUS_ACTION = "account.move.invoice.payment_status.inspect"
@@ -79,6 +78,20 @@ PARTIAL_FIELDS = [
     "exchange_move_id",
 ]
 COUNTERPART_LINE_FIELDS = ["id", "move_id"]
+OUTSTANDING_LINE_FIELDS = [
+    "id",
+    "move_id",
+    "company_id",
+    "account_id",
+    "partner_id",
+    "parent_state",
+    "reconciled",
+    "balance",
+    "amount_residual",
+    "amount_residual_currency",
+    "date",
+    "payment_id",
+]
 COUNTERPART_MOVE_FIELDS = [
     "id",
     "name",
@@ -109,11 +122,13 @@ STATUS_MOVE_FIELDS = [
     "state",
     "payment_state",
     "company_id",
+    "commercial_partner_id",
     "currency_id",
     "company_currency_id",
     "amount_total",
     "amount_residual",
     "matched_payment_ids",
+    "invoice_outstanding_credits_debits_widget",
 ]
 
 SEARCH_MODELS = {
@@ -320,7 +335,9 @@ def _header() -> dict[str, Any]:
     }
 
 
-def _responses(mode: str, *, present: bool = True) -> dict[str, list[list[dict[str, Any]]]]:
+def _responses(
+    mode: str, *, present: bool = True
+) -> dict[str, list[list[dict[str, Any]]]]:
     base: dict[str, list[list[dict[str, Any]]]] = {
         "account.move": [[_raw_header()] if present else []],
         "account.move.line": [],
@@ -341,30 +358,38 @@ def _responses(mode: str, *, present: bool = True) -> dict[str, list[list[dict[s
                 base[model] = []
         return base
     if mode == "get":
-        base["account.move.line"] = [[{
-            "id": 301,
-            "move_id": [99, "INV/2025/0099"],
-            "sequence": 100,
-            "display_type": "product",
-            "name": "Fixture service",
-            "product_id": [11, "display value must not leak"],
-            "account_id": [101, "display value must not leak"],
-            "quantity": 1.0,
-            "price_unit": 100.0,
-            "discount": 0.0,
-            "price_subtotal": 100.0,
-            "price_total": 113.0,
-            "tax_ids": [4],
-        }]]
+        base["account.move.line"] = [
+            [
+                {
+                    "id": 301,
+                    "move_id": [99, "INV/2025/0099"],
+                    "sequence": 100,
+                    "display_type": "product",
+                    "name": "Fixture service",
+                    "product_id": [11, "display value must not leak"],
+                    "account_id": [101, "display value must not leak"],
+                    "quantity": 1.0,
+                    "price_unit": 100.0,
+                    "discount": 0.0,
+                    "price_subtotal": 100.0,
+                    "price_total": 113.0,
+                    "tax_ids": [4],
+                }
+            ]
+        ]
         base["account.account"] = [[{"id": 101, "code": "6000", "name": "Sales"}]]
-        base["account.tax"] = [[{
-            "id": 4,
-            "name": "Tax 13%",
-            "type_tax_use": "sale",
-            "amount_type": "percent",
-            "amount": 13.0,
-            "price_include": False,
-        }]]
+        base["account.tax"] = [
+            [
+                {
+                    "id": 4,
+                    "name": "Tax 13%",
+                    "type_tax_use": "sale",
+                    "amount_type": "percent",
+                    "amount": 13.0,
+                    "price_include": False,
+                }
+            ]
+        ]
         base["product.product"] = [[{"id": 11, "display_name": "Consulting"}]]
     elif mode == "status":
         status_move = {
@@ -372,12 +397,36 @@ def _responses(mode: str, *, present: bool = True) -> dict[str, list[list[dict[s
             for key, value in _raw_header().items()
             if key
             in {
-                "id", "name", "move_type", "state", "payment_state", "company_id",
-                "currency_id", "amount_total", "amount_residual",
+                "id",
+                "name",
+                "move_type",
+                "state",
+                "payment_state",
+                "company_id",
+                "currency_id",
+                "amount_total",
+                "amount_residual",
             }
         }
         status_move["company_currency_id"] = [37, "SGD"]
+        status_move["commercial_partner_id"] = [9, "Fixture Customer"]
         status_move["matched_payment_ids"] = [5]
+        status_move["invoice_outstanding_credits_debits_widget"] = {
+            "outstanding": True,
+            "content": [
+                {
+                    "journal_name": "BNK1/2025/0060",
+                    "amount": 20.0,
+                    "currency_id": 6,
+                    "id": 602,
+                    "move_id": 60,
+                    "date": "2025-01-27",
+                    "account_payment_id": 6,
+                }
+            ],
+            "move_id": 99,
+            "title": "Outstanding credits",
+        }
         counterpart_move = {
             "id": 40,
             "name": "BNK1/2025/0040",
@@ -388,66 +437,106 @@ def _responses(mode: str, *, present: bool = True) -> dict[str, list[list[dict[s
         }
         base["account.move"] = [[status_move], [counterpart_move]]
         base["account.move.line"] = [
-            [{
-                "id": 302,
-                "move_id": [99, "INV/2025/0099"],
-                "account_id": [102, "display value must not leak"],
-                "date_maturity": "2025-02-20",
-                "balance": 152.55,
-                "amount_currency": 113.0,
-                "amount_residual": 85.05,
-                "amount_residual_currency": 63.0,
-                "currency_id": [6, "CNY"],
-                "reconciled": False,
-                "matching_number": "P",
-            }],
+            [
+                {
+                    "id": 302,
+                    "move_id": [99, "INV/2025/0099"],
+                    "account_id": [102, "display value must not leak"],
+                    "date_maturity": "2025-02-20",
+                    "balance": 152.55,
+                    "amount_currency": 113.0,
+                    "amount_residual": 85.05,
+                    "amount_residual_currency": 63.0,
+                    "currency_id": [6, "CNY"],
+                    "reconciled": False,
+                    "matching_number": "P",
+                }
+            ],
+            [
+                {
+                    "id": 602,
+                    "move_id": [60, "BNK1/2025/0060"],
+                    "company_id": [7, "Fixture Company"],
+                    "account_id": [102, "Accounts Receivable"],
+                    "partner_id": [9, "Fixture Customer"],
+                    "parent_state": "posted",
+                    "reconciled": False,
+                    "balance": -27.0,
+                    "amount_residual": -27.0,
+                    "amount_residual_currency": -20.0,
+                    "date": "2025-01-27",
+                    "payment_id": [6, "BNK1/2025/0060"],
+                }
+            ],
             [{"id": 402, "move_id": [40, "BNK1/2025/0040"]}],
         ]
-        base["account.account"] = [[{
-            "id": 102,
-            "code": "1100",
-            "name": "Accounts Receivable",
-            "account_type": "asset_receivable",
-        }]]
-        base["account.partial.reconcile"] = [[{
-            "id": 501,
-            "max_date": "2025-01-25",
-            "amount": 67.5,
-            "debit_amount_currency": 50.0,
-            "credit_amount_currency": 67.5,
-            "debit_move_id": [302, "INV/2025/0099"],
-            "credit_move_id": [402, "BNK1/2025/0040"],
-            "exchange_move_id": False,
-        }]]
-        base["account.payment"] = [[{
-            "id": 5,
-            "name": "BNK1/2025/0040",
-            "state": "in_process",
-            "date": "2025-01-25",
-            "payment_type": "inbound",
-            "partner_type": "customer",
-            "amount": 50.0,
-            "currency_id": [6, "CNY"],
-            "journal_id": [10, "BNK1 Bank"],
-            "payment_method_line_id": [55, "Manual"],
-            "move_id": [40, "BNK1/2025/0040"],
-            "is_reconciled": True,
-            "is_matched": False,
-        }]]
-        base["account.payment.method.line"] = [[{
-            "id": 55,
-            "payment_method_id": [3, "display value must not leak"],
-        }]]
-        base["account.payment.method"] = [[{
-            "id": 3,
-            "code": "manual",
-            "name": "Manual Payment",
-        }]]
+        base["account.account"] = [
+            [
+                {
+                    "id": 102,
+                    "code": "1100",
+                    "name": "Accounts Receivable",
+                    "account_type": "asset_receivable",
+                }
+            ]
+        ]
+        base["account.partial.reconcile"] = [
+            [
+                {
+                    "id": 501,
+                    "max_date": "2025-01-25",
+                    "amount": 67.5,
+                    "debit_amount_currency": 50.0,
+                    "credit_amount_currency": 67.5,
+                    "debit_move_id": [302, "INV/2025/0099"],
+                    "credit_move_id": [402, "BNK1/2025/0040"],
+                    "exchange_move_id": False,
+                }
+            ]
+        ]
+        base["account.payment"] = [
+            [
+                {
+                    "id": 5,
+                    "name": "BNK1/2025/0040",
+                    "state": "in_process",
+                    "date": "2025-01-25",
+                    "payment_type": "inbound",
+                    "partner_type": "customer",
+                    "amount": 50.0,
+                    "currency_id": [6, "CNY"],
+                    "journal_id": [10, "BNK1 Bank"],
+                    "payment_method_line_id": [55, "Manual"],
+                    "move_id": [40, "BNK1/2025/0040"],
+                    "is_reconciled": True,
+                    "is_matched": False,
+                }
+            ]
+        ]
+        base["account.payment.method.line"] = [
+            [
+                {
+                    "id": 55,
+                    "payment_method_id": [3, "display value must not leak"],
+                }
+            ]
+        ]
+        base["account.payment.method"] = [
+            [
+                {
+                    "id": 3,
+                    "code": "manual",
+                    "name": "Manual Payment",
+                }
+            ]
+        ]
         base["account.journal"] = [[{"id": 10, "code": "BNK1", "name": "Bank"}]]
-        base["res.currency"] = [[
-            {"id": 6, "name": "CNY"},
-            {"id": 37, "name": "SGD"},
-        ]]
+        base["res.currency"] = [
+            [
+                {"id": 6, "name": "CNY"},
+                {"id": 37, "name": "SGD"},
+            ]
+        ]
         base["res.partner"] = []
     return base
 
@@ -480,9 +569,7 @@ class _Environment:
                 model_responses,
                 access_allowed=model_name != denied_model,
             )
-        self.registry = _Registry(
-            self.calls, self.models, missing_model=missing_model
-        )
+        self.registry = _Registry(self.calls, self.models, missing_model=missing_model)
 
     def __getitem__(self, model: str):
         self.calls.append(("model", model))
@@ -512,11 +599,33 @@ def _assert_related_read(
     )
 
 
+def _use_bank_outstanding_candidate(
+    env: _Environment,
+    *,
+    account_type: Any = "asset_cash",
+    balance: float = 27.0,
+) -> dict[str, Any]:
+    candidate = env.models["account.move.line"].responses[1][0]
+    candidate.update(
+        account_id=[103, "Bank"],
+        balance=balance,
+        amount_residual=balance,
+        amount_residual_currency=20.0 if balance >= 0 else -20.0,
+    )
+    env.models["account.account"].responses.append(
+        [{"id": 103, "account_type": account_type}]
+    )
+    return candidate
+
+
 def test_decode_accepts_only_the_three_fixed_invoice_actions() -> None:
     for action in (SEARCH_ACTION, GET_ACTION, STATUS_ACTION):
-        assert runtime._decode_request(
-            io.StringIO(_bridge_request(action, _payload(action)))
-        )["action"] == action
+        assert (
+            runtime._decode_request(
+                io.StringIO(_bridge_request(action, _payload(action)))
+            )["action"]
+            == action
+        )
 
 
 def test_search_uses_exact_scope_filters_cursor_order_and_related_reads() -> None:
@@ -609,14 +718,16 @@ def test_get_reads_only_invoice_line_subset_and_exact_related_records() -> None:
         "discount": "0",
         "price_subtotal": "100",
         "price_total": "113",
-        "taxes": [{
-            "id": 4,
-            "name": "Tax 13%",
-            "type_tax_use": "sale",
-            "amount_type": "percent",
-            "amount": "13",
-            "price_include": False,
-        }],
+        "taxes": [
+            {
+                "id": 4,
+                "name": "Tax 13%",
+                "type_tax_use": "sale",
+                "amount_type": "percent",
+                "amount": "13",
+                "price_include": False,
+            }
+        ],
     }
     assert result == {
         "user_id": 42,
@@ -641,13 +752,18 @@ def test_get_reads_only_invoice_line_subset_and_exact_related_records() -> None:
     assert line_call[3] == INVOICE_LINE_FIELDS
     assert line_call[5] == "sequence,id"
     _assert_related_read(env, "account.account", [101], ["code", "name"])
-    _assert_related_read(env, "account.tax", [4], [
-        "name", "type_tax_use", "amount_type", "amount", "price_include"
-    ])
+    _assert_related_read(
+        env,
+        "account.tax",
+        [4],
+        ["name", "type_tax_use", "amount_type", "amount", "price_include"],
+    )
     _assert_related_read(env, "product.product", [11], ["display_name"])
 
 
-def test_payment_status_traverses_explicit_partial_reconcile_and_origin_payment() -> None:
+def test_payment_status_traverses_explicit_partial_reconcile_and_origin_payment() -> (
+    None
+):
     env = _Environment("status")
 
     result = runtime._dispatch(env, STATUS_ACTION, _payload(STATUS_ACTION), 7)
@@ -668,60 +784,78 @@ def test_payment_status_traverses_explicit_partial_reconcile_and_origin_payment(
             "company_currency": {"id": 37, "code": "SGD"},
             "amount_total": "113",
             "amount_residual": "63",
-            "receivable_payable_lines": [{
-                "id": 302,
-                "account": {
-                    "id": 102,
-                    "code": "1100",
-                    "name": "Accounts Receivable",
-                    "account_type": "asset_receivable",
-                },
-                "date_maturity": "2025-02-20",
-                "balance": "152.55",
-                "amount_currency": "113",
-                "amount_residual": "85.05",
-                "amount_residual_currency": "63",
-                "currency": {"id": 6, "code": "CNY"},
-                "reconciled": False,
-                "matching_number": "P",
-            }],
-            "reconciliations": [{
-                "id": 501,
-                "date": "2025-01-25",
-                "amount": "50",
-                "company_amount": "67.5",
-                "currency": {"id": 6, "code": "CNY"},
-                "company_currency": {"id": 37, "code": "SGD"},
-                "counterpart_line_id": 402,
-                "counterpart_move": {
-                    "id": 40,
-                    "name": "BNK1/2025/0040",
-                    "move_type": "entry",
-                    "state": "posted",
+            "receivable_payable_lines": [
+                {
+                    "id": 302,
+                    "account": {
+                        "id": 102,
+                        "code": "1100",
+                        "name": "Accounts Receivable",
+                        "account_type": "asset_receivable",
+                    },
+                    "date_maturity": "2025-02-20",
+                    "balance": "152.55",
+                    "amount_currency": "113",
+                    "amount_residual": "85.05",
+                    "amount_residual_currency": "63",
+                    "currency": {"id": 6, "code": "CNY"},
+                    "reconciled": False,
+                    "matching_number": "P",
+                }
+            ],
+            "reconciliations": [
+                {
+                    "id": 501,
                     "date": "2025-01-25",
-                },
-                "payment_id": 5,
-                "exchange_move_id": None,
-            }],
-            "payments": [{
-                "id": 5,
-                "name": "BNK1/2025/0040",
-                "state": "in_process",
-                "date": "2025-01-25",
-                "payment_type": "inbound",
-                "partner_type": "customer",
-                "amount": "50",
-                "currency": {"id": 6, "code": "CNY"},
-                "journal": {"id": 10, "code": "BNK1", "name": "Bank"},
-                "payment_method": {
-                    "id": 3,
-                    "code": "manual",
-                    "name": "Manual Payment",
-                },
-                "move_id": 40,
-                "is_reconciled": True,
-                "is_matched": False,
-            }],
+                    "amount": "50",
+                    "company_amount": "67.5",
+                    "currency": {"id": 6, "code": "CNY"},
+                    "company_currency": {"id": 37, "code": "SGD"},
+                    "invoice_line_id": 302,
+                    "counterpart_line_id": 402,
+                    "counterpart_move": {
+                        "id": 40,
+                        "name": "BNK1/2025/0040",
+                        "move_type": "entry",
+                        "state": "posted",
+                        "date": "2025-01-25",
+                    },
+                    "payment_id": 5,
+                    "exchange_move_id": None,
+                }
+            ],
+            "payments": [
+                {
+                    "id": 5,
+                    "name": "BNK1/2025/0040",
+                    "state": "in_process",
+                    "date": "2025-01-25",
+                    "payment_type": "inbound",
+                    "partner_type": "customer",
+                    "amount": "50",
+                    "currency": {"id": 6, "code": "CNY"},
+                    "journal": {"id": 10, "code": "BNK1", "name": "Bank"},
+                    "payment_method": {
+                        "id": 3,
+                        "code": "manual",
+                        "name": "Manual Payment",
+                    },
+                    "move_id": 40,
+                    "is_reconciled": True,
+                    "is_matched": False,
+                }
+            ],
+            "outstanding_items": [
+                {
+                    "line_id": 602,
+                    "move_id": 60,
+                    "payment_id": 6,
+                    "date": "2025-01-27",
+                    "label": "BNK1/2025/0060",
+                    "amount": "20",
+                    "currency": {"id": 6, "code": "CNY"},
+                }
+            ],
         },
     }
     move_calls = _search_calls(env, "account.move")
@@ -731,14 +865,26 @@ def test_payment_status_traverses_explicit_partial_reconcile_and_origin_payment(
         ("move_type", "in", DOCUMENT_TYPES),
     ]
     assert move_calls[0][3] == STATUS_MOVE_FIELDS
-    term_call, counterpart_line_call = _search_calls(env, "account.move.line")
+    term_call, outstanding_call, counterpart_line_call = _search_calls(
+        env, "account.move.line"
+    )
     assert term_call[2:] == (
         [
             ("move_id", "=", 99),
-            ("account_id.account_type", "in", ["asset_receivable", "liability_payable"]),
+            (
+                "account_id.account_type",
+                "in",
+                ["asset_receivable", "liability_payable"],
+            ),
         ],
         TERM_LINE_FIELDS,
         None,
+        "id",
+    )
+    assert outstanding_call[2:] == (
+        [("id", "in", [602]), ("company_id", "=", 7)],
+        OUTSTANDING_LINE_FIELDS,
+        1,
         "id",
     )
     partial_call = _search_calls(env, "account.partial.reconcile")[0]
@@ -771,13 +917,234 @@ def test_payment_status_traverses_explicit_partial_reconcile_and_origin_payment(
         1,
         "date desc,id desc",
     )
-    _assert_related_read(env, "account.account", [102], ["code", "name", "account_type"])
+    _assert_related_read(
+        env, "account.account", [102], ["code", "name", "account_type"]
+    )
+    assert len(_search_calls(env, "account.account")) == 1
     _assert_related_read(
         env, "account.payment.method.line", [55], ["payment_method_id"]
     )
-    _assert_related_read(
-        env, "account.payment.method", [3], ["code", "name"]
+    _assert_related_read(env, "account.payment.method", [3], ["code", "name"])
+
+
+@pytest.mark.parametrize("bank_label", (False, None, "Bank statement label"))
+def test_payment_status_accepts_optional_bank_label_without_exposing_it(
+    bank_label: Any,
+) -> None:
+    env = _Environment("status")
+    widget_item = env.models["account.move"].responses[0][0][
+        "invoice_outstanding_credits_debits_widget"
+    ]["content"][0]
+    widget_item["bank_label"] = bank_label
+
+    result = runtime._dispatch(env, STATUS_ACTION, _payload(STATUS_ACTION), 7)
+
+    assert result["payment_status"]["outstanding_items"] == [
+        {
+            "line_id": 602,
+            "move_id": 60,
+            "payment_id": 6,
+            "date": "2025-01-27",
+            "label": "BNK1/2025/0060",
+            "amount": "20",
+            "currency": {"id": 6, "code": "CNY"},
+        }
+    ]
+
+
+def test_payment_status_accepts_scoped_cash_account_bank_candidate() -> None:
+    env = _Environment("status")
+    _use_bank_outstanding_candidate(env)
+
+    result = runtime._dispatch(env, STATUS_ACTION, _payload(STATUS_ACTION), 7)
+
+    assert result["payment_status"]["outstanding_items"] == [
+        {
+            "line_id": 602,
+            "move_id": 60,
+            "payment_id": 6,
+            "date": "2025-01-27",
+            "label": "BNK1/2025/0060",
+            "amount": "20",
+            "currency": {"id": 6, "code": "CNY"},
+        }
+    ]
+    _assert_related_read(env, "account.account", [103], ["account_type"], call_index=1)
+    assert (
+        "context",
+        "account.account",
+        {"active_test": False, "allowed_company_ids": [7]},
+    ) in env.calls
+
+
+@pytest.mark.parametrize("account_type", ("asset_current", False, None))
+def test_payment_status_rejects_non_cash_bank_candidate_account_type(
+    account_type: Any,
+) -> None:
+    env = _Environment("status")
+    _use_bank_outstanding_candidate(env, account_type=account_type)
+
+    with pytest.raises(RuntimeFailure) as caught:
+        runtime._dispatch(env, STATUS_ACTION, _payload(STATUS_ACTION), 7)
+
+    assert caught.value.code == "odoo_runtime_error"
+
+
+def test_payment_status_rejects_opposite_sign_cash_account_candidate() -> None:
+    env = _Environment("status")
+    _use_bank_outstanding_candidate(env, balance=-27.0)
+
+    with pytest.raises(RuntimeFailure) as caught:
+        runtime._dispatch(env, STATUS_ACTION, _payload(STATUS_ACTION), 7)
+
+    assert caught.value.code == "odoo_runtime_error"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("company_id", [8, "Other Company"]),
+        ("partner_id", [10, "Other Partner"]),
+        ("parent_state", "draft"),
+        ("reconciled", True),
+        ("balance", 0.0),
+        ("date", "2025-01-28"),
+        ("move_id", [61, "Other Move"]),
+        ("payment_id", [7, "Other Payment"]),
+    ),
+)
+def test_payment_status_rejects_out_of_scope_bank_candidate_line(
+    field: str, value: Any
+) -> None:
+    env = _Environment("status")
+    candidate = _use_bank_outstanding_candidate(env)
+    candidate[field] = value
+
+    with pytest.raises(RuntimeFailure) as caught:
+        runtime._dispatch(env, STATUS_ACTION, _payload(STATUS_ACTION), 7)
+
+    assert caught.value.code == "odoo_runtime_error"
+
+
+def test_payment_status_rejects_zero_residual_bank_candidate_line() -> None:
+    env = _Environment("status")
+    candidate = _use_bank_outstanding_candidate(env)
+    candidate["amount_residual"] = 0.0
+    candidate["amount_residual_currency"] = 0.0
+
+    with pytest.raises(RuntimeFailure) as caught:
+        runtime._dispatch(env, STATUS_ACTION, _payload(STATUS_ACTION), 7)
+
+    assert caught.value.code == "odoo_runtime_error"
+
+
+def test_payment_status_rejects_unknown_outstanding_widget_item_field() -> None:
+    env = _Environment("status")
+    widget_item = env.models["account.move"].responses[0][0][
+        "invoice_outstanding_credits_debits_widget"
+    ]["content"][0]
+    widget_item["unknown"] = "unexpected"
+
+    with pytest.raises(RuntimeFailure) as caught:
+        runtime._dispatch(env, STATUS_ACTION, _payload(STATUS_ACTION), 7)
+
+    assert caught.value.code == "odoo_runtime_error"
+
+
+@pytest.mark.parametrize("bank_label", (True, 0, "", "   ", []))
+def test_payment_status_rejects_invalid_optional_bank_label(bank_label: Any) -> None:
+    env = _Environment("status")
+    widget_item = env.models["account.move"].responses[0][0][
+        "invoice_outstanding_credits_debits_widget"
+    ]["content"][0]
+    widget_item["bank_label"] = bank_label
+
+    with pytest.raises(RuntimeFailure) as caught:
+        runtime._dispatch(env, STATUS_ACTION, _payload(STATUS_ACTION), 7)
+
+    assert caught.value.code == "odoo_runtime_error"
+
+
+def test_payment_status_returns_empty_outstanding_items_for_false_widget() -> None:
+    env = _Environment("status")
+    move = env.models["account.move"].responses[0][0]
+    move["invoice_outstanding_credits_debits_widget"] = False
+    line_responses = env.models["account.move.line"].responses
+    env.models["account.move.line"].responses = [line_responses[0], line_responses[2]]
+
+    result = runtime._dispatch(env, STATUS_ACTION, _payload(STATUS_ACTION), 7)
+
+    assert result["payment_status"]["outstanding_items"] == []
+
+
+def test_payment_status_sorts_outstanding_items_by_date_and_line_desc() -> None:
+    env = _Environment("status")
+    widget = env.models["account.move"].responses[0][0][
+        "invoice_outstanding_credits_debits_widget"
+    ]
+    second_item = copy.deepcopy(widget["content"][0])
+    second_item.update(
+        id=603,
+        move_id=61,
+        account_payment_id=7,
+        journal_name="BNK1/2025/0061",
     )
+    widget["content"].append(second_item)
+    second_line = copy.deepcopy(env.models["account.move.line"].responses[1][0])
+    second_line.update(
+        id=603,
+        move_id=[61, "BNK1/2025/0061"],
+        payment_id=[7, "BNK1/2025/0061"],
+    )
+    env.models["account.move.line"].responses[1].append(second_line)
+
+    result = runtime._dispatch(env, STATUS_ACTION, _payload(STATUS_ACTION), 7)
+
+    assert [
+        item["line_id"] for item in result["payment_status"]["outstanding_items"]
+    ] == [603, 602]
+
+
+def test_payment_status_rejects_malformed_outstanding_widget() -> None:
+    env = _Environment("status")
+    widget = env.models["account.move"].responses[0][0][
+        "invoice_outstanding_credits_debits_widget"
+    ]
+    widget["content"][0]["amount"] = 0.0
+
+    with pytest.raises(RuntimeFailure) as caught:
+        runtime._dispatch(env, STATUS_ACTION, _payload(STATUS_ACTION), 7)
+
+    assert caught.value.code == "odoo_runtime_error"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("company_id", [8, "Other Company"]),
+        ("account_id", [999, "Other Account"]),
+        ("partner_id", [10, "Other Partner"]),
+        ("parent_state", "draft"),
+        ("reconciled", True),
+        ("balance", 27.0),
+        ("amount_residual", 0.0),
+    ),
+)
+def test_payment_status_rejects_out_of_scope_outstanding_line(
+    field: str, value: Any
+) -> None:
+    env = _Environment("status")
+    candidate = env.models["account.move.line"].responses[1][0]
+    candidate[field] = value
+    if field == "account_id":
+        env.models["account.account"].responses.append([])
+    if field == "amount_residual":
+        candidate["amount_residual_currency"] = 0.0
+
+    with pytest.raises(RuntimeFailure) as caught:
+        runtime._dispatch(env, STATUS_ACTION, _payload(STATUS_ACTION), 7)
+
+    assert caught.value.code == "odoo_runtime_error"
 
 
 def test_payment_status_includes_matched_payment_without_an_account_move() -> None:
@@ -785,6 +1152,7 @@ def test_payment_status_includes_matched_payment_without_an_account_move() -> No
     status_move = env.models["account.move"].responses[0][0]
     status_move["payment_state"] = "in_payment"
     status_move["matched_payment_ids"] = [6]
+    status_move["invoice_outstanding_credits_debits_widget"] = False
     env.models["account.partial.reconcile"].responses[0] = []
     env.models["account.move.line"].responses = [
         env.models["account.move.line"].responses[0]
@@ -796,6 +1164,7 @@ def test_payment_status_includes_matched_payment_without_an_account_move() -> No
 
     assert result["payment_status"]["payment_state"] == "in_payment"
     assert result["payment_status"]["reconciliations"] == []
+    assert result["payment_status"]["outstanding_items"] == []
     assert result["payment_status"]["payments"] == [
         {
             "id": 6,
@@ -821,7 +1190,9 @@ def test_payment_status_includes_matched_payment_without_an_account_move() -> No
     assert payment_call[2] == [("id", "in", [6]), ("company_id", "=", 7)]
 
 
-def test_payment_status_uses_credit_side_invoice_currency_amount_when_term_is_credit() -> None:
+def test_payment_status_uses_credit_side_invoice_currency_amount_when_term_is_credit() -> (
+    None
+):
     env = _Environment("status")
     move = env.models["account.move"].responses[0][0]
     move["move_type"] = "in_invoice"
@@ -857,7 +1228,11 @@ def test_company_module_and_every_required_acl_gate_precede_business_reads(
 ) -> None:
     for denied_model in sorted(required_models):
         env = _Environment(
-            "search" if action == SEARCH_ACTION else "get" if action == GET_ACTION else "status",
+            "search"
+            if action == SEARCH_ACTION
+            else "get"
+            if action == GET_ACTION
+            else "status",
             denied_model=denied_model,
         )
         result = runtime._dispatch(env, action, _payload(action), 7)
@@ -867,9 +1242,13 @@ def test_company_module_and_every_required_acl_gate_precede_business_reads(
         assert result[empty_key] == ([] if empty_key == "rows" else None)
         assert not _search_calls(env, "account.move")
 
-    missing = sorted(required_models)[0]
+    missing = min(required_models)
     env = _Environment(
-        "search" if action == SEARCH_ACTION else "get" if action == GET_ACTION else "status",
+        "search"
+        if action == SEARCH_ACTION
+        else "get"
+        if action == GET_ACTION
+        else "status",
         missing_model=missing,
     )
     result = runtime._dispatch(env, action, _payload(action), 7)
@@ -880,7 +1259,11 @@ def test_company_module_and_every_required_acl_gate_precede_business_reads(
     assert not _search_calls(env, "account.move")
 
     env = _Environment(
-        "search" if action == SEARCH_ACTION else "get" if action == GET_ACTION else "status",
+        "search"
+        if action == SEARCH_ACTION
+        else "get"
+        if action == GET_ACTION
+        else "status",
         company_visible=False,
     )
     result = runtime._dispatch(env, action, _payload(action), 7)
@@ -891,7 +1274,9 @@ def test_company_module_and_every_required_acl_gate_precede_business_reads(
 
 
 @pytest.mark.parametrize("action", (GET_ACTION, STATUS_ACTION))
-def test_missing_and_cross_company_records_are_runtime_indistinguishable(action: str) -> None:
+def test_missing_and_cross_company_records_are_runtime_indistinguishable(
+    action: str,
+) -> None:
     mode = "get" if action == GET_ACTION else "status"
     missing = runtime._dispatch(
         _Environment(mode, present=False),
@@ -914,14 +1299,40 @@ def test_missing_and_cross_company_records_are_runtime_indistinguishable(action:
     ("action", "payload"),
     (
         (SEARCH_ACTION, {"company_id": 7, "after": None, "limit": 3}),
-        (SEARCH_ACTION, {"company_id": 7, "after": ["2025-1-1", 1], "limit": 3, "filters": _filters()}),
-        (SEARCH_ACTION, {"company_id": 7, "after": None, "limit": 3, "filters": _filters(document_types=["entry"])}),
-        (SEARCH_ACTION, {"company_id": 7, "after": None, "limit": 3, "filters": _filters(query=" untrimmed")}),
+        (
+            SEARCH_ACTION,
+            {
+                "company_id": 7,
+                "after": ["2025-1-1", 1],
+                "limit": 3,
+                "filters": _filters(),
+            },
+        ),
+        (
+            SEARCH_ACTION,
+            {
+                "company_id": 7,
+                "after": None,
+                "limit": 3,
+                "filters": _filters(document_types=["entry"]),
+            },
+        ),
+        (
+            SEARCH_ACTION,
+            {
+                "company_id": 7,
+                "after": None,
+                "limit": 3,
+                "filters": _filters(query=" untrimmed"),
+            },
+        ),
         (GET_ACTION, {"company_id": 7, "move_id": True}),
         (STATUS_ACTION, {"company_id": 7, "move_id": 0}),
     ),
 )
-def test_invoice_runtime_payloads_fail_closed(action: str, payload: dict[str, Any]) -> None:
+def test_invoice_runtime_payloads_fail_closed(
+    action: str, payload: dict[str, Any]
+) -> None:
     with pytest.raises(RuntimeFailure) as caught:
         runtime._dispatch(_Environment("search"), action, payload, 7)
     assert caught.value.code == "bridge_protocol_error"
@@ -937,7 +1348,9 @@ def test_invoice_company_mismatch_fails_before_model_access(action: str) -> None
         runtime._dispatch(env, action, payload, 7)
     assert caught.value.code == "company_unavailable"
     assert caught.value.exit_code == 3
-    assert not any(call[0] in {"company", "access", "context", "search"} for call in env.calls)
+    assert not any(
+        call[0] in {"company", "access", "context", "search"} for call in env.calls
+    )
 
 
 def test_unknown_invoice_action_fails_closed_without_any_model_access() -> None:

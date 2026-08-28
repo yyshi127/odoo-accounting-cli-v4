@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/partner.create.request.schema.json",
+  "title": "partner.create request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "company_type"],
+      "properties": {
+        "name": {"$ref": "#/$defs/markerSafeText256"},
+        "company_type": {"enum": ["person", "company"]},
+        "vat": {"$ref": "#/$defs/text64"},
+        "reference": {"$ref": "#/$defs/markerSafeText128"},
+        "email": {"$ref": "#/$defs/text320"},
+        "phone": {"$ref": "#/$defs/text64"},
+        "mobile": {"$ref": "#/$defs/text64"},
+        "street": {"$ref": "#/$defs/text256"},
+        "street2": {"$ref": "#/$defs/text256"},
+        "city": {"$ref": "#/$defs/text256"},
+        "zip": {"$ref": "#/$defs/text64"},
+        "state_id": {"type": ["integer", "null"], "minimum": 1},
+        "country_id": {"type": ["integer", "null"], "minimum": 1},
+        "language": {"$ref": "#/$defs/nullableText16"}
+      }
+    }
+  },
+  "$defs": {
+    "markerSafeText256": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^(?![\\s\\S]*\\[ODACV4:)(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"
+    },
+    "markerSafeText128": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?![\\s\\S]*\\[ODACV4:)(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"
+    },
+    "text320": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 320,
+      "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"
+    },
+    "text256": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"
+    },
+    "text64": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"
+    },
+    "nullableText16": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 16,
+      "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"
+    }
+  }
+}

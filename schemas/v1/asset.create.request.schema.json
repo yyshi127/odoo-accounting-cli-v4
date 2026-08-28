@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/asset.create.request.schema.json",
+  "title": "asset.create request",
+  "type": "object",
+  "allOf": [
+    {"$ref": "request.schema.json"},
+    {
+      "properties": {
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "acquisition_date",
+            "original_value",
+            "salvage_value",
+            "account_asset_id",
+            "account_depreciation_id",
+            "account_depreciation_expense_id",
+            "journal_id",
+            "method",
+            "method_number",
+            "method_period",
+            "method_progress_factor",
+            "prorata_computation_type"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 426,
+              "pattern": "^(?![\\s\\S]*\\[ODACV4:)(?:\\S|\\S[\\s\\S]*\\S)$"
+            },
+            "acquisition_date": {"type": "string", "format": "date"},
+            "original_value": {"$ref": "#/$defs/decimal"},
+            "salvage_value": {"$ref": "#/$defs/decimal"},
+            "account_asset_id": {"type": "integer", "minimum": 1},
+            "account_depreciation_id": {"type": "integer", "minimum": 1},
+            "account_depreciation_expense_id": {"type": "integer", "minimum": 1},
+            "journal_id": {"type": "integer", "minimum": 1},
+            "method": {
+              "enum": ["linear", "degressive", "degressive_then_linear"]
+            },
+            "method_number": {"type": "integer", "minimum": 1, "maximum": 1200},
+            "method_period": {"enum": ["1", "12"]},
+            "method_progress_factor": {"$ref": "#/$defs/factor"},
+            "prorata_computation_type": {
+              "enum": ["none", "constant_periods", "daily_computation"]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "decimal": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
+    },
+    "factor": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^(?:0\\.(?:0*[1-9][0-9]*)|1(?:\\.0+)?)$(?![\\s\\S])"
+    }
+  }
+}

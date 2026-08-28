@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/account.return.search.response.schema.json",
+  "title": "account.return.search response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "account.return.search"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{"if": {"properties": {"success": {"const": true}}, "required": ["success"]}, "then": {"properties": {"request_id": {"type": "string", "format": "uuid"}, "status": {"const": "verified"}, "data": {"$ref": "#/$defs/data"}, "error": {"type": "null"}}}, "else": {"properties": {"data": {"type": "null"}, "error": {"$ref": "response.schema.json#/$defs/error"}}}}],
+  "$defs": {
+    "return_type": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "category"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1},
+        "category": {"enum": ["account_return", "audit"]}
+      }
+    },
+    "check_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "unresolved", "resolved"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "unresolved": {"type": "integer", "minimum": 0},
+        "resolved": {"type": "integer", "minimum": 0}
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "active", "date_from", "date_to", "date_deadline", "date_submission", "date_lock", "type", "state", "next_state", "is_completed", "company_id", "tax_unit_id", "manually_created", "check_counts"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1},
+        "active": {"type": "boolean"},
+        "date_from": {"type": "string", "format": "date"},
+        "date_to": {"type": "string", "format": "date"},
+        "date_deadline": {"type": "string", "format": "date"},
+        "date_submission": {"type": ["string", "null"], "format": "date"},
+        "date_lock": {"type": ["string", "null"], "format": "date"},
+        "type": {"$ref": "#/$defs/return_type"},
+        "state": {"enum": ["new", "reviewed", "submitted", "paid"]},
+        "next_state": {"type": ["string", "null"], "enum": ["new", "reviewed", "submitted", "paid", null]},
+        "is_completed": {"type": "boolean"},
+        "company_id": {"type": "integer", "minimum": 1},
+        "tax_unit_id": {"type": ["integer", "null"], "minimum": 1},
+        "manually_created": {"type": "boolean"},
+        "check_counts": {"$ref": "#/$defs/check_counts"}
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items", "has_more", "next_cursor"],
+      "properties": {
+        "items": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/item"}},
+        "has_more": {"type": "boolean"},
+        "next_cursor": {"type": ["string", "null"], "minLength": 1, "maxLength": 4096}
+      },
+      "allOf": [{"if": {"properties": {"has_more": {"const": true}}, "required": ["has_more"]}, "then": {"properties": {"items": {"type": "array", "minItems": 1}, "next_cursor": {"type": "string"}}}, "else": {"properties": {"next_cursor": {"type": "null"}}}}]
+    }
+  }
+}

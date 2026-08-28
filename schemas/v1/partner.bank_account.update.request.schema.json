@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/partner.bank_account.update.request.schema.json",
+  "title": "partner.bank_account.update request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["partner_bank_id", "changes"],
+      "properties": {
+        "partner_bank_id": {"type": "integer", "minimum": 1},
+        "changes": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "account_number": {"$ref": "#/$defs/markerSafeText128"},
+            "account_holder_name": {
+              "$ref": "#/$defs/nullableMarkerSafeText256"
+            },
+            "bank_id": {"type": ["integer", "null"], "minimum": 1},
+            "currency_id": {"type": ["integer", "null"], "minimum": 1}
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "markerSafeText128": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?![\\s\\S]*\\[ODACV4:)(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"
+    },
+    "nullableMarkerSafeText256": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^(?![\\s\\S]*\\[ODACV4:)(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"
+    }
+  }
+}

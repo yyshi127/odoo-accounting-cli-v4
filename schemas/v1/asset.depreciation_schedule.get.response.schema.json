@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/asset.depreciation_schedule.get.response.schema.json",
+  "title": "asset.depreciation_schedule.get response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "asset.depreciation_schedule.get"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{
+    "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+    "then": {
+      "properties": {
+        "request_id": {"type": "string", "format": "uuid"},
+        "status": {"const": "verified"},
+        "data": {"$ref": "#/$defs/data"},
+        "error": {"type": "null"}
+      }
+    },
+    "else": {
+      "properties": {
+        "data": {"type": "null"},
+        "error": {"$ref": "response.schema.json#/$defs/error"}
+      }
+    }
+  }],
+  "$defs": {
+    "money": {"type": "string", "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"},
+    "currency": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "code"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1, "maxLength": 3}
+      }
+    },
+    "journal": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "code", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1}
+      }
+    },
+    "asset": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "name", "state", "company_id", "currency", "acquisition_date", "original_value", "book_value"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1},
+        "state": {"enum": ["draft", "open", "paused", "close", "cancelled"]},
+        "company_id": {"type": "integer", "minimum": 1},
+        "currency": {"$ref": "#/$defs/currency"},
+        "acquisition_date": {"type": "string", "format": "date"},
+        "original_value": {"$ref": "#/$defs/money"},
+        "book_value": {"$ref": "#/$defs/money"}
+      }
+    },
+    "move": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "name", "date", "state", "auto_post", "journal", "depreciation_value", "cumulative_depreciation", "remaining_value", "line_ids"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": ["string", "null"], "minLength": 1},
+        "date": {"type": "string", "format": "date"},
+        "state": {"enum": ["draft", "posted", "cancel"]},
+        "auto_post": {"type": "string", "minLength": 1},
+        "journal": {"$ref": "#/$defs/journal"},
+        "depreciation_value": {"$ref": "#/$defs/money"},
+        "cumulative_depreciation": {"$ref": "#/$defs/money"},
+        "remaining_value": {"$ref": "#/$defs/money"},
+        "line_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 1}
+        }
+      }
+    },
+    "data": {
+      "type": "object", "additionalProperties": false,
+      "required": ["asset", "moves"],
+      "properties": {
+        "asset": {"$ref": "#/$defs/asset"},
+        "moves": {"type": "array", "items": {"$ref": "#/$defs/move"}}
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/period.transfer.run.request.schema.json",
+  "title": "period.transfer.run request",
+  "type": "object",
+  "allOf": [
+    {"$ref": "request.schema.json"},
+    {
+      "properties": {
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["transfer_model_id", "run_date"],
+          "properties": {
+            "transfer_model_id": {"type": "integer", "minimum": 1},
+            "run_date": {"type": "string", "format": "date"}
+          }
+        }
+      }
+    }
+  ]
+}

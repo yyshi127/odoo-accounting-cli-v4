@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/sale_invoice.stock_link.inspect.request.schema.json",
+  "title": "sale_invoice.stock_link.inspect request",
+  "type": "object",
+  "allOf": [
+    {"$ref": "request.schema.json"},
+    {
+      "properties": {
+        "context": {
+          "allOf": [
+            {"$ref": "request.schema.json#/$defs/context"},
+            {
+              "properties": {
+                "database": {"type": "string", "pattern": "\\S"},
+                "user_login": {"type": "string", "pattern": "\\S"},
+                "language": {"type": "string", "pattern": "\\S"},
+                "timezone": {"type": "string", "pattern": "\\S"}
+              }
+            }
+          ]
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["invoice_id"],
+          "properties": {
+            "invoice_id": {"type": "integer", "minimum": 1}
+          }
+        }
+      }
+    }
+  ]
+}

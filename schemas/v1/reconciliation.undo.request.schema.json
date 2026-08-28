@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/reconciliation.undo.request.schema.json",
+  "title": "reconciliation.undo request",
+  "type": "object",
+  "allOf": [
+    {"$ref": "request.schema.json"},
+    {
+      "properties": {
+        "parameters": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["line_ids"],
+              "properties": {
+                "line_ids": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "uniqueItems": true,
+                  "items": {"type": "integer", "minimum": 1}
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "invoice_id",
+                "partial_reconcile_id",
+                "invoice_line_id",
+                "counterpart_line_id"
+              ],
+              "properties": {
+                "invoice_id": {"type": "integer", "minimum": 1},
+                "partial_reconcile_id": {"type": "integer", "minimum": 1},
+                "invoice_line_id": {"type": "integer", "minimum": 1},
+                "counterpart_line_id": {"type": "integer", "minimum": 1}
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/invoice.analysis.search.request.schema.json",
+  "title": "invoice.analysis.search request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": "string", "format": "uuid", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"},
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {"$ref": "#/$defs/parameters"}
+  },
+  "$defs": {
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "dependentRequired": {"date_from": ["date_to"], "date_to": ["date_from"]},
+      "properties": {
+        "date_from": {"type": ["string", "null"], "format": "date", "default": null},
+        "date_to": {"type": ["string", "null"], "format": "date", "default": null},
+        "move_types": {"type": ["array", "null"], "minItems": 1, "maxItems": 4, "uniqueItems": true, "items": {"enum": ["out_invoice", "out_refund", "in_invoice", "in_refund"]}, "default": null},
+        "states": {"type": ["array", "null"], "minItems": 1, "maxItems": 3, "uniqueItems": true, "items": {"enum": ["draft", "posted", "cancel"]}, "default": null},
+        "payment_states": {"type": ["array", "null"], "minItems": 1, "maxItems": 7, "uniqueItems": true, "items": {"enum": ["not_paid", "in_payment", "paid", "partial", "reversed", "blocked", "invoicing_legacy"]}, "default": null},
+        "partner_id": {"type": ["integer", "null"], "minimum": 1, "default": null},
+        "product_id": {"type": ["integer", "null"], "minimum": 1, "default": null},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 100},
+        "cursor": {"type": ["string", "null"], "minLength": 1, "maxLength": 4096, "default": null}
+      }
+    }
+  }
+}

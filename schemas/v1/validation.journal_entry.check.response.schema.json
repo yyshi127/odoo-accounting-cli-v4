@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/validation.journal_entry.check.response.schema.json",
+  "title": "validation.journal_entry.check response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "validation.journal_entry.check"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{
+    "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+    "then": {
+      "properties": {
+        "request_id": {"type": "string", "format": "uuid"},
+        "status": {"const": "verified"},
+        "data": {"$ref": "#/$defs/data"},
+        "error": {"type": "null"}
+      }
+    },
+    "else": {
+      "properties": {
+        "data": {"type": "null"},
+        "error": {"$ref": "response.schema.json#/$defs/error"}
+      }
+    }
+  }],
+  "$defs": {
+    "money": {
+      "type": "string",
+      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+    },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["debit", "credit", "balance"],
+      "properties": {
+        "debit": {"$ref": "#/$defs/money"},
+        "credit": {"$ref": "#/$defs/money"},
+        "balance": {"$ref": "#/$defs/money"}
+      }
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["company_matches", "state_is_draft", "debits_equal_credits", "line_items_valid"],
+      "properties": {
+        "company_matches": {"const": true},
+        "state_is_draft": {"type": "boolean"},
+        "debits_equal_credits": {"type": "boolean"},
+        "line_items_valid": {"type": "boolean"}
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entry_id", "company_id", "state", "ready", "checks", "line_count", "accountable_line_count", "totals"],
+      "properties": {
+        "entry_id": {"type": "integer", "minimum": 1},
+        "company_id": {"type": "integer", "minimum": 1},
+        "state": {"enum": ["draft", "posted", "cancel"]},
+        "ready": {"type": "boolean"},
+        "checks": {"$ref": "#/$defs/checks"},
+        "line_count": {"type": "integer", "minimum": 0},
+        "accountable_line_count": {"type": "integer", "minimum": 0},
+        "totals": {"$ref": "#/$defs/totals"}
+      }
+    }
+  }
+}

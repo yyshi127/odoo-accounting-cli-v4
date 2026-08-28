@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/currency.convert.request.schema.json",
+  "title": "currency.convert request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "context": {
+      "allOf": [
+        {"$ref": "request.schema.json#/$defs/context"},
+        {
+          "type": "object",
+          "properties": {
+            "database": {"type": "string", "pattern": "\\S"},
+            "user_login": {"type": "string", "pattern": "\\S"},
+            "language": {"type": "string", "pattern": "\\S"},
+            "timezone": {"type": "string", "pattern": "\\S"}
+          }
+        }
+      ]
+    },
+    "parameters": {"$ref": "#/$defs/parameters"}
+  },
+  "$defs": {
+    "decimal": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["amount", "from_currency_id", "to_currency_id", "date"],
+      "properties": {
+        "amount": {"$ref": "#/$defs/decimal"},
+        "from_currency_id": {"type": "integer", "minimum": 1},
+        "to_currency_id": {"type": "integer", "minimum": 1},
+        "date": {"type": "string", "format": "date"}
+      }
+    }
+  }
+}

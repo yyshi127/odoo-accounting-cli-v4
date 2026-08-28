@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/stock.transfer.get.response.schema.json",
+  "title": "stock.transfer.get response",
+  "type": "object",
+  "allOf": [
+    {"$ref": "response.schema.json"},
+    {
+      "properties": {"capability": {"const": "stock.transfer.get"}, "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/item"}]}},
+      "allOf": [{"if": {"properties": {"success": {"const": true}}, "required": ["success"]}, "then": {"properties": {"request_id": {"type": "string", "format": "uuid"}, "status": {"const": "verified"}, "data": {"$ref": "#/$defs/item"}, "error": {"type": "null"}}}, "else": {"properties": {"data": {"type": "null"}, "error": {"$ref": "response.schema.json#/$defs/error"}}}}]
+    }
+  ],
+  "$defs": {
+    "nullableText": {"oneOf": [{"type": "null"}, {"type": "string", "minLength": 1}]},
+    "nullableDateTime": {"oneOf": [{"type": "null"}, {"type": "string", "format": "date-time", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"}]},
+    "namedRef": {"type": "object", "additionalProperties": false, "required": ["id", "name"], "properties": {"id": {"type": "integer", "minimum": 1}, "name": {"type": "string", "minLength": 1}}},
+    "operationType": {"type": "object", "additionalProperties": false, "required": ["id", "code", "name"], "properties": {"id": {"type": "integer", "minimum": 1}, "code": {"type": "string", "minLength": 1, "maxLength": 64}, "name": {"type": "string", "minLength": 1}}},
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "company_id", "name", "origin", "state", "operation_type", "scheduled_date", "completed_date", "source_location", "destination_location", "partner"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1}, "company_id": {"type": "integer", "minimum": 1}, "name": {"type": "string", "minLength": 1},
+        "origin": {"$ref": "#/$defs/nullableText"}, "state": {"enum": ["draft", "waiting", "confirmed", "assigned", "done", "cancel"]},
+        "operation_type": {"$ref": "#/$defs/operationType"}, "scheduled_date": {"$ref": "#/$defs/nullableDateTime"}, "completed_date": {"$ref": "#/$defs/nullableDateTime"},
+        "source_location": {"$ref": "#/$defs/namedRef"}, "destination_location": {"$ref": "#/$defs/namedRef"}, "partner": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/namedRef"}]}
+      }
+    }
+  }
+}

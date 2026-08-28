@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/invoice.analysis.summary.response.schema.json",
+  "title": "invoice.analysis.summary response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "invoice.analysis.summary"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{"if": {"properties": {"success": {"const": true}}, "required": ["success"]}, "then": {"properties": {"request_id": {"type": "string", "format": "uuid"}, "status": {"const": "verified"}, "data": {"$ref": "#/$defs/data"}, "error": {"type": "null"}}}, "else": {"properties": {"data": {"type": "null"}, "error": {"$ref": "response.schema.json#/$defs/error"}}}}],
+  "$defs": {
+    "currency": {"type": "object", "additionalProperties": false, "required": ["id", "code"], "properties": {"id": {"type": "integer", "minimum": 1}, "code": {"type": "string", "minLength": 1, "maxLength": 3}}},
+    "decimal": {"type": "string", "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"},
+    "group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "value"],
+      "properties": {"id": {"type": ["integer", "null"], "minimum": 1}, "value": {"type": ["string", "null"], "minLength": 1}}
+    },
+    "amounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["row_count", "quantity", "untaxed_amount", "total_amount", "margin", "inventory_value"],
+      "properties": {
+        "row_count": {"type": "integer", "minimum": 0},
+        "quantity": {"$ref": "#/$defs/decimal"},
+        "untaxed_amount": {"$ref": "#/$defs/decimal"},
+        "total_amount": {"$ref": "#/$defs/decimal"},
+        "margin": {"$ref": "#/$defs/decimal"},
+        "inventory_value": {"$ref": "#/$defs/decimal"}
+      }
+    },
+    "group_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"group": {"$ref": "#/$defs/group"}, "row_count": {"type": "integer", "minimum": 1}, "quantity": {"$ref": "#/$defs/decimal"}, "untaxed_amount": {"$ref": "#/$defs/decimal"}, "total_amount": {"$ref": "#/$defs/decimal"}, "margin": {"$ref": "#/$defs/decimal"}, "inventory_value": {"$ref": "#/$defs/decimal"}},
+      "required": ["group", "row_count", "quantity", "untaxed_amount", "total_amount", "margin", "inventory_value"]
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["group_by", "date_from", "date_to", "company_id", "company_currency", "groups", "totals"],
+      "properties": {
+        "group_by": {"enum": ["move_type", "state", "payment_state", "partner", "product"]},
+        "date_from": {"type": "string", "format": "date"},
+        "date_to": {"type": "string", "format": "date"},
+        "company_id": {"type": "integer", "minimum": 1},
+        "company_currency": {"$ref": "#/$defs/currency"},
+        "groups": {"type": "array", "items": {"$ref": "#/$defs/group_row"}},
+        "totals": {"$ref": "#/$defs/amounts"}
+      }
+    }
+  }
+}

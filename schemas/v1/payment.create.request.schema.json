@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/payment.create.request.schema.json",
+  "title": "payment.create request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": "string", "format": "uuid", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"},
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["payment_type", "partner_type", "partner_id", "amount", "currency_id", "journal_id", "payment_method_line_id", "date"],
+      "properties": {
+        "payment_type": {"enum": ["inbound", "outbound"]},
+        "partner_type": {"enum": ["customer", "supplier"]},
+        "partner_id": {"type": "integer", "minimum": 1},
+        "amount": {"$ref": "#/$defs/positiveAmount"},
+        "currency_id": {"type": "integer", "minimum": 1},
+        "journal_id": {"type": "integer", "minimum": 1},
+        "payment_method_line_id": {"type": "integer", "minimum": 1},
+        "date": {"type": "string", "format": "date"},
+        "payment_reference": {"$ref": "#/$defs/nullableText"}
+      }
+    }
+  },
+  "$defs": {
+    "positiveAmount": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^(?=[0-9.]*[1-9])(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
+    },
+    "nullableText": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"}
+      ]
+    }
+  }
+}

@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/sale_invoice.stock_link.inspect.response.schema.json",
+  "title": "sale_invoice.stock_link.inspect response",
+  "type": "object",
+  "allOf": [
+    {"$ref": "response.schema.json"},
+    {
+      "properties": {
+        "capability": {"const": "sale_invoice.stock_link.inspect"},
+        "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+          "then": {
+            "properties": {
+              "request_id": {"type": "string", "format": "uuid"},
+              "status": {"const": "verified"},
+              "data": {"$ref": "#/$defs/data"},
+              "error": {"type": "null"}
+            }
+          },
+          "else": {
+            "properties": {
+              "data": {"type": "null"},
+              "error": {"$ref": "response.schema.json#/$defs/error"}
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "decimal": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
+    },
+    "nonnegativeDecimal": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
+    },
+    "nullableText": {
+      "oneOf": [{"type": "null"}, {"type": "string", "minLength": 1}]
+    },
+    "namedRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1}
+      }
+    },
+    "account": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1}
+      }
+    },
+    "accountingLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "account", "debit", "credit", "balance"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "account": {"$ref": "#/$defs/account"},
+        "debit": {"$ref": "#/$defs/nonnegativeDecimal"},
+        "credit": {"$ref": "#/$defs/nonnegativeDecimal"},
+        "balance": {"$ref": "#/$defs/decimal"}
+      }
+    },
+    "accountingEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "date", "state", "lines"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"$ref": "#/$defs/nullableText"},
+        "date": {"type": "string", "format": "date"},
+        "state": {"const": "posted"},
+        "lines": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/accountingLine"}}
+      }
+    },
+    "stockMove": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "date", "state", "reference", "product", "quantity", "uom", "value", "accounting_entry"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "date": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "state": {"const": "done"},
+        "reference": {"$ref": "#/$defs/nullableText"},
+        "product": {"$ref": "#/$defs/namedRef"},
+        "quantity": {"$ref": "#/$defs/decimal"},
+        "uom": {"$ref": "#/$defs/namedRef"},
+        "value": {"$ref": "#/$defs/decimal"},
+        "accounting_entry": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/accountingEntry"}]}
+      }
+    },
+    "line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "product", "quantity", "sale_order_line_ids", "stock_moves"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "product": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/namedRef"}]},
+        "quantity": {"$ref": "#/$defs/decimal"},
+        "sale_order_line_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 1}
+        },
+        "stock_moves": {"type": "array", "items": {"$ref": "#/$defs/stockMove"}}
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "move_type", "state", "company_id", "lines", "stock_move_ids", "account_move_ids"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"$ref": "#/$defs/nullableText"},
+        "move_type": {"enum": ["out_invoice", "out_refund"]},
+        "state": {"enum": ["draft", "posted", "cancel"]},
+        "company_id": {"type": "integer", "minimum": 1},
+        "lines": {"type": "array", "items": {"$ref": "#/$defs/line"}},
+        "stock_move_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 1}
+        },
+        "account_move_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 1}
+        }
+      }
+    }
+  }
+}

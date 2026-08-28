@@ -26,11 +26,16 @@ def _odoo_metadata(
     }
 
 
-def _audit_metadata() -> dict[str, Any]:
+def _audit_metadata(
+    *,
+    operation_id: str | None = None,
+    idempotency_key: str | None = None,
+    verification: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     return {
-        "operation_id": None,
-        "idempotency_key": None,
-        "verification": None,
+        "operation_id": operation_id,
+        "idempotency_key": idempotency_key,
+        "verification": verification,
     }
 
 
@@ -46,6 +51,9 @@ def success_document(
     user_id: int | None = None,
     model: str | None = None,
     record_ids: list[int] | None = None,
+    operation_id: str | None = None,
+    idempotency_key: str | None = None,
+    verification: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
@@ -63,7 +71,11 @@ def success_document(
             model=model,
             record_ids=record_ids,
         ),
-        "audit": _audit_metadata(),
+        "audit": _audit_metadata(
+            operation_id=operation_id,
+            idempotency_key=idempotency_key,
+            verification=verification,
+        ),
     }
 
 
@@ -81,6 +93,9 @@ def error_document(
     user_id: int | None = None,
     model: str | None = None,
     record_ids: list[int] | None = None,
+    operation_id: str | None = None,
+    idempotency_key: str | None = None,
+    verification: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
@@ -103,7 +118,11 @@ def error_document(
             model=model,
             record_ids=record_ids,
         ),
-        "audit": _audit_metadata(),
+        "audit": _audit_metadata(
+            operation_id=operation_id,
+            idempotency_key=idempotency_key,
+            verification=verification,
+        ),
     }
 
 

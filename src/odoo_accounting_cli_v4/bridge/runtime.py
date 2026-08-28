@@ -1,9 +1,10 @@
-"""Odoo-side runtime for the narrow V4 read bridge."""
+"""Odoo-side runtime for the fixed V4 local bridge actions."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from contextlib import contextmanager
 from datetime import date as date_type
@@ -12,7 +13,6 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from odoo_accounting_cli_v4.config import ConfigError, load_runtime_config
-
 
 _MAX_REQUEST_CHARS = 1024 * 1024
 _ACCOUNT_FIELDS = (
@@ -24,6 +24,42 @@ _ACCOUNT_FIELDS = (
     "reconcile",
     "company_ids",
 )
+_CURRENCY_RATE_ACTION = "res.currency.rate.read_page"
+_CURRENCY_CONVERT_ACTION = "res.currency.convert"
+_BANK_TRANSACTION_ACTION = "account.bank.statement.line.search_page"
+_BANK_RECONCILIATION_ACTIONS = frozenset(
+    {
+        "account.bank.statement.line.reconciliation.get",
+        "account.bank.statement.line.match_candidate.read_page",
+    }
+)
+_PRODUCT_ACCOUNTING_PROFILE_ACTION = "product.product.accounting_profile.get"
+_CORE_WRITE_ACTION = "accounting.core_write.execute"
+_CORE_OBJECT_READ_ACTION = "accounting.core_object.read"
+_INVENTORY_ACCOUNTING_ACTION = "accounting.inventory.read"
+_INVENTORY_MASTER_ACTION = "accounting.inventory_master.read"
+_INVENTORY_OPERATIONS_ACTION = "accounting.inventory_operations.read"
+_ORDER_DOCUMENTS_ACTION = "accounting.order_documents.read"
+_ASSET_READ_ACTION = "accounting.asset.read"
+_BUDGET_REPORT_ACTION = "accounting.budget_report.read"
+_INVOICE_ANALYSIS_ACTION = "accounting.invoice_analysis.read"
+_PERIOD_CONTEXT_ACTION = "accounting.period_context.read"
+_ACCOUNT_RETURN_ACTION = "accounting.account_return.read"
+_JOURNAL_ANALYSIS_ACTION = "accounting.journal_analysis.read"
+_LOCALIZATION_CONFIGURATION_ACTION = "accounting.localization_configuration.inspect"
+_FINANCIAL_REPORT_EXPORT_ACTION = "account.report.fixed_export"
+_DECIMAL_TEXT_PATTERN = re.compile(r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
+_CURRENCY_RATE_FIELDS = (
+    "id",
+    "name",
+    "currency_id",
+    "company_id",
+    "rate",
+    "company_rate",
+    "inverse_company_rate",
+)
+_CURRENCY_RATE_COMPANY_FIELDS = ("id", "root_id", "currency_id")
+_CURRENCY_RATE_CURRENCY_FIELDS = ("id", "name")
 _MASTER_DATA_ACTIONS: dict[str, dict[str, Any]] = {
     "account.journal.read_page": {
         "model": "account.journal",
@@ -132,6 +168,220 @@ _FINANCIAL_REPORT_ACTIONS = {
         "key": "tax",
         "mode": "range",
     },
+    "account.report.general_ledger.read_page": {
+        "xml_id": "account_reports.general_ledger_report",
+        "key": "general_ledger",
+        "mode": "range",
+        "models": ("account.report", "account.move.line", "res.currency"),
+        "typed_values": True,
+        "allow_temp_tables": True,
+    },
+    "account.report.partner_ledger.read_page": {
+        "xml_id": "account_reports.partner_ledger_report",
+        "key": "partner_ledger",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.move.line",
+            "res.currency",
+            "res.partner",
+        ),
+        "typed_values": True,
+        "allow_temp_tables": True,
+    },
+    "account.report.customer_statement.read_page": {
+        "xml_id": "account_reports.customer_statement_report",
+        "key": "customer_statement",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.move.line",
+            "res.currency",
+            "res.partner",
+        ),
+        "typed_values": True,
+        "partner_parameter": True,
+        "unreconciled": False,
+    },
+    "account.report.followup.read_page": {
+        "xml_id": "account_reports.followup_report",
+        "key": "followup",
+        "mode": "single",
+        "models": (
+            "account.report",
+            "account.move.line",
+            "res.currency",
+            "res.partner",
+        ),
+        "typed_values": True,
+        "partner_parameter": True,
+        "unreconciled": True,
+    },
+    "account.report.aged_receivable.read_page": {
+        "xml_id": "account_reports.aged_receivable_report",
+        "key": "aged_receivable",
+        "mode": "single",
+        "models": (
+            "account.report",
+            "account.move.line",
+            "res.currency",
+            "res.partner",
+        ),
+        "typed_values": True,
+        "allow_temp_tables": True,
+    },
+    "account.report.aged_payable.read_page": {
+        "xml_id": "account_reports.aged_payable_report",
+        "key": "aged_payable",
+        "mode": "single",
+        "models": (
+            "account.report",
+            "account.move.line",
+            "res.currency",
+            "res.partner",
+        ),
+        "typed_values": True,
+        "allow_temp_tables": True,
+    },
+    "account.report.journal.read_page": {
+        "xml_id": "account_reports.journal_report",
+        "key": "journal",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.move",
+            "account.move.line",
+            "res.currency",
+        ),
+        "typed_values": True,
+        "allow_temp_tables": True,
+    },
+    "account.report.executive_summary.read_page": {
+        "xml_id": "account_reports.executive_summary",
+        "key": "executive_summary",
+        "mode": "range",
+        "models": ("account.report", "account.move.line", "res.currency"),
+        "typed_values": True,
+        "allow_temp_tables": True,
+    },
+    "account.report.asset.read_page": {
+        "xml_id": "account_asset.assets_report",
+        "key": "asset",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.asset",
+            "account.move",
+            "account.move.line",
+            "res.currency",
+        ),
+        "typed_values": True,
+        "allow_temp_tables": True,
+    },
+    "account.report.deferred_expense.read_page": {
+        "xml_id": "account_reports.deferred_expense_report",
+        "key": "deferred_expense",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.move",
+            "account.move.line",
+            "res.currency",
+        ),
+        "typed_values": True,
+    },
+    "account.report.deferred_revenue.read_page": {
+        "xml_id": "account_reports.deferred_revenue_report",
+        "key": "deferred_revenue",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.move",
+            "account.move.line",
+            "res.currency",
+        ),
+        "typed_values": True,
+    },
+    "account.report.multicurrency_revaluation.read_page": {
+        "xml_id": "account_reports.multicurrency_revaluation_report",
+        "key": "multicurrency_revaluation",
+        "mode": "single",
+        "models": ("account.report", "account.move.line", "res.currency"),
+        "typed_values": True,
+    },
+    "account.report.china_balance_sheet.read_page": {
+        "xml_id": "l10n_cn_reports.account_financial_report_cn_balancesheet0",
+        "key": "china_balance_sheet",
+        "mode": "single",
+        "models": (
+            "account.report",
+            "account.move.line",
+            "res.currency",
+            "res.country",
+        ),
+        "typed_values": True,
+        "fiscal_country_code": "CN",
+        "chart_template": "cn_oscg",
+    },
+    "account.report.china_profit_and_loss.read_page": {
+        "xml_id": "l10n_cn_reports.account_financial_report_cn_profitloss0",
+        "key": "china_profit_and_loss",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.move.line",
+            "res.currency",
+            "res.country",
+        ),
+        "typed_values": True,
+        "fiscal_country_code": "CN",
+        "chart_template": "cn_oscg",
+    },
+    "account.report.china_cash_flow.read_page": {
+        "xml_id": "l10n_cn_reports.account_report_cn_cs_flow",
+        "key": "china_cash_flow",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.move.line",
+            "account.cash.flow.line",
+            "res.currency",
+            "res.country",
+        ),
+        "typed_values": True,
+        "fiscal_country_code": "CN",
+        "chart_template": "cn_oscg",
+    },
+    "account.report.singapore_gst.read_page": {
+        "xml_id": "l10n_sg.tax_report",
+        "key": "singapore_gst",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.move.line",
+            "account.tax",
+            "res.currency",
+            "res.country",
+        ),
+        "typed_values": True,
+        "fiscal_country_code": "SG",
+        "chart_template": "sg",
+    },
+    "account.report.bank_reconciliation.read_page": {
+        "xml_id": "account_reports.bank_reconciliation_report",
+        "key": "bank_reconciliation",
+        "mode": "single",
+        "models": (
+            "account.report",
+            "account.move.line",
+            "res.currency",
+            "account.journal",
+            "account.bank.statement",
+            "account.bank.statement.line",
+        ),
+        "typed_values": True,
+        "journal_parameter": True,
+    },
 }
 _INVOICE_ACTIONS = {
     "account.move.invoice.search_page",
@@ -182,11 +432,13 @@ _INVOICE_STATUS_MOVE_FIELDS = (
     "state",
     "payment_state",
     "company_id",
+    "commercial_partner_id",
     "currency_id",
     "company_currency_id",
     "amount_total",
     "amount_residual",
     "matched_payment_ids",
+    "invoice_outstanding_credits_debits_widget",
 )
 _INVOICE_LINE_TYPES = (
     "product",
@@ -233,6 +485,20 @@ _INVOICE_PARTIAL_FIELDS = (
     "exchange_move_id",
 )
 _INVOICE_COUNTERPART_LINE_FIELDS = ("id", "move_id")
+_INVOICE_OUTSTANDING_LINE_FIELDS = (
+    "id",
+    "move_id",
+    "company_id",
+    "account_id",
+    "partner_id",
+    "parent_state",
+    "reconciled",
+    "balance",
+    "amount_residual",
+    "amount_residual_currency",
+    "date",
+    "payment_id",
+)
 _INVOICE_COUNTERPART_MOVE_FIELDS = (
     "id",
     "name",
@@ -418,8 +684,33 @@ _OPEN_ITEM_MODELS = (
     "res.partner",
     "res.currency",
 )
+_BANK_TRANSACTION_MODELS = (
+    "res.company",
+    "account.bank.statement.line",
+    "account.move",
+    "account.journal",
+    "res.partner",
+    "res.currency",
+    "account.payment",
+)
 _ACTIONS = {
+    _CORE_OBJECT_READ_ACTION,
+    _CORE_WRITE_ACTION,
+    _INVENTORY_ACCOUNTING_ACTION,
+    _INVENTORY_MASTER_ACTION,
+    _INVENTORY_OPERATIONS_ACTION,
+    _ORDER_DOCUMENTS_ACTION,
+    _ASSET_READ_ACTION,
+    _BUDGET_REPORT_ACTION,
+    _INVOICE_ANALYSIS_ACTION,
+    _PERIOD_CONTEXT_ACTION,
+    _ACCOUNT_RETURN_ACTION,
+    _JOURNAL_ANALYSIS_ACTION,
+    _LOCALIZATION_CONFIGURATION_ACTION,
+    _FINANCIAL_REPORT_EXPORT_ACTION,
     "account.account.read_page",
+    _CURRENCY_RATE_ACTION,
+    _CURRENCY_CONVERT_ACTION,
     "res.company.accounting_context.read_page",
     *_MASTER_DATA_ACTIONS,
     "account.move.journal_entry.search_page",
@@ -428,11 +719,16 @@ _ACTIONS = {
     *_PAYMENT_ACTIONS,
     *_OPEN_ITEM_ACTION_SIDES,
     "account.move.line.reconciliation_candidate.read_page",
+    _BANK_TRANSACTION_ACTION,
+    *_BANK_RECONCILIATION_ACTIONS,
+    _PRODUCT_ACCOUNTING_PROFILE_ACTION,
     "res.partner.accounting.search_page",
     *_FINANCIAL_REPORT_ACTIONS,
     "res.users.accounting_access.inspect",
     "res.company.accounting_configuration.inspect",
     "accounting.environment.diagnostic.inspect",
+    "account.fiscal.position.resolve",
+    "res.company.journal_integrity.inspect",
 }
 
 _ACCOUNTING_ACCESS_GROUPS = (
@@ -492,6 +788,35 @@ def _read_only_cursor(registry: Any):
             cursor.rollback()
         finally:
             cursor.close()
+
+
+@contextmanager
+def _rollback_only_cursor(registry: Any):
+    """Allow report temp tables while guaranteeing no transaction is committed."""
+
+    cursor = registry.cursor()
+    try:
+        yield cursor
+    finally:
+        try:
+            cursor.rollback()
+        finally:
+            cursor.close()
+
+
+@contextmanager
+def _write_cursor(registry: Any):
+    """Commit only the single allowlisted core-write bridge action."""
+
+    cursor = registry.cursor()
+    try:
+        yield cursor
+        cursor.commit()
+    except Exception:
+        cursor.rollback()
+        raise
+    finally:
+        cursor.close()
 
 
 def _decode_request(stdin: TextIO) -> dict[str, Any]:
@@ -594,7 +919,9 @@ def _validated_target(request: dict[str, Any], config_path: Path):
 def _require_keys(payload: dict[str, Any], keys: set[str]) -> None:
     if set(payload) != keys:
         raise RuntimeFailure(
-            "bridge_protocol_error", "The bridge action payload is invalid.", exit_code=7
+            "bridge_protocol_error",
+            "The bridge action payload is invalid.",
+            exit_code=7,
         )
 
 
@@ -604,7 +931,9 @@ def _master_data_after_is_valid(spec: dict[str, Any], after: Any) -> bool:
     expected_types = spec["cursor_types"]
     if not isinstance(after, list) or len(after) != len(expected_types):
         return False
-    for index, (value, expected_type) in enumerate(zip(after, expected_types, strict=True)):
+    for index, (value, expected_type) in enumerate(
+        zip(after, expected_types, strict=True)
+    ):
         if expected_type is bool:
             if not isinstance(value, bool):
                 return False
@@ -634,7 +963,10 @@ def _master_data_cursor_domain(spec: dict[str, Any], after: list[Any]) -> list[A
     terms: list[list[Any]] = []
     for index, (field, operator) in enumerate(zip(fields, operators, strict=True)):
         term = [
-            *((previous, "=", after[position]) for position, previous in enumerate(fields[:index])),
+            *(
+                (previous, "=", after[position])
+                for position, previous in enumerate(fields[:index])
+            ),
             (field, operator, after[index]),
         ]
         terms.append(term)
@@ -739,9 +1071,7 @@ def _dispatch_master_data(
             )
         expected_line_ids = set(line_ids)
         observed_line_ids: set[int] = set()
-        lines_by_term: dict[int, list[dict[str, Any]]] = {
-            row["id"]: [] for row in rows
-        }
+        lines_by_term: dict[int, list[dict[str, Any]]] = {row["id"]: [] for row in rows}
         if line_ids:
             line_rows = (
                 env["account.payment.term.line"]
@@ -789,9 +1119,7 @@ def _dispatch_master_data(
                 )
         for row in rows:
             row["company_id"] = _reference_id(row["company_id"])
-            row["discount_percentage"] = _decimal_string(
-                row["discount_percentage"]
-            )
+            row["discount_percentage"] = _decimal_string(row["discount_percentage"])
             row["lines"] = lines_by_term[row["id"]]
     if action == "res.currency.read_page":
         for row in rows:
@@ -808,6 +1136,434 @@ def _dispatch_master_data(
         "module_installed": module_installed,
         "access_allowed": access_allowed,
         "rows": rows,
+    }
+
+
+def _currency_rate_payload(
+    payload: dict[str, Any], company_id: int
+) -> tuple[list[Any] | None, int, dict[str, Any]]:
+    _require_keys(payload, {"company_id", "after", "limit", "filters"})
+    requested_company_id = payload["company_id"]
+    after = payload["after"]
+    limit = payload["limit"]
+    filters = payload["filters"]
+    if (
+        not isinstance(requested_company_id, int)
+        or isinstance(requested_company_id, bool)
+        or requested_company_id <= 0
+        or not isinstance(limit, int)
+        or isinstance(limit, bool)
+        or not 1 <= limit <= 1001
+        or not isinstance(filters, dict)
+        or set(filters) != {"date_from", "date_to", "currency_id"}
+    ):
+        raise RuntimeFailure(
+            "bridge_protocol_error",
+            "The bridge action payload is invalid.",
+            exit_code=7,
+        )
+    if requested_company_id != company_id:
+        raise RuntimeFailure(
+            "company_unavailable", "The company is unavailable.", exit_code=3
+        )
+
+    date_from = filters["date_from"]
+    date_to = filters["date_to"]
+    currency_id = filters["currency_id"]
+    after_valid = after is None or (
+        isinstance(after, list)
+        and len(after) == 2
+        and _is_canonical_date(after[0])
+        and isinstance(after[1], int)
+        and not isinstance(after[1], bool)
+        and after[1] > 0
+    )
+    filters_valid = (
+        (date_from is None or _is_canonical_date(date_from))
+        and (date_to is None or _is_canonical_date(date_to))
+        and (date_from is None or date_to is None or date_from <= date_to)
+        and (
+            currency_id is None
+            or (
+                isinstance(currency_id, int)
+                and not isinstance(currency_id, bool)
+                and currency_id > 0
+            )
+        )
+    )
+    if not after_valid or not filters_valid:
+        raise RuntimeFailure(
+            "bridge_protocol_error",
+            "The bridge action payload is invalid.",
+            exit_code=7,
+        )
+    return after, limit, filters
+
+
+def _currency_rate_domain(
+    root_company_id: int,
+    after: list[Any] | None,
+    filters: dict[str, Any],
+) -> list[Any]:
+    components: list[list[Any]] = [
+        [
+            "|",
+            ("company_id", "=", False),
+            ("company_id", "=", root_company_id),
+        ]
+    ]
+    if filters["date_from"] is not None:
+        components.append([("name", ">=", filters["date_from"])])
+    if filters["date_to"] is not None:
+        components.append([("name", "<=", filters["date_to"])])
+    if filters["currency_id"] is not None:
+        components.append([("currency_id", "=", filters["currency_id"])])
+    if after is not None:
+        components.append(
+            [
+                "|",
+                ("name", "<", after[0]),
+                "&",
+                ("name", "=", after[0]),
+                ("id", ">", after[1]),
+            ]
+        )
+    domain: list[Any] = ["&"] * (len(components) - 1)
+    for component in components:
+        domain.extend(component)
+    return domain
+
+
+def _currency_rate_runtime_error() -> RuntimeFailure:
+    return RuntimeFailure(
+        "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+    )
+
+
+def _currency_rate_positive_decimal(value: Any) -> str:
+    text = _decimal_string(value)
+    if Decimal(text) <= 0:
+        raise _currency_rate_runtime_error()
+    return text
+
+
+def _dispatch_currency_rates(
+    env: Any,
+    payload: dict[str, Any],
+    company_id: int,
+) -> dict[str, Any]:
+    after, limit, filters = _currency_rate_payload(payload, company_id)
+    context = {"active_test": False, "allowed_company_ids": [company_id]}
+    model_names = (
+        "res.company",
+        "res.currency.rate",
+        "res.currency",
+        "res.users",
+    )
+    installed = {
+        model_name: env.registry.get(model_name) is not None
+        for model_name in model_names
+    }
+    module_installed = all(installed.values())
+    models = (
+        {model_name: env[model_name] for model_name in model_names}
+        if module_installed
+        else {}
+    )
+    access_allowed = bool(
+        module_installed
+        and all(models[model_name].has_access("read") for model_name in model_names)
+    )
+    company_model = models.get("res.company")
+    if access_allowed:
+        business_user = models["res.users"].browse(env.uid)
+        if env.su or business_user.env.su or business_user.id != env.uid:
+            raise _currency_rate_runtime_error()
+        access_allowed = bool(business_user.has_group("base.group_user"))
+    if not module_installed or not access_allowed:
+        return {
+            "user_id": env.uid,
+            "company_visible": False,
+            "module_installed": module_installed,
+            "access_allowed": access_allowed,
+            "root_company_id": None,
+            "rows": [],
+        }
+
+    target_rows = company_model.with_context(**context).search_read(
+        [("id", "=", company_id)],
+        fields=list(_CURRENCY_RATE_COMPANY_FIELDS),
+        limit=1,
+        order="id",
+    )
+    company_visible = len(target_rows) == 1
+    if not company_visible:
+        return {
+            "user_id": env.uid,
+            "company_visible": False,
+            "module_installed": True,
+            "access_allowed": True,
+            "root_company_id": None,
+            "rows": [],
+        }
+    target = target_rows[0]
+    root_company_id = _reference_id(target.get("root_id"))
+    company_currency_id = _reference_id(target.get("currency_id"))
+    if (
+        target.get("id") != company_id
+        or root_company_id is None
+        or company_currency_id is None
+    ):
+        raise _currency_rate_runtime_error()
+
+    raw_rows = (
+        env["res.currency.rate"]
+        .with_context(**context)
+        .search_read(
+            _currency_rate_domain(root_company_id, after, filters),
+            fields=list(_CURRENCY_RATE_FIELDS),
+            limit=limit,
+            order="name desc,id",
+        )
+    )
+    if not isinstance(raw_rows, list) or len(raw_rows) > limit:
+        raise _currency_rate_runtime_error()
+
+    rate_ids: set[int] = set()
+    currency_ids: set[int] = {company_currency_id}
+    normalized: list[dict[str, Any]] = []
+    previous: tuple[int, str, int] | None = None
+    for raw in raw_rows:
+        if not isinstance(raw, dict) or set(raw) != set(_CURRENCY_RATE_FIELDS):
+            raise _currency_rate_runtime_error()
+        record_id = raw["id"]
+        date = _date_string(raw["name"])
+        currency_id = _reference_id(raw["currency_id"])
+        source_company_id = _reference_id(raw["company_id"])
+        if (
+            not isinstance(record_id, int)
+            or isinstance(record_id, bool)
+            or record_id <= 0
+            or record_id in rate_ids
+            or not _is_canonical_date(date)
+            or currency_id is None
+            or source_company_id not in {None, root_company_id}
+            or (filters["date_from"] is not None and date < filters["date_from"])
+            or (filters["date_to"] is not None and date > filters["date_to"])
+            or (
+                filters["currency_id"] is not None
+                and currency_id != filters["currency_id"]
+            )
+            or (
+                after is not None
+                and not (date < after[0] or (date == after[0] and record_id > after[1]))
+            )
+        ):
+            raise _currency_rate_runtime_error()
+        current = (-date_type.fromisoformat(date).toordinal(), date, record_id)
+        if previous is not None and current <= previous:
+            raise _currency_rate_runtime_error()
+        previous = current
+        rate_ids.add(record_id)
+        currency_ids.add(currency_id)
+        technical_rate = _currency_rate_positive_decimal(raw["rate"])
+        foreign_per_company = _currency_rate_positive_decimal(raw["company_rate"])
+        company_per_foreign = _currency_rate_positive_decimal(
+            raw["inverse_company_rate"]
+        )
+        if abs(
+            Decimal(foreign_per_company) * Decimal(company_per_foreign) - Decimal(1)
+        ) > Decimal("0.000000000000001"):
+            raise _currency_rate_runtime_error()
+        normalized.append(
+            {
+                "id": record_id,
+                "date": date,
+                "currency_id": currency_id,
+                "source_company_id": source_company_id,
+                "technical_rate": technical_rate,
+                "foreign_units_per_company_unit": foreign_per_company,
+                "company_units_per_foreign_unit": company_per_foreign,
+            }
+        )
+
+    sorted_currency_ids = sorted(currency_ids)
+    currency_rows = (
+        env["res.currency"]
+        .with_context(**context)
+        .search_read(
+            [("id", "in", sorted_currency_ids)],
+            fields=list(_CURRENCY_RATE_CURRENCY_FIELDS),
+            limit=len(sorted_currency_ids),
+            order="id",
+        )
+    )
+    currencies: dict[int, str] = {}
+    for currency in currency_rows:
+        currency_record_id = currency.get("id") if isinstance(currency, dict) else None
+        code = currency.get("name") if isinstance(currency, dict) else None
+        if (
+            not isinstance(currency_record_id, int)
+            or isinstance(currency_record_id, bool)
+            or currency_record_id in currencies
+            or currency_record_id not in currency_ids
+            or not isinstance(code, str)
+            or not code
+        ):
+            raise _currency_rate_runtime_error()
+        currencies[currency_record_id] = code
+    if set(currencies) != currency_ids:
+        raise _currency_rate_runtime_error()
+
+    rows = []
+    for row in normalized:
+        currency_id = row.pop("currency_id")
+        rows.append(
+            {
+                "id": row["id"],
+                "date": row["date"],
+                "currency": {"id": currency_id, "code": currencies[currency_id]},
+                "company_currency": {
+                    "id": company_currency_id,
+                    "code": currencies[company_currency_id],
+                },
+                "requested_company_id": company_id,
+                "source_company_id": row["source_company_id"],
+                "technical_rate": row["technical_rate"],
+                "foreign_units_per_company_unit": row["foreign_units_per_company_unit"],
+                "company_units_per_foreign_unit": row["company_units_per_foreign_unit"],
+            }
+        )
+    return {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        "root_company_id": root_company_id,
+        "rows": rows,
+    }
+
+
+def _dispatch_currency_convert(
+    env: Any, payload: dict[str, Any], company_id: int
+) -> dict[str, Any]:
+    _require_keys(
+        payload,
+        {"company_id", "amount", "from_currency_id", "to_currency_id", "date"},
+    )
+    amount = payload["amount"]
+    from_currency_id = payload["from_currency_id"]
+    to_currency_id = payload["to_currency_id"]
+    conversion_date = payload["date"]
+    try:
+        decimal_amount = Decimal(amount)
+    except (ValueError, TypeError, ArithmeticError) as exc:
+        raise RuntimeFailure(
+            "bridge_protocol_error",
+            "The bridge action payload is invalid.",
+            exit_code=7,
+        ) from exc
+    if (
+        payload["company_id"] != company_id
+        or not isinstance(amount, str)
+        or len(amount) > 256
+        or _DECIMAL_TEXT_PATTERN.fullmatch(amount) is None
+        or not decimal_amount.is_finite()
+        or not isinstance(from_currency_id, int)
+        or isinstance(from_currency_id, bool)
+        or from_currency_id <= 0
+        or not isinstance(to_currency_id, int)
+        or isinstance(to_currency_id, bool)
+        or to_currency_id <= 0
+        or not _is_canonical_date(conversion_date)
+    ):
+        raise RuntimeFailure(
+            "bridge_protocol_error",
+            "The bridge action payload is invalid.",
+            exit_code=7,
+        )
+
+    company_model = env["res.company"]
+    currency_model = env["res.currency"]
+    currency_rate_model = env["res.currency.rate"]
+    company_visible = bool(
+        company_model.search_count([("id", "=", company_id)], limit=1)
+    )
+    module_installed = all(
+        env.registry.get(model_name) is not None
+        for model_name in ("res.company", "res.currency", "res.currency.rate")
+    )
+    access_allowed = bool(
+        company_visible
+        and module_installed
+        and company_model.has_access("read")
+        and currency_model.has_access("read")
+        and currency_rate_model.has_access("read")
+    )
+    if not access_allowed:
+        return {
+            "user_id": env.uid,
+            "company_visible": company_visible,
+            "module_installed": module_installed,
+            "access_allowed": access_allowed,
+            "conversion": None,
+        }
+
+    currency_ids = sorted({from_currency_id, to_currency_id})
+    currency_rows = currency_model.search_read(
+        [("id", "in", currency_ids)],
+        fields=["id", "name"],
+        limit=len(currency_ids),
+        order="id",
+    )
+    currencies = {
+        row["id"]: row["name"]
+        for row in currency_rows
+        if isinstance(row, dict)
+        and isinstance(row.get("id"), int)
+        and not isinstance(row["id"], bool)
+        and row["id"] in currency_ids
+        and isinstance(row.get("name"), str)
+        and bool(row["name"])
+    }
+    if len(currencies) != len(currency_rows) or set(currencies) != set(currency_ids):
+        return {
+            "user_id": env.uid,
+            "company_visible": company_visible,
+            "module_installed": module_installed,
+            "access_allowed": access_allowed,
+            "conversion": None,
+        }
+
+    company = company_model.browse(company_id)
+    from_currency = currency_model.browse(from_currency_id)
+    to_currency = currency_model.browse(to_currency_id)
+    converted = from_currency._convert(
+        float(decimal_amount),
+        to_currency,
+        company,
+        date_type.fromisoformat(conversion_date),
+        round=True,
+    )
+    return {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        "conversion": {
+            "company_id": company_id,
+            "date": conversion_date,
+            "amount": amount,
+            "converted_amount": _decimal_string(converted),
+            "from_currency": {
+                "id": from_currency_id,
+                "code": currencies[from_currency_id],
+            },
+            "to_currency": {
+                "id": to_currency_id,
+                "code": currencies[to_currency_id],
+            },
+        },
     }
 
 
@@ -848,7 +1604,9 @@ def _dispatch_company_contexts(
         or len(available_company_ids) != len(set(available_company_ids))
     ):
         raise RuntimeFailure(
-            "bridge_protocol_error", "The bridge action payload is invalid.", exit_code=7
+            "bridge_protocol_error",
+            "The bridge action payload is invalid.",
+            exit_code=7,
         )
     if payload["company_id"] != company_id:
         raise RuntimeFailure(
@@ -879,28 +1637,26 @@ def _dispatch_company_contexts(
     domain: list[Any] = [("id", "in", list(available_company_ids))]
     if after is not None:
         domain.append(("id", ">", after[0]))
-    rows = (
-        company_model.with_context(
-            active_test=False,
-            allowed_company_ids=list(available_company_ids),
-        ).search_read(
-            domain,
-            fields=[
-                "id",
-                "name",
-                "sequence",
-                "active",
-                "currency_id",
-                "country_id",
-                "account_fiscal_country_id",
-                "chart_template",
-                "tax_calculation_rounding_method",
-                "fiscalyear_last_month",
-                "fiscalyear_last_day",
-            ],
-            limit=limit,
-            order="id",
-        )
+    rows = company_model.with_context(
+        active_test=False,
+        allowed_company_ids=list(available_company_ids),
+    ).search_read(
+        domain,
+        fields=[
+            "id",
+            "name",
+            "sequence",
+            "active",
+            "currency_id",
+            "country_id",
+            "account_fiscal_country_id",
+            "chart_template",
+            "tax_calculation_rounding_method",
+            "fiscalyear_last_month",
+            "fiscalyear_last_day",
+        ],
+        limit=limit,
+        order="id",
     )
     allowed_set = set(available_company_ids)
     if any(row.get("id") not in allowed_set for row in rows):
@@ -922,17 +1678,25 @@ def _dispatch_company_contexts(
         )
         if reference_id is not None
     }
-    currency_rows = env["res.currency"].with_context(active_test=False).search_read(
-        [("id", "in", list(currency_ids))],
-        fields=["id", "name", "decimal_places"],
-        limit=len(currency_ids),
-        order="id",
+    currency_rows = (
+        env["res.currency"]
+        .with_context(active_test=False)
+        .search_read(
+            [("id", "in", list(currency_ids))],
+            fields=["id", "name", "decimal_places"],
+            limit=len(currency_ids),
+            order="id",
+        )
     )
-    country_rows = env["res.country"].with_context(active_test=False).search_read(
-        [("id", "in", list(country_ids))],
-        fields=["id", "code", "name"],
-        limit=len(country_ids),
-        order="id",
+    country_rows = (
+        env["res.country"]
+        .with_context(active_test=False)
+        .search_read(
+            [("id", "in", list(country_ids))],
+            fields=["id", "code", "name"],
+            limit=len(country_ids),
+            order="id",
+        )
     )
     currencies = {row["id"]: row for row in currency_rows}
     countries = {row["id"]: row for row in country_rows}
@@ -1171,11 +1935,10 @@ def _journal_entry_filters_are_valid(filters: Any) -> bool:
         not isinstance(state, str) for state in states
     ):
         return False
-    canonical_states = [state for state in ("draft", "posted", "cancel") if state in states]
-    if (
-        states != canonical_states
-        or len(states) != len(set(states))
-    ):
+    canonical_states = [
+        state for state in ("draft", "posted", "cancel") if state in states
+    ]
+    if states != canonical_states or len(states) != len(set(states)):
         return False
     for key in ("journal_id", "partner_id"):
         value = filters[key]
@@ -1185,9 +1948,7 @@ def _journal_entry_filters_are_valid(filters: Any) -> bool:
             return False
     query = filters["query"]
     return query is None or (
-        isinstance(query, str)
-        and query == query.strip()
-        and 1 <= len(query) <= 200
+        isinstance(query, str) and query == query.strip() and 1 <= len(query) <= 200
     )
 
 
@@ -1206,7 +1967,9 @@ def _journal_entry_gate(
     ]
     if include_accounts:
         models.append("account.account")
-    module_installed = all(env.registry.get(model_name) is not None for model_name in models)
+    module_installed = all(
+        env.registry.get(model_name) is not None for model_name in models
+    )
     access_allowed = bool(
         company_visible
         and module_installed
@@ -1237,7 +2000,11 @@ def _journal_entry_domain(
         domains.append([("partner_id", "=", filters["partner_id"])])
     if filters["query"] is not None:
         domains.append(
-            ["|", ("name", "ilike", filters["query"]), ("ref", "ilike", filters["query"])]
+            [
+                "|",
+                ("name", "ilike", filters["query"]),
+                ("ref", "ilike", filters["query"]),
+            ]
         )
     if after is not None:
         domains.append(
@@ -1361,7 +2128,9 @@ def _dispatch_journal_entry_search(
         or not _journal_entry_filters_are_valid(payload["filters"])
     ):
         raise RuntimeFailure(
-            "bridge_protocol_error", "The bridge action payload is invalid.", exit_code=7
+            "bridge_protocol_error",
+            "The bridge action payload is invalid.",
+            exit_code=7,
         )
     if payload["company_id"] != company_id:
         raise RuntimeFailure(
@@ -1425,7 +2194,9 @@ def _dispatch_journal_entry_search(
             value = line[field]
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 raise RuntimeFailure(
-                    "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+                    "odoo_runtime_error",
+                    "The Odoo runtime request failed.",
+                    exit_code=7,
                 )
             totals[move_id][field] += Decimal(str(value))
     related = _journal_entry_related(env, moves, [], company_id)
@@ -1445,10 +2216,7 @@ def _dispatch_journal_entry_search(
         observed_move_ids.add(move_id)
         row = _journal_entry_header(move, related)
         row.update(
-            {
-                field: _decimal_string(value)
-                for field, value in totals[move_id].items()
-            }
+            {field: _decimal_string(value) for field, value in totals[move_id].items()}
         )
         rows.append(row)
     return {
@@ -1472,7 +2240,9 @@ def _dispatch_journal_entry_get(
         or payload["move_id"] <= 0
     ):
         raise RuntimeFailure(
-            "bridge_protocol_error", "The bridge action payload is invalid.", exit_code=7
+            "bridge_protocol_error",
+            "The bridge action payload is invalid.",
+            exit_code=7,
         )
     if payload["company_id"] != company_id:
         raise RuntimeFailure(
@@ -1603,9 +2373,7 @@ def _dispatch_journal_entry_get(
                 totals[field] += Decimal(str(raw))
         normalized_lines.append(line)
     entry["lines"] = normalized_lines
-    entry["totals"] = {
-        field: _decimal_string(value) for field, value in totals.items()
-    }
+    entry["totals"] = {field: _decimal_string(value) for field, value in totals.items()}
     return {
         "user_id": env.uid,
         "company_visible": company_visible,
@@ -1688,9 +2456,7 @@ def _invoice_search_payload_is_valid(payload: Any) -> bool:
             return False
     query = filters["query"]
     return query is None or (
-        isinstance(query, str)
-        and query == query.strip()
-        and 1 <= len(query) <= 200
+        isinstance(query, str) and query == query.strip() and 1 <= len(query) <= 200
     )
 
 
@@ -1866,9 +2632,7 @@ def _invoice_header(
     row["invoice_date_due"] = _optional_date(row["invoice_date_due"])
     for field in ("ref", "payment_reference", "invoice_origin"):
         row[field] = _optional_string(row[field])
-    row["journal"] = _journal_reference(
-        _safe_related(related, "journals", journal_id)
-    )
+    row["journal"] = _journal_reference(_safe_related(related, "journals", journal_id))
     row["company_id"] = row_company_id
     row["currency"] = _currency_reference(
         _safe_related(related, "currencies", currency_id)
@@ -1893,7 +2657,9 @@ def _dispatch_invoice_search(
 ) -> dict[str, Any]:
     if not _invoice_search_payload_is_valid(payload):
         raise RuntimeFailure(
-            "bridge_protocol_error", "The bridge action payload is invalid.", exit_code=7
+            "bridge_protocol_error",
+            "The bridge action payload is invalid.",
+            exit_code=7,
         )
     if payload["company_id"] != company_id:
         raise RuntimeFailure(
@@ -1955,7 +2721,9 @@ def _dispatch_invoice_get(
 ) -> dict[str, Any]:
     if not _invoice_id_payload_is_valid(payload):
         raise RuntimeFailure(
-            "bridge_protocol_error", "The bridge action payload is invalid.", exit_code=7
+            "bridge_protocol_error",
+            "The bridge action payload is invalid.",
+            exit_code=7,
         )
     if payload["company_id"] != company_id:
         raise RuntimeFailure(
@@ -2069,8 +2837,7 @@ def _dispatch_invoice_get(
             else None
         )
         if (
-            line["display_type"]
-            in {"line_section", "line_subsection", "line_note"}
+            line["display_type"] in {"line_section", "line_subsection", "line_note"}
         ) != (line["account"] is None):
             raise RuntimeFailure(
                 "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
@@ -2141,7 +2908,9 @@ def _dispatch_invoice_payment_status(
 ) -> dict[str, Any]:
     if not _invoice_id_payload_is_valid(payload):
         raise RuntimeFailure(
-            "bridge_protocol_error", "The bridge action payload is invalid.", exit_code=7
+            "bridge_protocol_error",
+            "The bridge action payload is invalid.",
+            exit_code=7,
         )
     if payload["company_id"] != company_id:
         raise RuntimeFailure(
@@ -2186,13 +2955,16 @@ def _dispatch_invoice_payment_status(
         )
     move_id = move.get("id")
     move_company_id = _reference_id(move.pop("company_id"))
+    commercial_partner_id = _reference_id(move.pop("commercial_partner_id"))
     move_currency_id = _reference_id(move.pop("currency_id"))
     company_currency_id = _reference_id(move.pop("company_currency_id"))
+    outstanding_widget = move.pop("invoice_outstanding_credits_debits_widget")
     if (
         not isinstance(move_id, int)
         or isinstance(move_id, bool)
         or move_id != payload["move_id"]
         or move_company_id != company_id
+        or commercial_partner_id is None
         or move_currency_id is None
         or company_currency_id is None
     ):
@@ -2238,6 +3010,188 @@ def _dispatch_invoice_payment_status(
         account_ids,
         ("code", "name", "account_type"),
         company_id,
+    )
+
+    term_balances_by_account: dict[int, list[Decimal]] = {}
+    for line in term_lines:
+        if set(line) != set(_INVOICE_TERM_LINE_FIELDS):
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        account_id = _reference_id(line.get("account_id"))
+        if (
+            _reference_id(line.get("move_id")) != move_id
+            or account_id is None
+            or account_id not in accounts
+        ):
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        term_balances_by_account.setdefault(account_id, []).append(
+            Decimal(_decimal_string(line.get("balance")))
+        )
+
+    outstanding_details: list[dict[str, Any]] = []
+    outstanding_line_ids: set[int] = set()
+    if outstanding_widget not in (False, None):
+        expected_widget_fields = {"outstanding", "content", "move_id", "title"}
+        if (
+            not isinstance(outstanding_widget, dict)
+            or set(outstanding_widget) != expected_widget_fields
+            or outstanding_widget["outstanding"] is not True
+            or _reference_id(outstanding_widget["move_id"]) != move_id
+            or not isinstance(outstanding_widget["title"], str)
+            or not outstanding_widget["title"].strip()
+            or not isinstance(outstanding_widget["content"], list)
+            or not outstanding_widget["content"]
+        ):
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        required_item_fields = {
+            "journal_name",
+            "amount",
+            "currency_id",
+            "id",
+            "move_id",
+            "date",
+            "account_payment_id",
+        }
+        for raw_item in outstanding_widget["content"]:
+            if not isinstance(raw_item, dict):
+                raise RuntimeFailure(
+                    "odoo_runtime_error",
+                    "The Odoo runtime request failed.",
+                    exit_code=7,
+                )
+            item_fields = set(raw_item)
+            bank_label = raw_item.get("bank_label")
+            if (
+                not required_item_fields <= item_fields
+                or item_fields - required_item_fields - {"bank_label"}
+                or (
+                    "bank_label" in raw_item
+                    and bank_label is not False
+                    and bank_label is not None
+                    and (not isinstance(bank_label, str) or not bank_label.strip())
+                )
+            ):
+                raise RuntimeFailure(
+                    "odoo_runtime_error",
+                    "The Odoo runtime request failed.",
+                    exit_code=7,
+                )
+            line_id = raw_item["id"]
+            candidate_move_id = _reference_id(raw_item["move_id"])
+            payment_id = _reference_id(raw_item["account_payment_id"])
+            candidate_currency_id = _reference_id(raw_item["currency_id"])
+            date = _date_string(raw_item["date"])
+            label = raw_item["journal_name"]
+            amount = _decimal_string(raw_item["amount"])
+            if (
+                not isinstance(line_id, int)
+                or isinstance(line_id, bool)
+                or line_id <= 0
+                or line_id in outstanding_line_ids
+                or candidate_move_id is None
+                or candidate_currency_id != move_currency_id
+                or not isinstance(label, str)
+                or not label.strip()
+                or Decimal(amount) <= 0
+            ):
+                raise RuntimeFailure(
+                    "odoo_runtime_error",
+                    "The Odoo runtime request failed.",
+                    exit_code=7,
+                )
+            outstanding_line_ids.add(line_id)
+            outstanding_details.append(
+                {
+                    "line_id": line_id,
+                    "move_id": candidate_move_id,
+                    "payment_id": payment_id,
+                    "date": date,
+                    "label": label,
+                    "amount": amount,
+                }
+            )
+
+    outstanding_lines: dict[int, dict[str, Any]] = {}
+    if outstanding_line_ids:
+        rows = (
+            env["account.move.line"]
+            .with_context(active_test=False, allowed_company_ids=[company_id])
+            .search_read(
+                [
+                    ("id", "in", sorted(outstanding_line_ids)),
+                    ("company_id", "=", company_id),
+                ],
+                fields=list(_INVOICE_OUTSTANDING_LINE_FIELDS),
+                limit=len(outstanding_line_ids),
+                order="id",
+            )
+        )
+        outstanding_lines = _indexed_rows(rows, outstanding_line_ids)
+    candidate_account_ids = {
+        account_id
+        for line in outstanding_lines.values()
+        if (account_id := _reference_id(line.get("account_id"))) is not None
+    }
+    candidate_accounts = _related_rows(
+        env,
+        "account.account",
+        candidate_account_ids - set(accounts),
+        ("account_type",),
+        company_id,
+    )
+    for detail in outstanding_details:
+        line = outstanding_lines[detail["line_id"]]
+        if set(line) != set(_INVOICE_OUTSTANDING_LINE_FIELDS):
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        candidate_move_id = _reference_id(line["move_id"])
+        candidate_company_id = _reference_id(line["company_id"])
+        candidate_account_id = _reference_id(line["account_id"])
+        candidate_partner_id = _reference_id(line["partner_id"])
+        candidate_payment_id = _reference_id(line["payment_id"])
+        balance = Decimal(_decimal_string(line["balance"]))
+        amount_residual = Decimal(_decimal_string(line["amount_residual"]))
+        amount_residual_currency = Decimal(
+            _decimal_string(line["amount_residual_currency"])
+        )
+        core_candidate = candidate_account_id in term_balances_by_account and any(
+            term_balance * balance < 0
+            for term_balance in term_balances_by_account[candidate_account_id]
+        )
+        candidate_account = candidate_accounts.get(candidate_account_id)
+        bank_candidate = (
+            candidate_account is not None
+            and set(candidate_account) == {"id", "account_type"}
+            and candidate_account.get("account_type") == "asset_cash"
+            and any(
+                term_balance * balance > 0
+                for term_balances in term_balances_by_account.values()
+                for term_balance in term_balances
+            )
+        )
+        if (
+            candidate_move_id != detail["move_id"]
+            or candidate_company_id != company_id
+            or candidate_partner_id != commercial_partner_id
+            or candidate_payment_id != detail["payment_id"]
+            or line["parent_state"] != "posted"
+            or line["reconciled"] is not False
+            or balance == 0
+            or (amount_residual == 0 and amount_residual_currency == 0)
+            or not (core_candidate or bank_candidate)
+            or _date_string(line["date"]) != detail["date"]
+        ):
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+    outstanding_details.sort(
+        key=lambda item: (item["date"], item["line_id"]), reverse=True
     )
 
     partials: list[dict[str, Any]] = []
@@ -2399,9 +3353,7 @@ def _dispatch_invoice_payment_status(
         for row in payment_rows
         if (record_id := _reference_id(row.get("currency_id"))) is not None
     )
-    currencies = _related_rows(
-        env, "res.currency", currency_ids, ("name",), company_id
-    )
+    currencies = _related_rows(env, "res.currency", currency_ids, ("name",), company_id)
 
     normalized_term_lines: list[dict[str, Any]] = []
     term_currency_ids: dict[int, int] = {}
@@ -2465,12 +3417,11 @@ def _dispatch_invoice_payment_status(
                 "date": _date_string(partial["max_date"]),
                 "amount": _decimal_string(detail["invoice_amount"]),
                 "company_amount": _decimal_string(partial["amount"]),
-                "currency": _currency_reference(
-                    currencies[reconciliation_currency_id]
-                ),
+                "currency": _currency_reference(currencies[reconciliation_currency_id]),
                 "company_currency": _currency_reference(
                     currencies[company_currency_id]
                 ),
+                "invoice_line_id": detail["invoice_line_id"],
                 "counterpart_line_id": detail["counterpart_line_id"],
                 "counterpart_move": {
                     "id": counterpart_move_id,
@@ -2535,14 +3486,19 @@ def _dispatch_invoice_payment_status(
     move["name"] = _optional_string(move["name"])
     move["company_id"] = move_company_id
     move["currency"] = _currency_reference(currencies[move_currency_id])
-    move["company_currency"] = _currency_reference(
-        currencies[company_currency_id]
-    )
+    move["company_currency"] = _currency_reference(currencies[company_currency_id])
     move["amount_total"] = _decimal_string(move["amount_total"])
     move["amount_residual"] = _decimal_string(move["amount_residual"])
     move["receivable_payable_lines"] = normalized_term_lines
     move["reconciliations"] = reconciliations
     move["payments"] = payments
+    move["outstanding_items"] = [
+        {
+            **detail,
+            "currency": _currency_reference(currencies[move_currency_id]),
+        }
+        for detail in outstanding_details
+    ]
     return {
         "user_id": env.uid,
         "company_visible": company_visible,
@@ -2607,12 +3563,12 @@ def _payment_search_payload_is_valid(payload: Any) -> bool:
         and filters["date_from"] > filters["date_to"]
     ):
         return False
-    if not _invoice_choices_are_canonical(
-        filters["states"], _PAYMENT_STATES
-    ) or not _invoice_choices_are_canonical(
-        filters["payment_types"], _PAYMENT_TYPES
-    ) or not _invoice_choices_are_canonical(
-        filters["partner_types"], _PAYMENT_PARTNER_TYPES
+    if (
+        not _invoice_choices_are_canonical(filters["states"], _PAYMENT_STATES)
+        or not _invoice_choices_are_canonical(filters["payment_types"], _PAYMENT_TYPES)
+        or not _invoice_choices_are_canonical(
+            filters["partner_types"], _PAYMENT_PARTNER_TYPES
+        )
     ):
         return False
     for field in ("journal_id", "partner_id", "currency_id"):
@@ -2623,9 +3579,7 @@ def _payment_search_payload_is_valid(payload: Any) -> bool:
             return False
     query = filters["query"]
     return query is None or (
-        isinstance(query, str)
-        and query == query.strip()
-        and 1 <= len(query) <= 200
+        isinstance(query, str) and query == query.strip() and 1 <= len(query) <= 200
     )
 
 
@@ -2715,10 +3669,7 @@ def _payment_company_path(row: dict[str, Any], company_id: int) -> list[int]:
     if not isinstance(parent_path, str) or not parent_path.endswith("/"):
         raise _payment_runtime_failure()
     parts = parent_path[:-1].split("/")
-    if (
-        not parts
-        or any(not part.isdigit() or part.startswith("0") for part in parts)
-    ):
+    if not parts or any(not part.isdigit() or part.startswith("0") for part in parts):
         raise _payment_runtime_failure()
     scope = [int(part) for part in parts]
     if (
@@ -2738,9 +3689,7 @@ def _payment_graph_scope(
         or company_id not in available_company_ids
         or len(available_company_ids) != len(set(available_company_ids))
         or any(
-            not isinstance(value, int)
-            or isinstance(value, bool)
-            or value <= 0
+            not isinstance(value, int) or isinstance(value, bool) or value <= 0
             for value in available_company_ids
         )
     ):
@@ -2781,9 +3730,7 @@ def _payment_graph_scope(
         raise _payment_runtime_failure()
     root_company_id = paths[company_id][0]
     same_root_ids = sorted(
-        record_id
-        for record_id, path in paths.items()
-        if path[0] == root_company_id
+        record_id for record_id, path in paths.items() if path[0] == root_company_id
     )
     if company_id not in same_root_ids:
         raise _payment_runtime_failure()
@@ -2807,9 +3754,7 @@ def _payment_domain(
         ("currency_id", "currency_id", "="),
     ):
         if filters[filter_name] not in (None, []):
-            domains.append(
-                [(model_field, operator, filters[filter_name])]
-            )
+            domains.append([(model_field, operator, filters[filter_name])])
     if filters["query"] is not None:
         domains.append(
             [
@@ -3066,9 +4011,8 @@ def _payment_common(
     method_line = related["method_lines"][method_line_id]
     line_journal_id = _reference_id(method_line.get("journal_id"))
     method_id = _reference_id(method_line.get("payment_method_id"))
-    if (
-        method_id is None
-        or (line_journal_id is not None and line_journal_id != journal_id)
+    if method_id is None or (
+        line_journal_id is not None and line_journal_id != journal_id
     ):
         raise _payment_runtime_failure()
     method = related["methods"][method_id]
@@ -3096,9 +4040,7 @@ def _payment_common(
     row["name"] = _payment_optional_text(row.get("name"))
     row["date"] = _date_string(row.get("date"))
     row["memo"] = _payment_optional_text(row.get("memo"))
-    row["payment_reference"] = _payment_optional_text(
-        row.get("payment_reference")
-    )
+    row["payment_reference"] = _payment_optional_text(row.get("payment_reference"))
     amount = _decimal_string(row.get("amount"))
     amount_signed = _decimal_string(row.get("amount_signed"))
     company_signed = _decimal_string(row.get("amount_company_currency_signed"))
@@ -3107,10 +4049,7 @@ def _payment_common(
     expected_signed = (
         amount_decimal if row["payment_type"] == "inbound" else -amount_decimal
     )
-    if (
-        amount_decimal < 0
-        or signed_decimal != expected_signed
-    ):
+    if amount_decimal < 0 or signed_decimal != expected_signed:
         raise _payment_runtime_failure()
     row["amount"] = amount
     row["amount_signed"] = amount_signed
@@ -3148,7 +4087,9 @@ def _dispatch_payment_search(
 ) -> dict[str, Any]:
     if not _payment_search_payload_is_valid(payload):
         raise RuntimeFailure(
-            "bridge_protocol_error", "The bridge action payload is invalid.", exit_code=7
+            "bridge_protocol_error",
+            "The bridge action payload is invalid.",
+            exit_code=7,
         )
     if payload["company_id"] != company_id:
         raise RuntimeFailure(
@@ -3243,9 +4184,7 @@ def _payment_read_documents(
         allowed_company_ids=graph_scope,
     )
     return [
-        _payment_document(
-            rows[record_id], record_id=record_id, graph_scope=graph_scope
-        )
+        _payment_document(rows[record_id], record_id=record_id, graph_scope=graph_scope)
         for record_id in sorted(rows)
     ]
 
@@ -3282,9 +4221,7 @@ def _payment_read_direct_documents(
         if row["move_type"] in _PAYMENT_DOCUMENT_TYPES:
             document_ids.add(record_id)
     return [
-        _payment_document(
-            rows[record_id], record_id=record_id, graph_scope=graph_scope
-        )
+        _payment_document(rows[record_id], record_id=record_id, graph_scope=graph_scope)
         for record_id in sorted(document_ids)
     ]
 
@@ -3351,8 +4288,7 @@ def _payment_reconciled_documents(
     )
     for account in accounts.values():
         if (
-            account.get("account_type")
-            not in {"asset_receivable", "liability_payable"}
+            account.get("account_type") not in {"asset_receivable", "liability_payable"}
             or account.get("reconcile") is not True
         ):
             raise _payment_runtime_failure()
@@ -3457,8 +4393,9 @@ def _payment_reconciled_documents(
         allowed_company_ids=graph_scope,
     )
     for line_id, move_id in counterpart_line_moves.items():
-        if _reference_id(counterpart_moves[move_id].get("company_id")) != (
-            counterpart_line_companies[line_id]
+        if (
+            _reference_id(counterpart_moves[move_id].get("company_id"))
+            != (counterpart_line_companies[line_id])
         ):
             raise _payment_runtime_failure()
     document_ids: set[int] = set()
@@ -3475,9 +4412,7 @@ def _payment_reconciled_documents(
         if move["move_type"] in _PAYMENT_DOCUMENT_TYPES:
             document_ids.add(move_id)
 
-    documents = _payment_read_documents(
-        env, document_ids, company_id, graph_scope
-    )
+    documents = _payment_read_documents(env, document_ids, company_id, graph_scope)
     invoices = [
         document
         for document in documents
@@ -3499,7 +4434,9 @@ def _dispatch_payment_get(
 ) -> dict[str, Any]:
     if not _payment_get_payload_is_valid(payload):
         raise RuntimeFailure(
-            "bridge_protocol_error", "The bridge action payload is invalid.", exit_code=7
+            "bridge_protocol_error",
+            "The bridge action payload is invalid.",
+            exit_code=7,
         )
     if payload["company_id"] != company_id:
         raise RuntimeFailure(
@@ -3517,9 +4454,7 @@ def _dispatch_payment_get(
             result_key="payment",
         )
     company_scope = _payment_company_scope(env, company_id)
-    graph_scope = _payment_graph_scope(
-        env, company_id, available_company_ids
-    )
+    graph_scope = _payment_graph_scope(env, company_id, available_company_ids)
     fields = [*_PAYMENT_FIELDS, "invoice_ids"]
     rows = (
         env["account.payment"]
@@ -3638,9 +4573,7 @@ def _open_item_payload_is_valid(payload: Any) -> bool:
             return False
     query = filters["query"]
     return query is None or (
-        isinstance(query, str)
-        and query == query.strip()
-        and 1 <= len(query) <= 200
+        isinstance(query, str) and query == query.strip() and 1 <= len(query) <= 200
     )
 
 
@@ -3654,8 +4587,7 @@ def _open_item_gate(env: Any, company_id: int) -> tuple[bool, bool, bool]:
         and env["res.company"].search_count([("id", "=", company_id)], limit=1)
     )
     module_installed = all(
-        env.registry.get(model_name) is not None
-        for model_name in _OPEN_ITEM_MODELS
+        env.registry.get(model_name) is not None for model_name in _OPEN_ITEM_MODELS
     )
     access_allowed = bool(
         company_visible
@@ -3869,9 +4801,7 @@ def _dispatch_open_item_search(
             "company_unavailable", "The company is unavailable.", exit_code=3
         )
     side, account_type = _OPEN_ITEM_ACTION_SIDES[action]
-    company_visible, module_installed, access_allowed = _open_item_gate(
-        env, company_id
-    )
+    company_visible, module_installed, access_allowed = _open_item_gate(env, company_id)
     if not access_allowed:
         return {
             "user_id": env.uid,
@@ -3942,9 +4872,7 @@ def _dispatch_open_item_search(
         journal = _safe_related(related, "journals", journal_id)
         account = _safe_related(related, "accounts", account_id)
         currency = _safe_related(related, "currencies", currency_id)
-        company_currency = _safe_related(
-            related, "currencies", company_currency_id
-        )
+        company_currency = _safe_related(related, "currencies", company_currency_id)
         move_company_id = _reference_id(move.get("company_id"))
         journal_company_id = _reference_id(journal.get("company_id"))
         account_company_ids = account.get("company_ids")
@@ -3957,9 +4885,7 @@ def _dispatch_open_item_search(
             or move.get("state") != "posted"
             or not isinstance(account_company_ids, list)
             or any(
-                not isinstance(value, int)
-                or isinstance(value, bool)
-                or value <= 0
+                not isinstance(value, int) or isinstance(value, bool) or value <= 0
                 for value in account_company_ids
             )
             or not company_scope.intersection(account_company_ids)
@@ -3973,13 +4899,14 @@ def _dispatch_open_item_search(
         if partner_id is not None:
             partner_row = _safe_related(related, "partners", partner_id)
             partner_company_id = _reference_id(partner_row.get("company_id"))
-            if partner_company_id is not None and partner_company_id not in company_scope:
+            if (
+                partner_company_id is not None
+                and partner_company_id not in company_scope
+            ):
                 raise _open_item_runtime_failure()
             partner = {
                 "id": partner_id,
-                "name": _open_item_optional_text(
-                    partner_row.get("complete_name")
-                ),
+                "name": _open_item_optional_text(partner_row.get("complete_name")),
                 "reference": _open_item_optional_text(partner_row.get("ref")),
             }
 
@@ -3992,9 +4919,7 @@ def _dispatch_open_item_search(
         )
         row["name"] = _open_item_optional_text(row["name"])
         row["ref"] = _open_item_optional_text(row["ref"])
-        row["matching_number"] = _open_item_optional_text(
-            row["matching_number"]
-        )
+        row["matching_number"] = _open_item_optional_text(row["matching_number"])
         row["move"] = {
             "id": move_id,
             "name": move["name"],
@@ -4023,11 +4948,9 @@ def _dispatch_open_item_search(
             )
         }
         try:
-            balanced = (
-                Decimal(str(raw_amounts["debit"]))
-                - Decimal(str(raw_amounts["credit"]))
-                == Decimal(str(raw_amounts["balance"]))
-            )
+            balanced = Decimal(str(raw_amounts["debit"])) - Decimal(
+                str(raw_amounts["credit"])
+            ) == Decimal(str(raw_amounts["balance"]))
         except (ArithmeticError, TypeError, ValueError) as exc:
             raise _open_item_runtime_failure() from exc
         if not balanced:
@@ -4041,6 +4964,548 @@ def _dispatch_open_item_search(
         "module_installed": module_installed,
         "access_allowed": access_allowed,
         "rows": normalized,
+    }
+
+
+def _bank_transaction_payload_is_valid(payload: Any) -> bool:
+    if not isinstance(payload, dict) or set(payload) not in (
+        {"company_id", "after", "limit"},
+        {"company_id", "after", "limit", "filters"},
+    ):
+        return False
+    if (
+        not isinstance(payload["company_id"], int)
+        or isinstance(payload["company_id"], bool)
+        or not isinstance(payload["limit"], int)
+        or isinstance(payload["limit"], bool)
+        or not 1 <= payload["limit"] <= 1001
+    ):
+        return False
+    after = payload["after"]
+    if after is not None and not (
+        isinstance(after, list)
+        and len(after) == 2
+        and _is_canonical_date(after[0])
+        and isinstance(after[1], int)
+        and not isinstance(after[1], bool)
+        and after[1] > 0
+    ):
+        return False
+    if "filters" not in payload:
+        return True
+    filters = payload["filters"]
+    if not isinstance(filters, dict) or set(filters) != {
+        "date_from",
+        "date_to",
+        "journal_id",
+        "partner_id",
+        "reconciled",
+        "query",
+    }:
+        return False
+    for field in ("date_from", "date_to"):
+        if filters[field] is not None and not _is_canonical_date(filters[field]):
+            return False
+    if (
+        filters["date_from"] is not None
+        and filters["date_to"] is not None
+        and filters["date_from"] > filters["date_to"]
+    ):
+        return False
+    for field in ("journal_id", "partner_id"):
+        value = filters[field]
+        if value is not None and (
+            not isinstance(value, int) or isinstance(value, bool) or value <= 0
+        ):
+            return False
+    if filters["reconciled"] is not None and not isinstance(
+        filters["reconciled"], bool
+    ):
+        return False
+    query = filters["query"]
+    return query is None or (
+        isinstance(query, str) and query == query.strip() and 1 <= len(query) <= 200
+    )
+
+
+def _bank_transaction_domain(
+    company_id: int,
+    after: list[Any] | None,
+    filters: dict[str, Any] | None = None,
+) -> list[Any]:
+    domains: list[list[Any]] = [[("company_id", "=", company_id)]]
+    if filters is not None:
+        for filter_name, model_field, operator in (
+            ("date_from", "date", ">="),
+            ("date_to", "date", "<="),
+            ("journal_id", "journal_id", "="),
+            ("partner_id", "partner_id", "="),
+            ("reconciled", "is_reconciled", "="),
+        ):
+            if filters[filter_name] is not None:
+                domains.append([(model_field, operator, filters[filter_name])])
+        if filters["query"] is not None:
+            from odoo.fields import Domain
+
+            domains.append(
+                list(
+                    Domain.OR(
+                        [
+                            [("payment_ref", "ilike", filters["query"])],
+                            [("ref", "ilike", filters["query"])],
+                            [("move_id.name", "ilike", filters["query"])],
+                            [("partner_id.name", "ilike", filters["query"])],
+                        ]
+                    )
+                )
+            )
+    if after is not None:
+        domains.append(
+            [
+                "|",
+                ("date", "<", after[0]),
+                "&",
+                ("date", "=", after[0]),
+                ("id", "<", after[1]),
+            ]
+        )
+    from odoo.osv import expression
+
+    return expression.AND(domains)
+
+
+def _dispatch_product_accounting_profile(
+    env: Any, payload: dict[str, Any], company_id: int
+) -> dict[str, Any]:
+    _require_keys(payload, {"company_id", "product_id"})
+    if (
+        not isinstance(payload["company_id"], int)
+        or isinstance(payload["company_id"], bool)
+        or not isinstance(payload["product_id"], int)
+        or isinstance(payload["product_id"], bool)
+        or payload["product_id"] <= 0
+    ):
+        raise RuntimeFailure(
+            "bridge_protocol_error",
+            "The bridge action payload is invalid.",
+            exit_code=7,
+        )
+    if payload["company_id"] != company_id:
+        raise RuntimeFailure(
+            "company_unavailable", "The company is unavailable.", exit_code=3
+        )
+
+    identity_models = (
+        "res.company",
+        "product.product",
+        "product.template",
+        "product.category",
+    )
+    company_visible = bool(
+        env["res.company"].search_count([("id", "=", company_id)], limit=1)
+    )
+    module_installed = all(
+        env.registry.get(model_name) is not None for model_name in identity_models
+    )
+    account_installed = env.registry.get("account.account") is not None
+    access_models = (
+        (*identity_models, "account.account") if account_installed else identity_models
+    )
+    access_allowed = bool(
+        company_visible
+        and module_installed
+        and all(env[model_name].has_access("read") for model_name in access_models)
+    )
+    empty_page = {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        "data": None,
+    }
+    if not access_allowed:
+        return empty_page
+
+    from odoo.osv import expression
+
+    product_domain = expression.AND(
+        [
+            [("id", "=", payload["product_id"])],
+            [
+                "|",
+                ("company_id", "=", False),
+                ("company_id", "=", company_id),
+            ],
+        ]
+    )
+    product = (
+        env["product.product"]
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+        .search(product_domain, limit=1)
+    )
+    if not product:
+        return empty_page
+
+    company = env["res.company"].browse(company_id)
+    product = product.with_company(company)
+    product_row = product.read(
+        ["display_name", "default_code", "active", "company_id", "product_tmpl_id"]
+    )[0]
+    template_id = _reference_id(product_row["product_tmpl_id"])
+    if template_id is None:
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    template = env["product.template"].browse(template_id).with_company(company)
+    template_row = template.read(["name", "company_id", "categ_id"])[0]
+    category_id = _reference_id(template_row["categ_id"])
+    if category_id is None:
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    category = env["product.category"].browse(category_id).with_company(company)
+    category_row = category.read(["name", "complete_name"])[0]
+
+    product_company_id = _reference_id(product_row["company_id"])
+    template_company_id = _reference_id(template_row["company_id"])
+    if (
+        product_company_id != template_company_id
+        or product_company_id not in {None, company_id}
+        or not isinstance(product_row.get("display_name"), str)
+        or not product_row["display_name"].strip()
+        or not isinstance(product_row.get("active"), bool)
+        or not isinstance(template_row.get("name"), str)
+        or not template_row["name"].strip()
+        or not isinstance(category_row.get("name"), str)
+        or not category_row["name"].strip()
+        or not isinstance(category_row.get("complete_name"), str)
+        or not category_row["complete_name"].strip()
+    ):
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    default_code = product_row.get("default_code")
+    if default_code in {False, None, ""}:
+        default_code = None
+    elif not isinstance(default_code, str) or not default_code.strip():
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+
+    raw_accounts = product._get_product_accounts() if account_installed else {}
+    if not isinstance(raw_accounts, dict):
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    stock_account_installed = bool(
+        account_installed and env.registry.get("product.value") is not None
+    )
+
+    def account_record_id(value: Any) -> int | None:
+        if not value:
+            return None
+        record_ids = getattr(value, "ids", None)
+        if (
+            not isinstance(record_ids, list)
+            or len(record_ids) != 1
+            or not isinstance(record_ids[0], int)
+            or isinstance(record_ids[0], bool)
+            or record_ids[0] <= 0
+        ):
+            raise RuntimeFailure(
+                "odoo_runtime_error",
+                "The Odoo runtime request failed.",
+                exit_code=7,
+            )
+        return record_ids[0]
+
+    raw_slots: dict[str, tuple[bool, str | None, int | None]] = {}
+    for key, owning_module_installed in (
+        ("income", account_installed),
+        ("expense", account_installed),
+        ("stock_valuation", stock_account_installed),
+        ("stock_input", stock_account_installed),
+        ("stock_output", stock_account_installed),
+    ):
+        if not owning_module_installed:
+            raw_slots[key] = (False, "module_uninstalled", None)
+        elif key not in raw_accounts:
+            raw_slots[key] = (False, "field_unavailable", None)
+        else:
+            raw_slots[key] = (True, None, account_record_id(raw_accounts[key]))
+
+    account_ids = {
+        account_id
+        for available, _reason, account_id in raw_slots.values()
+        if available and account_id is not None
+    }
+    accounts = _related_rows(
+        env, "account.account", account_ids, ("code", "name"), company_id
+    )
+    account_slots = {
+        key: {
+            "available": available,
+            "reason_code": reason,
+            "account": (
+                _account_reference(accounts[account_id])
+                if account_id is not None
+                else None
+            ),
+        }
+        for key, (available, reason, account_id) in raw_slots.items()
+    }
+
+    def selection_slot(field_name: str, allowed: set[str]) -> dict[str, Any]:
+        if not stock_account_installed:
+            return {
+                "available": False,
+                "reason_code": "module_uninstalled",
+                "value": None,
+            }
+        if field_name not in template._fields:
+            return {
+                "available": False,
+                "reason_code": "field_unavailable",
+                "value": None,
+            }
+        value = template[field_name]
+        if not isinstance(value, str) or value not in allowed:
+            raise RuntimeFailure(
+                "odoo_runtime_error",
+                "The Odoo runtime request failed.",
+                exit_code=7,
+            )
+        return {"available": True, "reason_code": None, "value": value}
+
+    return {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        "data": {
+            "company_id": company_id,
+            "product": {
+                "id": product.id,
+                "name": product_row["display_name"],
+                "default_code": default_code,
+                "active": product_row["active"],
+                "company_id": product_company_id,
+                "template_id": template_id,
+            },
+            "template": {
+                "id": template_id,
+                "name": template_row["name"],
+                "company_id": template_company_id,
+                "category_id": category_id,
+            },
+            "category": {
+                "id": category_id,
+                "name": category_row["name"],
+                "complete_name": category_row["complete_name"],
+            },
+            "modules": {
+                "account": account_installed,
+                "stock_account": stock_account_installed,
+            },
+            "accounts": account_slots,
+            "valuation": selection_slot("valuation", {"periodic", "real_time"}),
+            "cost_method": selection_slot(
+                "cost_method", {"standard", "fifo", "average"}
+            ),
+        },
+    }
+
+
+def _dispatch_bank_transaction_search(
+    env: Any, payload: dict[str, Any], company_id: int
+) -> dict[str, Any]:
+    if not _bank_transaction_payload_is_valid(payload):
+        raise RuntimeFailure(
+            "bridge_protocol_error",
+            "The bridge action payload is invalid.",
+            exit_code=7,
+        )
+    if payload["company_id"] != company_id:
+        raise RuntimeFailure(
+            "company_unavailable", "The company is unavailable.", exit_code=3
+        )
+
+    company_visible = bool(
+        env["res.company"].search_count([("id", "=", company_id)], limit=1)
+    )
+    module_installed = all(
+        env.registry.get(model_name) is not None
+        for model_name in _BANK_TRANSACTION_MODELS
+    )
+    access_allowed = bool(
+        company_visible
+        and module_installed
+        and all(
+            env[model_name].has_access("read")
+            for model_name in _BANK_TRANSACTION_MODELS
+        )
+    )
+    if not access_allowed:
+        return {
+            "user_id": env.uid,
+            "company_visible": company_visible,
+            "module_installed": module_installed,
+            "access_allowed": access_allowed,
+            "rows": [],
+        }
+
+    raw_rows = (
+        env["account.bank.statement.line"]
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+        .search_read(
+            _bank_transaction_domain(
+                company_id, payload["after"], payload.get("filters")
+            ),
+            fields=[
+                "id",
+                "company_id",
+                "payment_ref",
+                "partner_id",
+                "journal_id",
+                "amount",
+                "currency_id",
+                "move_id",
+                "is_reconciled",
+                "payment_ids",
+            ],
+            limit=payload["limit"],
+            order="date desc,id desc",
+        )
+    )
+    partner_ids: set[int] = set()
+    journal_ids: set[int] = set()
+    currency_ids: set[int] = set()
+    move_ids: set[int] = set()
+    payment_ids: set[int] = set()
+    for row in raw_rows:
+        partner_id = _reference_id(row.get("partner_id"))
+        journal_id = _reference_id(row.get("journal_id"))
+        currency_id = _reference_id(row.get("currency_id"))
+        move_id = _reference_id(row.get("move_id"))
+        raw_payment_ids = row.get("payment_ids")
+        if (
+            journal_id is None
+            or currency_id is None
+            or move_id is None
+            or not isinstance(raw_payment_ids, list)
+            or any(
+                not isinstance(payment_id, int)
+                or isinstance(payment_id, bool)
+                or payment_id <= 0
+                for payment_id in raw_payment_ids
+            )
+            or len(raw_payment_ids) != len(set(raw_payment_ids))
+        ):
+            raise RuntimeFailure(
+                "odoo_runtime_error",
+                "The Odoo runtime request failed.",
+                exit_code=7,
+            )
+        if partner_id is not None:
+            partner_ids.add(partner_id)
+        journal_ids.add(journal_id)
+        currency_ids.add(currency_id)
+        move_ids.add(move_id)
+        payment_ids.update(raw_payment_ids)
+
+    partners = _related_rows(
+        env, "res.partner", partner_ids, ("complete_name",), company_id
+    )
+    journals = _related_rows(
+        env,
+        "account.journal",
+        journal_ids,
+        ("code", "name", "company_id"),
+        company_id,
+    )
+    currencies = _related_rows(env, "res.currency", currency_ids, ("name",), company_id)
+    moves = _related_rows(
+        env,
+        "account.move",
+        move_ids,
+        ("name", "state", "date", "ref", "company_id"),
+        company_id,
+    )
+    payments = _related_rows(
+        env, "account.payment", payment_ids, ("date", "company_id"), company_id
+    )
+    payment_dates: dict[int, str] = {}
+    for payment_id, payment in payments.items():
+        if _reference_id(payment["company_id"]) != company_id:
+            raise RuntimeFailure(
+                "odoo_runtime_error",
+                "The Odoo runtime request failed.",
+                exit_code=7,
+            )
+        payment_dates[payment_id] = _date_string(payment["date"])
+
+    rows: list[dict[str, Any]] = []
+    observed_ids: set[int] = set()
+    for row in raw_rows:
+        row_id = row.get("id")
+        company_reference = _reference_id(row.pop("company_id"))
+        partner_id = _reference_id(row.pop("partner_id"))
+        journal_id = _reference_id(row.pop("journal_id"))
+        currency_id = _reference_id(row.pop("currency_id"))
+        move_id = _reference_id(row.pop("move_id"))
+        linked_payment_ids = row.pop("payment_ids")
+        move = moves.get(move_id)
+        if (
+            not isinstance(row_id, int)
+            or isinstance(row_id, bool)
+            or row_id <= 0
+            or row_id in observed_ids
+            or company_reference != company_id
+            or move is None
+            or _reference_id(move.get("company_id")) != company_id
+            or _reference_id(journals[journal_id].get("company_id")) != company_id
+            or not isinstance(move.get("name"), str)
+            or not move["name"].strip()
+            or move.get("state") not in {"draft", "posted", "cancel"}
+            or not isinstance(row.get("is_reconciled"), bool)
+        ):
+            raise RuntimeFailure(
+                "odoo_runtime_error",
+                "The Odoo runtime request failed.",
+                exit_code=7,
+            )
+        observed_ids.add(row_id)
+        dates = [payment_dates[payment_id] for payment_id in linked_payment_ids]
+        rows.append(
+            {
+                "id": row_id,
+                "company_id": company_id,
+                "date": _date_string(move["date"]),
+                "payment_date": min(dates) if dates else None,
+                "name": _optional_string(row["payment_ref"]),
+                "reference": _optional_string(move["ref"]),
+                "partner": (
+                    _named_reference(partners[partner_id])
+                    if partner_id is not None
+                    else None
+                ),
+                "journal": _journal_reference(journals[journal_id]),
+                "amount": _decimal_string(row["amount"]),
+                "currency": _currency_reference(currencies[currency_id]),
+                "move": {
+                    "id": move_id,
+                    "name": move["name"],
+                    "state": move["state"],
+                },
+                "reconciled": row["is_reconciled"],
+            }
+        )
+    return {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        "rows": rows,
     }
 
 
@@ -4078,9 +5543,7 @@ def _partner_accounting_payload_is_valid(payload: Any, company_id: int) -> bool:
     return filters["role"] in {"both", "customer", "vendor"} and (
         query is None
         or (
-            isinstance(query, str)
-            and query == query.strip()
-            and 1 <= len(query) <= 200
+            isinstance(query, str) and query == query.strip() and 1 <= len(query) <= 200
         )
     )
 
@@ -4145,7 +5608,9 @@ def _dispatch_partner_accounting_search(
         env["res.company"].search_count([("id", "=", company_id)], limit=1)
     )
     required_models = ("res.partner", "account.account")
-    module_installed = all(env.registry.get(name) is not None for name in required_models)
+    module_installed = all(
+        env.registry.get(name) is not None for name in required_models
+    )
     access_allowed = bool(
         company_visible
         and module_installed
@@ -4163,7 +5628,9 @@ def _dispatch_partner_accounting_search(
         env["res.partner"]
         .with_context(active_test=False, allowed_company_ids=[company_id])
         .search_read(
-            _partner_accounting_domain(company_id, payload["after"], payload["filters"]),
+            _partner_accounting_domain(
+                company_id, payload["after"], payload["filters"]
+            ),
             fields=[
                 "id",
                 "complete_name",
@@ -4245,12 +5712,16 @@ def _dispatch_financial_report(
     env: Any, action: str, payload: dict[str, Any], company_id: int
 ) -> dict[str, Any]:
     spec = _FINANCIAL_REPORT_ACTIONS[action]
-    _require_keys(
-        payload,
-        {"company_id", "date_from", "date_to", "after_line_id", "limit"},
-    )
+    required_keys = {"company_id", "date_from", "date_to", "after_line_id", "limit"}
+    if spec.get("journal_parameter") is True:
+        required_keys.add("journal_id")
+    if spec.get("partner_parameter") is True:
+        required_keys.add("partner_id")
+    _require_keys(payload, required_keys)
     limit = payload["limit"]
     after_line_id = payload["after_line_id"]
+    journal_id = payload.get("journal_id")
+    partner_id = payload.get("partner_id")
     if (
         not isinstance(payload["company_id"], int)
         or isinstance(payload["company_id"], bool)
@@ -4270,9 +5741,27 @@ def _dispatch_financial_report(
             after_line_id is None
             or (isinstance(after_line_id, str) and bool(after_line_id.strip()))
         )
+        or (
+            spec.get("journal_parameter") is True
+            and (
+                not isinstance(journal_id, int)
+                or isinstance(journal_id, bool)
+                or journal_id <= 0
+            )
+        )
+        or (
+            spec.get("partner_parameter") is True
+            and (
+                not isinstance(partner_id, int)
+                or isinstance(partner_id, bool)
+                or partner_id <= 0
+            )
+        )
     ):
         raise RuntimeFailure(
-            "bridge_protocol_error", "The bridge action payload is invalid.", exit_code=7
+            "bridge_protocol_error",
+            "The bridge action payload is invalid.",
+            exit_code=7,
         )
     if payload["company_id"] != company_id:
         raise RuntimeFailure(
@@ -4283,16 +5772,42 @@ def _dispatch_financial_report(
     company_visible = bool(
         company_model.search_count([("id", "=", company_id)], limit=1)
     )
-    required_models = ("account.report", "account.move.line", "res.currency")
+    required_models = spec.get(
+        "models", ("account.report", "account.move.line", "res.currency")
+    )
     models_installed = all(
         env.registry.get(model_name) is not None for model_name in required_models
     )
+    localization_applicable = True
+    expected_country_code = spec.get("fiscal_country_code")
+    if company_visible and models_installed and expected_country_code is not None:
+        companies = company_model.search_read(
+            [("id", "=", company_id)],
+            fields=["id", "account_fiscal_country_id", "chart_template"],
+            limit=1,
+        )
+        if len(companies) != 1 or companies[0].get("id") != company_id:
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+        fiscal_country_id = _reference_id(companies[0].get("account_fiscal_country_id"))
+        countries = env["res.country"].search_read(
+            [("id", "=", fiscal_country_id)], fields=["id", "code"], limit=1
+        )
+        localization_applicable = bool(
+            len(countries) == 1
+            and countries[0].get("id") == fiscal_country_id
+            and countries[0].get("code") == expected_country_code
+            and companies[0].get("chart_template") == spec.get("chart_template")
+        )
     root_report = (
         env.ref(spec["xml_id"], raise_if_not_found=False)
-        if models_installed
+        if models_installed and localization_applicable
         else None
     )
-    module_installed = bool(models_installed and root_report)
+    module_installed = bool(
+        models_installed and localization_applicable and root_report
+    )
     access_allowed = bool(
         company_visible
         and module_installed
@@ -4316,13 +5831,59 @@ def _dispatch_financial_report(
             "filter": "custom",
         },
     }
+    if spec.get("journal_parameter") is True:
+        journal_available = bool(
+            env["account.journal"]
+            .with_context(active_test=False, allowed_company_ids=[company_id])
+            .search_count(
+                [
+                    ("id", "=", journal_id),
+                    ("company_id", "=", company_id),
+                    ("type", "=", "bank"),
+                ],
+                limit=1,
+            )
+        )
+        if not journal_available:
+            raise RuntimeFailure(
+                "company_unavailable",
+                "The company-scoped bank journal is unavailable.",
+                exit_code=3,
+            )
+        previous_options["bank_reconciliation_report_journal_id"] = journal_id
+    if spec.get("partner_parameter") is True:
+        partner_available = bool(
+            env["res.partner"]
+            .with_context(active_test=False, allowed_company_ids=[company_id])
+            .search_count(
+                [
+                    ("id", "=", partner_id),
+                    "|",
+                    ("company_id", "=", False),
+                    ("company_id", "=", company_id),
+                ],
+                limit=1,
+            )
+        )
+        if not partner_available:
+            raise RuntimeFailure(
+                "company_unavailable",
+                "The company-scoped partner is unavailable.",
+                exit_code=3,
+            )
+        previous_options["partner_ids"] = [partner_id]
+        previous_options["unfold_all"] = True
     options = root_report.get_options(previous_options)
     option_date = options.get("date") if isinstance(options, dict) else None
     report_id = options.get("report_id") if isinstance(options, dict) else None
     raw_columns = options.get("columns") if isinstance(options, dict) else None
+    readonly_query = (
+        options.get("readonly_query") if isinstance(options, dict) else None
+    )
     if (
         not isinstance(options, dict)
-        or options.get("readonly_query") is not True
+        or not isinstance(readonly_query, bool)
+        or (readonly_query is not True and spec.get("allow_temp_tables") is not True)
         or options.get("all_entries") is not False
         or not isinstance(option_date, dict)
         or not _is_canonical_date(option_date.get("date_from"))
@@ -4338,31 +5899,73 @@ def _dispatch_financial_report(
         or report_id <= 0
         or not isinstance(raw_columns, list)
         or not raw_columns
+        or (
+            spec.get("journal_parameter") is True
+            and options.get("bank_reconciliation_report_journal_id") != journal_id
+        )
+        or (
+            spec.get("partner_parameter") is True
+            and (
+                options.get("partner_ids") != [partner_id]
+                or options.get("unfold_all") is not True
+                or options.get("unreconciled") is not spec["unreconciled"]
+            )
+        )
     ):
         raise RuntimeFailure(
             "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
         )
 
     columns: list[dict[str, Any]] = []
+    typed_values = spec.get("typed_values") is True
+    allowed_figure_types = {
+        "monetary",
+        "float",
+        "percentage",
+        "integer",
+        "date",
+        "string",
+    }
     for index, column in enumerate(raw_columns):
+        figure_type = column.get("figure_type") if isinstance(column, dict) else None
+        column_name = column.get("name") if isinstance(column, dict) else None
+        if (
+            action == "account.report.asset.read_page"
+            and isinstance(column_name, str)
+            and not column_name.strip()
+            and column.get("expression_label") == "balance"
+        ):
+            column_name = "Book Value"
         if (
             not isinstance(column, dict)
-            or column.get("figure_type") != "monetary"
-            or not isinstance(column.get("name"), str)
-            or not column["name"].strip()
+            or (
+                figure_type not in allowed_figure_types
+                if typed_values
+                else figure_type != "monetary"
+            )
+            or not isinstance(column_name, str)
+            or not column_name.strip()
             or not isinstance(column.get("expression_label"), str)
             or not column["expression_label"].strip()
         ):
             raise RuntimeFailure(
                 "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
             )
-        columns.append(
-            {
-                "index": index,
-                "label": column["name"],
-                "expression_label": column["expression_label"],
-            }
-        )
+        normalized_figure_type = figure_type
+        if (
+            action == "account.report.asset.read_page"
+            and column["expression_label"] == "acquisition_date"
+            and figure_type == "date"
+        ):
+            normalized_figure_type = "string"
+        normalized_column = {
+            "index": index,
+            "label": column_name,
+            "expression_label": column["expression_label"],
+        }
+        if typed_values:
+            normalized_column["figure_type"] = normalized_figure_type
+        columns.append(normalized_column)
 
     effective_report = env["account.report"].browse(report_id)
     if (
@@ -4373,7 +5976,11 @@ def _dispatch_financial_report(
         raise RuntimeFailure(
             "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
         )
-    information = effective_report.get_report_information_readonly(options)
+    information = (
+        effective_report.get_report_information_readonly(options)
+        if readonly_query
+        else effective_report.get_report_information(options)
+    )
     raw_lines = information.get("lines") if isinstance(information, dict) else None
     if not isinstance(raw_lines, list):
         raise RuntimeFailure(
@@ -4387,6 +5994,20 @@ def _dispatch_financial_report(
         line_id = line.get("id") if isinstance(line, dict) else None
         parent_id = line.get("parent_id") if isinstance(line, dict) else None
         unfoldable = line.get("unfoldable", False) if isinstance(line, dict) else None
+        structural_line = bool(
+            isinstance(line, dict)
+            and action == "account.report.journal.read_page"
+            and raw_cells == []
+            and isinstance(line.get("colspan"), int)
+            and not isinstance(line["colspan"], bool)
+            and line["colspan"] == len(columns) + 1
+        )
+        if (
+            structural_line
+            and isinstance(line.get("name"), str)
+            and not line["name"].strip()
+        ):
+            continue
         if (
             not isinstance(line, dict)
             or not isinstance(line_id, str)
@@ -4403,26 +6024,69 @@ def _dispatch_financial_report(
             or line["level"] < 0
             or not isinstance(unfoldable, bool)
             or not isinstance(raw_cells, list)
-            or len(raw_cells) != len(columns)
+            or (not structural_line and len(raw_cells) != len(columns))
         ):
             raise RuntimeFailure(
                 "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
             )
-        values: list[str | None] = []
-        for index, cell in enumerate(raw_cells):
-            if (
-                not isinstance(cell, dict)
-                or cell.get("expression_label") != columns[index]["expression_label"]
+        values: list[str | None] = [None] * len(columns) if structural_line else []
+        for index, cell in enumerate([] if structural_line else raw_cells):
+            partner_empty_cell = bool(
+                spec.get("partner_parameter") is True
+                and isinstance(cell, dict)
+                and cell.get("expression_label") in (False, None)
+                and cell.get("no_format") in (False, None, "")
+            )
+            if not isinstance(cell, dict) or (
+                cell.get("expression_label") != columns[index]["expression_label"]
+                and not partner_empty_cell
             ):
                 raise RuntimeFailure(
-                    "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+                    "odoo_runtime_error",
+                    "The Odoo runtime request failed.",
+                    exit_code=7,
                 )
             raw_value = cell.get("no_format")
-            values.append(
-                None
-                if raw_value is None or isinstance(raw_value, bool)
-                else _decimal_string(raw_value)
-            )
+            if (
+                raw_value is None
+                or raw_value is False
+                or (spec.get("partner_parameter") is True and raw_value == "")
+            ):
+                normalized_value: str | None = None
+            elif (
+                action == "account.report.asset.read_page"
+                and isinstance(raw_value, str)
+                and not raw_value.strip()
+                and columns[index]["figure_type"] in {"date", "string"}
+            ):
+                normalized_value = None
+            elif not typed_values or columns[index]["figure_type"] in {
+                "monetary",
+                "float",
+                "percentage",
+            }:
+                normalized_value = _decimal_string(raw_value)
+            elif columns[index]["figure_type"] == "integer":
+                normalized_value = _decimal_string(raw_value)
+                if "." in normalized_value:
+                    raise RuntimeFailure(
+                        "odoo_runtime_error",
+                        "The Odoo runtime request failed.",
+                        exit_code=7,
+                    )
+            elif columns[index]["figure_type"] == "date":
+                normalized_value = _date_string(raw_value)
+            elif columns[index]["figure_type"] == "string" and isinstance(
+                raw_value, str
+            ):
+                normalized_value = raw_value
+            else:
+                raise RuntimeFailure(
+                    "odoo_runtime_error",
+                    "The Odoo runtime request failed.",
+                    exit_code=7,
+                )
+            values.append(normalized_value)
         line_ids.add(line_id)
         normalized_lines.append(
             {
@@ -4557,8 +6221,10 @@ def _dispatch_company_accounting_configuration(
         "account_opening_move_id",
         "account_opening_date",
     ]
-    rows = env["res.company"].with_context(active_test=False).search_read(
-        [("id", "=", company_id)], fields=fields, limit=1
+    rows = (
+        env["res.company"]
+        .with_context(active_test=False)
+        .search_read([("id", "=", company_id)], fields=fields, limit=1)
     )
     if len(rows) != 1 or rows[0].get("id") != company_id:
         raise RuntimeFailure(
@@ -4575,7 +6241,9 @@ def _dispatch_company_accounting_configuration(
     fiscal_country = _single_related_row(
         env, "res.country", fiscal_country_id, ["name", "code"]
     )
-    suspense = _single_related_row(env, "account.account", suspense_id, ["code", "name"])
+    suspense = _single_related_row(
+        env, "account.account", suspense_id, ["code", "name"]
+    )
     pos_receivable = _single_related_row(
         env, "account.account", pos_receivable_id, ["code", "name"]
     )
@@ -4724,6 +6392,217 @@ def _dispatch_accounting_environment_diagnostic(
     }
 
 
+def _positive_id(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _dispatch_fiscal_position_resolve(
+    env: Any, payload: dict[str, Any], company_id: int
+) -> dict[str, Any]:
+    _require_keys(
+        payload,
+        {
+            "company_id",
+            "partner_id",
+            "delivery_partner_id",
+            "account_id",
+            "tax_ids",
+        },
+    )
+    tax_ids = payload["tax_ids"]
+    optional_ids = (payload["delivery_partner_id"], payload["account_id"])
+    if (
+        payload["company_id"] != company_id
+        or not _positive_id(payload["partner_id"])
+        or any(value is not None and not _positive_id(value) for value in optional_ids)
+        or not (
+            tax_ids is None
+            or (
+                isinstance(tax_ids, list)
+                and 1 <= len(tax_ids) <= 100
+                and all(_positive_id(value) for value in tax_ids)
+                and len(set(tax_ids)) == len(tax_ids)
+            )
+        )
+    ):
+        raise RuntimeFailure(
+            "bridge_protocol_error",
+            "The bridge action payload is invalid.",
+            exit_code=7,
+        )
+
+    required_models = (
+        "res.company",
+        "res.partner",
+        "account.fiscal.position",
+        "account.account",
+        "account.tax",
+    )
+    company_model = env["res.company"]
+    company_visible = bool(
+        company_model.search_count([("id", "=", company_id)], limit=1)
+    )
+    module_installed = all(
+        env.registry.get(model_name) is not None for model_name in required_models
+    )
+    access_allowed = bool(
+        company_visible
+        and module_installed
+        and all(env[model_name].has_access("read") for model_name in required_models)
+    )
+    empty = {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        "data": None,
+    }
+    if not access_allowed:
+        return empty
+
+    requested_partner_ids = {
+        payload["partner_id"],
+        *(
+            [payload["delivery_partner_id"]]
+            if payload["delivery_partner_id"] is not None
+            else []
+        ),
+    }
+    partner_records = env["res.partner"].search(
+        [
+            ("id", "in", sorted(requested_partner_ids)),
+            "|",
+            ("company_id", "=", False),
+            ("company_id", "=", company_id),
+        ]
+    )
+    partners = {record.id: record for record in partner_records}
+    if set(partners) != requested_partner_ids:
+        return empty
+
+    account = None
+    if payload["account_id"] is not None:
+        account = env["account.account"].search(
+            [
+                ("id", "=", payload["account_id"]),
+                ("company_ids", "in", [company_id]),
+            ],
+            limit=1,
+        )
+        if not account:
+            return empty
+
+    taxes = None
+    if tax_ids is not None:
+        visible_taxes = env["account.tax"].search(
+            [("id", "in", tax_ids), ("company_id", "=", company_id)]
+        )
+        if set(visible_taxes.ids) != set(tax_ids):
+            return empty
+        taxes = env["account.tax"].browse(tax_ids)
+
+    fiscal_position_model = env["account.fiscal.position"].with_company(company_id)
+    partner = partners[payload["partner_id"]]
+    delivery = (
+        partners[payload["delivery_partner_id"]]
+        if payload["delivery_partner_id"] is not None
+        else None
+    )
+    fiscal_position = fiscal_position_model._get_fiscal_position(
+        partner, delivery=delivery
+    )
+    mapped_account = (
+        fiscal_position.map_account(account) if fiscal_position and account else account
+    )
+    mapped_taxes = (
+        fiscal_position.map_tax(taxes)
+        if fiscal_position and taxes is not None
+        else taxes
+    )
+    data = {
+        "company_id": company_id,
+        "partner_id": payload["partner_id"],
+        "delivery_partner_id": payload["delivery_partner_id"],
+        "fiscal_position": (
+            {"id": fiscal_position.id, "name": fiscal_position.name}
+            if fiscal_position
+            else None
+        ),
+        "account_mapping": (
+            {
+                "source_id": payload["account_id"],
+                "mapped_id": mapped_account.id,
+            }
+            if account is not None
+            else None
+        ),
+        "tax_mapping": (
+            {
+                "source_ids": list(tax_ids),
+                "mapped_ids": (
+                    list(mapped_taxes.ids) if fiscal_position else list(tax_ids)
+                ),
+            }
+            if taxes is not None
+            else None
+        ),
+    }
+    return {**empty, "data": data}
+
+
+def _dispatch_journal_integrity(
+    env: Any, payload: dict[str, Any], company_id: int
+) -> dict[str, Any]:
+    _require_keys(payload, {"company_id"})
+    if payload["company_id"] != company_id:
+        raise RuntimeFailure(
+            "company_unavailable", "The company is unavailable.", exit_code=3
+        )
+    required_models = ("res.company", "account.journal", "account.move")
+    company_model = env["res.company"]
+    company_visible = bool(
+        company_model.search_count([("id", "=", company_id)], limit=1)
+    )
+    module_installed = all(
+        env.registry.get(model_name) is not None for model_name in required_models
+    )
+    access_allowed = bool(
+        company_visible
+        and module_installed
+        and env.user.has_group("account.group_account_user")
+        and all(env[model_name].has_access("read") for model_name in required_models)
+    )
+    page = {
+        "user_id": env.uid,
+        "company_visible": company_visible,
+        "module_installed": module_installed,
+        "access_allowed": access_allowed,
+        "data": None,
+    }
+    if not access_allowed:
+        return page
+    raw = company_model.browse(company_id)._check_hash_integrity()
+    if (
+        not isinstance(raw, dict)
+        or set(raw) != {"printing_date", "results"}
+        or not isinstance(raw["printing_date"], str)
+        or not raw["printing_date"].strip()
+        or not isinstance(raw["results"], list)
+        or any(not isinstance(result, dict) for result in raw["results"])
+    ):
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    return {
+        **page,
+        "data": {
+            "company_id": company_id,
+            "printing_date": raw["printing_date"],
+            "results": [dict(result) for result in raw["results"]],
+        },
+    }
+
+
 def _dispatch(
     env: Any,
     action: str,
@@ -4731,6 +6610,164 @@ def _dispatch(
     company_id: int,
     available_company_ids: tuple[int, ...] | None = None,
 ):
+    if action == _FINANCIAL_REPORT_EXPORT_ACTION:
+        from odoo_accounting_cli_v4.bridge.financial_report_exports_runtime import (
+            dispatch as dispatch_financial_report_export,
+        )
+
+        return dispatch_financial_report_export(
+            env,
+            payload,
+            company_id,
+            failure_type=RuntimeFailure,
+        )
+    if action == _INVENTORY_MASTER_ACTION:
+        from odoo_accounting_cli_v4.bridge.inventory_master_runtime import (
+            dispatch as dispatch_inventory_master,
+        )
+
+        return dispatch_inventory_master(
+            env,
+            payload,
+            company_id,
+            failure_type=RuntimeFailure,
+        )
+    if action == _INVENTORY_OPERATIONS_ACTION:
+        from odoo_accounting_cli_v4.bridge.inventory_operations_runtime import (
+            dispatch as dispatch_inventory_operations,
+        )
+
+        return dispatch_inventory_operations(
+            env,
+            payload,
+            company_id,
+            failure_type=RuntimeFailure,
+        )
+    if action == _ORDER_DOCUMENTS_ACTION:
+        from odoo_accounting_cli_v4.bridge.order_documents_runtime import (
+            dispatch as dispatch_order_documents,
+        )
+
+        return dispatch_order_documents(
+            env,
+            payload,
+            company_id,
+            failure_type=RuntimeFailure,
+        )
+    if action == _ACCOUNT_RETURN_ACTION:
+        from odoo_accounting_cli_v4.bridge.account_returns_runtime import (
+            dispatch as dispatch_account_returns,
+        )
+
+        return dispatch_account_returns(
+            env,
+            payload,
+            company_id,
+            failure_type=RuntimeFailure,
+        )
+    if action == _JOURNAL_ANALYSIS_ACTION:
+        from odoo_accounting_cli_v4.bridge.journal_analysis_runtime import (
+            dispatch as dispatch_journal_analysis,
+        )
+
+        return dispatch_journal_analysis(
+            env,
+            payload,
+            company_id,
+            failure_type=RuntimeFailure,
+        )
+    if action == _INVOICE_ANALYSIS_ACTION:
+        from odoo_accounting_cli_v4.bridge.invoice_analysis_runtime import (
+            dispatch as dispatch_invoice_analysis,
+        )
+
+        return dispatch_invoice_analysis(
+            env,
+            payload,
+            company_id,
+            failure_type=RuntimeFailure,
+        )
+    if action == _PERIOD_CONTEXT_ACTION:
+        from odoo_accounting_cli_v4.bridge.period_context_runtime import (
+            dispatch as dispatch_period_context,
+        )
+
+        return dispatch_period_context(
+            env,
+            payload,
+            company_id,
+            failure_type=RuntimeFailure,
+        )
+    if action == _CORE_OBJECT_READ_ACTION:
+        from odoo_accounting_cli_v4.bridge.core_object_reads_runtime import (
+            dispatch as dispatch_core_object_read,
+        )
+
+        return dispatch_core_object_read(
+            env,
+            payload,
+            company_id,
+            failure_type=RuntimeFailure,
+        )
+    if action == _LOCALIZATION_CONFIGURATION_ACTION:
+        from odoo_accounting_cli_v4.bridge.localization_configuration_runtime import (
+            dispatch as dispatch_localization_configuration,
+        )
+
+        return dispatch_localization_configuration(
+            env,
+            payload,
+            company_id,
+            failure_type=RuntimeFailure,
+        )
+    if action == _ASSET_READ_ACTION:
+        from odoo_accounting_cli_v4.bridge.assets_runtime import (
+            dispatch as dispatch_assets,
+        )
+
+        return dispatch_assets(
+            env,
+            payload,
+            company_id,
+            failure_type=RuntimeFailure,
+        )
+    if action == _BUDGET_REPORT_ACTION:
+        from odoo_accounting_cli_v4.bridge.budget_report_runtime import (
+            dispatch as dispatch_budget_report,
+        )
+
+        return dispatch_budget_report(
+            env,
+            payload,
+            company_id,
+            failure_type=RuntimeFailure,
+        )
+    if action == _INVENTORY_ACCOUNTING_ACTION:
+        from odoo_accounting_cli_v4.bridge.inventory_accounting_runtime import (
+            dispatch as dispatch_inventory_accounting,
+        )
+
+        return dispatch_inventory_accounting(
+            env,
+            payload,
+            company_id,
+            failure_type=RuntimeFailure,
+        )
+    if action == _CORE_WRITE_ACTION:
+        from odoo_accounting_cli_v4.bridge.core_writes_runtime import (
+            dispatch as dispatch_core_write,
+        )
+
+        return dispatch_core_write(
+            env,
+            payload,
+            company_id,
+            failure_type=RuntimeFailure,
+        )
+    if action == "account.fiscal.position.resolve":
+        return _dispatch_fiscal_position_resolve(env, payload, company_id)
+    if action == "res.company.journal_integrity.inspect":
+        return _dispatch_journal_integrity(env, payload, company_id)
     if action == "res.company.accounting_configuration.inspect":
         return _dispatch_company_accounting_configuration(env, payload, company_id)
     if action == "accounting.environment.diagnostic.inspect":
@@ -4804,9 +6841,7 @@ def _dispatch(
             ],
         }
     if action == "account.account.read_page":
-        _require_keys(
-            payload, {"company_id", "after_code", "after_id", "limit"}
-        )
+        _require_keys(payload, {"company_id", "after_code", "after_id", "limit"})
         if payload["company_id"] != company_id:
             raise RuntimeFailure(
                 "company_unavailable", "The company is unavailable.", exit_code=3
@@ -4871,7 +6906,9 @@ def _dispatch(
         rows = (
             env["account.account"]
             .with_context(active_test=False, allowed_company_ids=[company_id])
-            .search_read(domain, fields=list(_ACCOUNT_FIELDS), limit=limit, order="code,id")
+            .search_read(
+                domain, fields=list(_ACCOUNT_FIELDS), limit=limit, order="code,id"
+            )
         )
         return {
             "user_id": env.uid,
@@ -4882,6 +6919,10 @@ def _dispatch(
         }
     if action in _MASTER_DATA_ACTIONS:
         return _dispatch_master_data(env, action, payload, company_id)
+    if action == _CURRENCY_RATE_ACTION:
+        return _dispatch_currency_rates(env, payload, company_id)
+    if action == _CURRENCY_CONVERT_ACTION:
+        return _dispatch_currency_convert(env, payload, company_id)
     if action == "res.company.accounting_context.read_page":
         if available_company_ids is None:
             raise RuntimeFailure(
@@ -4911,9 +6952,7 @@ def _dispatch(
                 "The bridge action payload is invalid.",
                 exit_code=7,
             )
-        return _dispatch_payment_get(
-            env, payload, company_id, available_company_ids
-        )
+        return _dispatch_payment_get(env, payload, company_id, available_company_ids)
     if action in _OPEN_ITEM_ACTION_SIDES:
         return _dispatch_open_item_search(env, action, payload, company_id)
     if action == "account.move.line.reconciliation_candidate.read_page":
@@ -4927,6 +6966,22 @@ def _dispatch(
             company_id,
             failure_type=RuntimeFailure,
         )
+    if action == _BANK_TRANSACTION_ACTION:
+        return _dispatch_bank_transaction_search(env, payload, company_id)
+    if action in _BANK_RECONCILIATION_ACTIONS:
+        from odoo_accounting_cli_v4.bridge.bank_reconciliation_runtime import (
+            dispatch as dispatch_bank_reconciliation,
+        )
+
+        return dispatch_bank_reconciliation(
+            env,
+            action,
+            payload,
+            company_id,
+            failure_type=RuntimeFailure,
+        )
+    if action == _PRODUCT_ACCOUNTING_PROFILE_ACTION:
+        return _dispatch_product_accounting_profile(env, payload, company_id)
     if action == "res.partner.accounting.search_page":
         return _dispatch_partner_accounting_search(env, payload, company_id)
     if action in _FINANCIAL_REPORT_ACTIONS:
@@ -4937,8 +6992,10 @@ def _dispatch(
 
 
 def _ensure_language_is_active(root_env: Any, language: str) -> None:
-    active = root_env["res.lang"].with_context(active_test=False).search_count(
-        [("code", "=", language), ("active", "=", True)], limit=1
+    active = (
+        root_env["res.lang"]
+        .with_context(active_test=False)
+        .search_count([("code", "=", language), ("active", "=", True)], limit=1)
     )
     if not active:
         raise RuntimeFailure(
@@ -4961,6 +7018,25 @@ def _effective_company_ids(users: Any, target: Any) -> tuple[int, ...]:
     )
 
 
+def _cursor_factory_for(action: str, payload: dict[str, Any]):
+    if action == _CORE_WRITE_ACTION:
+        return _write_cursor
+    if action == _INVENTORY_ACCOUNTING_ACTION:
+        from odoo_accounting_cli_v4.bridge.inventory_accounting_runtime import (
+            requires_rollback_only,
+        )
+
+        return (
+            _rollback_only_cursor
+            if requires_rollback_only(payload)
+            else _read_only_cursor
+        )
+    report_spec = _FINANCIAL_REPORT_ACTIONS.get(action)
+    if report_spec is not None and report_spec.get("allow_temp_tables") is True:
+        return _rollback_only_cursor
+    return _read_only_cursor
+
+
 def execute(request: dict[str, Any], *, config_path: Path, odoo_config: Path):
     target = _validated_target(request, config_path)
     try:
@@ -4972,16 +7048,22 @@ def execute(request: dict[str, Any], *, config_path: Path, odoo_config: Path):
             ["--config", str(odoo_config), "--database", target.database, "--no-http"]
         )
         registry = Registry(target.database)
-        with _read_only_cursor(registry) as cursor:
+        action = request["action"]
+        cursor_factory = _cursor_factory_for(action, request["payload"])
+        with cursor_factory(registry) as cursor:
             root_env = api.Environment(cursor, SUPERUSER_ID, {})
             request_target = request["target"]
             _ensure_language_is_active(root_env, request_target["language"])
-            users = root_env["res.users"].with_context(active_test=False).search(
-                [("login", "=", target.user_login)], limit=2
+            users = (
+                root_env["res.users"]
+                .with_context(active_test=False)
+                .search([("login", "=", target.user_login)], limit=2)
             )
             if len(users) != 1 or not users.active:
                 raise RuntimeFailure(
-                    "user_unavailable", "The configured user is unavailable.", exit_code=3
+                    "user_unavailable",
+                    "The configured user is unavailable.",
+                    exit_code=3,
                 )
             effective_company_ids = _effective_company_ids(users, target)
             if request["action"] == "res.company.accounting_context.read_page":
@@ -5006,7 +7088,7 @@ def execute(request: dict[str, Any], *, config_path: Path, odoo_config: Path):
             env = api.Environment(cursor, users.id, context)
             return _dispatch(
                 env,
-                request["action"],
+                action,
                 request["payload"],
                 target.company_id,
                 effective_company_ids,
@@ -5061,7 +7143,9 @@ def main(argv: list[str] | None = None) -> int:
             },
         )
         sys.stdout.write(
-            json.dumps(result, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            json.dumps(
+                result, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            )
             + "\n"
         )
         return 7
@@ -5085,5 +7169,8 @@ def main(argv: list[str] | None = None) -> int:
             },
         )
         exit_code = exc.exit_code
-    sys.stdout.write(json.dumps(result, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n")
+    sys.stdout.write(
+        json.dumps(result, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        + "\n"
+    )
     return exit_code

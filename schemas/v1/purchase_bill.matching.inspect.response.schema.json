@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/purchase_bill.matching.inspect.response.schema.json",
+  "title": "purchase_bill.matching.inspect response",
+  "type": "object",
+  "allOf": [
+    {"$ref": "response.schema.json"},
+    {
+      "properties": {
+        "capability": {"const": "purchase_bill.matching.inspect"},
+        "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+          "then": {
+            "properties": {
+              "request_id": {"type": "string", "format": "uuid"},
+              "status": {"const": "verified"},
+              "data": {"$ref": "#/$defs/data"},
+              "error": {"type": "null"}
+            }
+          },
+          "else": {
+            "properties": {
+              "data": {"type": "null"},
+              "error": {"$ref": "response.schema.json#/$defs/error"}
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "decimal": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
+    },
+    "nullableText": {
+      "oneOf": [{"type": "null"}, {"type": "string", "minLength": 1}]
+    },
+    "namedRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1}
+      }
+    },
+    "currency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1, "maxLength": 3}
+      }
+    },
+    "purchaseLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "order_id",
+        "ordered_quantity",
+        "received_quantity",
+        "invoiced_quantity",
+        "to_invoice_quantity"
+      ],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "order_id": {"type": "integer", "minimum": 1},
+        "ordered_quantity": {"$ref": "#/$defs/decimal"},
+        "received_quantity": {"$ref": "#/$defs/decimal"},
+        "invoiced_quantity": {"$ref": "#/$defs/decimal"},
+        "to_invoice_quantity": {"$ref": "#/$defs/decimal"}
+      }
+    },
+    "line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "product", "label", "quantity", "price_subtotal", "purchase_line", "unmatched_queue"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "product": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/namedRef"}]},
+        "label": {"$ref": "#/$defs/nullableText"},
+        "quantity": {"$ref": "#/$defs/decimal"},
+        "price_subtotal": {"$ref": "#/$defs/decimal"},
+        "purchase_line": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/purchaseLine"}]},
+        "unmatched_queue": {"type": "boolean"}
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "move_type",
+        "state",
+        "company_id",
+        "partner",
+        "currency",
+        "is_purchase_matched",
+        "purchase_order_ids",
+        "lines"
+      ],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"$ref": "#/$defs/nullableText"},
+        "move_type": {"enum": ["in_invoice", "in_refund"]},
+        "state": {"enum": ["draft", "posted", "cancel"]},
+        "company_id": {"type": "integer", "minimum": 1},
+        "partner": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/namedRef"}]},
+        "currency": {"$ref": "#/$defs/currency"},
+        "is_purchase_matched": {"type": "boolean"},
+        "purchase_order_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 1}
+        },
+        "lines": {"type": "array", "items": {"$ref": "#/$defs/line"}}
+      }
+    }
+  }
+}

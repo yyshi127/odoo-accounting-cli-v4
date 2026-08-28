@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/deferred_revenue.generate_entries.request.schema.json",
+  "title": "deferred_revenue.generate_entries request",
+  "type": "object",
+  "allOf": [
+    {"$ref": "request.schema.json"},
+    {
+      "properties": {
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["date_to"],
+          "properties": {
+            "date_to": {"type": "string", "format": "date"}
+          }
+        }
+      }
+    }
+  ]
+}

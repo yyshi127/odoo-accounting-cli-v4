@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/partner.bank_account.search.response.schema.json",
+  "title": "partner.bank_account.search response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "partner.bank_account.search"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{
+    "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+    "then": {"properties": {
+      "request_id": {"type": "string", "format": "uuid"},
+      "status": {"const": "verified"},
+      "data": {"$ref": "#/$defs/data"},
+      "error": {"type": "null"}
+    }},
+    "else": {"properties": {"data": {"type": "null"}, "error": {"$ref": "response.schema.json#/$defs/error"}}}
+  }],
+  "$defs": {
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items", "has_more", "next_cursor"],
+      "properties": {
+        "items": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/item"}},
+        "has_more": {"type": "boolean"},
+        "next_cursor": {"type": ["string", "null"], "minLength": 1, "maxLength": 4096}
+      },
+      "allOf": [{
+        "if": {"properties": {"has_more": {"const": true}}, "required": ["has_more"]},
+        "then": {"properties": {"items": {"type": "array", "minItems": 1}, "next_cursor": {"type": "string"}}},
+        "else": {"properties": {"next_cursor": {"type": "null"}}}
+      }]
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "acc_number", "account_holder_name", "account_type", "active", "sequence", "account_holder", "allow_out_payment", "bank", "currency", "company_id", "linked_journal"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "acc_number": {"type": "string", "minLength": 1},
+        "account_holder_name": {"type": ["string", "null"]},
+        "account_type": {"type": "string", "minLength": 1},
+        "active": {"type": "boolean"},
+        "sequence": {"type": "integer"},
+        "account_holder": {"$ref": "#/$defs/named"},
+        "allow_out_payment": {"type": "boolean"},
+        "bank": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/bank"}]},
+        "currency": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/currency"}]},
+        "company_id": {"type": ["integer", "null"], "minimum": 1},
+        "linked_journal": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/coded"}]}
+      }
+    },
+    "named": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1}
+      }
+    },
+    "bank": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "bic"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1},
+        "bic": {"type": ["string", "null"]}
+      }
+    },
+    "currency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1, "maxLength": 3}
+      }
+    },
+    "coded": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

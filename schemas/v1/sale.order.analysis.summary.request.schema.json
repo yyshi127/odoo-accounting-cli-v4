@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/sale.order.analysis.summary.request.schema.json",
+  "title": "sale.order.analysis.summary request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": "string", "format": "uuid", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"},
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {"$ref": "#/$defs/parameters"}
+  },
+  "$defs": {
+    "nullableId": {"type": ["integer", "null"], "minimum": 1},
+    "nullableStates": {"oneOf": [{"type": "null"}, {"type": "array", "minItems": 1, "maxItems": 4, "uniqueItems": true, "items": {"enum": ["draft", "sent", "sale", "cancel"]}}]},
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["date_from", "date_to", "group_by"],
+      "properties": {
+        "date_from": {"type": "string", "format": "date"},
+        "date_to": {"type": "string", "format": "date"},
+        "group_by": {"enum": ["state", "invoice_status", "partner", "salesperson", "currency"]},
+        "states": {"$ref": "#/$defs/nullableStates"},
+        "partner_id": {"$ref": "#/$defs/nullableId"},
+        "currency_id": {"$ref": "#/$defs/nullableId"}
+      }
+    }
+  }
+}

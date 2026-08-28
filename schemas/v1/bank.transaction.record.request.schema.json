@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/bank.transaction.record.request.schema.json",
+  "title": "bank.transaction.record request",
+  "type": "object",
+  "allOf": [
+    {"$ref": "request.schema.json"},
+    {
+      "properties": {
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "journal_id", "date", "amount", "payment_ref", "partner_id"
+          ],
+          "properties": {
+            "journal_id": {"type": "integer", "minimum": 1},
+            "date": {"type": "string", "format": "date"},
+            "amount": {
+              "type": "string",
+              "maxLength": 256,
+              "pattern": "^-?(?:(?:[1-9][0-9]*)(?:\\.[0-9]+)?|0\\.(?=[0-9]*[1-9])[0-9]+)$(?![\\s\\S])"
+            },
+            "payment_ref": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"
+            },
+            "partner_id": {
+              "oneOf": [
+                {"type": "null"},
+                {"type": "integer", "minimum": 1}
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

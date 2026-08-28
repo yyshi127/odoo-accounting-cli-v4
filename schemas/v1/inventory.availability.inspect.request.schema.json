@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/inventory.availability.inspect.request.schema.json",
+  "title": "inventory.availability.inspect request",
+  "type": "object",
+  "allOf": [
+    {"$ref": "request.schema.json"},
+    {"properties": {"parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product_id"],
+      "properties": {
+        "product_id": {"type": "integer", "minimum": 1},
+        "warehouse_id": {"type": ["integer", "null"], "minimum": 1, "default": null},
+        "location_id": {"type": ["integer", "null"], "minimum": 1, "default": null}
+      },
+      "not": {"required": ["warehouse_id", "location_id"], "properties": {"warehouse_id": {"type": "integer"}, "location_id": {"type": "integer"}}}
+    }}}
+  ]
+}

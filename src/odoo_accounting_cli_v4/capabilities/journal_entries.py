@@ -11,14 +11,17 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 
-
 SEARCH_CAPABILITY_ID = "journal_entry.search"
 GET_CAPABILITY_ID = "journal_entry.get"
+CHECK_CAPABILITY_ID = "validation.journal_entry.check"
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 1000
 _CURSOR_VERSION = 1
 _DECIMAL_PATTERN = re.compile(r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 _STATE_ORDER = ("draft", "posted", "cancel")
+_NON_ACCOUNTABLE_DISPLAY_TYPES = frozenset(
+    {"line_section", "line_subsection", "line_note"}
+)
 _DISPLAY_TYPES = frozenset(
     {
         "product",
@@ -115,7 +118,7 @@ def _canonical_json(value: Any) -> str:
 
 
 class JournalEntryPort(Protocol):
-    """Narrow bridge port for the two fixed journal-entry reads."""
+    """Narrow bridge port for fixed journal-entry reads and preflight checks."""
 
     @property
     def user_id(self) -> int: ...
@@ -130,6 +133,8 @@ class JournalEntryPort(Protocol):
     ) -> dict[str, Any]: ...
 
     def get_entry(self, *, company_id: int, entry_id: int) -> dict[str, Any]: ...
+
+    def check_entry(self, *, company_id: int, entry_id: int) -> dict[str, Any]: ...
 
 
 class JournalEntryError(RuntimeError):
@@ -312,6 +317,14 @@ def validate_journal_entry_get_request(
     if set(parameters) != {"entry_id"} or not _valid_id(parameters["entry_id"]):
         raise _invalid("parameters must contain one positive integer entry_id.")
     return request_id, context, parameters["entry_id"]
+
+
+def validate_journal_entry_check_request(
+    request: Any,
+) -> tuple[str, dict[str, Any], int]:
+    """Validate the closed journal-entry readiness request."""
+
+    return validate_journal_entry_get_request(request)
 
 
 def _encode_cursor(
@@ -576,11 +589,10 @@ def _validate_entry(row: Any, *, company_id: int, entry_id: int) -> dict[str, An
     line_ids: set[int] = set()
     for line in row["lines"]:
         display_type = line.get("display_type") if isinstance(line, dict) else None
-        non_accountable = isinstance(display_type, str) and display_type in {
-            "line_section",
-            "line_subsection",
-            "line_note",
-        }
+        non_accountable = (
+            isinstance(display_type, str)
+            and display_type in _NON_ACCOUNTABLE_DISPLAY_TYPES
+        )
         if (
             not isinstance(line, dict)
             or set(line) != _LINE_FIELDS
@@ -630,3 +642,55 @@ def get_journal_entry(
             exit_code=4,
         )
     return _validate_entry(entry, company_id=context["company_id"], entry_id=entry_id)
+
+
+def check_journal_entry(
+    port: JournalEntryPort, request: dict[str, Any]
+) -> dict[str, Any]:
+    """Check whether one company-scoped general journal entry is ready to post."""
+
+    _, context, entry_id = validate_journal_entry_check_request(request)
+    page = port.check_entry(company_id=context["company_id"], entry_id=entry_id)
+    entry = _validate_page(port, page, payload_key="entry")
+    if entry is None:
+        raise JournalEntryError(
+            "record_not_found",
+            "The requested general journal entry was not found.",
+            exit_code=4,
+        )
+    verified = _validate_entry(
+        entry, company_id=context["company_id"], entry_id=entry_id
+    )
+    accountable_lines = [
+        line
+        for line in verified["lines"]
+        if line["display_type"] not in _NON_ACCOUNTABLE_DISPLAY_TYPES
+    ]
+    line_items_valid = len(accountable_lines) >= 2 and all(
+        not (
+            Decimal(line["debit"]) != Decimal(0)
+            and Decimal(line["credit"]) != Decimal(0)
+        )
+        for line in accountable_lines
+    )
+    totals = verified["totals"]
+    debits_equal_credits = (
+        Decimal(totals["debit"]) == Decimal(totals["credit"])
+        and Decimal(totals["balance"]) == Decimal(0)
+    )
+    state_is_draft = verified["state"] == "draft"
+    return {
+        "entry_id": verified["id"],
+        "company_id": verified["company_id"],
+        "state": verified["state"],
+        "ready": state_is_draft and debits_equal_credits and line_items_valid,
+        "checks": {
+            "company_matches": True,
+            "state_is_draft": state_is_draft,
+            "debits_equal_credits": debits_equal_credits,
+            "line_items_valid": line_items_valid,
+        },
+        "line_count": len(verified["lines"]),
+        "accountable_line_count": len(accountable_lines),
+        "totals": dict(totals),
+    }

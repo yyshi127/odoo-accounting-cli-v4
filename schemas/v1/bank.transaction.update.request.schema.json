@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/bank.transaction.update.request.schema.json",
+  "title": "bank.transaction.update request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": "string", "format": "uuid", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"},
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transaction_id", "changes"],
+      "properties": {
+        "transaction_id": {"type": "integer", "minimum": 1},
+        "changes": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "date": {"type": "string", "format": "date"},
+            "amount": {"type": "string", "maxLength": 256, "pattern": "^-?(?:(?:[1-9][0-9]*)(?:\\.[0-9]+)?|0\\.(?=[0-9]*[1-9])[0-9]+)$(?![\\s\\S])"},
+            "payment_ref": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"},
+            "partner_id": {"type": ["integer", "null"], "minimum": 1}
+          }
+        }
+      }
+    }
+  }
+}

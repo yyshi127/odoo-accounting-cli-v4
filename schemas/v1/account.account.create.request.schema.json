@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/account.account.create.request.schema.json",
+  "title": "account.account.create request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": "string", "format": "uuid", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"},
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "name", "account_type"],
+      "properties": {
+        "code": {"$ref": "#/$defs/code"},
+        "name": {"$ref": "#/$defs/name"},
+        "account_type": {"$ref": "#/$defs/accountType"},
+        "reconcile": {"type": "boolean"},
+        "currency_id": {"type": ["integer", "null"], "minimum": 1}
+      }
+    }
+  },
+  "$defs": {
+    "code": {"type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9.]+$"},
+    "name": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"},
+    "accountType": {"enum": ["asset_receivable", "asset_cash", "asset_current", "asset_non_current", "asset_prepayments", "asset_fixed", "liability_payable", "liability_credit_card", "liability_current", "liability_non_current", "equity", "equity_unaffected", "income", "income_other", "expense", "expense_other", "expense_depreciation", "expense_direct_cost", "off_balance"]}
+  }
+}

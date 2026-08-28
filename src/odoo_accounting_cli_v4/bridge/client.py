@@ -6,8 +6,8 @@ import json
 import subprocess
 from typing import Any, Protocol
 
-
-_MAX_RESPONSE_CHARS = 4 * 1024 * 1024
+# A 64 MiB fixed report export expands to just under 86 MiB of Base64 JSON.
+_MAX_RESPONSE_CHARS = 96 * 1024 * 1024
 
 
 class BridgeTarget(Protocol):
@@ -71,6 +71,7 @@ class OdooBridgeClient:
                 text=True,
                 timeout=self._target.timeout_seconds,
                 shell=False,
+                check=False,
             )
         except subprocess.TimeoutExpired as exc:
             raise BridgeError(

@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/diagnostic.journal_integrity.inspect.response.schema.json",
+  "title": "diagnostic.journal_integrity.inspect response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "diagnostic.journal_integrity.inspect"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{
+    "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+    "then": {
+      "properties": {
+        "request_id": {"type": "string", "format": "uuid"},
+        "status": {"const": "verified"},
+        "data": {"$ref": "#/$defs/data"},
+        "error": {"type": "null"}
+      }
+    },
+    "else": {
+      "properties": {
+        "data": {"type": "null"},
+        "error": {"$ref": "response.schema.json#/$defs/error"}
+      }
+    }
+  }],
+  "$defs": {
+    "restricted_flag": {"enum": ["V", "X"]},
+    "basic_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["journal_name", "restricted_by_hash_table", "status", "msg_cover"],
+      "properties": {
+        "journal_name": {"type": "string", "minLength": 1},
+        "restricted_by_hash_table": {"$ref": "#/$defs/restricted_flag"},
+        "status": {"enum": ["no_data", "corrupted"]},
+        "msg_cover": {"type": "string", "minLength": 1}
+      }
+    },
+    "verified_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["journal_name", "restricted_by_hash_table", "status", "msg_cover", "first_move_name", "first_hash", "first_move_date", "last_move_name", "last_hash", "last_move_date"],
+      "properties": {
+        "journal_name": {"type": "string", "minLength": 1},
+        "restricted_by_hash_table": {"$ref": "#/$defs/restricted_flag"},
+        "status": {"const": "verified"},
+        "msg_cover": {"type": "string", "minLength": 1},
+        "first_move_name": {"type": "string", "minLength": 1},
+        "first_hash": {"type": "string", "minLength": 1},
+        "first_move_date": {"type": "string", "minLength": 1},
+        "last_move_name": {"type": "string", "minLength": 1},
+        "last_hash": {"type": "string", "minLength": 1},
+        "last_move_date": {"type": "string", "minLength": 1}
+      }
+    },
+    "result": {
+      "oneOf": [
+        {"$ref": "#/$defs/basic_result"},
+        {"$ref": "#/$defs/verified_result"}
+      ]
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["company_id", "printing_date", "results"],
+      "properties": {
+        "company_id": {"type": "integer", "minimum": 1},
+        "printing_date": {"type": "string", "minLength": 1},
+        "results": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/result"}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/localization.china.configuration.inspect.response.schema.json",
+  "title": "localization.china.configuration.inspect response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "localization.china.configuration.inspect"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+      "then": {
+        "properties": {
+          "request_id": {"type": "string", "format": "uuid"},
+          "status": {"const": "verified"},
+          "data": {"$ref": "#/$defs/data"},
+          "error": {"type": "null"}
+        }
+      },
+      "else": {
+        "properties": {
+          "data": {"type": "null"},
+          "error": {"$ref": "response.schema.json#/$defs/error"}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "tax": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "rate", "type_tax_use"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1},
+        "rate": {"type": "string", "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"},
+        "type_tax_use": {"enum": ["sale", "purchase"]}
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "company_id", "fiscal_country_code", "chart_template", "modules",
+        "account_count", "default_sale_tax", "default_purchase_tax",
+        "fapiao_field_ready", "voucher_report_ready", "configured", "missing"
+      ],
+      "properties": {
+        "company_id": {"type": "integer", "minimum": 1},
+        "fiscal_country_code": {"type": ["string", "null"], "pattern": "^[A-Z]{2}$"},
+        "chart_template": {"type": ["string", "null"], "minLength": 1},
+        "modules": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["l10n_cn", "l10n_cn_oscg"],
+          "properties": {
+            "l10n_cn": {"type": "boolean"},
+            "l10n_cn_oscg": {"type": "boolean"}
+          }
+        },
+        "account_count": {"type": "integer", "minimum": 0},
+        "default_sale_tax": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/tax"}]},
+        "default_purchase_tax": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/tax"}]},
+        "fapiao_field_ready": {"type": "boolean"},
+        "voucher_report_ready": {"type": "boolean"},
+        "configured": {"type": "boolean"},
+        "missing": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "fiscal_country", "chart_template", "l10n_cn", "l10n_cn_oscg",
+              "accounts", "default_sale_tax", "default_purchase_tax",
+              "fapiao_field", "voucher_report"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

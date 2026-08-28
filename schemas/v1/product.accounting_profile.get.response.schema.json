@@ -1,0 +1,206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/product.accounting_profile.get.response.schema.json",
+  "title": "product.accounting_profile.get response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "product.accounting_profile.get"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{
+    "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+    "then": {
+      "properties": {
+        "request_id": {"type": "string", "format": "uuid"},
+        "status": {"const": "verified"},
+        "data": {"$ref": "#/$defs/data"},
+        "error": {"type": "null"}
+      }
+    },
+    "else": {
+      "properties": {
+        "data": {"type": "null"},
+        "error": {"$ref": "response.schema.json#/$defs/error"}
+      }
+    }
+  }],
+  "$defs": {
+    "nullable_company_id": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "integer", "minimum": 1}
+      ]
+    },
+    "product": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "default_code", "active", "company_id", "template_id"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1},
+        "default_code": {"oneOf": [{"type": "null"}, {"type": "string", "minLength": 1}]},
+        "active": {"type": "boolean"},
+        "company_id": {"$ref": "#/$defs/nullable_company_id"},
+        "template_id": {"type": "integer", "minimum": 1}
+      }
+    },
+    "template": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "company_id", "category_id"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1},
+        "company_id": {"$ref": "#/$defs/nullable_company_id"},
+        "category_id": {"type": "integer", "minimum": 1}
+      }
+    },
+    "category": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "complete_name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1},
+        "complete_name": {"type": "string", "minLength": 1}
+      }
+    },
+    "modules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["account", "stock_account"],
+      "properties": {
+        "account": {"type": "boolean"},
+        "stock_account": {"type": "boolean"}
+      }
+    },
+    "account": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "code": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1}
+      }
+    },
+    "unavailable_reason": {
+      "enum": ["module_uninstalled", "field_unavailable"]
+    },
+    "account_slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available", "reason_code", "account"],
+      "properties": {
+        "available": {"type": "boolean"},
+        "reason_code": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/unavailable_reason"}]},
+        "account": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/account"}]}
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "available": {"const": true},
+            "reason_code": {"type": "null"},
+            "account": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/account"}]}
+          }
+        },
+        {
+          "properties": {
+            "available": {"const": false},
+            "reason_code": {"$ref": "#/$defs/unavailable_reason"},
+            "account": {"type": "null"}
+          }
+        }
+      ]
+    },
+    "accounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["income", "expense", "stock_valuation", "stock_input", "stock_output"],
+      "properties": {
+        "income": {"$ref": "#/$defs/account_slot"},
+        "expense": {"$ref": "#/$defs/account_slot"},
+        "stock_valuation": {"$ref": "#/$defs/account_slot"},
+        "stock_input": {"$ref": "#/$defs/account_slot"},
+        "stock_output": {"$ref": "#/$defs/account_slot"}
+      }
+    },
+    "valuation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available", "reason_code", "value"],
+      "properties": {
+        "available": {"type": "boolean"},
+        "reason_code": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/unavailable_reason"}]},
+        "value": {"oneOf": [{"type": "null"}, {"enum": ["periodic", "real_time"]}]}
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "available": {"const": true},
+            "reason_code": {"type": "null"},
+            "value": {"enum": ["periodic", "real_time"]}
+          }
+        },
+        {
+          "properties": {
+            "available": {"const": false},
+            "reason_code": {"$ref": "#/$defs/unavailable_reason"},
+            "value": {"type": "null"}
+          }
+        }
+      ]
+    },
+    "cost_method": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available", "reason_code", "value"],
+      "properties": {
+        "available": {"type": "boolean"},
+        "reason_code": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/unavailable_reason"}]},
+        "value": {"oneOf": [{"type": "null"}, {"enum": ["standard", "fifo", "average"]}]}
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "available": {"const": true},
+            "reason_code": {"type": "null"},
+            "value": {"enum": ["standard", "fifo", "average"]}
+          }
+        },
+        {
+          "properties": {
+            "available": {"const": false},
+            "reason_code": {"$ref": "#/$defs/unavailable_reason"},
+            "value": {"type": "null"}
+          }
+        }
+      ]
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["company_id", "product", "template", "category", "modules", "accounts", "valuation", "cost_method"],
+      "properties": {
+        "company_id": {"type": "integer", "minimum": 1},
+        "product": {"$ref": "#/$defs/product"},
+        "template": {"$ref": "#/$defs/template"},
+        "category": {"$ref": "#/$defs/category"},
+        "modules": {"$ref": "#/$defs/modules"},
+        "accounts": {"$ref": "#/$defs/accounts"},
+        "valuation": {"$ref": "#/$defs/valuation"},
+        "cost_method": {"$ref": "#/$defs/cost_method"}
+      }
+    }
+  }
+}

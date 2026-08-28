@@ -18,7 +18,6 @@ from odoo_accounting_cli_v4.capabilities.invoices import (
 )
 from odoo_accounting_cli_v4.registry import load_registry
 
-
 REQUEST_ID = "7bc39413-0d69-4092-9319-795d33f3167c"
 
 
@@ -212,6 +211,7 @@ def _status() -> dict:
                 "company_amount": "67.50",
                 "currency": _currency(),
                 "company_currency": _currency("SGD", 37),
+                "invoice_line_id": 302,
                 "counterpart_line_id": 402,
                 "counterpart_move": {
                     "id": 40,
@@ -243,6 +243,17 @@ def _status() -> dict:
                 "move_id": 40,
                 "is_reconciled": True,
                 "is_matched": True,
+            }
+        ],
+        "outstanding_items": [
+            {
+                "line_id": 602,
+                "move_id": 60,
+                "payment_id": 6,
+                "date": "2025-01-27",
+                "label": "BNK1/2025/0060",
+                "amount": "20.00",
+                "currency": _currency(),
             }
         ],
     }
@@ -611,6 +622,7 @@ def test_payment_status_verifies_accounting_reconciliations_and_payments() -> No
         lambda status: status["receivable_payable_lines"][0].update(extra=True),
         lambda status: status["receivable_payable_lines"][0]["account"].update(account_type="income"),
         lambda status: status["reconciliations"][0].update(company_amount=67.5),
+        lambda status: status["reconciliations"][0].update(invoice_line_id=999),
         lambda status: status["reconciliations"][0]["counterpart_move"].update(extra=True),
         lambda status: status["reconciliations"][0].update(payment_id=999),
         lambda status: status["reconciliations"][0].update(currency=_currency("EUR", 3)),
@@ -620,6 +632,11 @@ def test_payment_status_verifies_accounting_reconciliations_and_payments() -> No
         lambda status: status["payments"][0].update(move_id=999),
         lambda status: status["payments"][0].update(amount="Infinity"),
         lambda status: status["payments"][0]["payment_method"].update(extra=True),
+        lambda status: status["outstanding_items"][0].update(extra=True),
+        lambda status: status["outstanding_items"][0].update(amount="0"),
+        lambda status: status["outstanding_items"][0].update(
+            currency=_currency("EUR", 3)
+        ),
     ],
 )
 def test_invalid_payment_status_never_becomes_verified(mutation) -> None:
@@ -639,10 +656,24 @@ def test_payment_status_enforces_stable_orders_and_unique_records() -> None:
         inspect_invoice_payment_status(FakePort(payment_status=status), _status_request())
 
     status = _status()
+    duplicate_outstanding = copy.deepcopy(status["outstanding_items"][0])
+    status["outstanding_items"].append(duplicate_outstanding)
+    with pytest.raises(InvoiceError):
+        inspect_invoice_payment_status(FakePort(payment_status=status), _status_request())
+
+    status = _status()
     duplicate_payment = copy.deepcopy(status["payments"][0])
     status["payments"].append(duplicate_payment)
     with pytest.raises(InvoiceError):
         inspect_invoice_payment_status(FakePort(payment_status=status), _status_request())
+
+
+def test_payment_status_accepts_empty_outstanding_items() -> None:
+    status = _status()
+    status["outstanding_items"] = []
+    assert inspect_invoice_payment_status(
+        FakePort(payment_status=status), _status_request()
+    ) == status
 
 
 def test_payment_status_accepts_nullable_optional_ids_and_fields() -> None:

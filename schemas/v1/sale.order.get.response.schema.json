@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/sale.order.get.response.schema.json",
+  "title": "sale.order.get response",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"}, "request_id": {"type": ["string", "null"], "format": "uuid"}, "success": {"type": "boolean"}, "capability": {"const": "sale.order.get"}, "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]}, "warnings": {"type": "array", "items": {"type": "object"}}, "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]}, "odoo": {"$ref": "response.schema.json#/$defs/odoo"}, "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{"if": {"properties": {"success": {"const": true}}, "required": ["success"]}, "then": {"properties": {"request_id": {"type": "string", "format": "uuid"}, "status": {"const": "verified"}, "data": {"$ref": "#/$defs/data"}, "error": {"type": "null"}}}, "else": {"properties": {"data": {"type": "null"}, "error": {"$ref": "response.schema.json#/$defs/error"}}}}],
+  "$defs": {
+    "ref": {"type": "object", "additionalProperties": false, "required": ["id", "name"], "properties": {"id": {"type": "integer", "minimum": 1}, "name": {"type": "string", "minLength": 1}}},
+    "nullableRef": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/ref"}]},
+    "currency": {"type": "object", "additionalProperties": false, "required": ["id", "code"], "properties": {"id": {"type": "integer", "minimum": 1}, "code": {"type": "string", "minLength": 1, "maxLength": 3}}},
+    "decimal": {"type": "string", "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"},
+    "utcDateTime": {"type": "string", "format": "date-time", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"},
+    "nullableDate": {"oneOf": [{"type": "null"}, {"type": "string", "format": "date"}]},
+    "nullableText": {"type": ["string", "null"], "minLength": 1},
+    "idList": {"type": "array", "uniqueItems": true, "items": {"type": "integer", "minimum": 1}},
+    "line": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "order", "company", "partner", "state", "date_order", "sequence", "display_type", "description", "product", "uom", "ordered_quantity", "invoiced_quantity", "to_invoice_quantity", "unit_price", "discount_percent", "amount_untaxed", "amount_tax", "amount_total", "currency", "taxes", "invoice_line_ids", "stock_move_ids", "delivered_quantity", "to_deliver_quantity"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1}, "order": {"$ref": "#/$defs/ref"}, "company": {"$ref": "#/$defs/ref"}, "partner": {"$ref": "#/$defs/ref"}, "state": {"enum": ["draft", "sent", "sale", "cancel"]}, "date_order": {"$ref": "#/$defs/utcDateTime"}, "sequence": {"type": "integer", "minimum": 0}, "display_type": {"$ref": "#/$defs/nullableText"}, "description": {"type": "string", "minLength": 1}, "product": {"$ref": "#/$defs/nullableRef"}, "uom": {"$ref": "#/$defs/nullableRef"},
+        "ordered_quantity": {"$ref": "#/$defs/decimal"}, "invoiced_quantity": {"$ref": "#/$defs/decimal"}, "to_invoice_quantity": {"$ref": "#/$defs/decimal"}, "delivered_quantity": {"$ref": "#/$defs/decimal"}, "to_deliver_quantity": {"$ref": "#/$defs/decimal"}, "unit_price": {"$ref": "#/$defs/decimal"}, "discount_percent": {"$ref": "#/$defs/decimal"}, "amount_untaxed": {"$ref": "#/$defs/decimal"}, "amount_tax": {"$ref": "#/$defs/decimal"}, "amount_total": {"$ref": "#/$defs/decimal"}, "currency": {"$ref": "#/$defs/currency"}, "taxes": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/ref"}}, "invoice_line_ids": {"$ref": "#/$defs/idList"}, "stock_move_ids": {"$ref": "#/$defs/idList"}
+      }
+    },
+    "invoice": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "name", "move_type", "state", "payment_state", "amount_total", "currency"],
+      "properties": {"id": {"type": "integer", "minimum": 1}, "name": {"type": "string", "minLength": 1}, "move_type": {"enum": ["out_invoice", "out_refund", "out_receipt"]}, "state": {"enum": ["draft", "posted", "cancel"]}, "payment_state": {"type": ["string", "null"], "enum": ["not_paid", "in_payment", "paid", "partial", "reversed", "blocked", "invoicing_legacy", null]}, "amount_total": {"$ref": "#/$defs/decimal"}, "currency": {"$ref": "#/$defs/currency"}}
+    },
+    "transfer": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "name", "state", "source_location", "destination_location"],
+      "properties": {"id": {"type": "integer", "minimum": 1}, "name": {"type": "string", "minLength": 1}, "state": {"enum": ["draft", "waiting", "confirmed", "assigned", "done", "cancel"]}, "source_location": {"$ref": "#/$defs/ref"}, "destination_location": {"$ref": "#/$defs/ref"}}
+    },
+    "data": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "name", "company", "partner", "state", "date_order", "currency", "user", "invoice_status", "amount_untaxed", "amount_tax", "amount_total", "invoice_ids", "transfer_ids", "line_count", "validity_date", "client_order_ref", "team", "delivery_status", "lines", "invoices", "transfers"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1}, "name": {"type": "string", "minLength": 1}, "company": {"$ref": "#/$defs/ref"}, "partner": {"$ref": "#/$defs/ref"},
+        "state": {"enum": ["draft", "sent", "sale", "cancel"]}, "date_order": {"$ref": "#/$defs/utcDateTime"}, "currency": {"$ref": "#/$defs/currency"}, "user": {"$ref": "#/$defs/nullableRef"}, "invoice_status": {"enum": ["upselling", "invoiced", "to invoice", "no"]},
+        "amount_untaxed": {"$ref": "#/$defs/decimal"}, "amount_tax": {"$ref": "#/$defs/decimal"}, "amount_total": {"$ref": "#/$defs/decimal"},
+        "invoice_ids": {"$ref": "#/$defs/idList"}, "transfer_ids": {"$ref": "#/$defs/idList"}, "line_count": {"type": "integer", "minimum": 0},
+        "validity_date": {"$ref": "#/$defs/nullableDate"}, "client_order_ref": {"$ref": "#/$defs/nullableText"}, "team": {"$ref": "#/$defs/nullableRef"}, "delivery_status": {"type": ["string", "null"], "enum": ["pending", "started", "partial", "full", null]},
+        "lines": {"type": "array", "items": {"$ref": "#/$defs/line"}}, "invoices": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/invoice"}}, "transfers": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/transfer"}}
+      }
+    }
+  }
+}

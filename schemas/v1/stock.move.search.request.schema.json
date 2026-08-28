@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/stock.move.search.request.schema.json",
+  "title": "stock.move.search request",
+  "type": "object",
+  "allOf": [
+    {"$ref": "request.schema.json"},
+    {"properties": {"parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "transfer_id": {"type": ["integer", "null"], "minimum": 1, "default": null},
+        "product_id": {"type": ["integer", "null"], "minimum": 1, "default": null},
+        "state": {"oneOf": [{"type": "null"}, {"enum": ["draft", "waiting", "confirmed", "partially_available", "assigned", "done", "cancel"]}], "default": null},
+        "date_from": {"type": ["string", "null"], "format": "date", "default": null},
+        "date_to": {"type": ["string", "null"], "format": "date", "default": null},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 100},
+        "cursor": {"type": ["string", "null"], "minLength": 1, "maxLength": 4096, "default": null}
+      }
+    }}}
+  ]
+}

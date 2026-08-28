@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/journal_entry.lines.replace.request.schema.json",
+  "title": "journal_entry.lines.replace request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "context",
+    "parameters"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v1"
+    },
+    "request_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "context": {
+      "$ref": "request.schema.json#/$defs/context"
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "move_id",
+        "lines"
+      ],
+      "properties": {
+        "move_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "lines": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "account_id",
+              "partner_id",
+              "debit",
+              "credit"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"
+              },
+              "account_id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "partner_id": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
+              },
+              "debit": {
+                "$ref": "#/$defs/decimal"
+              },
+              "credit": {
+                "$ref": "#/$defs/decimal"
+              },
+              "currency_id": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
+              },
+              "amount_currency": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/nonzero_signed_decimal"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "analytic_distribution": {
+                "$ref": "invoice.lines.replace.request.schema.json#/$defs/analytic_distribution"
+              }
+            },
+            "dependentRequired": {
+              "currency_id": [
+                "amount_currency"
+              ],
+              "amount_currency": [
+                "currency_id"
+              ]
+            },
+            "allOf": [
+              {
+                "if": {
+                  "required": [
+                    "currency_id"
+                  ],
+                  "properties": {
+                    "currency_id": {
+                      "type": "null"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "amount_currency": {
+                      "type": "null"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "required": [
+                    "amount_currency"
+                  ],
+                  "properties": {
+                    "amount_currency": {
+                      "type": "null"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "currency_id": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "decimal": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
+    },
+    "nonzero_signed_decimal": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^-?(?:(?:[1-9][0-9]*)(?:\\.[0-9]+)?|0\\.(?=[0-9]*[1-9])[0-9]+)$(?![\\s\\S])"
+    }
+  }
+}

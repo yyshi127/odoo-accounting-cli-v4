@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/fiscal_position.resolve.response.schema.json",
+  "title": "fiscal_position.resolve response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "fiscal_position.resolve"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{
+    "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+    "then": {
+      "properties": {
+        "request_id": {"type": "string", "format": "uuid"},
+        "status": {"const": "verified"},
+        "data": {"$ref": "#/$defs/data"},
+        "error": {"type": "null"}
+      }
+    },
+    "else": {
+      "properties": {
+        "data": {"type": "null"},
+        "error": {"$ref": "response.schema.json#/$defs/error"}
+      }
+    }
+  }],
+  "$defs": {
+    "fiscal_position": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1}
+      }
+    },
+    "account_mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "mapped_id"],
+      "properties": {
+        "source_id": {"type": "integer", "minimum": 1},
+        "mapped_id": {"type": "integer", "minimum": 1}
+      }
+    },
+    "tax_mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_ids", "mapped_ids"],
+      "properties": {
+        "source_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 1}
+        },
+        "mapped_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 1}
+        }
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["company_id", "partner_id", "delivery_partner_id", "fiscal_position", "account_mapping", "tax_mapping"],
+      "properties": {
+        "company_id": {"type": "integer", "minimum": 1},
+        "partner_id": {"type": "integer", "minimum": 1},
+        "delivery_partner_id": {
+          "oneOf": [{"type": "null"}, {"type": "integer", "minimum": 1}]
+        },
+        "fiscal_position": {
+          "oneOf": [{"type": "null"}, {"$ref": "#/$defs/fiscal_position"}]
+        },
+        "account_mapping": {
+          "oneOf": [{"type": "null"}, {"$ref": "#/$defs/account_mapping"}]
+        },
+        "tax_mapping": {
+          "oneOf": [{"type": "null"}, {"$ref": "#/$defs/tax_mapping"}]
+        }
+      }
+    }
+  }
+}

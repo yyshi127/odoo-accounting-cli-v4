@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/purchase.order.line.search.response.schema.json",
+  "title": "purchase.order.line.search response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"}, "request_id": {"type": ["string", "null"], "format": "uuid"}, "success": {"type": "boolean"}, "capability": {"const": "purchase.order.line.search"}, "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/page"}]}, "warnings": {"type": "array", "items": {"type": "object"}}, "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]}, "odoo": {"$ref": "response.schema.json#/$defs/odoo"}, "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{"if": {"properties": {"success": {"const": true}}, "required": ["success"]}, "then": {"properties": {"request_id": {"type": "string", "format": "uuid"}, "status": {"const": "verified"}, "data": {"$ref": "#/$defs/page"}, "error": {"type": "null"}}}, "else": {"properties": {"data": {"type": "null"}, "error": {"$ref": "response.schema.json#/$defs/error"}}}}],
+  "$defs": {
+    "ref": {"type": "object", "additionalProperties": false, "required": ["id", "name"], "properties": {"id": {"type": "integer", "minimum": 1}, "name": {"type": "string", "minLength": 1}}},
+    "nullableRef": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/ref"}]},
+    "currency": {"type": "object", "additionalProperties": false, "required": ["id", "code"], "properties": {"id": {"type": "integer", "minimum": 1}, "code": {"type": "string", "minLength": 1, "maxLength": 3}}},
+    "decimal": {"type": "string", "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"},
+    "utcDateTime": {"type": "string", "format": "date-time", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"},
+    "idList": {"type": "array", "uniqueItems": true, "items": {"type": "integer", "minimum": 1}},
+    "nullableText": {"type": ["string", "null"], "minLength": 1},
+    "nullableUtcDateTime": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/utcDateTime"}]},
+    "line": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "order", "company", "partner", "state", "date_order", "sequence", "display_type", "description", "product", "uom", "ordered_quantity", "invoiced_quantity", "to_invoice_quantity", "unit_price", "discount_percent", "amount_untaxed", "amount_tax", "amount_total", "currency", "taxes", "invoice_line_ids", "stock_move_ids", "received_quantity", "to_receive_quantity", "date_planned"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1}, "order": {"$ref": "#/$defs/ref"}, "company": {"$ref": "#/$defs/ref"}, "partner": {"$ref": "#/$defs/ref"},
+        "state": {"enum": ["draft", "sent", "to approve", "purchase", "cancel"]}, "date_order": {"$ref": "#/$defs/utcDateTime"}, "sequence": {"type": "integer", "minimum": 0}, "display_type": {"$ref": "#/$defs/nullableText"}, "description": {"type": "string", "minLength": 1},
+        "product": {"$ref": "#/$defs/nullableRef"}, "uom": {"$ref": "#/$defs/nullableRef"},
+        "ordered_quantity": {"$ref": "#/$defs/decimal"}, "invoiced_quantity": {"$ref": "#/$defs/decimal"}, "to_invoice_quantity": {"$ref": "#/$defs/decimal"}, "received_quantity": {"$ref": "#/$defs/decimal"}, "to_receive_quantity": {"$ref": "#/$defs/decimal"},
+        "unit_price": {"$ref": "#/$defs/decimal"}, "discount_percent": {"$ref": "#/$defs/decimal"}, "amount_untaxed": {"$ref": "#/$defs/decimal"}, "amount_tax": {"$ref": "#/$defs/decimal"}, "amount_total": {"$ref": "#/$defs/decimal"},
+        "currency": {"$ref": "#/$defs/currency"}, "taxes": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/ref"}}, "invoice_line_ids": {"$ref": "#/$defs/idList"}, "stock_move_ids": {"$ref": "#/$defs/idList"}, "date_planned": {"$ref": "#/$defs/nullableUtcDateTime"}
+      }
+    },
+    "page": {"type": "object", "additionalProperties": false, "required": ["items", "has_more", "next_cursor"], "properties": {"items": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/line"}}, "has_more": {"type": "boolean"}, "next_cursor": {"type": ["string", "null"], "minLength": 1}}}
+  }
+}

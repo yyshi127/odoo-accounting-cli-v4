@@ -41,6 +41,93 @@ def test_decode_accepts_only_the_fixed_target_and_action_envelope(monkeypatch) -
     assert value["action"] == "account.account.read_page"
 
 
+def test_decode_accepts_the_single_allowlisted_core_write_action() -> None:
+    value = runtime._decode_request(
+        io.StringIO(_request(action="accounting.core_write.execute"))
+    )
+
+    assert value["action"] == "accounting.core_write.execute"
+
+
+def test_decode_accepts_the_core_object_read_action() -> None:
+    value = runtime._decode_request(
+        io.StringIO(_request(action="accounting.core_object.read"))
+    )
+
+    assert value["action"] == "accounting.core_object.read"
+
+
+def test_decode_accepts_the_budget_report_read_action() -> None:
+    value = runtime._decode_request(
+        io.StringIO(_request(action="accounting.budget_report.read"))
+    )
+
+    assert value["action"] == "accounting.budget_report.read"
+    assert (
+        runtime._cursor_factory_for("accounting.budget_report.read", {})
+        is runtime._read_only_cursor
+    )
+
+
+def test_decode_accepts_the_inventory_accounting_action() -> None:
+    value = runtime._decode_request(
+        io.StringIO(
+            _request(
+                action="accounting.inventory.read",
+                payload={
+                    "capability_id": "report.inventory_valuation",
+                    "company_id": 7,
+                    "parameters": {"date": "2025-01-31"},
+                },
+            )
+        )
+    )
+
+    assert value["action"] == "accounting.inventory.read"
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        "accounting.inventory_master.read",
+        "accounting.inventory_operations.read",
+        "accounting.order_documents.read",
+    ],
+)
+def test_decode_accepts_narrow_read_actions_with_read_only_cursor(
+    action: str,
+) -> None:
+    value = runtime._decode_request(io.StringIO(_request(action=action)))
+
+    assert value["action"] == action
+    assert runtime._cursor_factory_for(action, {}) is runtime._read_only_cursor
+
+
+def test_inventory_valuation_uses_rollback_only_report_transaction() -> None:
+    assert (
+        runtime._cursor_factory_for(
+            "accounting.inventory.read",
+            {
+                "capability_id": "report.inventory_valuation",
+                "company_id": 7,
+                "parameters": {"date": "2025-01-31"},
+            },
+        )
+        is runtime._rollback_only_cursor
+    )
+    assert (
+        runtime._cursor_factory_for(
+            "accounting.inventory.read",
+            {
+                "capability_id": "cogs.entries.list",
+                "company_id": 7,
+                "parameters": {},
+            },
+        )
+        is runtime._read_only_cursor
+    )
+
+
 @pytest.mark.parametrize(
     "raw",
     [
@@ -92,6 +179,61 @@ def test_read_only_cursor_forces_postgres_readonly_and_never_commits() -> None:
         ("rollback",),
         ("close",),
     ]
+
+
+def test_write_cursor_commits_only_after_a_successful_action() -> None:
+    calls = []
+
+    class Cursor:
+        def commit(self):
+            calls.append(("commit",))
+
+        def rollback(self):
+            calls.append(("rollback",))
+
+        def close(self):
+            calls.append(("close",))
+
+    cursor = Cursor()
+
+    class Registry:
+        def cursor(self):
+            calls.append(("cursor",))
+            return cursor
+
+    with runtime._write_cursor(Registry()) as observed:
+        assert observed is cursor
+
+    assert calls == [("cursor",), ("commit",), ("close",)]
+
+
+def test_write_cursor_rolls_back_a_failed_action() -> None:
+    calls = []
+
+    class Cursor:
+        def commit(self):
+            raise AssertionError("a failed write must not commit")
+
+        def rollback(self):
+            calls.append(("rollback",))
+
+        def close(self):
+            calls.append(("close",))
+
+    cursor = Cursor()
+
+    class Registry:
+        def cursor(self):
+            calls.append(("cursor",))
+            return cursor
+
+    with (
+        pytest.raises(RuntimeError, match="write failed"),
+        runtime._write_cursor(Registry()),
+    ):
+        raise RuntimeError("write failed")
+
+    assert calls == [("cursor",), ("rollback",), ("close",)]
 
 
 def test_composite_account_page_uses_one_environment_identity_and_read() -> None:
@@ -149,6 +291,122 @@ def test_composite_account_page_uses_one_environment_identity_and_read() -> None
         "rows": [{"id": 10}],
     }
     assert [item[0] for item in calls].count("search") == 1
+
+
+def test_inventory_action_delegates_to_the_narrow_runtime(monkeypatch) -> None:
+    from odoo_accounting_cli_v4.bridge import inventory_accounting_runtime
+
+    calls = []
+
+    def delegate(env, payload, company_id, *, failure_type):
+        calls.append((env, payload, company_id, failure_type))
+        return {"items": []}
+
+    monkeypatch.setattr(inventory_accounting_runtime, "dispatch", delegate)
+    environment = object()
+    payload = {
+        "capability_id": "report.inventory_valuation",
+        "company_id": 7,
+        "parameters": {"date": "2025-01-31"},
+    }
+
+    result = runtime._dispatch(environment, "accounting.inventory.read", payload, 7)
+
+    assert result == {"items": []}
+    assert calls == [(environment, payload, 7, RuntimeFailure)]
+
+
+@pytest.mark.parametrize(
+    ("action", "runtime_module"),
+    [
+        (
+            "accounting.inventory_master.read",
+            "inventory_master_runtime",
+        ),
+        (
+            "accounting.inventory_operations.read",
+            "inventory_operations_runtime",
+        ),
+        (
+            "accounting.order_documents.read",
+            "order_documents_runtime",
+        ),
+    ],
+)
+def test_narrow_read_actions_delegate_to_narrow_runtimes(
+    monkeypatch, action: str, runtime_module: str
+) -> None:
+    from odoo_accounting_cli_v4.bridge import (
+        inventory_master_runtime,
+        inventory_operations_runtime,
+        order_documents_runtime,
+    )
+
+    module = {
+        "inventory_master_runtime": inventory_master_runtime,
+        "inventory_operations_runtime": inventory_operations_runtime,
+        "order_documents_runtime": order_documents_runtime,
+    }[runtime_module]
+    calls = []
+
+    def delegate(env, payload, company_id, *, failure_type):
+        calls.append((env, payload, company_id, failure_type))
+        return {"items": []}
+
+    monkeypatch.setattr(module, "dispatch", delegate)
+    environment = object()
+    payload = {
+        "capability_id": "warehouse.list",
+        "company_id": 7,
+        "parameters": {},
+    }
+
+    result = runtime._dispatch(environment, action, payload, 7)
+
+    assert result == {"items": []}
+    assert calls == [(environment, payload, 7, RuntimeFailure)]
+
+
+def test_core_object_action_delegates_to_the_narrow_runtime(monkeypatch) -> None:
+    from odoo_accounting_cli_v4.bridge import core_object_reads_runtime
+
+    calls = []
+
+    def delegate(env, payload, company_id, *, failure_type):
+        calls.append((env, payload, company_id, failure_type))
+        return {"items": []}
+
+    monkeypatch.setattr(core_object_reads_runtime, "dispatch", delegate)
+    environment = object()
+    payload = {
+        "capability_id": "journal.get",
+        "company_id": 7,
+        "parameters": {"journal_id": 9},
+    }
+
+    result = runtime._dispatch(environment, "accounting.core_object.read", payload, 7)
+
+    assert result == {"items": []}
+    assert calls == [(environment, payload, 7, RuntimeFailure)]
+
+
+def test_budget_report_action_delegates_to_the_narrow_runtime(monkeypatch) -> None:
+    from odoo_accounting_cli_v4.bridge import budget_report_runtime
+
+    calls = []
+
+    def delegate(env, payload, company_id, *, failure_type):
+        calls.append((env, payload, company_id, failure_type))
+        return {"items": []}
+
+    monkeypatch.setattr(budget_report_runtime, "dispatch", delegate)
+    environment = object()
+    payload = {"company_id": 7, "parameters": {"budget_id": 71}}
+
+    result = runtime._dispatch(environment, "accounting.budget_report.read", payload, 7)
+
+    assert result == {"items": []}
+    assert calls == [(environment, payload, 7, RuntimeFailure)]
 
 
 def test_inactive_language_is_rejected_before_business_dispatch() -> None:

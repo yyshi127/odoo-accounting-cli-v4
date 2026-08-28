@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/inventory.accounting_entries.list.request.schema.json",
+  "title": "inventory.accounting_entries.list request",
+  "type": "object",
+  "allOf": [
+    {"$ref": "request.schema.json"},
+    {
+      "properties": {
+        "context": {
+          "allOf": [
+            {"$ref": "request.schema.json#/$defs/context"},
+            {
+              "properties": {
+                "database": {"type": "string", "pattern": "\\S"},
+                "user_login": {"type": "string", "pattern": "\\S"},
+                "language": {"type": "string", "pattern": "\\S"},
+                "timezone": {"type": "string", "pattern": "\\S"}
+              }
+            }
+          ]
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "date_from": {"type": ["string", "null"], "format": "date", "default": null},
+            "date_to": {"type": ["string", "null"], "format": "date", "default": null},
+            "product_id": {"type": ["integer", "null"], "minimum": 1, "default": null},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 100},
+            "cursor": {"type": ["string", "null"], "minLength": 1, "maxLength": 4096, "default": null}
+          }
+        }
+      }
+    }
+  ]
+}

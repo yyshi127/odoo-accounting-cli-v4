@@ -48,6 +48,9 @@ class OdooJournalEntryPort:
             allow_null=True,
         )
 
+    def check_entry(self, *, company_id: int, entry_id: int) -> dict[str, Any]:
+        return self.get_entry(company_id=company_id, entry_id=entry_id)
+
     def _invoke(
         self,
         action: str,

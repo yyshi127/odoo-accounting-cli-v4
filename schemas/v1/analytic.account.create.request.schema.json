@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/analytic.account.create.request.schema.json",
+  "title": "analytic.account.create request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": "string", "format": "uuid", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"},
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "plan_id"],
+      "properties": {
+        "name": {"$ref": "#/$defs/text"},
+        "plan_id": {"type": "integer", "minimum": 1},
+        "code": {"$ref": "#/$defs/nullableText"},
+        "partner_id": {"type": ["integer", "null"], "minimum": 1}
+      }
+    }
+  },
+  "$defs": {
+    "text": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "^(?![\\s\\S]*\\[ODACV4:)(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"},
+    "nullableText": {"type": ["string", "null"], "minLength": 1, "maxLength": 200, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"}
+  }
+}

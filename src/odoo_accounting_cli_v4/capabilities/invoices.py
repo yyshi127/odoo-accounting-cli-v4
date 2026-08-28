@@ -11,7 +11,6 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 
-
 SEARCH_CAPABILITY_ID = "invoice.search"
 GET_CAPABILITY_ID = "invoice.get"
 PAYMENT_STATUS_CAPABILITY_ID = "invoice.payment_status.inspect"
@@ -118,6 +117,7 @@ _PAYMENT_STATUS_FIELDS = frozenset(
         "receivable_payable_lines",
         "reconciliations",
         "payments",
+        "outstanding_items",
     }
 )
 _RECEIVABLE_PAYABLE_LINE_FIELDS = frozenset(
@@ -142,10 +142,22 @@ _RECONCILIATION_FIELDS = frozenset(
         "company_amount",
         "currency",
         "company_currency",
+        "invoice_line_id",
         "counterpart_line_id",
         "counterpart_move",
         "payment_id",
         "exchange_move_id",
+    }
+)
+_OUTSTANDING_ITEM_FIELDS = frozenset(
+    {
+        "line_id",
+        "move_id",
+        "payment_id",
+        "date",
+        "label",
+        "amount",
+        "currency",
     }
 )
 _PAYMENT_FIELDS = frozenset(
@@ -876,10 +888,26 @@ def _valid_reconciliation(value: Any) -> bool:
         and _is_decimal_string(value["company_amount"])
         and _valid_currency(value["currency"])
         and _valid_currency(value["company_currency"])
+        and _valid_id(value["invoice_line_id"])
         and _valid_id(value["counterpart_line_id"])
         and _valid_counterpart_move(value["counterpart_move"])
         and _valid_optional_id(value["payment_id"])
         and _valid_optional_id(value["exchange_move_id"])
+    )
+
+
+def _valid_outstanding_item(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and set(value) == _OUTSTANDING_ITEM_FIELDS
+        and _valid_id(value["line_id"])
+        and _valid_id(value["move_id"])
+        and _valid_optional_id(value["payment_id"])
+        and _is_date(value["date"])
+        and _is_nonempty_string(value["label"])
+        and _is_decimal_string(value["amount"])
+        and Decimal(value["amount"]) > 0
+        and _valid_currency(value["currency"])
     )
 
 
@@ -933,16 +961,19 @@ def _validate_payment_status(
         or not isinstance(row["receivable_payable_lines"], list)
         or not isinstance(row["reconciliations"], list)
         or not isinstance(row["payments"], list)
+        or not isinstance(row["outstanding_items"], list)
     ):
         raise _failed("Odoo returned invalid invoice payment status.")
 
     previous_line_id: int | None = None
+    term_line_ids: set[int] = set()
     for line in row["receivable_payable_lines"]:
         if (
             not _valid_receivable_payable_line(line)
             or (previous_line_id is not None and line["id"] <= previous_line_id)
         ):
             raise _failed("Odoo returned an invalid receivable/payable line.")
+        term_line_ids.add(line["id"])
         previous_line_id = line["id"]
 
     previous_reconciliation: tuple[str, int] | None = None
@@ -979,7 +1010,8 @@ def _validate_payment_status(
     for reconciliation in row["reconciliations"]:
         payment_id = reconciliation["payment_id"]
         if (
-            reconciliation["currency"] != row["currency"]
+            reconciliation["invoice_line_id"] not in term_line_ids
+            or reconciliation["currency"] != row["currency"]
             or reconciliation["company_currency"] != row["company_currency"]
             or (
                 payment_id is not None
@@ -991,6 +1023,21 @@ def _validate_payment_status(
             )
         ):
             raise _failed("Odoo returned inconsistent invoice reconciliation links.")
+
+    previous_outstanding: tuple[str, int] | None = None
+    outstanding_line_ids: set[int] = set()
+    for item in row["outstanding_items"]:
+        if not _valid_outstanding_item(item):
+            raise _failed("Odoo returned an invalid outstanding payment item.")
+        current = (item["date"], item["line_id"])
+        if (
+            item["line_id"] in outstanding_line_ids
+            or (previous_outstanding is not None and current >= previous_outstanding)
+            or item["currency"] != row["currency"]
+        ):
+            raise _failed("Odoo returned outstanding items in an unstable order.")
+        outstanding_line_ids.add(item["line_id"])
+        previous_outstanding = current
     return dict(row)
 
 

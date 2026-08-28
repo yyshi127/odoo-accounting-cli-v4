@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/core-write-result.schema.json",
+  "title": "Core write result data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "idempotent_replay",
+    "result"
+  ],
+  "properties": {
+    "idempotent_replay": {
+      "type": "boolean"
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model",
+        "id",
+        "name",
+        "state",
+        "company_id",
+        "move_type",
+        "source_id",
+        "line_ids",
+        "partial_reconcile_ids",
+        "full_reconcile_id",
+        "reconciled"
+      ],
+      "properties": {
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "state": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "company_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "move_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "source_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "line_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "partial_reconcile_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "full_reconcile_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "reconciled": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

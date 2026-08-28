@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/purchase.order.update_draft.request.schema.json",
+  "title": "purchase.order.update_draft request", "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"}, "request_id": {"type": "string", "format": "uuid", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"},
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {"type": "object", "additionalProperties": false, "required": ["order_id", "changes"], "properties": {
+      "order_id": {"type": "integer", "minimum": 1},
+      "changes": {"type": "object", "additionalProperties": false, "minProperties": 1, "properties": {
+        "partner_ref": {"$ref": "purchase.order.create.request.schema.json#/$defs/nullable_text"},
+        "date_order": {"$ref": "purchase.order.create.request.schema.json#/$defs/datetime"},
+        "payment_term_id": {"$ref": "purchase.order.create.request.schema.json#/$defs/nullable_id"},
+        "incoterm_id": {"$ref": "purchase.order.create.request.schema.json#/$defs/nullable_id"}
+      }}
+    }}
+  }
+}
