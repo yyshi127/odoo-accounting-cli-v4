@@ -89,6 +89,8 @@ _LINE_FIELDS = frozenset(
         "discount",
         "price_subtotal",
         "price_total",
+        "deferred_start_date",
+        "deferred_end_date",
         "taxes",
     }
 )
@@ -789,6 +791,10 @@ def _validate_invoice(row: Any, *, company_id: int, invoice_id: int) -> dict[str
                     "price_subtotal",
                     "price_total",
                 )
+            )
+            or not all(
+                line[field] is None or _is_date(line[field])
+                for field in ("deferred_start_date", "deferred_end_date")
             )
             or not isinstance(line["taxes"], list)
         ):

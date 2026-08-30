@@ -72,6 +72,25 @@ def _payment_status() -> dict:
     }
 
 
+def _line() -> dict:
+    return {
+        "id": 301,
+        "sequence": 10,
+        "display_type": "product",
+        "name": "Deferred service",
+        "product": None,
+        "account": {"id": 101, "code": "6000", "name": "Sales"},
+        "quantity": "1",
+        "price_unit": "100",
+        "discount": "0",
+        "price_subtotal": "100",
+        "price_total": "100",
+        "deferred_start_date": "2026-09-01",
+        "deferred_end_date": "2026-12-31",
+        "taxes": [],
+    }
+
+
 @pytest.mark.parametrize(
     ("capability_id", "parameters", "expected_data"),
     (
@@ -80,7 +99,7 @@ def _payment_status() -> dict:
             {"limit": 1},
             {"items": [_header()], "has_more": False, "next_cursor": None},
         ),
-        ("invoice.get", {"invoice_id": 30}, {**_header(), "lines": []}),
+        ("invoice.get", {"invoice_id": 30}, {**_header(), "lines": [_line()]}),
         (
             "invoice.payment_status.inspect",
             {"invoice_id": 30},
@@ -113,7 +132,7 @@ def test_cli_dispatches_fixed_invoice_reads(
                 "company_visible": True,
                 "module_installed": True,
                 "access_allowed": True,
-                "invoice": {**_header(), "lines": []},
+                "invoice": {**_header(), "lines": [_line()]},
             }
 
         def inspect_payment_status(self, **kwargs):

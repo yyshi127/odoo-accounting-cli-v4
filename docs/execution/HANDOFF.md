@@ -33,7 +33,12 @@ the Odoo source/add-on tree while building CLI capabilities.
 - Current workflow acceptance is blocked by the two isolated databases' bank
   configuration: outstanding receipts and bank suspense both use account 153.
   The new 24-capability workflow test is not a completed live acceptance pass.
-  See the final checkpoint below before attempting another run.
+  See the accounting-core workflow checkpoint below before attempting another run.
+- Deferred invoice/bill line dates and date readback now extend existing
+  commands without adding IDs. The shared real workflow reached automatic
+  generation but hit the existing `exchange_currency_rate` singleton defect;
+  see the separate deferred-date checkpoint below. Neither blocked workflow
+  is counted as a full live acceptance pass.
 
 ## Historical 2026-08-28 baseline (289 IDs)
 
@@ -1662,11 +1667,10 @@ Two conditional gaps remain explicit:
 - `period.lock.change` is disabled, so final period locking is not yet an
   end-to-end CLI action. Native locking requires an accounting manager; uid 5
   must not be elevated or bypassed to force it through.
-- Deferred generation exists, but current CLI line parameters do not expose
-  `deferred_start_date` / `deferred_end_date`; the existing extended-write
-  integration fixture sets them directly through ORM. If a fully CLI-driven
-  deferred workflow is required, extend the existing line parameters instead
-  of adding a new auxiliary capability family.
+- The missing `deferred_start_date` / `deferred_end_date` line parameters
+  identified at this checkpoint are addressed by the later deferred-date
+  checkpoint below. The older extended-write fixture still sets them through
+  ORM; it is not evidence of a fully CLI-driven date-entry workflow.
 
 `period.adjustment.create` is not a reason to duplicate functionality: ordinary
 `journal_entry.create`, `journal_entry.post`, and `journal_entry.reverse` already
@@ -1784,3 +1788,113 @@ account-role configuration, without modifying business databases or promoting
 the test user. Then rerun the unchanged six-scenario acceptance test and record
 the actual result. Until then, the registry stays at 355 IDs and the full
 accounting-core workflow acceptance remains incomplete.
+
+## 2026-08-31 deferred invoice dates (native add-on blocks live acceptance)
+
+This batch closes an accounting input/readback gap without increasing the
+registry: 355 IDs, 340 enabled handlers, and 685 schema files remain unchanged.
+The registry file SHA-256 remains
+`21b6a57b0bd3b7f17432663de5c82c25b0d63a38c8c9ed6bad2e58732c75572e`.
+
+Five existing writes now accept optional line-level `deferred_start_date` and
+`deferred_end_date`: `customer_invoice.create`, `vendor_bill.create`,
+`invoice.lines.replace`, `customer_credit_note.create`, and `vendor_refund.create`.
+Three request schema files cover all five through the existing refund references.
+The dates must either both be omitted, both be null, or both be ISO dates with
+start <= end. Same-day and pre-invoice-date periods are allowed. Requiring an
+explicit pair is a CLI choice, not an Odoo restriction: native Odoo can infer
+the start from invoice_date for an end-only input.
+
+No defaults are injected into old requests or their idempotency fingerprints.
+Line replacement/refund comparisons only compare deferred dates when the request
+explicitly includes them. Thus an otherwise identical old request remains a
+no-write replay even if the actual draft/posted record now has deferred dates.
+Explicit null/null clears the dates; other full-line replacements retain their
+existing semantics, so callers must include dates they want on replacement lines.
+Existing draft-state, external sales/purchase-source, ACL, and company guards are
+unchanged. No generic ORM write API or additional control plane was introduced.
+
+`invoice.get` now returns both date fields for each line. They are read only
+when present on the native model; otherwise they normalize to null. This does
+not add an `account_accountant` prerequisite to all invoice reads. Read validation
+checks each date independently, so existing end-only or unusual native records
+are not rejected just because new CLI writes require a pair. Usage is in README.
+
+Local evidence: the combined relevant contract/schema/runtime/bridge/CLI selection
+passed 464 tests in 220.72 seconds; four shared helper/precondition tests also
+passed. The opt-in live test correctly skipped without authorization (not a live
+pass). After deployment, 311 focused schema/runtime/helper tests passed on the
+server in 9.26 seconds. Ruff and diff checks passed.
+
+Read-only native-source and database inspection confirmed existing company-1
+configuration in both isolated databases: journal 11 (active/general), deferred
+expense account 50 (asset_current), deferred revenue account 92
+(liability_current), both generation methods `on_validation` and both computation
+methods `month`. These settings were not changed. The native source is
+`account_accountant/models/account_move.py` (date fields/constraints and automatic
+generation). This batch tests automatic generation on invoice posting, not the
+separate manual month-end generate commands.
+
+Seventeen code/schema/test/README files were synchronized after exact baseline
+checks. One server test file (`test_invoice_cli.py`) was an older known repository
+blob `d82deb75b554c5a1d08a49554e9d655bf031d2e7`; inspection showed only the already
+committed `outstanding_items: []` fixture addition was missing, not an unknown
+server edit. The other existing targets matched the local pre-batch commit.
+
+- Uploaded archive SHA-256: `64196fc78394f35864f9cd7037d25c7ecab17294372ce8dab9ec44f5c426fc63`
+- Backup: `/opt/odoo-accounting-cli-v4/.tooling/accounting-deferred-lines-20260831-4b691adc/overwritten-files.tgz`
+- Backup SHA-256: `41a3f6cd457745b345fd8bfb3d5a6739b6c0c12f5f4a0f7a1e23b2b84680c4e7`
+- Shared test: `tests/integration/test_deferred_invoice_lines_live.py`
+- Live artifacts: `/opt/odoo-accounting-cli-v4/.tooling/accounting-deferred-lines-20260831-4b691adc/live-smoke.{log,exit,pid}`
+
+The shared smoke uses eight existing public CLI capabilities, two source
+invoices/bills of 120 per alias, five scenarios, and one rollback-only business
+transaction per alias. It checks date set/clear/restore and exact replay,
+automatic deferral of 120 plus two future recognitions of 60, and date-bearing
+customer/vendor refund drafts. Automatic deferred moves and their lines are
+explicitly tracked for fresh-cursor rollback verification. The two future
+recognition entries per source must remain draft with `auto_post=at_date`; the
+test never posts them early. The common test helpers execute `cli.main` and normal
+ports against the real ORM in-process, not external bridge transport or durable
+commit/replay.
+
+### Actual live result and remaining authority boundary
+
+The shared smoke failed in `odoo_cli_v4_dev` after 98.34 seconds, exit code 1.
+It did not reach `odoo_cli_v4_e2e`. In the first database, customer invoice
+creation, `invoice.get` date readback, and date modification/clear/restore with
+exact CLI replay succeeded. The next `invoice.post` failed while Odoo created
+the two future recognition entries. The supplier and refund scenarios were not
+reached, and the automatic 120/60/60 verification did not complete. Do not infer
+their live success from the local test counts or the shared adapter.
+
+The retained native traceback points to
+`/mnt/odoo/odoo19/custom/addons/exchange_currency_rate/models/account_move.py:50`:
+the `@api.constrains('company_currency_id', 'currency_id')` method reads
+`self.is_exchange` on multiple moves and raises
+`ValueError: Expected singleton: account.move(265, 266)`.
+Native `account_accountant/models/account_move.py:333` calls
+`self.create(deferral_moves_vals)` for that multi-period batch. Read-only source
+inspection confirms this constraint has no per-record loop or supported context
+escape. This is the same existing third-party add-on issue already recorded for
+asset validation, not a missing deferred-account configuration or a date-schema
+failure. The inspected add-on file SHA-256 is
+`724ae3b4eb753b00b273d96641ce7639473a6f37740b6ce3aeba5ca669ee54e9`.
+
+All writes were rolled back. The fresh-cursor tracked-record/run-marker verifier
+completed before the original exception was re-raised. The failed log SHA-256 is
+`0b5a18470dbb10de1100693f3eb67778e2915ad3c011589dba87bb5bee440fbe`.
+The live process completed; it was not left running. Odoo19 stayed active with
+`MainPID=1678372`, `NRestarts=2`, and the unchanged 2026-08-30 10:25:07 CST
+activation timestamp. No business database, company setting, installed add-on,
+runtime configuration, permission, or service was modified for this smoke.
+
+Keep the failed test and assertions intact. Do not shorten the period to force a
+single generated move, patch/monkey-patch the shared add-on, skip the constraint,
+or elevate the test user. The active goal forbids changes to existing Odoo and
+add-on code; a repair therefore needs separate user authorization and an agreed
+isolated validation/deployment scope before rerunning this full smoke.
+
+The separate bank-matching configuration correction also remains unauthorized
+and was not attempted. Both real-workflow blockers remain open; the new input and
+readback implementation is not a claim that accounting-core acceptance is done.

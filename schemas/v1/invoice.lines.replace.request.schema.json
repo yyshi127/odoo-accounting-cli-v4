@@ -87,8 +87,35 @@
               },
               "analytic_distribution": {
                 "$ref": "#/$defs/analytic_distribution"
+              },
+              "deferred_start_date": {
+                "type": ["string", "null"],
+                "format": "date"
+              },
+              "deferred_end_date": {
+                "type": ["string", "null"],
+                "format": "date"
               }
-            }
+            },
+            "dependentRequired": {
+              "deferred_start_date": ["deferred_end_date"],
+              "deferred_end_date": ["deferred_start_date"]
+            },
+            "oneOf": [
+              {
+                "properties": {
+                  "deferred_start_date": {"type": "null"},
+                  "deferred_end_date": {"type": "null"}
+                }
+              },
+              {
+                "required": ["deferred_start_date", "deferred_end_date"],
+                "properties": {
+                  "deferred_start_date": {"type": "string"},
+                  "deferred_end_date": {"type": "string"}
+                }
+              }
+            ]
           }
         }
       }
@@ -182,8 +209,35 @@
         },
         "analytic_distribution": {
           "$ref": "#/$defs/analytic_distribution"
+        },
+        "deferred_start_date": {
+          "type": ["string", "null"],
+          "format": "date"
+        },
+        "deferred_end_date": {
+          "type": ["string", "null"],
+          "format": "date"
         }
-      }
+      },
+      "dependentRequired": {
+        "deferred_start_date": ["deferred_end_date"],
+        "deferred_end_date": ["deferred_start_date"]
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "deferred_start_date": {"type": "null"},
+            "deferred_end_date": {"type": "null"}
+          }
+        },
+        {
+          "required": ["deferred_start_date", "deferred_end_date"],
+          "properties": {
+            "deferred_start_date": {"type": "string"},
+            "deferred_end_date": {"type": "string"}
+          }
+        }
+      ]
     }
   }
 }

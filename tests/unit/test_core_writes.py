@@ -2091,6 +2091,69 @@ def test_invoice_create_accepts_the_frozen_optional_header_and_line_fields(
 
 
 @pytest.mark.parametrize(
+    "capability_id",
+    [
+        "customer_invoice.create",
+        "vendor_bill.create",
+        "invoice.lines.replace",
+        "customer_credit_note.create",
+        "vendor_refund.create",
+    ],
+)
+@pytest.mark.parametrize(
+    "dates",
+    [
+        {},
+        {"deferred_start_date": None, "deferred_end_date": None},
+        {"deferred_start_date": "2026-09-01", "deferred_end_date": "2026-10-31"},
+        {"deferred_start_date": "2025-02-01", "deferred_end_date": "2025-02-01"},
+    ],
+)
+def test_invoice_deferred_dates_preserve_explicit_and_omitted_values(
+    capability_id: str,
+    dates: dict,
+) -> None:
+    request = _request(capability_id)
+    request["parameters"].setdefault(
+        "lines", deepcopy(PARAMETERS["invoice.lines.replace"]["lines"])
+    )
+    request["parameters"]["lines"][0].update(dates)
+
+    normalized = validate_core_write_request(capability_id, request)[2]
+
+    assert normalized == request["parameters"]
+
+
+@pytest.mark.parametrize(
+    "capability_id", ["customer_invoice.create", "invoice.lines.replace"]
+)
+@pytest.mark.parametrize(
+    "dates",
+    [
+        {"deferred_start_date": "2026-09-01"},
+        {"deferred_end_date": "2026-10-31"},
+        {"deferred_start_date": None, "deferred_end_date": "2026-10-31"},
+        {"deferred_start_date": "2026-09-01", "deferred_end_date": None},
+        {"deferred_start_date": "2026-11-01", "deferred_end_date": "2026-10-31"},
+        {"deferred_start_date": "2026-02-29", "deferred_end_date": "2026-10-31"},
+        {"deferred_start_date": "20260901", "deferred_end_date": "2026-10-31"},
+        {"deferred_start_date": False, "deferred_end_date": False},
+    ],
+)
+def test_invoice_deferred_dates_reject_invalid_pairs(
+    capability_id: str,
+    dates: dict,
+) -> None:
+    request = _request(capability_id)
+    request["parameters"]["lines"][0].update(dates)
+
+    with pytest.raises(CoreWriteError) as caught:
+        validate_core_write_request(capability_id, request)
+
+    assert caught.value.code == "invalid_request"
+
+
+@pytest.mark.parametrize(
     "capability_id", ["customer_invoice.create", "vendor_bill.create"]
 )
 def test_invoice_due_date_and_payment_term_are_mutually_exclusive_when_nonnull(

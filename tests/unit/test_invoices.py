@@ -164,6 +164,8 @@ def _line() -> dict:
         "discount": "0.00",
         "price_subtotal": "100.00",
         "price_total": "113.00",
+        "deferred_start_date": None,
+        "deferred_end_date": None,
         "taxes": [_tax()],
     }
 
@@ -533,6 +535,44 @@ def test_get_verifies_exact_invoice_and_line_shapes() -> None:
 
 
 @pytest.mark.parametrize(
+    ("start_date", "end_date"),
+    [
+        (None, None),
+        (None, "2026-12-31"),
+        ("2026-09-01", None),
+        ("2026-09-01", "2026-12-31"),
+        ("2026-12-31", "2026-09-01"),
+    ],
+)
+def test_get_preserves_native_deferred_dates_without_write_pair_constraints(
+    start_date: str | None, end_date: str | None
+) -> None:
+    invoice = _invoice()
+    invoice["lines"][0].update(
+        deferred_start_date=start_date, deferred_end_date=end_date
+    )
+
+    assert get_invoice(FakePort(invoice=invoice), _get_request()) == invoice
+    load_registry().validate_instance(
+        "schemas/v1/invoice.get.response.schema.json",
+        _success_response("invoice.get", invoice),
+    )
+
+
+@pytest.mark.parametrize("field", ("deferred_start_date", "deferred_end_date"))
+@pytest.mark.parametrize(
+    "value", ("2026-02-30", "20260901", "2026-09-01T00:00:00", 0, True, False)
+)
+def test_get_rejects_non_iso_deferred_dates(field: str, value: object) -> None:
+    invoice = _invoice()
+    invoice["lines"][0][field] = value
+
+    with pytest.raises(InvoiceError) as caught:
+        get_invoice(FakePort(invoice=invoice), _get_request())
+    assert caught.value.code == "failed_validation"
+
+
+@pytest.mark.parametrize(
     "mutation",
     [
         lambda invoice: invoice.update(extra=True),
@@ -542,6 +582,8 @@ def test_get_verifies_exact_invoice_and_line_shapes() -> None:
         lambda invoice: invoice["lines"][0].update(display_type="line_section"),
         lambda invoice: invoice["lines"][0].update(display_type="tax"),
         lambda invoice: invoice["lines"][0].update(display_type=None),
+        lambda invoice: invoice["lines"][0].pop("deferred_start_date"),
+        lambda invoice: invoice["lines"][0].pop("deferred_end_date"),
         lambda invoice: invoice["lines"][0]["taxes"][0].update(extra=True),
         lambda invoice: invoice["lines"][0]["taxes"][0].update(amount=float("inf")),
         lambda invoice: invoice.update(lines=[_line(), _line()]),

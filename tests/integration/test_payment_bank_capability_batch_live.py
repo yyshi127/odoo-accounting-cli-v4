@@ -380,6 +380,7 @@ def _cli(
             "bank.transaction.search": OdooBankTransactionSearchPort,
             "bank.transaction.reconciliation.get": OdooBankReconciliationPort,
             "bank.transaction.match_candidates.list": OdooBankReconciliationPort,
+            "invoice.get": OdooInvoicePort,
             "invoice.payment_status.inspect": OdooInvoicePort,
             "payment.get": OdooPaymentPort,
             "journal_entry.get": OdooJournalEntryPort,

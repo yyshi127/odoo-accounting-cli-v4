@@ -67,7 +67,7 @@
     "line": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "sequence", "display_type", "name", "product", "account", "quantity", "price_unit", "discount", "price_subtotal", "price_total", "taxes"],
+      "required": ["id", "sequence", "display_type", "name", "product", "account", "quantity", "price_unit", "discount", "price_subtotal", "price_total", "deferred_start_date", "deferred_end_date", "taxes"],
       "properties": {
         "id": {"type": "integer", "minimum": 1},
         "sequence": {"type": "integer"},
@@ -80,6 +80,8 @@
         "discount": {"$ref": "invoice.search.response.schema.json#/$defs/money"},
         "price_subtotal": {"$ref": "invoice.search.response.schema.json#/$defs/money"},
         "price_total": {"$ref": "invoice.search.response.schema.json#/$defs/money"},
+        "deferred_start_date": {"type": ["string", "null"], "format": "date"},
+        "deferred_end_date": {"type": ["string", "null"], "format": "date"},
         "taxes": {"type": "array", "items": {"$ref": "#/$defs/tax"}}
       },
       "allOf": [{

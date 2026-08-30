@@ -4,6 +4,7 @@ import copy
 import io
 import json
 import sys
+from datetime import date
 from types import ModuleType, SimpleNamespace
 from typing import Any
 
@@ -218,6 +219,7 @@ class _Model:
         self.calls = calls
         self.responses = copy.deepcopy(responses or [])
         self.access_allowed = access_allowed
+        self._fields: set[str] = set()
 
     def has_access(self, operation: str) -> bool:
         self.calls.append(("access", self.name, operation))
@@ -718,6 +720,8 @@ def test_get_reads_only_invoice_line_subset_and_exact_related_records() -> None:
         "discount": "0",
         "price_subtotal": "100",
         "price_total": "113",
+        "deferred_start_date": None,
+        "deferred_end_date": None,
         "taxes": [
             {
                 "id": 4,
@@ -759,6 +763,72 @@ def test_get_reads_only_invoice_line_subset_and_exact_related_records() -> None:
         ["name", "type_tax_use", "amount_type", "amount", "price_include"],
     )
     _assert_related_read(env, "product.product", [11], ["display_name"])
+
+
+@pytest.mark.parametrize(
+    ("start_date", "end_date", "expected_start", "expected_end"),
+    [
+        (False, False, None, None),
+        (False, date(2026, 12, 31), None, "2026-12-31"),
+        (date(2026, 9, 1), False, "2026-09-01", None),
+        (date(2026, 9, 1), date(2026, 12, 31), "2026-09-01", "2026-12-31"),
+        ("2026-12-31", "2026-09-01", "2026-12-31", "2026-09-01"),
+    ],
+)
+def test_get_reads_available_deferred_dates_without_pair_or_range_constraints(
+    start_date: date | str | bool,
+    end_date: date | str | bool,
+    expected_start: str | None,
+    expected_end: str | None,
+) -> None:
+    env = _Environment("get")
+    line_model = env.models["account.move.line"]
+    line_model._fields.update(("deferred_start_date", "deferred_end_date"))
+    line_model.responses[0][0].update(
+        deferred_start_date=start_date, deferred_end_date=end_date
+    )
+
+    result = runtime._dispatch(env, GET_ACTION, _payload(GET_ACTION), 7)
+
+    line = result["invoice"]["lines"][0]
+    assert line["deferred_start_date"] == expected_start
+    assert line["deferred_end_date"] == expected_end
+    assert _search_calls(env, "account.move.line")[0][3] == [
+        *INVOICE_LINE_FIELDS,
+        "deferred_start_date",
+        "deferred_end_date",
+    ]
+
+
+def test_get_keeps_missing_optional_deferred_field_null() -> None:
+    env = _Environment("get")
+    line_model = env.models["account.move.line"]
+    line_model._fields.add("deferred_end_date")
+    line_model.responses[0][0]["deferred_end_date"] = "2026-12-31"
+
+    result = runtime._dispatch(env, GET_ACTION, _payload(GET_ACTION), 7)
+
+    line = result["invoice"]["lines"][0]
+    assert line["deferred_start_date"] is None
+    assert line["deferred_end_date"] == "2026-12-31"
+    assert _search_calls(env, "account.move.line")[0][3] == [
+        *INVOICE_LINE_FIELDS, "deferred_end_date"
+    ]
+
+
+@pytest.mark.parametrize("field", ("deferred_start_date", "deferred_end_date"))
+@pytest.mark.parametrize("value", ("2026-02-30", "20260901", 0, True))
+def test_get_rejects_malformed_native_deferred_dates(
+    field: str, value: object
+) -> None:
+    env = _Environment("get")
+    line_model = env.models["account.move.line"]
+    line_model._fields.add(field)
+    line_model.responses[0][0][field] = value
+
+    with pytest.raises(RuntimeFailure) as caught:
+        runtime._dispatch(env, GET_ACTION, _payload(GET_ACTION), 7)
+    assert caught.value.code == "odoo_runtime_error"
 
 
 def test_payment_status_traverses_explicit_partial_reconcile_and_origin_payment() -> (

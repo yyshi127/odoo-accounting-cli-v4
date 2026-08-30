@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import re
+from datetime import date
 from decimal import Decimal
 from typing import Any
 
@@ -1702,6 +1703,248 @@ def test_invoice_line_replace_persists_analytic_distribution_and_replays() -> No
     assert writes._current_invoice_lines(
         Records(env, "account.move", [invoice])
     ) == writes._normalized_invoice_replacement_lines(parameters["lines"])
+
+
+@pytest.mark.parametrize(
+    "capability_id", ["customer_invoice.create", "vendor_bill.create"]
+)
+@pytest.mark.parametrize("clear_dates", [False, True])
+def test_document_create_persists_deferred_dates_and_keys_include_them(
+    capability_id: str,
+    clear_dates: bool,
+) -> None:
+    env = Env()
+    parameters = _document_parameters(env, capability_id)
+    dates = {
+        "deferred_start_date": None if clear_dates else "2025-03-01",
+        "deferred_end_date": None if clear_dates else "2025-04-30",
+    }
+    parameters["lines"][0].update(dates)
+    payload = _payload(capability_id, parameters, key="deferred-create")
+
+    first = writes.dispatch(env, payload, 7, Failure)
+    replay = writes.dispatch(env, payload, 7, Failure)
+
+    assert first["idempotent_replay"] is False
+    assert replay["idempotent_replay"] is True
+    creates = [call for call in env.calls if call[:2] == ("create", "account.move")]
+    assert len(creates) == 1
+    line_values = creates[0][2]["invoice_line_ids"][0][2]
+    assert {field: line_values[field] for field in dates} == {
+        field: value or False for field, value in dates.items()
+    }
+    changed = copy.deepcopy(payload)
+    changed["parameters"]["lines"][0].update(
+        deferred_start_date="2025-03-01", deferred_end_date="2025-05-31"
+    )
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(env, changed, 7, Failure)
+    assert caught.value.code == "idempotency_conflict"
+
+
+@pytest.mark.parametrize(
+    "capability_id", ["customer_invoice.create", "invoice.lines.replace"]
+)
+@pytest.mark.parametrize(
+    "dates",
+    [
+        {"deferred_end_date": "2025-04-30"},
+        {"deferred_start_date": None, "deferred_end_date": "2025-04-30"},
+        {"deferred_start_date": "2025-05-01", "deferred_end_date": "2025-04-30"},
+        {"deferred_start_date": "2025-02-29", "deferred_end_date": "2025-04-30"},
+    ],
+)
+def test_runtime_rejects_invalid_deferred_dates_before_business_writes(
+    capability_id: str,
+    dates: dict,
+) -> None:
+    env = Env()
+    parameters = (
+        _document_parameters(env, capability_id)
+        if capability_id == "customer_invoice.create"
+        else {"move_id": 610, "lines": _replacement_invoice_lines(env)}
+    )
+    parameters["lines"][0].update(dates)
+    key = writes._deterministic_key(capability_id, parameters, 7) or "invalid-dates"
+
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(env, _payload(capability_id, parameters, key=key), 7, Failure)
+
+    assert caught.value.code == "bridge_protocol_error"
+    assert not any(call[0] in {"create", "write"} for call in env.calls)
+
+
+def test_invoice_line_replace_updates_and_clears_deferred_dates_without_false_replay() -> (
+    None
+):
+    env = Env()
+    invoice = env.existing_move(610, move_type="out_invoice", state="draft")
+    parameters = {"move_id": invoice.id, "lines": _replacement_invoice_lines(env)}
+    parameters["lines"][0].update(
+        deferred_start_date="2025-03-01", deferred_end_date="2025-04-30"
+    )
+    key = writes._deterministic_key("invoice.lines.replace", parameters, 7)
+    payload = _payload("invoice.lines.replace", parameters, key=key)
+    assert writes.dispatch(env, payload, 7, Failure)["idempotent_replay"] is False
+    for line in invoice.invoice_line_ids:
+        line.deferred_start_date = date(2025, 3, 1)
+        line.deferred_end_date = date(2025, 4, 30)
+    assert writes.dispatch(env, payload, 7, Failure)["idempotent_replay"] is True
+
+    for dates in (
+        {"deferred_start_date": "2025-03-01", "deferred_end_date": "2025-05-31"},
+        {"deferred_start_date": None, "deferred_end_date": None},
+    ):
+        parameters["lines"][0].update(dates)
+        next_key = writes._deterministic_key("invoice.lines.replace", parameters, 7)
+        assert next_key != key
+        next_payload = _payload("invoice.lines.replace", parameters, key=next_key)
+        assert (
+            writes.dispatch(env, next_payload, 7, Failure)["idempotent_replay"] is False
+        )
+        assert (
+            writes.dispatch(env, next_payload, 7, Failure)["idempotent_replay"] is True
+        )
+        assert writes._current_invoice_lines(
+            Records(env, "account.move", [invoice])
+        ) == writes._normalized_invoice_replacement_lines(parameters["lines"])
+        key = next_key
+    assert all(
+        line.deferred_start_date is False and line.deferred_end_date is False
+        for line in invoice.invoice_line_ids
+    )
+
+
+@pytest.mark.parametrize("state", ["draft", "posted"])
+def test_legacy_invoice_line_replay_preserves_existing_deferred_dates(
+    state: str,
+) -> None:
+    env = Env()
+    invoice = env.existing_move(610, move_type="out_invoice", state="draft")
+    parameters = {"move_id": invoice.id, "lines": _replacement_invoice_lines(env)}
+    key = writes._deterministic_key("invoice.lines.replace", parameters, 7)
+    payload = _payload("invoice.lines.replace", parameters, key=key)
+    writes.dispatch(env, payload, 7, Failure)
+    invoice.state = state
+    for line in invoice.invoice_line_ids:
+        line.deferred_start_date = date(2025, 3, 1)
+        line.deferred_end_date = date(2025, 4, 30)
+    before = len([call for call in env.calls if call[0] == "write"])
+
+    assert writes.dispatch(env, payload, 7, Failure)["idempotent_replay"] is True
+
+    assert len([call for call in env.calls if call[0] == "write"]) == before
+    assert all(
+        line.deferred_start_date == date(2025, 3, 1)
+        and line.deferred_end_date == date(2025, 4, 30)
+        for line in invoice.invoice_line_ids
+    )
+
+
+@pytest.mark.parametrize("source_field", ["sale_line_ids", "purchase_line_id"])
+def test_deferred_date_change_does_not_bypass_external_invoice_source_guard(
+    source_field: str,
+) -> None:
+    env = Env()
+    invoice = env.existing_move(610, move_type="out_invoice", state="draft")
+    parameters = {"move_id": invoice.id, "lines": _replacement_invoice_lines(env)}
+    parameters["lines"][0].update(
+        deferred_start_date="2025-03-01", deferred_end_date="2025-04-30"
+    )
+    key = writes._deterministic_key("invoice.lines.replace", parameters, 7)
+    writes.dispatch(
+        env, _payload("invoice.lines.replace", parameters, key=key), 7, Failure
+    )
+    for line in invoice.invoice_line_ids:
+        line._fields = {source_field: object()}
+        setattr(line, source_field, [999])
+    before = len([call for call in env.calls if call[0] == "write"])
+    parameters["lines"][0]["deferred_end_date"] = "2025-05-31"
+    key = writes._deterministic_key("invoice.lines.replace", parameters, 7)
+
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(
+            env, _payload("invoice.lines.replace", parameters, key=key), 7, Failure
+        )
+
+    assert caught.value.code == "business_rule_error"
+    assert len([call for call in env.calls if call[0] == "write"]) == before
+
+
+@pytest.mark.parametrize(
+    "capability_id", ["customer_credit_note.create", "vendor_refund.create"]
+)
+def test_refund_deferred_dates_are_persisted_and_verified_on_replay(
+    capability_id: str,
+) -> None:
+    env = Env()
+    source = env.existing_move(
+        405,
+        move_type="out_invoice"
+        if capability_id.startswith("customer")
+        else "in_invoice",
+        state="posted",
+    )
+    parameters = {
+        "move_id": source.id,
+        "date": "2025-02-05",
+        "reason": "Deferred correction",
+        "lines": _replacement_invoice_lines(env),
+    }
+    parameters["lines"][0].update(
+        deferred_start_date="2025-03-01", deferred_end_date="2025-04-30"
+    )
+    payload = _payload(capability_id, parameters, key="deferred-refund")
+    first = writes.dispatch(env, payload, 7, Failure)
+    assert writes.dispatch(env, payload, 7, Failure)["idempotent_replay"] is True
+    refund = env.models["account.move"].browse(first["result"]["id"])
+    assert writes._current_invoice_lines(
+        refund
+    ) == writes._normalized_invoice_replacement_lines(parameters["lines"])
+    for line in refund.invoice_line_ids:
+        line.deferred_end_date = "2025-05-31"
+
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(env, payload, 7, Failure)
+    assert caught.value.code == "idempotency_conflict"
+
+
+@pytest.mark.parametrize(
+    "capability_id", ["customer_credit_note.create", "vendor_refund.create"]
+)
+def test_legacy_refund_replay_preserves_existing_deferred_dates(
+    capability_id: str,
+) -> None:
+    env = Env()
+    source = env.existing_move(
+        405,
+        move_type="out_invoice"
+        if capability_id.startswith("customer")
+        else "in_invoice",
+        state="posted",
+    )
+    parameters = {
+        "move_id": source.id,
+        "date": "2025-02-05",
+        "reason": "Legacy deferred correction",
+        "lines": _replacement_invoice_lines(env),
+    }
+    payload = _payload(capability_id, parameters, key="legacy-deferred-refund")
+    first = writes.dispatch(env, payload, 7, Failure)
+    refund = env.models["account.move"].browse(first["result"]["id"])
+    for line in refund.invoice_line_ids:
+        line.deferred_start_date = date(2025, 3, 1)
+        line.deferred_end_date = date(2025, 4, 30)
+    before = len([call for call in env.calls if call[0] == "write"])
+
+    assert writes.dispatch(env, payload, 7, Failure)["idempotent_replay"] is True
+
+    assert len([call for call in env.calls if call[0] == "write"]) == before
+    assert all(
+        line.deferred_start_date == date(2025, 3, 1)
+        and line.deferred_end_date == date(2025, 4, 30)
+        for line in refund.invoice_line_ids
+    )
 
 
 def test_entry_create_is_balanced_then_post_is_naturally_idempotent() -> None:

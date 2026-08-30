@@ -524,8 +524,9 @@ _DOCUMENT_CREATE_OPTIONAL_KEYS = frozenset(
 _DOCUMENT_LINE_REQUIRED_KEYS = frozenset(
     {"name", "account_id", "quantity", "price_unit", "tax_ids"}
 )
+_DEFERRED_LINE_DATE_FIELDS = ("deferred_start_date", "deferred_end_date")
 _DOCUMENT_LINE_OPTIONAL_KEYS = frozenset(
-    {"product_id", "discount", "analytic_distribution"}
+    {"product_id", "discount", "analytic_distribution", *_DEFERRED_LINE_DATE_FIELDS}
 )
 _ENTRY_LINE_REQUIRED_KEYS = frozenset(
     {"name", "account_id", "partner_id", "debit", "credit"}
@@ -2585,6 +2586,18 @@ def _normalized_analytic_distribution(value: Any) -> dict[str, str]:
     }
 
 
+def _valid_deferred_line_dates(line: dict[str, Any]) -> bool:
+    has_start, has_end = (field in line for field in _DEFERRED_LINE_DATE_FIELDS)
+    if has_start != has_end:
+        return False
+    if not has_start:
+        return True
+    start, end = (line[field] for field in _DEFERRED_LINE_DATE_FIELDS)
+    return (start is None and end is None) or (
+        _is_date(start) and _is_date(end) and start <= end
+    )
+
+
 def _valid_document_lines(value: Any) -> bool:
     if not isinstance(value, list) or not 1 <= len(value) <= 200:
         return False
@@ -2617,6 +2630,7 @@ def _valid_document_lines(value: Any) -> bool:
             or not isinstance(tax_ids, list)
             or any(not _is_id(item) for item in tax_ids)
             or len(tax_ids) != len(set(tax_ids))
+            or not _valid_deferred_line_dates(line)
         ):
             return False
     return True
@@ -2732,7 +2746,8 @@ def _valid_replacement_invoice_lines(value: Any) -> bool:
     }
     for line in value:
         if not isinstance(line, dict) or not required <= set(line) <= required | {
-            "analytic_distribution"
+            "analytic_distribution",
+            *_DEFERRED_LINE_DATE_FIELDS,
         }:
             return False
         quantity = _decimal(line["quantity"])
@@ -2750,6 +2765,7 @@ def _valid_replacement_invoice_lines(value: Any) -> bool:
             or not isinstance(tax_ids, list)
             or any(not _is_id(item) for item in tax_ids)
             or tax_ids != sorted(set(tax_ids))
+            or not _valid_deferred_line_dates(line)
             or (
                 "analytic_distribution" in line
                 and not _valid_analytic_distribution(line["analytic_distribution"])
@@ -2782,9 +2798,24 @@ def _normalized_invoice_replacement_lines(
             "analytic_distribution": _normalized_analytic_distribution(
                 line.get("analytic_distribution")
             ),
+            **{field: line.get(field) for field in _DEFERRED_LINE_DATE_FIELDS},
         }
         for line in lines
     ]
+
+
+def _invoice_lines_match(
+    current: list[dict[str, Any]] | None, lines: list[dict[str, Any]]
+) -> bool:
+    expected = _normalized_invoice_replacement_lines(lines)
+    if current is None or len(current) != len(expected):
+        return False
+    for actual, target, requested in zip(current, expected, lines, strict=True):
+        for field in _DEFERRED_LINE_DATE_FIELDS:
+            if field not in requested:
+                # Legacy requests did not compare or explicitly clear these dates.
+                target[field] = actual[field]
+    return current == expected
 
 
 def _normalized_entry_replacement_lines(
@@ -7704,6 +7735,11 @@ def _create_document(
                         if "discount" in line
                         else {}
                     ),
+                    **{
+                        field: line[field] or False
+                        for field in _DEFERRED_LINE_DATE_FIELDS
+                        if field in line
+                    },
                     **(
                         {
                             "analytic_distribution": _odoo_analytic_distribution(
@@ -8087,6 +8123,10 @@ def _current_invoice_lines(move: Any) -> list[dict[str, Any]] | None:
                 "analytic_distribution": _normalized_analytic_distribution(
                     getattr(line, "analytic_distribution", None)
                 ),
+                **{
+                    field: _nullable_value(getattr(line, field, None))
+                    for field in _DEFERRED_LINE_DATE_FIELDS
+                },
             }
         )
     return result
@@ -8250,6 +8290,11 @@ def _replacement_commands(
                 "analytic_distribution": _odoo_analytic_distribution(
                     line.get("analytic_distribution")
                 ),
+                **{
+                    field: line[field] or False
+                    for field in _DEFERRED_LINE_DATE_FIELDS
+                    if field in line
+                },
             }
         else:
             values = {
@@ -8293,15 +8338,14 @@ def _replace_move_lines(
     invoice_action = capability_id == "invoice.lines.replace"
     if invoice_action:
         _validate_invoice_line_references(env, move, lines, company_id, failure_type)
-        expected = _normalized_invoice_replacement_lines(lines)
-        current = _current_invoice_lines(move)
+        matches = _invoice_lines_match(_current_invoice_lines(move), lines)
     else:
         company_currency_id = _validate_entry_line_references(
             env, lines, company_id, failure_type
         )
         expected = _normalized_entry_replacement_lines(lines, company_currency_id)
-        current = _current_entry_lines(move)
-    if current == expected:
+        matches = _current_entry_lines(move) == expected
+    if matches:
         return _move_result(move, company_id), True
     if invoice_action and _has_external_invoice_line_source(move):
         raise _fail(
@@ -8321,9 +8365,11 @@ def _replace_move_lines(
     field_name = "invoice_line_ids" if invoice_action else "line_ids"
     move.write({field_name: _replacement_commands(capability_id, lines)})
     verified = (
-        _current_invoice_lines(move) if invoice_action else _current_entry_lines(move)
+        _invoice_lines_match(_current_invoice_lines(move), lines)
+        if invoice_action
+        else _current_entry_lines(move) == expected
     )
-    if verified != expected:
+    if not verified:
         raise _fail(
             failure_type,
             "odoo_write_error",
@@ -8526,9 +8572,9 @@ def _create_refund(
                 "The refund operation key identifies multiple records.",
                 exit_code=5,
             )
-        if "lines" in parameters and _current_invoice_lines(
-            refunds
-        ) != _normalized_invoice_replacement_lines(parameters["lines"]):
+        if "lines" in parameters and not _invoice_lines_match(
+            _current_invoice_lines(refunds), parameters["lines"]
+        ):
             raise _fail(
                 failure_type,
                 "idempotency_conflict",
@@ -8614,9 +8660,9 @@ def _create_refund(
         company_id,
         failure_type,
     )
-    if "lines" in parameters and _current_invoice_lines(
-        refunds
-    ) != _normalized_invoice_replacement_lines(parameters["lines"]):
+    if "lines" in parameters and not _invoice_lines_match(
+        _current_invoice_lines(refunds), parameters["lines"]
+    ):
         raise _fail(
             failure_type,
             "odoo_write_error",

@@ -651,6 +651,23 @@ def _validate_ids(value: Any, *, exact_length: int | None = None) -> list[int] |
     return list(value)
 
 
+def _validate_deferred_line_dates(line: dict[str, Any]) -> None:
+    has_start = "deferred_start_date" in line
+    has_end = "deferred_end_date" in line
+    if has_start != has_end:
+        raise _invalid("Invoice-line deferred dates must be provided together.")
+    if not has_start:
+        return
+    start, end = line["deferred_start_date"], line["deferred_end_date"]
+    if start is None and end is None:
+        return
+    if not (_is_date(start) and _is_date(end) and start <= end):
+        raise _invalid(
+            "Invoice-line deferred dates must both be null or YYYY-MM-DD dates "
+            "with start on or before end."
+        )
+
+
 def _validate_invoice_parameters(parameters: Any) -> dict[str, Any]:
     required = {"partner_id", "journal_id", "invoice_date", "currency_id", "lines"}
     allowed = required | {
@@ -705,6 +722,8 @@ def _validate_invoice_parameters(parameters: Any) -> dict[str, Any]:
         "product_id",
         "discount",
         "analytic_distribution",
+        "deferred_start_date",
+        "deferred_end_date",
     }
     for line in lines:
         if (
@@ -736,6 +755,7 @@ def _validate_invoice_parameters(parameters: Any) -> dict[str, Any]:
             raise _invalid(
                 "Invoice line tax_ids must contain unique positive integers."
             )
+        _validate_deferred_line_dates(line)
         normalized_line = {**line, "tax_ids": tax_ids}
         if "analytic_distribution" in line:
             normalized_line["analytic_distribution"] = _validate_analytic_distribution(
@@ -914,7 +934,11 @@ def _validate_invoice_line_replacement_parameters(
         "discount",
         "tax_ids",
     }
-    allowed_line_fields = required_line_fields | {"analytic_distribution"}
+    allowed_line_fields = required_line_fields | {
+        "analytic_distribution",
+        "deferred_start_date",
+        "deferred_end_date",
+    }
     normalized_lines: list[dict[str, Any]] = []
     for line in lines:
         if (
@@ -942,6 +966,7 @@ def _validate_invoice_line_replacement_parameters(
             raise _invalid(
                 "Invoice line tax_ids must be sorted unique positive integers."
             )
+        _validate_deferred_line_dates(line)
         normalized_line = {**line, "tax_ids": tax_ids}
         if "analytic_distribution" in line:
             normalized_line["analytic_distribution"] = _validate_analytic_distribution(

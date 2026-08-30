@@ -462,6 +462,7 @@ _INVOICE_LINE_FIELDS = (
     "price_total",
     "tax_ids",
 )
+_INVOICE_DEFERRED_DATE_FIELDS = ("deferred_start_date", "deferred_end_date")
 _INVOICE_TERM_LINE_FIELDS = (
     "id",
     "move_id",
@@ -2763,17 +2764,20 @@ def _dispatch_invoice_get(
             access_allowed=access_allowed,
             result_key="invoice",
         )
-    lines = (
-        env["account.move.line"]
-        .with_context(active_test=False, allowed_company_ids=[company_id])
-        .search_read(
-            [
-                ("move_id", "=", payload["move_id"]),
-                ("display_type", "in", list(_INVOICE_LINE_TYPES)),
-            ],
-            fields=list(_INVOICE_LINE_FIELDS),
-            order="sequence,id",
-        )
+    line_model = env["account.move.line"].with_context(
+        active_test=False, allowed_company_ids=[company_id]
+    )
+    line_fields = [
+        *_INVOICE_LINE_FIELDS,
+        *(field for field in _INVOICE_DEFERRED_DATE_FIELDS if field in line_model._fields),
+    ]
+    lines = line_model.search_read(
+        [
+            ("move_id", "=", payload["move_id"]),
+            ("display_type", "in", list(_INVOICE_LINE_TYPES)),
+        ],
+        fields=line_fields,
+        order="sequence,id",
     )
     account_ids = {
         record_id
@@ -2804,7 +2808,7 @@ def _dispatch_invoice_get(
     invoice = _invoice_header(moves[0], related, company_id)
     normalized_lines: list[dict[str, Any]] = []
     for raw in lines:
-        if set(raw) != set(_INVOICE_LINE_FIELDS):
+        if set(raw) != set(line_fields):
             raise RuntimeFailure(
                 "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
             )
@@ -2825,6 +2829,11 @@ def _dispatch_invoice_get(
         line.pop("tax_ids")
         line["display_type"] = _optional_string(line["display_type"])
         line["name"] = _optional_string(line["name"])
+        for field in _INVOICE_DEFERRED_DATE_FIELDS:
+            value = line.get(field)
+            line[field] = (
+                None if value is None or value is False else _date_string(value)
+            )
         line["product"] = (
             {
                 "id": product_id,
