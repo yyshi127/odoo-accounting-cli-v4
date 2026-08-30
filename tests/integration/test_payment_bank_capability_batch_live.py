@@ -1,19 +1,24 @@
 """Transactional dual-database smoke for the payment/bank capability batch.
 
-The worker runs as the configured accountant, creates its own accounting fixtures,
-exercises all ten new capabilities, and rolls the transaction back.  It never
-commits fixture or accounting data.
+The worker uses the public CLI in-process with normal Odoo ports and a shared
+real ORM transaction as the configured accountant.  This checks CLI contracts
+and accounting effects, not cross-process transport.  Business records are only
+created/changed through CLI commands; ORM reads select master data and audit
+rollback.  No fixture or accounting data is committed.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 import subprocess
 import sys
+import sysconfig
 import uuid
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +55,36 @@ _CAPABILITIES = (
     "bank.transaction.match",
     "bank.transaction.unmatch",
     "reconciliation.write_off",
+    "payment.post",
+    "customer_invoice.create",
+    "invoice.post",
+    "bank.transaction.record",
+    "invoice.payment_status.inspect",
+    "receivable.payment.register",
+    "payment.get",
+    "vendor_bill.create",
+    "payable.payment.register",
+    "journal_entry.create",
+    "journal_entry.post",
+    "journal_entry.reverse",
+    "journal_entry.get",
+    "report.trial_balance",
+)
+_SCENARIOS = (
+    "payment_lifecycle",
+    "bank_match_unmatch_writeoff",
+    "customer_split_payment_bank_match",
+    "supplier_bill_payment",
+    "adjustment_reversal",
+    "trial_balance_movement",
+)
+_BUSINESS_MODELS = (
+    "account.payment",
+    "account.move",
+    "account.move.line",
+    "account.bank.statement.line",
+    "account.partial.reconcile",
+    "account.full.reconcile",
 )
 
 
@@ -131,7 +166,13 @@ def _run_worker(
     environment = os.environ.copy()
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
     environment["PYTHONPATH"] = os.pathsep.join(
-        part for part in (str(_root() / "src"), environment.get("PYTHONPATH")) if part
+        part
+        for part in (
+            str(_root() / "src"),
+            sysconfig.get_path("purelib"),
+            environment.get("PYTHONPATH"),
+        )
+        if part
     )
     completed = subprocess.run(
         command,
@@ -140,19 +181,23 @@ def _run_worker(
         text=True,
         capture_output=True,
         check=False,
-        timeout=timeout,
+        timeout=max(timeout, 900),
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert completed.stderr == ""
     assert len(completed.stdout.splitlines()) == 1
     assert json.loads(completed.stdout) == {
         "alias": alias,
-        "capabilities": list(_CAPABILITIES),
+        "capabilities": sorted(_CAPABILITIES),
         "company_id": _COMPANY_ID,
         "database": _DATABASES[alias],
+        "execution": "in_process_cli_real_orm",
         "rollback_verified": True,
+        "scenarios": list(_SCENARIOS),
+        "trial_balance_period_delta": {"debit": "510", "credit": "510"},
         "user_id": _USER_ID,
     }
+    print(completed.stdout.strip(), flush=True)
 
 
 if pytest is not None:
@@ -242,7 +287,11 @@ def _request(
 ) -> dict[str, Any]:
     return {
         "schema_version": "v1",
-        "request_id": str(uuid.uuid5(run_id, f"payment-bank:{capability_id}")),
+        "request_id": str(
+            uuid.uuid5(
+                run_id, f"payment-bank:{alias}:{capability_id}:{_digest(parameters)}"
+            )
+        ),
         "context": {
             "database": alias,
             "company_id": _COMPANY_ID,
@@ -254,116 +303,144 @@ def _request(
     }
 
 
-class _CoreWritePort:
+class _RuntimeClient:
     def __init__(self, env: Any) -> None:
         self.env = env
+        self.capabilities: set[str] = set()
+        self.tracked: dict[str, set[int]] = {model: set() for model in _BUSINESS_MODELS}
+        self.last_runtime_failure: Exception | None = None
 
-    @property
-    def user_id(self) -> int:
-        return self.env.uid
+    def invoke(self, action: str, payload: dict[str, Any]) -> dict[str, Any]:
+        from odoo_accounting_cli_v4.bridge.client import BridgeError
+        from odoo_accounting_cli_v4.bridge.runtime import RuntimeFailure, _dispatch
 
-    def execute(self, **payload: Any) -> dict[str, Any]:
-        from odoo_accounting_cli_v4.bridge.core_writes_runtime import dispatch
-        from odoo_accounting_cli_v4.bridge.runtime import RuntimeFailure
+        self.env.invalidate_all()
+        try:
+            page = _dispatch(self.env, action, payload, _COMPANY_ID, (_COMPANY_ID,))
+        except RuntimeFailure as exc:
+            self.last_runtime_failure = exc
+            raise BridgeError(
+                exc.code,
+                str(exc),
+                exit_code=exc.exit_code,
+                retryable=exc.retryable,
+                details=exc.details,
+            ) from exc
+        result = page.get("result")
+        if isinstance(result, dict) and result.get("model") in self.tracked:
+            self.tracked[result["model"]].add(result["id"])
+            self.tracked["account.move.line"].update(result.get("line_ids", []))
+            self.tracked["account.partial.reconcile"].update(
+                result.get("partial_reconcile_ids", [])
+            )
+            if result.get("full_reconcile_id"):
+                self.tracked["account.full.reconcile"].add(result["full_reconcile_id"])
+            _collect_related(self.env, self.tracked)
+        return page
 
-        return dispatch(self.env, payload, payload["company_id"], RuntimeFailure)
+
+def _cli(
+    client: _RuntimeClient,
+    alias: str,
+    run_id: uuid.UUID,
+    capability_id: str,
+    parameters: dict[str, Any],
+    *,
+    key: str | None = None,
+) -> dict[str, Any]:
+    from odoo_accounting_cli_v4 import cli
+    from odoo_accounting_cli_v4.bridge.bank_reconciliation import (
+        OdooBankReconciliationPort,
+    )
+    from odoo_accounting_cli_v4.bridge.bank_transactions import (
+        OdooBankTransactionSearchPort,
+    )
+    from odoo_accounting_cli_v4.bridge.core_writes import OdooCoreWritePort
+    from odoo_accounting_cli_v4.bridge.financial_reports import OdooFinancialReportPort
+    from odoo_accounting_cli_v4.bridge.invoices import OdooInvoicePort
+    from odoo_accounting_cli_v4.bridge.journal_entries import OdooJournalEntryPort
+    from odoo_accounting_cli_v4.bridge.payments import OdooPaymentPort
+
+    request = _request(alias, run_id, capability_id, parameters)
+    if key is not None:
+        port = OdooCoreWritePort(client)
+        argv = [
+            "write",
+            "run",
+            capability_id,
+            "--request",
+            "-",
+            "--idempotency-key",
+            key,
+            "--confirm",
+            capability_id,
+        ]
+    else:
+        ports = {
+            "bank.transaction.search": OdooBankTransactionSearchPort,
+            "bank.transaction.reconciliation.get": OdooBankReconciliationPort,
+            "bank.transaction.match_candidates.list": OdooBankReconciliationPort,
+            "invoice.payment_status.inspect": OdooInvoicePort,
+            "payment.get": OdooPaymentPort,
+            "journal_entry.get": OdooJournalEntryPort,
+            "report.trial_balance": OdooFinancialReportPort,
+        }
+        port = ports[capability_id](client)
+        argv = ["read", capability_id, "--request", "-"]
+    stdout, stderr = io.StringIO(), io.StringIO()
+    client.last_runtime_failure = None
+    exit_code = cli.main(
+        argv,
+        stdin=io.StringIO(json.dumps(request)),
+        stdout=stdout,
+        stderr=stderr,
+        port_factory=lambda _capability, _request: port,
+    )
+    if exit_code != 0:
+        raise AssertionError(
+            f"{capability_id}: {stdout.getvalue()}{stderr.getvalue()}"
+        ) from client.last_runtime_failure
+    assert stderr.getvalue() == ""
+    assert len(stdout.getvalue().splitlines()) == 1
+    response = json.loads(stdout.getvalue())
+    assert response["request_id"] == request["request_id"]
+    assert response["capability"] == capability_id
+    assert response["schema_version"] == "v1"
+    assert response["success"] is True and response["status"] == "verified"
+    assert response["error"] is None
+    assert {
+        field: response["odoo"][field]
+        for field in ("database", "company_id", "user_id")
+    } == {
+        "database": alias,
+        "company_id": _COMPANY_ID,
+        "user_id": _USER_ID,
+    }
+    if key is not None:
+        result = response["data"]["result"]
+        assert response["odoo"]["model"] == result["model"]
+        assert response["odoo"]["record_ids"] == [result["id"]]
+    client.capabilities.add(capability_id)
+    return response["data"]
 
 
 def _write(
-    env: Any,
+    env: _RuntimeClient,
     alias: str,
     run_id: uuid.UUID,
     capability_id: str,
     parameters: dict[str, Any],
     *,
     explicit_key: str | None = None,
-    twice: bool = True,
 ) -> dict[str, Any]:
-    from odoo_accounting_cli_v4.capabilities.core_writes import execute_core_write
-
-    request = _request(alias, run_id, capability_id, parameters)
     key = _write_key(capability_id, parameters, explicit_key)
-    port = _CoreWritePort(env)
-    first = execute_core_write(port, capability_id, request, key, capability_id)
+    first = _cli(env, alias, run_id, capability_id, parameters, key=key)
     if first["idempotent_replay"] is not False:
         raise RuntimeError(f"{capability_id} unexpectedly replayed its first write")
-    if not twice:
-        return first["result"]
-    second = execute_core_write(port, capability_id, request, key, capability_id)
+    second = _cli(env, alias, run_id, capability_id, parameters, key=key)
     if second["idempotent_replay"] is not True or second["result"] != first["result"]:
         raise RuntimeError(f"{capability_id} did not replay deterministically")
     return first["result"]
-
-
-class _BankSearchPort:
-    def __init__(self, env: Any) -> None:
-        self.env = env
-
-    @property
-    def user_id(self) -> int:
-        return self.env.uid
-
-    def search_page(self, **payload: Any) -> dict[str, Any]:
-        from odoo_accounting_cli_v4.bridge.runtime import (
-            _dispatch_bank_transaction_search,
-        )
-
-        return _dispatch_bank_transaction_search(
-            self.env,
-            payload,
-            payload["company_id"],
-        )
-
-
-class _BankReconciliationPort:
-    def __init__(self, env: Any) -> None:
-        self.env = env
-
-    @property
-    def user_id(self) -> int:
-        return self.env.uid
-
-    def get(self, *, company_id: int, transaction_id: int) -> dict[str, Any]:
-        from odoo_accounting_cli_v4.bridge.bank_reconciliation_runtime import (
-            GET_ACTION,
-            dispatch,
-        )
-        from odoo_accounting_cli_v4.bridge.runtime import RuntimeFailure
-
-        return dispatch(
-            self.env,
-            GET_ACTION,
-            {"company_id": company_id, "transaction_id": transaction_id},
-            company_id,
-            failure_type=RuntimeFailure,
-        )
-
-    def read_candidates_page(
-        self,
-        *,
-        company_id: int,
-        transaction_id: int,
-        after: list[Any] | None,
-        limit: int,
-    ) -> dict[str, Any]:
-        from odoo_accounting_cli_v4.bridge.bank_reconciliation_runtime import (
-            CANDIDATE_ACTION,
-            dispatch,
-        )
-        from odoo_accounting_cli_v4.bridge.runtime import RuntimeFailure
-
-        return dispatch(
-            self.env,
-            CANDIDATE_ACTION,
-            {
-                "company_id": company_id,
-                "transaction_id": transaction_id,
-                "after": after,
-                "limit": limit,
-            },
-            company_id,
-            failure_type=RuntimeFailure,
-        )
 
 
 def _read_search(
@@ -372,14 +449,7 @@ def _read_search(
     run_id: uuid.UUID,
     parameters: dict[str, Any],
 ) -> dict[str, Any]:
-    from odoo_accounting_cli_v4.capabilities.bank_transactions import (
-        search_bank_transactions,
-    )
-
-    return search_bank_transactions(
-        _BankSearchPort(env),
-        _request(alias, run_id, "bank.transaction.search", parameters),
-    )
+    return _cli(env, alias, run_id, "bank.transaction.search", parameters)
 
 
 def _read_reconciliation(
@@ -388,18 +458,12 @@ def _read_reconciliation(
     run_id: uuid.UUID,
     transaction_id: int,
 ) -> dict[str, Any]:
-    from odoo_accounting_cli_v4.capabilities.bank_reconciliation import (
-        get_bank_transaction_reconciliation,
-    )
-
-    return get_bank_transaction_reconciliation(
-        _BankReconciliationPort(env),
-        _request(
-            alias,
-            run_id,
-            "bank.transaction.reconciliation.get",
-            {"transaction_id": transaction_id},
-        ),
+    return _cli(
+        env,
+        alias,
+        run_id,
+        "bank.transaction.reconciliation.get",
+        {"transaction_id": transaction_id},
     )
 
 
@@ -408,19 +472,14 @@ def _read_candidates(
     alias: str,
     run_id: uuid.UUID,
     transaction_id: int,
+    cursor: str | None = None,
 ) -> dict[str, Any]:
-    from odoo_accounting_cli_v4.capabilities.bank_reconciliation import (
-        list_bank_match_candidates,
-    )
-
-    return list_bank_match_candidates(
-        _BankReconciliationPort(env),
-        _request(
-            alias,
-            run_id,
-            "bank.transaction.match_candidates.list",
-            {"transaction_id": transaction_id, "limit": 1000, "cursor": None},
-        ),
+    return _cli(
+        env,
+        alias,
+        run_id,
+        "bank.transaction.match_candidates.list",
+        {"transaction_id": transaction_id, "limit": 1000, "cursor": cursor},
     )
 
 
@@ -445,14 +504,16 @@ def _fixture_ids(env: Any, alias: str) -> dict[str, int]:
         ),
         "bank journal",
     )
-    sale_journal = _one(
-        env["account.journal"].search(
-            [("company_id", "=", _COMPANY_ID), ("type", "=", "sale")],
-            order="id",
-            limit=1,
-        ),
-        "sale journal",
-    )
+
+    def journal(journal_type: str) -> Any:
+        return _one(
+            env["account.journal"].search(
+                [("company_id", "=", _COMPANY_ID), ("type", "=", journal_type)],
+                order="id",
+                limit=1,
+            ),
+            f"{journal_type} journal",
+        )
 
     def account(account_type: str) -> Any:
         return _one(
@@ -481,15 +542,32 @@ def _fixture_ids(env: Any, alias: str) -> dict[str, int]:
             f"{payment_type} manual payment method line",
         )
 
+    inbound_method = method_line("inbound")
+    outstanding = inbound_method.payment_account_id
+    if (
+        not outstanding
+        or not outstanding.reconcile
+        or _COMPANY_ID not in outstanding.company_ids.ids
+        or outstanding == bank_journal.default_account_id
+        or outstanding == bank_journal.suspense_account_id
+    ):
+        raise RuntimeError(
+            "split receipts require a reconcilable outstanding account distinct "
+            "from the bank and suspense accounts"
+        )
     return {
         "customer": partner_ids["customer"],
         "supplier": partner_ids["supplier"],
         "currency": company.currency_id.id,
         "bank_journal": bank_journal.id,
-        "sale_journal": sale_journal.id,
+        "sale_journal": journal("sale").id,
+        "purchase_journal": journal("purchase").id,
+        "general_journal": journal("general").id,
         "income": account("income").id,
         "expense": account("expense").id,
-        "inbound_method": method_line("inbound").id,
+        "current_asset": account("asset_current").id,
+        "inbound_method": inbound_method.id,
+        "outstanding": outstanding.id,
         "outbound_method": method_line("outbound").id,
     }
 
@@ -541,7 +619,6 @@ def _exercise_payment(
         run_id,
         "payment.post",
         {"payment_id": payment_id},
-        twice=False,
     )
     reset = _write(
         env,
@@ -592,18 +669,19 @@ def _exercise_bank(
         run_id,
         "invoice.post",
         {"move_id": invoice_id},
-        twice=False,
     )
-    invoice_move = env["account.move"].browse(invoice_id)
+    invoice_status = _cli(
+        env, alias, run_id, "invoice.payment_status.inspect", {"invoice_id": invoice_id}
+    )
     receivable = _one(
-        invoice_move.line_ids.filtered(
-            lambda line: (
-                line.account_id.account_type == "asset_receivable"
-                and not line.reconciled
-            )
-        ),
+        [
+            line
+            for line in invoice_status["receivable_payable_lines"]
+            if line["account"]["account_type"] == "asset_receivable"
+            and not line["reconciled"]
+        ],
         "open receivable line",
-    )
+    )[0]
 
     recorded = _write(
         env,
@@ -654,7 +732,7 @@ def _exercise_bank(
         raise RuntimeError("the new bank transaction is not initially unmatched")
     candidates = _read_candidates(env, alias, run_id, transaction_id)
     candidate_ids = {item["id"] for item in candidates["items"]}
-    if receivable.id not in candidate_ids:
+    if receivable["id"] not in candidate_ids:
         raise RuntimeError("the fixture receivable is absent from match candidates")
 
     matched = _write(
@@ -662,13 +740,13 @@ def _exercise_bank(
         alias,
         run_id,
         "bank.transaction.match",
-        {"transaction_id": transaction_id, "candidate_line_ids": [receivable.id]},
+        {"transaction_id": transaction_id, "candidate_line_ids": [receivable["id"]]},
     )
     if matched["reconciled"] is not True:
         raise RuntimeError("bank.transaction.match did not reconcile the transaction")
     matched_state = _read_reconciliation(env, alias, run_id, transaction_id)
     if not any(
-        line["source_line_id"] == receivable.id
+        line["source_line_id"] == receivable["id"]
         for line in matched_state["matched_lines"]
     ):
         raise RuntimeError("reconciliation.get did not report the matched receivable")
@@ -711,12 +789,394 @@ def _exercise_bank(
     return invoice_id, transaction_id
 
 
+def _create_posted_invoice(
+    client: _RuntimeClient,
+    alias: str,
+    run_id: uuid.UUID,
+    ids: dict[str, int],
+    today: str,
+    marker: str,
+    amount: str,
+    *,
+    supplier: bool = False,
+) -> int:
+    capability = "vendor_bill.create" if supplier else "customer_invoice.create"
+    invoice = _write(
+        client,
+        alias,
+        run_id,
+        capability,
+        {
+            "partner_id": ids["supplier" if supplier else "customer"],
+            "journal_id": ids["purchase_journal" if supplier else "sale_journal"],
+            "invoice_date": today,
+            "currency_id": ids["currency"],
+            "lines": [
+                {
+                    "name": marker,
+                    "account_id": ids["expense" if supplier else "income"],
+                    "quantity": "1",
+                    "price_unit": amount,
+                    "tax_ids": [],
+                }
+            ],
+        },
+        explicit_key=f"{capability}:{alias}:{run_id.hex}:business-chain",
+    )
+    _write(client, alias, run_id, "invoice.post", {"move_id": invoice["id"]})
+    state = _cli(
+        client,
+        alias,
+        run_id,
+        "invoice.payment_status.inspect",
+        {"invoice_id": invoice["id"]},
+    )
+    assert state["state"] == "posted"
+    assert state["move_type"] == ("in_invoice" if supplier else "out_invoice")
+    assert Decimal(state["amount_total"]) == Decimal(amount)
+    assert Decimal(state["amount_residual"]) == Decimal(amount)
+    return invoice["id"]
+
+
+def _exercise_split_receipts(
+    client: _RuntimeClient,
+    alias: str,
+    run_id: uuid.UUID,
+    ids: dict[str, int],
+    today: str,
+    marker: str,
+) -> None:
+    invoice_id = _create_posted_invoice(
+        client, alias, run_id, ids, today, marker, "100"
+    )
+    payments = []
+    for amount, residual in (("40", "60"), ("60", "0")):
+        result = _write(
+            client,
+            alias,
+            run_id,
+            "receivable.payment.register",
+            {
+                "move_id": invoice_id,
+                "journal_id": ids["bank_journal"],
+                "payment_date": today,
+                "amount": amount,
+            },
+            explicit_key=f"split-receipt:{alias}:{run_id.hex}:{amount}",
+        )
+        assert result["source_id"] == invoice_id
+        state = _cli(
+            client,
+            alias,
+            run_id,
+            "invoice.payment_status.inspect",
+            {"invoice_id": invoice_id},
+        )
+        assert Decimal(state["amount_residual"]) == Decimal(residual)
+        assert sum(
+            Decimal(item["company_amount"])
+            for item in state["reconciliations"]
+            if item["payment_id"] == result["id"]
+        ) == Decimal(amount)
+        if residual == "60":
+            assert state["payment_state"] == "partial"
+        else:
+            assert state["payment_state"] in {"in_payment", "paid"}
+            assert all(line["reconciled"] for line in state["receivable_payable_lines"])
+        payment = _cli(
+            client, alias, run_id, "payment.get", {"payment_id": result["id"]}
+        )
+        assert Decimal(payment["amount"]) == Decimal(amount)
+        assert (payment["payment_type"], payment["partner_type"]) == (
+            "inbound",
+            "customer",
+        )
+        assert payment["payment_method_line"]["id"] == ids["inbound_method"]
+        assert payment["move_id"] == payment["journal_entry"]["id"]
+        assert invoice_id in {item["id"] for item in payment["reconciled_invoices"]}
+        payments.append(payment)
+    assert len({payment["id"] for payment in payments}) == 2
+    assert {payment["id"] for payment in payments} <= {
+        item["id"] for item in state["payments"]
+    }
+    transaction = _write(
+        client,
+        alias,
+        run_id,
+        "bank.transaction.record",
+        {
+            "journal_id": ids["bank_journal"],
+            "date": today,
+            "amount": "100",
+            "payment_ref": marker,
+            "partner_id": ids["customer"],
+        },
+        explicit_key=f"split-bank:{alias}:{run_id.hex}",
+    )
+    move_ids = {payment["move_id"] for payment in payments}
+    candidates, cursor = [], None
+    while True:
+        page = _read_candidates(client, alias, run_id, transaction["id"], cursor)
+        candidates.extend(
+            item
+            for item in page["items"]
+            if item["move"]["id"] in move_ids
+            and item["account"]["id"] == ids["outstanding"]
+        )
+        if not page["has_more"]:
+            break
+        assert page["next_cursor"] is not None and page["next_cursor"] != cursor
+        cursor = page["next_cursor"]
+    assert (
+        len(candidates) == 2 and {item["move"]["id"] for item in candidates} == move_ids
+    )
+    assert sorted(Decimal(item["amount_residual"]) for item in candidates) == [
+        Decimal(40),
+        Decimal(60),
+    ]
+    line_ids = sorted(item["id"] for item in candidates)
+    _write(
+        client,
+        alias,
+        run_id,
+        "bank.transaction.match",
+        {"transaction_id": transaction["id"], "candidate_line_ids": line_ids},
+    )
+    bank = _read_reconciliation(client, alias, run_id, transaction["id"])
+    assert bank["transaction"]["is_reconciled"] is True
+    assert Decimal(bank["transaction"]["amount_residual"]) == 0
+    assert bank["suspense_line"] is None
+    assert {line["source_line_id"] for line in bank["matched_lines"]} == set(line_ids)
+    assert all(
+        Decimal(line["source_amount_residual"]) == 0 for line in bank["matched_lines"]
+    )
+    assert all(
+        Decimal(line["source_amount_residual_currency"]) == 0
+        for line in bank["matched_lines"]
+    )
+    assert (
+        Decimal(bank["liquidity_line"]["balance"])
+        + sum(Decimal(line["applied_balance"]) for line in bank["matched_lines"])
+        == 0
+    )
+    for payment in payments:
+        paid = _cli(client, alias, run_id, "payment.get", {"payment_id": payment["id"]})
+        assert paid["is_matched"] is True and paid["state"] == "paid"
+    final = _cli(
+        client,
+        alias,
+        run_id,
+        "invoice.payment_status.inspect",
+        {"invoice_id": invoice_id},
+    )
+    assert Decimal(final["amount_residual"]) == 0 and final["payment_state"] == "paid"
+    entry = _cli(
+        client,
+        alias,
+        run_id,
+        "journal_entry.get",
+        {"entry_id": bank["transaction"]["move_id"]},
+    )
+    assert entry["state"] == "posted"
+    assert (
+        Decimal(entry["totals"]["debit"]) == Decimal(entry["totals"]["credit"]) == 100
+    )
+    assert Decimal(entry["totals"]["balance"]) == 0
+
+
+def _exercise_supplier_payment(
+    client: _RuntimeClient,
+    alias: str,
+    run_id: uuid.UUID,
+    ids: dict[str, int],
+    today: str,
+    marker: str,
+) -> None:
+    bill_id = _create_posted_invoice(
+        client, alias, run_id, ids, today, marker, "80", supplier=True
+    )
+    result = _write(
+        client,
+        alias,
+        run_id,
+        "payable.payment.register",
+        {
+            "move_id": bill_id,
+            "journal_id": ids["bank_journal"],
+            "payment_date": today,
+            "amount": "80",
+        },
+        explicit_key=f"supplier-payment:{alias}:{run_id.hex}",
+    )
+    assert result["source_id"] == bill_id
+    payment = _cli(client, alias, run_id, "payment.get", {"payment_id": result["id"]})
+    assert (payment["payment_type"], payment["partner_type"]) == (
+        "outbound",
+        "supplier",
+    )
+    assert Decimal(payment["amount"]) == 80
+    assert bill_id in {item["id"] for item in payment["reconciled_bills"]}
+    state = _cli(
+        client, alias, run_id, "invoice.payment_status.inspect", {"invoice_id": bill_id}
+    )
+    assert Decimal(state["amount_residual"]) == 0
+    assert state["payment_state"] in {"in_payment", "paid"}
+    assert all(line["reconciled"] for line in state["receivable_payable_lines"])
+
+
+def _exercise_adjustment_reversal(
+    client: _RuntimeClient,
+    alias: str,
+    run_id: uuid.UUID,
+    ids: dict[str, int],
+    today: str,
+    marker: str,
+) -> None:
+    entry = _write(
+        client,
+        alias,
+        run_id,
+        "journal_entry.create",
+        {
+            "journal_id": ids["general_journal"],
+            "date": today,
+            "reference": marker,
+            "lines": [
+                {
+                    "name": marker + " debit",
+                    "account_id": ids["expense"],
+                    "partner_id": None,
+                    "debit": "25",
+                    "credit": "0",
+                },
+                {
+                    "name": marker + " credit",
+                    "account_id": ids["current_asset"],
+                    "partner_id": None,
+                    "debit": "0",
+                    "credit": "25",
+                },
+            ],
+        },
+        explicit_key=f"adjustment:{alias}:{run_id.hex}",
+    )
+    _write(client, alias, run_id, "journal_entry.post", {"move_id": entry["id"]})
+    reversal = _write(
+        client,
+        alias,
+        run_id,
+        "journal_entry.reverse",
+        {"move_id": entry["id"], "date": today, "reason": marker},
+    )
+    assert reversal["source_id"] == entry["id"] and reversal["id"] != entry["id"]
+    if reversal["state"] == "draft":
+        _write(client, alias, run_id, "journal_entry.post", {"move_id": reversal["id"]})
+    balances: dict[int, Decimal] = {}
+    for entry_id in (entry["id"], reversal["id"]):
+        posted = _cli(
+            client, alias, run_id, "journal_entry.get", {"entry_id": entry_id}
+        )
+        assert posted["state"] == "posted"
+        assert (
+            Decimal(posted["totals"]["debit"])
+            == Decimal(posted["totals"]["credit"])
+            == 25
+        )
+        assert Decimal(posted["totals"]["balance"]) == 0
+        for line in posted["lines"]:
+            account_id = line["account"]["id"]
+            balances[account_id] = balances.get(account_id, Decimal(0)) + Decimal(
+                line["balance"]
+            )
+    assert set(balances) == {ids["expense"], ids["current_asset"]}
+    assert all(balance == 0 for balance in balances.values())
+
+
+def _trial_balance_totals(
+    client: _RuntimeClient, alias: str, run_id: uuid.UUID, today: str
+) -> list[Decimal]:
+    data = _cli(
+        client,
+        alias,
+        run_id,
+        "report.trial_balance",
+        {"date_from": today, "date_to": today, "limit": 1000, "cursor": None},
+    )
+    assert [column["expression_label"] for column in data["columns"]] == [
+        "balance",
+        "debit",
+        "credit",
+        "balance",
+    ]
+    assert data["has_more"] is False and data["next_cursor"] is None
+    totals = [line for line in data["lines"] if line["parent_id"] is None]
+    assert len(totals) == 1 and all(value is not None for value in totals[0]["values"])
+    values = [Decimal(value) for value in totals[0]["values"]]
+    assert values[0] == values[3] == 0
+    assert values[1] == values[2]
+    return values
+
+
+def _collect_related(env: Any, tracked: dict[str, set[int]]) -> None:
+    """Read-only rollback audit; never supplies records to a business command."""
+    records = {
+        model: env[model].browse(sorted(ids)).exists() for model, ids in tracked.items()
+    }
+    records["account.payment"] |= records["account.bank.statement.line"].payment_ids
+    records["account.move"] |= (
+        records["account.payment"].move_id
+        | records["account.bank.statement.line"].move_id
+    )
+    lines = records["account.move.line"] | records["account.move"].line_ids
+    partials = (
+        records["account.partial.reconcile"]
+        | lines.matched_debit_ids
+        | lines.matched_credit_ids
+    )
+    fulls = (
+        records["account.full.reconcile"]
+        | lines.full_reconcile_id
+        | partials.full_reconcile_id
+    )
+    partials |= fulls.partial_reconcile_ids
+    lines |= (
+        fulls.reconciled_line_ids | partials.debit_move_id | partials.credit_move_id
+    )
+    records["account.move"] |= lines.move_id | partials.exchange_move_id
+    records["account.move.line"] = lines | records["account.move"].line_ids
+    records["account.partial.reconcile"] = partials
+    records["account.full.reconcile"] = fulls
+    for model, found in records.items():
+        tracked[model].update(found.ids)
+
+
+def _collect_marked(env: Any, tracked: dict[str, set[int]], marker: str) -> None:
+    """Find this run's roots even if a failed CLI returned no new record ID."""
+    domains = {
+        "account.payment": [
+            "|",
+            ("memo", "ilike", marker),
+            ("payment_reference", "ilike", marker),
+        ],
+        "account.bank.statement.line": [("payment_ref", "ilike", marker)],
+        "account.move": [
+            "|",
+            ("ref", "ilike", marker),
+            ("line_ids.name", "ilike", marker),
+        ],
+        "account.move.line": [("name", "ilike", marker)],
+    }
+    for model, domain in domains.items():
+        tracked[model].update(
+            env[model].with_context(active_test=False).search(domain).ids
+        )
+    _collect_related(env, tracked)
+
+
 def _verify_rollback(
     registry: Any,
     *,
-    payment_id: int,
-    invoice_id: int,
-    transaction_id: int,
+    tracked: dict[str, set[int]],
     marker: str,
 ) -> None:
     from odoo import SUPERUSER_ID, api
@@ -728,22 +1188,11 @@ def _verify_rollback(
             SUPERUSER_ID,
             {"allowed_company_ids": [_COMPANY_ID], "active_test": False},
         )
+        leaked = {model: set(record_ids) for model, record_ids in tracked.items()}
+        _collect_marked(env, leaked, marker)
         remaining = {
-            "payment_id": env["account.payment"].search_count(
-                [("id", "=", payment_id)], limit=1
-            ),
-            "invoice_id": env["account.move"].search_count(
-                [("id", "=", invoice_id)], limit=1
-            ),
-            "transaction_id": env["account.bank.statement.line"].search_count(
-                [("id", "=", transaction_id)], limit=1
-            ),
-            "marker_payment": env["account.payment"].search_count(
-                [("payment_reference", "ilike", marker)], limit=1
-            ),
-            "marker_bank": env["account.bank.statement.line"].search_count(
-                [("payment_ref", "=", marker)], limit=1
-            ),
+            model: env[model].search_count([("id", "in", sorted(record_ids))])
+            for model, record_ids in leaked.items()
         }
         if any(remaining.values()):
             raise RuntimeError(f"transaction fixtures survived rollback: {remaining}")
@@ -774,10 +1223,10 @@ def _live_worker(argv: list[str] | None = None) -> int:
     registry = Registry(args.database)
     cursor = registry.cursor()
     marker = f"ODACV4-PAY-BANK-{args.alias}-{args.run_id.hex}"
-    payment_id: int | None = None
-    invoice_id: int | None = None
-    transaction_id: int | None = None
-    failure: Exception | None = None
+    tracked: dict[str, set[int]] = {model: set() for model in _BUSINESS_MODELS}
+    scenarios: list[str] = []
+    env = client = None
+    failure: BaseException | None = None
     try:
         env = api.Environment(
             cursor,
@@ -789,6 +1238,8 @@ def _live_worker(argv: list[str] | None = None) -> int:
                 "tz": "Asia/Shanghai",
             },
         )
+        client = _RuntimeClient(env)
+        client.tracked = tracked
         user = env.user
         if (
             env.uid != _USER_ID
@@ -800,36 +1251,74 @@ def _live_worker(argv: list[str] | None = None) -> int:
             raise RuntimeError("the fixed business user is unavailable")
         ids = _fixture_ids(env, args.alias)
         today = fields.Date.to_string(fields.Date.context_today(env.user))
-        payment_id = _exercise_payment(env, args.alias, args.run_id, ids, today, marker)
-        invoice_id, transaction_id = _exercise_bank(
-            env, args.alias, args.run_id, ids, today, marker
+        _exercise_payment(client, args.alias, args.run_id, ids, today, marker)
+        scenarios.append("payment_lifecycle")
+        _exercise_bank(client, args.alias, args.run_id, ids, today, marker)
+        scenarios.append("bank_match_unmatch_writeoff")
+        before = _trial_balance_totals(client, args.alias, args.run_id, today)
+        _exercise_split_receipts(
+            client, args.alias, args.run_id, ids, today, marker + "-SPLIT"
         )
-    except Exception as exc:
+        scenarios.append("customer_split_payment_bank_match")
+        _exercise_supplier_payment(
+            client, args.alias, args.run_id, ids, today, marker + "-SUPPLIER"
+        )
+        scenarios.append("supplier_bill_payment")
+        _exercise_adjustment_reversal(
+            client, args.alias, args.run_id, ids, today, marker + "-ADJUST"
+        )
+        scenarios.append("adjustment_reversal")
+        after = _trial_balance_totals(client, args.alias, args.run_id, today)
+        delta = [new - old for old, new in zip(before, after, strict=True)]
+        # Eight posted moves: invoice, two receipts, bank deposit, bill, payment,
+        # adjustment and reversal. These are period movements, not net balances.
+        expected_movement = Decimal(100 + 40 + 60 + 100 + 80 + 80 + 25 + 25)
+        assert delta == [Decimal(0), expected_movement, expected_movement, Decimal(0)]
+        scenarios.append("trial_balance_movement")
+        assert client.capabilities == set(_CAPABILITIES)
+        assert all(tracked.values()), "rollback tracking omitted a business model"
+    except BaseException as exc:  # noqa: BLE001 - re-raised after rollback verification
         failure = exc
     finally:
-        cursor.rollback()
-        cursor.close()
+        try:
+            if env is not None:
+                _collect_marked(env, tracked, args.run_id.hex)
+        except Exception as exc:  # noqa: BLE001 - collection must never prevent rollback
+            if failure is None:
+                failure = exc
+            else:
+                failure.add_note(f"rollback ID collection also failed: {exc}")
+        finally:
+            try:
+                cursor.rollback()
+            finally:
+                cursor.close()
 
-    if payment_id is not None and invoice_id is not None and transaction_id is not None:
+    try:
         _verify_rollback(
             registry,
-            payment_id=payment_id,
-            invoice_id=invoice_id,
-            transaction_id=transaction_id,
-            marker=marker,
+            tracked=tracked,
+            marker=args.run_id.hex,
         )
+    except Exception as exc:
+        raise exc from failure
     if failure is not None:
         raise failure
-    if payment_id is None or invoice_id is None or transaction_id is None:
-        raise RuntimeError("the live fixtures were not initialized")
+    assert client is not None and scenarios == list(_SCENARIOS)
     sys.stdout.write(
         json.dumps(
             {
                 "alias": args.alias,
-                "capabilities": list(_CAPABILITIES),
+                "capabilities": sorted(client.capabilities),
                 "company_id": _COMPANY_ID,
                 "database": args.database,
+                "execution": "in_process_cli_real_orm",
                 "rollback_verified": True,
+                "scenarios": scenarios,
+                "trial_balance_period_delta": {
+                    "debit": format(delta[1].normalize(), "f"),
+                    "credit": format(delta[2].normalize(), "f"),
+                },
                 "user_id": _USER_ID,
             },
             ensure_ascii=False,

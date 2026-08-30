@@ -1,6 +1,6 @@
 # Odoo Accounting CLI V4 handoff
 
-Updated: 2026-08-28 (Asia/Shanghai)
+Updated: 2026-08-31 (Asia/Shanghai)
 
 ## Objective and working rule
 
@@ -15,6 +15,27 @@ restart or modify Odoo, Nginx, PostgreSQL, Pi, V2, V3, business databases, or
 the Odoo source/add-on tree while building CLI capabilities.
 
 ## Current authoritative count
+
+- Registry: 355 capability IDs; 340 enabled handlers (210 reads and 130 writes)
+  and 15 disabled IDs.
+- Runtime status: 307 `unconfigured`, 33 `degraded`, and 15 `disabled`.
+- Versioned JSON Schema documents: 685.
+- Latest completed capability checkpoint: `44314c8`, pushed to `rebuild/v4`.
+  The final supporting-object checkpoint and its evidence limits are recorded
+  near the end of this document.
+- These totals include historical inventory, sales, and purchase extensions.
+  They are neither a count of pure-accounting commands nor a completion
+  percentage for the accounting module. Picking, delivery, and stock-return
+  documents are outside the current accounting-core acceptance scope.
+- Prioritize verified invoice/payment/reconciliation and journal workflows;
+  reuse existing commands instead of increasing the count with supporting
+  objects or logistics commands that do not close an accounting workflow gap.
+- Current workflow acceptance is blocked by the two isolated databases' bank
+  configuration: outstanding receipts and bank suspense both use account 153.
+  The new 24-capability workflow test is not a completed live acceptance pass.
+  See the final checkpoint below before attempting another run.
+
+## Historical 2026-08-28 baseline (289 IDs)
 
 - Registry baseline: 289 capability IDs, after the eight-command sales-invoice/
   stock-transfer write batch, the nine-command localized and specialist
@@ -1651,3 +1672,115 @@ Two conditional gaps remain explicit:
 `journal_entry.create`, `journal_entry.post`, and `journal_entry.reverse` already
 provide the manual adjustment route. These are source/contract audit findings,
 not a claim that a fresh end-to-end business acceptance run has passed.
+
+## 2026-08-31 accounting-core workflow acceptance (configuration blocked)
+
+This checkpoint adds no capability IDs, schemas, or production handlers. It
+upgrades `tests/integration/test_payment_bank_capability_batch_live.py` to run
+24 existing public CLI capabilities through `cli.main`, normal Odoo ports, and
+the real ORM dispatcher in one rollback-only business transaction per alias.
+It does not claim cross-process CLI/bridge transport or durable commit/replay
+coverage. Read-only ORM access selects existing master data and audits rollback;
+all test business records are created and changed through public CLI commands.
+
+The shared smoke retains standalone-payment lifecycle and bank
+match/unmatch/write-off checks, and adds these accounting-only workflows:
+
+- Customer invoice 100: post, collect 40 (residual 60), collect 60 (residual 0),
+  record a bank deposit of 100, match the two payments' outstanding-receipt
+  lines, and verify the invoice and both payments are paid/matched.
+- Supplier bill 80: post and pay 80, then verify zero payable residual. This
+  does not include the subsequent bank-outflow match; `in_payment` is allowed.
+- Adjustment 25: post and reverse through public CLI commands, posting the
+  reversal when necessary; verify balanced entries and a zero combined balance
+  on each affected account.
+- Trial balance: compare the report before and after those three new workflows,
+  excluding the two legacy scenarios. Period debit and credit must each
+  increase by 510; opening and closing total net balances remain zero.
+
+Every write is immediately replayed with the same key. The two partial receipts
+use separate explicit keys. The worker tracks payments, moves, move lines,
+bank statement lines, and partial/full reconciliations, including automatically
+created related records. It rolls back on both success and failure and checks
+the tracked IDs and run marker from a fresh cursor. The readonly cleanup audit
+uses the existing superuser verifier; business execution remains uid 5/company 1.
+
+Local regression evidence: 564 core-write/bank tests passed in 798.03 seconds
+and 40 CLI tests passed in 287.58 seconds. Four new tests for the fixture's
+account-role precondition and test-only failure diagnostics also passed (608
+local passes in total). Ruff, format, and diff checks passed;
+the unconfigured live test correctly skipped (one skip, not a live pass).
+Independent source/contract review found no blocking mismatch. The Odoo
+interpreter lacks `jsonschema`; only the worker's `PYTHONPATH` includes the
+project virtualenv dependencies. No package was installed in the running Odoo
+environment and no runtime configuration or service was changed.
+
+The server's previous test and handoff files were backed up before deployment:
+
+- Backup: `/opt/odoo-accounting-cli-v4/.tooling/accounting-core-workflows-20260831-87c4e26a/overwritten-files.tgz`
+- Backup SHA-256: `bd984ae6484db00945a98d5683486600c9a52dca5216b60d3025866b62dc33aa`
+- Initial test SHA-256 (the failed live attempt): `53d90eaa26368452c19c58828c7a9b329b3a63915270a31357b2482d36f0a41a`
+- Updated test SHA-256 (fail-fast precondition): `f4c6e8b453e414ad25aead38f3f81207c5f1f6abf4b9014f085c76bd9c41d770`
+- New unit-test SHA-256: `3b30a0173b4b62e45eb65a4bcdfce037bc0997ef7293ca4ceba808bb99da0b98`
+
+The updated test and new unit test were subsequently synchronized to the server
+and both hashes were verified. Before that update, the failed-attempt test and
+previous handoff were preserved in
+`/opt/odoo-accounting-cli-v4/.tooling/accounting-core-workflows-20260831-87c4e26a/precondition-update-before.tgz`
+(SHA-256 `98739255753edfeaf056acddb166a4169b510b1de96bf74a02926f622c041e34`).
+The four new unit tests also passed on the server in 0.25 seconds. The live smoke
+was not retried against the known invalid configuration. Odoo19 remained active
+with `MainPID=1678372`, `NRestarts=2`, and the unchanged start timestamp
+`Sun 2026-08-30 10:25:07 CST`; no service was restarted.
+
+The first shared smoke failed in `odoo_cli_v4_dev` after 349.93 seconds;
+`odoo_cli_v4_e2e` was not reached. The exit file contains `1`. Durable evidence is under
+`/opt/odoo-accounting-cli-v4/.tooling/accounting-core-workflows-20260831-87c4e26a/`
+(`live-smoke.log`, `live-smoke.exit`, and `live-smoke.pid`).
+The failed-run log SHA-256 is
+`dbd3480e6bf7cd4bdf5a55a481cc2266c5ab6f41fd3bd6b1b2bcfc31b8f56685`.
+
+The two legacy scenarios and the trial-balance baseline completed in `v4-dev`.
+The customer invoice was posted, receipts of 40 and 60 produced residuals of
+60 and 0, and both outstanding receipt lines were returned as bank-match
+candidates. Matching them together raised the public `business_rule_error`.
+The transaction was rolled back and the fresh-cursor verifier detected no
+surviving tracked records before the original failure was re-raised. Supplier
+payment, adjustment/reversal, the final trial-balance delta, and the second
+database are not successful live evidence from this attempt.
+
+Subsequent public CLI reads (`journal.list`, `payment.method.list`, and
+`journal.configuration.inspect`) confirmed the same configuration in both
+isolated databases, with no alternative company-1 bank journal:
+
+| Role | Configuration |
+| --- | --- |
+| Bank journal | 14 (`BNK1`) |
+| Bank/liquidity account | 152 (`1003`) |
+| Bank suspense account | 153 (`1004`) |
+| Inbound manual payment method | 3, payment account 153 |
+| Outbound manual payment method | 4, payment account 153 |
+
+Native Odoo creates a counterpart line for each selected source. Its
+`account.bank.statement.line._seek_for_lines` classifies lines by the journal's
+default and suspense accounts, and `_synchronize_from_moves` rejects multiple
+suspense lines. Thus the current shared outstanding/suspense configuration
+cannot support this two-receipt matching scenario. This is not evidence that
+normal multiple-source matching with distinct account roles is unsupported.
+No production handler was changed or native constraint bypassed.
+
+The test now rejects an outstanding account shared with either liquidity or
+suspense before writing any business fixtures. It also retains native exception
+causes for test diagnostics only; the production CLI's sanitized error output
+is unchanged. Do not rerun expecting success until a separately authorized
+fixture-configuration correction has been made. Do not elevate uid 5, split
+the bank deposit, remove assertions, or use direct ORM business writes to force
+this acceptance test through. The older draft-payment fixture still expects
+outstanding account 153; review that expectation when approving configuration
+changes rather than restoring the invalid shared-account setup.
+
+Next action requires permission to correct only the two isolated test banks'
+account-role configuration, without modifying business databases or promoting
+the test user. Then rerun the unchanged six-scenario acceptance test and record
+the actual result. Until then, the registry stays at 355 IDs and the full
+accounting-core workflow acceptance remains incomplete.
