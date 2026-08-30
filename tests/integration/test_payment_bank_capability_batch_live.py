@@ -328,7 +328,8 @@ class _RuntimeClient:
             ) from exc
         result = page.get("result")
         if isinstance(result, dict) and result.get("model") in self.tracked:
-            self.tracked[result["model"]].add(result["id"])
+            if result["id"] is not None:
+                self.tracked[result["model"]].add(result["id"])
             self.tracked["account.move.line"].update(result.get("line_ids", []))
             self.tracked["account.partial.reconcile"].update(
                 result.get("partial_reconcile_ids", [])
@@ -355,6 +356,7 @@ def _cli(
     from odoo_accounting_cli_v4.bridge.bank_transactions import (
         OdooBankTransactionSearchPort,
     )
+    from odoo_accounting_cli_v4.bridge.core_object_reads import OdooCoreObjectReadPort
     from odoo_accounting_cli_v4.bridge.core_writes import OdooCoreWritePort
     from odoo_accounting_cli_v4.bridge.financial_reports import OdooFinancialReportPort
     from odoo_accounting_cli_v4.bridge.invoices import OdooInvoicePort
@@ -384,6 +386,7 @@ def _cli(
             "invoice.payment_status.inspect": OdooInvoicePort,
             "payment.get": OdooPaymentPort,
             "journal_entry.get": OdooJournalEntryPort,
+            "journal_item.search": OdooCoreObjectReadPort,
             "report.trial_balance": OdooFinancialReportPort,
         }
         port = ports[capability_id](client)
@@ -420,7 +423,8 @@ def _cli(
     if key is not None:
         result = response["data"]["result"]
         assert response["odoo"]["model"] == result["model"]
-        assert response["odoo"]["record_ids"] == [result["id"]]
+        record_ids = [result["id"]] if result["id"] is not None else result["line_ids"]
+        assert response["odoo"]["record_ids"] == record_ids
     client.capabilities.add(capability_id)
     return response["data"]
 

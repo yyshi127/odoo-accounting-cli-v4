@@ -1,5 +1,44 @@
 # Execution status
 
+## Current accounting phase — 2026-08-31
+
+The active objective is capability-first accounting delivery in
+[GOAL_SUMMARY.md](GOAL_SUMMARY.md). Historical sales, purchasing and inventory
+logistics are outside this phase; picking and physical-return commands are not
+accounting-core completion. Financial credit notes/refunds remain in scope.
+
+The current registry has 355 IDs, 340 enabled handlers (210 reads, 130 writes),
+and 685 schemas. Statuses are 307 `unconfigured`, 33 `degraded`, and 15 `disabled`.
+These are implementation totals including historical non-accounting extensions,
+not 355 accounting operations, a coverage percentage, or proof that all workflows
+pass for the configured user. There are 16 `stock.*` IDs, but other historical
+sales/purchase extensions also remain; subtracting 16 does not establish a
+pure-accounting count or a coverage denominator. Registry SHA-256:
+`21b6a57b0bd3b7f17432663de5c82c25b0d63a38c8c9ed6bad2e58732c75572e`.
+
+The latest completed implementation adds independent accounting dates to three
+existing invoice/bill commands. Its 14-capability CLI/ORM lifecycle smoke passed
+on both isolated aliases with rollback verification. The subsequent financial
+credit-note settlement acceptance passed on both aliases: 11 existing commands,
+zero new production interfaces, and customer/supplier residuals of 120, 80, then
+0. Native automatic reconciliation, targeted undo, reapplication, journal items,
+trial balance and fresh-cursor rollback were verified. The shared smoke passed
+in 1293.65s with exit 0; this is in-process CLI/real-ORM evidence, not a
+cross-process bridge or durable commit/replay test. See
+[HANDOFF.md](HANDOFF.md) for exact batch evidence and recovery artifacts.
+
+Two separate real-workflow blockers remain unresolved: the isolated bank journal
+uses the same account for suspense and outstanding payments, and the installed
+exchange-rate add-on fails on multi-record move creation. Neither configuration
+nor add-on repair is authorized. No current claim of complete accounting coverage
+or release readiness is made.
+
+## Historical 289-ID checkpoint and earlier execution record
+
+The remainder preserves past checkpoints, counts and gate definitions. Its
+references to "current" or "latest" describe those historical snapshots and do
+not supersede the current accounting phase above.
+
 - G0: passed (private environment baseline retained outside this public repository)
 - G1: passed
 - G2: in progress (source snapshot, two provenance-bound synthetic databases,

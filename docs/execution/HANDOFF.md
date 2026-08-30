@@ -4,7 +4,7 @@ Updated: 2026-08-31 (Asia/Shanghai)
 
 ## Objective and working rule
 
-Build a broad, practical Odoo 19 CLI capability library first. Add heavier
+Build a broad, practical Odoo 19 accounting CLI capability library first. Add heavier
 approval, audit, and policy controls in a later phase. New work should normally
 land in batches of 8-12 related commands, reuse one shared contract/runtime
 path where the real Odoo API permits it, and use one shared live smoke per
@@ -20,9 +20,14 @@ the Odoo source/add-on tree while building CLI capabilities.
   and 15 disabled IDs.
 - Runtime status: 307 `unconfigured`, 33 `degraded`, and 15 `disabled`.
 - Versioned JSON Schema documents: 685.
-- Latest completed capability checkpoint: `44314c8`, pushed to `rebuild/v4`.
+- Latest registry-expansion checkpoint: `44314c8`, pushed to `rebuild/v4`.
   The final supporting-object checkpoint and its evidence limits are recorded
   near the end of this document.
+- The subsequent independent-accounting-date implementation is checkpoint
+  `63b5288`; its 14-capability lifecycle passed on both isolated aliases. The
+  current financial credit-note auto/undo/apply acceptance is recorded at the
+  end of this document: all 11 existing capabilities passed on both aliases,
+  with rollback verification and no new production interfaces.
 - These totals include historical inventory, sales, and purchase extensions.
   They are neither a count of pure-accounting commands nor a completion
   percentage for the accounting module. Picking, delivery, and stock-return
@@ -30,7 +35,7 @@ the Odoo source/add-on tree while building CLI capabilities.
 - Prioritize verified invoice/payment/reconciliation and journal workflows;
   reuse existing commands instead of increasing the count with supporting
   objects or logistics commands that do not close an accounting workflow gap.
-- Current workflow acceptance is blocked by the two isolated databases' bank
+- The combined receipt/bank-matching workflow is blocked by the isolated databases' bank
   configuration: outstanding receipts and bank suspense both use account 153.
   The new 24-capability workflow test is not a completed live acceptance pass.
   See the accounting-core workflow checkpoint below before attempting another run.
@@ -1983,3 +1988,118 @@ The separate bank-account-role conflict and exchange_currency_rate singleton
 failure described above remain unresolved. Neither configuration nor add-on
 repair was authorized or attempted during this accounting-date batch. Passing
 this narrower lifecycle test does not turn those failed full workflows into passes.
+
+## 2026-08-31 financial credit-note settlement acceptance (passed)
+
+This batch adds no capability IDs, schemas or production handlers. It targets
+existing customer/supplier financial credit-note workflows, not physical stock
+returns or cash refunds. The registry remains 355 IDs, including historical
+non-accounting extensions; this is not an accounting completion percentage.
+GOAL_SUMMARY now reflects the user's capability-first phase. STATUS/G3/G5 mark
+their old 289-ID inventory-heavy narrative as historical and point to the current
+accounting-only scope without deleting earlier evidence.
+
+The existing document-lifecycle smoke has a separately authorized refund-only
+case. The original 14-capability lifecycle remains the default and retains its
+earlier evidence; it is not unnecessarily rerun by the refund-only selection.
+The revised refund chain targets 11 existing commands: customer_invoice.create,
+vendor_bill.create, customer_credit_note.create, vendor_refund.create,
+invoice.post, invoice.get, invoice.payment_status.inspect, reconciliation.apply,
+reconciliation.undo, journal_item.search, and report.trial_balance. Each alias
+uses uid 5/company 1 in one real transaction, with public CLI commands, normal
+ports and the actual ORM. Read-only ORM access selects master data and audits
+cleanup. This is in-process CLI/ORM coverage, not cross-process bridge transport
+or durable commit/replay evidence.
+
+Each side starts with a posted 120-unit source document in company currency and
+creates positive-price credits of 40 and 80. Native posting reconciles each
+linked credit automatically. The revised test reads that result, undoes only the
+identified partial reconciliation, verifies that the earlier partial survives,
+and reapplies the released outstanding item through public CLI commands. All
+explicit writes retain immediate replay checks. This also exercises targeted
+undo of a fully reconciled multi-credit graph, rather than only a two-line pair.
+
+Both isolated companies have account_storno enabled. The test preserves red
+debit/credit signs and checks that the customer source alone increases the
+trial-balance debit and credit totals by 120 each, then checks zero signed net
+movement after full credits. Absolute
+movement is 480 on each side across both workflows; it is not the signed report
+delta. Coverage is limited to this existing same-currency, no-tax fixture and
+does not prove foreign-currency, tax or bank-refund workflows.
+
+The shared test helper now tracks line/partial/full IDs when a reconciliation
+result has no single primary ID; it no longer adds None to rollback ID sets.
+Its CLI metadata check requires exact line IDs for such results. This changes
+test adaptation, not production permissions or reconciliation behavior. Three
+new cases failed against the old helper; the corrected helper selection passes
+9 tests. The focused selection, including these cases and existing refund/undo
+contracts and runtime tests, passed 16 locally (23.78s) and the same 16 on the
+server (20.62s). The two live nodes skip when their respective authorization
+variables are off; skips are not real-run passes.
+
+The first real refund attempt failed in v4-dev after 92.15s, before manual
+reconciliation and before the supplier or v4-e2e scenarios. It had already
+created/posted the source, verified its 120 residual and +120 trial-balance
+movement, and created/posted a credit with total/untaxed amount 40 and zero tax.
+The failing assertion expected that posted credit to retain a residual of 40;
+its actual residual was not printed. Installed Odoo source inspection then
+confirmed the missed native behavior: account_move._post selects linked draft
+reversals at lines 5524-5525 and reconciles them at line 5574, even with
+move_reverse_cancel false. Production invoice.get reads the native residual
+unchanged apart from decimal formatting. No production fix or native bypass is
+warranted by this failure. The original test error was re-raised only after its
+rollback and fresh-cursor cleanup verification succeeded.
+
+The original failed attempt remains in
+`/opt/odoo-accounting-cli-v4/.tooling/accounting-refund-settlement-20260831-3898a5be/live-smoke.{log,exit,pid}`.
+Its log SHA-256 is
+`eedd1c8504037e6f58a43feec4ce4c19199a27374b266c5f58e9fccfdcecc72d`;
+run UUID is `01a5fd52-7b01-483b-bbc1-d9c865f71b8a`. Launcher/process group
+2691141 has finished. This failed attempt is not acceptance evidence for the
+complete workflow. The corrected auto/undo/apply chain ran separately under
+process group 2701075, with `live-smoke-attempt2.{log,exit,pid}` in the same
+artifact directory. It has now finished: `1 passed in 1293.65s (0:21:33)`, exit
+0. Both v4-dev and v4-e2e passed all 11 capabilities, both 120/80/0 residual
+traces, and fresh-cursor rollback verification. Per alias, the test verified
+2 source documents, 4 credit notes and 12 posted journal items. The final
+reconciliation graph contains 4 partial and 2 full records; rollback tracking
+also includes deleted automatic reconciliations, for 8 partial and 4 full IDs
+in total. Those tracked totals are not the final live graph. No worker remains
+in either attempt's process group.
+
+Corrected live log SHA-256:
+`aa7f30dedf72b7fd8275830f9a8063964aa0afd4e5c7f1f6953eaa23ce54569b`.
+Focused server unit log SHA-256:
+`f6b90b4e78aa3e55be9fe3ca0e6cf2640af6dfe58ce2275cb88e698f4cdb0a63`.
+
+All nine pre-batch targets matched commit 63b5288 before deployment. Their
+original contents and ownership/modes are retained in
+`/opt/odoo-accounting-cli-v4/.tooling/accounting-refund-settlement-20260831-3898a5be/overwritten-files.tgz`
+(SHA-256 `32b50110fe24cfd8b63f3364e23f9c5f352e332715c7ebd91ea79dcde18a64a5`).
+The initial eight-file upload has SHA-256
+`8917f9643f7d8640fdde8c469f04dc566cc9d7932e85dbaf0aca099777619a2e`;
+it retains the first attempt's test version. Every uploaded file was hash checked
+and its original ownership/mode restored. The separate bank-account-role and
+exchange-rate-addon blockers remain unresolved; no business database, installed
+add-on, accounting configuration or service was modified for this batch.
+
+The corrected two-file test/README upload is retained as
+`/tmp/accounting-refund-settlement-20260831-3898a5be-attempt2.tgz`, SHA-256
+`1cab3a76dbc06c424f2d542c2f03074baef1e06735ce1c2eb50131ad7502a9ac`.
+The test file SHA-256 is
+`b0d8c43c87b6e4d605317b91bc6d04fa3f66b0640e3716d8e568b729889f2260`.
+
+The post-run read-only audit confirmed the registry digest and the installed
+exchange-rate add-on digest were unchanged, as were the earlier failed bank and
+deferred-workflow logs. Odoo19 remained active/running with MainPID 1678372,
+NRestarts 2 and the same 2026-08-30 10:25:07 CST activation timestamp. No service
+control was issued. The bank configuration and add-on repair still need separate
+authorization; this narrower successful workflow does not clear those blockers.
+
+Read-only local profiling identified repeated full-registry/schema structural
+validation on every CLI invocation: the normal no-Odoo invoice.get descriptor
+took about 4.8 seconds, and the profile observed 685 check_schema calls. Each
+refund alias has 87 CLI calls across 11 IDs, including 40 write invocations with
+replays. The profiler's extra runtime is not a normal-operation timing, and the
+server's exact cost distribution was not measured. No production caching or
+validation bypass was introduced while this live test was running.

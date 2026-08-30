@@ -4,6 +4,9 @@ The worker uses the ordinary configured accountant and public CLI commands backe
 by one real Odoo transaction. It verifies independent invoice/accounting dates,
 retains the three document lifecycles and immediate replay, and rolls everything
 back. This is in-process CLI/real-ORM coverage, not cross-process transport.
+The separately enabled refund-only case closes customer and supplier financial
+credits through native automatic reconciliation, targeted undo and manual
+reapplication, without invoking the original lifecycle, bank or deferred workflows.
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ import sys
 import sysconfig
 import uuid
 from datetime import timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +36,7 @@ except ModuleNotFoundError:
 
 _CONFIG_ENV = "ODOO_ACCOUNTING_CLI_V4_CONFIG"
 _ALLOW_ENV = "ODACV4_ALLOW_DOCUMENT_LIFECYCLE_WRITE_SMOKE"
+_REFUND_ALLOW_ENV = "ODACV4_ALLOW_FINANCIAL_REFUND_SMOKE"
 _ALIASES = ("v4-dev", "v4-e2e")
 _DATABASES = {
     "v4-dev": "odoo_cli_v4_dev",
@@ -62,6 +67,19 @@ _CAPABILITIES = set(_NEW_CAPABILITIES) | {
     "journal_entry.create",
     "journal_entry.post",
 }
+_REFUND_CAPABILITIES = {
+    "customer_invoice.create",
+    "vendor_bill.create",
+    "customer_credit_note.create",
+    "vendor_refund.create",
+    "invoice.post",
+    "invoice.get",
+    "invoice.payment_status.inspect",
+    "reconciliation.apply",
+    "reconciliation.undo",
+    "journal_item.search",
+    "report.trial_balance",
+}
 _RESULT_KEYS = {
     "model",
     "id",
@@ -81,10 +99,10 @@ def _root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _enabled_runtime() -> tuple[Path, dict[str, Any]]:
+def _enabled_runtime(allow_env: str = _ALLOW_ENV) -> tuple[Path, dict[str, Any]]:
     assert pytest is not None
-    if os.environ.get(_ALLOW_ENV) != "1":
-        pytest.skip(f"set {_ALLOW_ENV}=1 to authorize isolated write smoke")
+    if os.environ.get(allow_env) != "1":
+        pytest.skip(f"set {allow_env}=1 to authorize isolated write smoke")
     raw = os.environ.get(_CONFIG_ENV)
     if not raw:
         pytest.skip(f"{_CONFIG_ENV} is not configured")
@@ -150,8 +168,12 @@ def _run_worker(
     run_id: uuid.UUID,
     config_path: Path,
     runtime: dict[str, Any],
+    *,
+    refund_only: bool = False,
 ) -> None:
     command, timeout = _worker_command(alias, run_id, config_path, runtime)
+    if refund_only:
+        command.append("--refund-only")
     environment = os.environ.copy()
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
     environment["PYTHONPATH"] = os.pathsep.join(
@@ -175,17 +197,43 @@ def _run_worker(
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert completed.stderr == ""
     assert len(completed.stdout.splitlines()) == 1
-    assert json.loads(completed.stdout) == {
-        "accounting_dates_verified": True,
+    expected = {
         "alias": alias,
-        "capabilities": sorted(_CAPABILITIES),
+        "capabilities": sorted(_REFUND_CAPABILITIES if refund_only else _CAPABILITIES),
         "company_id": _COMPANY_ID,
         "database": _DATABASES[alias],
         "execution": "in_process_cli_real_orm",
-        "marker_migration_verified": True,
         "rollback_verified": True,
         "user_id": _USER_ID,
     }
+    if refund_only:
+        expected.update(
+            {
+                "source_documents": 2,
+                "credit_notes": 4,
+                "posted_journal_items": 12,
+                "account_storno": True,
+                "source_residuals": {
+                    "customer": ["120", "80", "0"],
+                    "supplier": ["120", "80", "0"],
+                },
+                "trial_balance_period_delta": {
+                    "opening_balance": "0",
+                    "debit": "0",
+                    "credit": "0",
+                    "closing_balance": "0",
+                },
+                "source_only_trial_balance_delta": {"debit": "120", "credit": "120"},
+                "absolute_journal_item_movement": {"debit": "480", "credit": "480"},
+                "final_reconciliations": {"partial": 4, "full": 2},
+                "tracked_reconciliations": {"partial": 8, "full": 4},
+            }
+        )
+    else:
+        expected.update(
+            {"accounting_dates_verified": True, "marker_migration_verified": True}
+        )
+    assert json.loads(completed.stdout) == expected
     print(completed.stdout.strip(), flush=True)
 
 
@@ -198,6 +246,13 @@ if pytest is not None:
         for alias in _ALIASES:
             _run_worker(alias, run_id, config_path, runtime)
 
+    @pytest.mark.integration
+    def test_financial_refunds_reconcile_and_roll_back_per_alias() -> None:
+        config_path, runtime = _enabled_runtime(_REFUND_ALLOW_ENV)
+        run_id = uuid.uuid4()
+        for alias in _ALIASES:
+            _run_worker(alias, run_id, config_path, runtime, refund_only=True)
+
 
 def _arguments(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -207,6 +262,7 @@ def _arguments(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--alias", choices=_ALIASES, required=True)
     parser.add_argument("--database", choices=tuple(_DATABASES.values()), required=True)
     parser.add_argument("--run-id", type=uuid.UUID, required=True)
+    parser.add_argument("--refund-only", action="store_true")
     args = parser.parse_args(argv)
     if args.database != _DATABASES[args.alias]:
         parser.error("alias and physical database do not match")
@@ -621,6 +677,410 @@ def _run_chain(client: core._RuntimeClient, alias: str, run_id: uuid.UUID) -> No
     assert client.tracked["account.move"] == {invoice_id, bill_id, entry_id}
 
 
+def _refund_document_balance(
+    client: core._RuntimeClient,
+    alias: str,
+    run_id: uuid.UUID,
+    move_id: int,
+    move_type: str,
+    total: int,
+    residual: int,
+) -> Decimal:
+    data = core._cli(client, alias, run_id, "invoice.get", {"invoice_id": move_id})
+    assert (data["id"], data["move_type"], data["state"]) == (
+        move_id,
+        move_type,
+        "posted",
+    )
+    assert Decimal(data["amount_total"]) == Decimal(data["amount_untaxed"]) == total
+    assert Decimal(data["amount_tax"]) == 0
+    actual_residual = Decimal(data["amount_residual"])
+    assert actual_residual == residual, (
+        f"{move_type} {move_id}: expected residual {residual}, "
+        f"got {actual_residual}; payment_state={data['payment_state']}"
+    )
+    return actual_residual
+
+
+def _exercise_financial_refunds(
+    client: core._RuntimeClient,
+    alias: str,
+    run_id: uuid.UUID,
+    ids: dict[str, int],
+    today: str,
+    trial_balance_baseline: list[Decimal],
+    *,
+    supplier: bool,
+) -> tuple[list[str], dict[int, int], int, list[Decimal] | None, set[int], int]:
+    side = "supplier" if supplier else "customer"
+    source_type, refund_type = (
+        ("in_invoice", "in_refund")
+        if supplier
+        else (
+            "out_invoice",
+            "out_refund",
+        )
+    )
+    source_capability = "vendor_bill.create" if supplier else "customer_invoice.create"
+    refund_capability = (
+        "vendor_refund.create" if supplier else "customer_credit_note.create"
+    )
+    marker = f"financial-refund:{alias}:{run_id.hex}:{side}"
+    line = {
+        "name": marker,
+        "product_id": None,
+        "account_id": ids["expense" if supplier else "income"],
+        "quantity": "1",
+        "price_unit": "120",
+        "discount": "0",
+        "tax_ids": [],
+    }
+    source = core._write(
+        client,
+        alias,
+        run_id,
+        source_capability,
+        {
+            "partner_id": ids[side],
+            "journal_id": ids["purchase_journal" if supplier else "sale_journal"],
+            "date": today,
+            "invoice_date": today,
+            "invoice_date_due": today,
+            "payment_term_id": None,
+            "currency_id": ids["currency"],
+            "lines": [line],
+        },
+        explicit_key=f"{marker}:source",
+    )
+    source_id = source["id"]
+    assert source["move_type"] == source_type and source["state"] == "draft"
+    core._write(client, alias, run_id, "invoice.post", {"move_id": source_id})
+    source_delta = None
+    if not supplier:
+        source_totals = core._trial_balance_totals(client, alias, run_id, today)
+        source_delta = [
+            new - old
+            for old, new in zip(trial_balance_baseline, source_totals, strict=True)
+        ]
+        assert source_delta == [Decimal(0), Decimal(120), Decimal(120), Decimal(0)]
+    residuals = [
+        format(
+            _refund_document_balance(
+                client, alias, run_id, source_id, source_type, 120, 120
+            ).normalize(),
+            "f",
+        )
+    ]
+    documents = {source_id: 120}
+    expected_partials: dict[int, int] = {}
+    expected_partial_ids: set[int] = set()
+    final_full_id = None
+    term_account_id = None
+    for amount, remaining in ((40, 80), (80, 0)):
+        refund = core._write(
+            client,
+            alias,
+            run_id,
+            refund_capability,
+            {
+                "move_id": source_id,
+                "date": today,
+                "reason": f"{marker}:{amount}",
+                "lines": [
+                    {**line, "name": f"{marker}:{amount}", "price_unit": str(amount)}
+                ],
+            },
+            explicit_key=f"{marker}:credit:{amount}",
+        )
+        refund_id = refund["id"]
+        assert refund["source_id"] == source_id
+        assert refund["move_type"] == refund_type and refund["state"] == "draft"
+        core._write(client, alias, run_id, "invoice.post", {"move_id": refund_id})
+        # Odoo automatically reconciles a posted credit with its reversed source.
+        _refund_document_balance(
+            client, alias, run_id, refund_id, refund_type, amount, 0
+        )
+        _refund_document_balance(
+            client, alias, run_id, source_id, source_type, 120, remaining
+        )
+        automatic = core._cli(
+            client,
+            alias,
+            run_id,
+            "invoice.payment_status.inspect",
+            {"invoice_id": source_id},
+        )
+        auto_partial = _one(
+            [
+                item
+                for item in automatic["reconciliations"]
+                if item["counterpart_move"]["id"] == refund_id
+            ],
+            "this credit note's automatic reconciliation",
+        )[0]
+        assert auto_partial["payment_id"] is None
+        assert Decimal(auto_partial["company_amount"]) == amount
+        assert len(automatic["reconciliations"]) == len(expected_partial_ids) + 1
+        assert {item["id"] for item in automatic["reconciliations"]} == (
+            expected_partial_ids | {auto_partial["id"]}
+        )
+        low, high = sorted(
+            (auto_partial["invoice_line_id"], auto_partial["counterpart_line_id"])
+        )
+        undone = core._write(
+            client,
+            alias,
+            run_id,
+            "reconciliation.undo",
+            {
+                "invoice_id": source_id,
+                "partial_reconcile_id": auto_partial["id"],
+                "invoice_line_id": auto_partial["invoice_line_id"],
+                "counterpart_line_id": auto_partial["counterpart_line_id"],
+            },
+            explicit_key=(
+                f"reconciliation.undo:{source_id}:{auto_partial['id']}:{low}:{high}"
+            ),
+        )
+        assert undone["source_id"] == source_id and undone["id"] is None
+        assert undone["partial_reconcile_ids"] == sorted(expected_partial_ids)
+        assert undone["full_reconcile_id"] is None and undone["reconciled"] is False
+        assert undone["state"] == (
+            "partial" if expected_partial_ids else "unreconciled"
+        )
+        _refund_document_balance(
+            client, alias, run_id, source_id, source_type, 120, remaining + amount
+        )
+        _refund_document_balance(
+            client, alias, run_id, refund_id, refund_type, amount, amount
+        )
+        before = core._cli(
+            client,
+            alias,
+            run_id,
+            "invoice.payment_status.inspect",
+            {"invoice_id": source_id},
+        )
+        assert len(before["reconciliations"]) == len(expected_partial_ids)
+        assert {
+            item["id"] for item in before["reconciliations"]
+        } == expected_partial_ids
+        assert {
+            item["counterpart_move"]["id"]: Decimal(item["company_amount"])
+            for item in before["reconciliations"]
+        } == expected_partials
+        term_line = _one(before["receivable_payable_lines"], "source payment term")[0]
+        assert term_line["id"] == auto_partial["invoice_line_id"]
+        term_account_id = term_line["account"]["id"]
+        candidate = _one(
+            [
+                item
+                for item in before["outstanding_items"]
+                if item["move_id"] == refund_id
+            ],
+            "this credit note's outstanding item",
+        )[0]
+        assert (
+            candidate["payment_id"] is None and Decimal(candidate["amount"]) == amount
+        )
+        counterpart_id = candidate["line_id"]
+        assert counterpart_id == auto_partial["counterpart_line_id"]
+        applied = core._write(
+            client,
+            alias,
+            run_id,
+            "reconciliation.apply",
+            {"invoice_id": source_id, "outstanding_line_id": counterpart_id},
+            explicit_key=f"reconciliation.apply:{source_id}:{counterpart_id}",
+        )
+        assert applied["source_id"] == source_id and applied["id"] is None
+        assert applied["line_ids"] == sorted((term_line["id"], counterpart_id))
+        assert len(applied["partial_reconcile_ids"]) == 1
+        assert applied["partial_reconcile_ids"][0] not in (
+            expected_partial_ids | {auto_partial["id"]}
+        )
+        expected_partial_ids.update(applied["partial_reconcile_ids"])
+        assert applied["reconciled"] is (remaining == 0)
+        if remaining == 0:
+            assert applied["full_reconcile_id"] is not None
+            final_full_id = applied["full_reconcile_id"]
+        else:
+            assert applied["full_reconcile_id"] is None
+        residual = _refund_document_balance(
+            client, alias, run_id, source_id, source_type, 120, remaining
+        )
+        residuals.append(format(residual.normalize(), "f"))
+        _refund_document_balance(
+            client, alias, run_id, refund_id, refund_type, amount, 0
+        )
+        after = core._cli(
+            client,
+            alias,
+            run_id,
+            "invoice.payment_status.inspect",
+            {"invoice_id": source_id},
+        )
+        expected_partials[refund_id] = amount
+        assert len(after["reconciliations"]) == len(expected_partials)
+        assert {item["id"] for item in after["reconciliations"]} == expected_partial_ids
+        assert {
+            item["counterpart_move"]["id"]: Decimal(item["company_amount"])
+            for item in after["reconciliations"]
+        } == expected_partials
+        assert all(item["payment_id"] is None for item in after["reconciliations"])
+        assert after["payments"] == []
+        assert Decimal(after["amount_residual"]) == remaining
+        assert after["payment_state"] == ("partial" if remaining else "reversed")
+        if remaining == 0:
+            assert all(item["reconciled"] for item in after["receivable_payable_lines"])
+        documents[refund_id] = -amount
+    assert residuals == ["120", "80", "0"] and term_account_id is not None
+    assert len(expected_partial_ids) == 2 and final_full_id is not None
+    return (
+        residuals,
+        documents,
+        term_account_id,
+        source_delta,
+        expected_partial_ids,
+        final_full_id,
+    )
+
+
+def _run_refund_chain(
+    client: core._RuntimeClient, alias: str, run_id: uuid.UUID
+) -> dict[str, Any]:
+    from odoo import fields
+
+    ids = _fixture_ids(client.env, alias)
+    # Existing isolated-fixture setting: inspect it, never alter accounting setup.
+    storno = client.env["res.company"].browse(_COMPANY_ID).account_storno
+    assert storno is True, "the isolated refund fixture expects red-storno accounting"
+    today = fields.Date.to_string(fields.Date.context_today(client.env.user))
+    before = core._trial_balance_totals(client, alias, run_id, today)
+    traces: dict[str, list[str]] = {}
+    source_checkpoint = None
+    move_ids: set[int] = set()
+    line_ids: set[int] = set()
+    final_partial_ids: set[int] = set()
+    final_full_ids: set[int] = set()
+    signed_totals = [Decimal(0), Decimal(0)]
+    absolute_totals = [Decimal(0), Decimal(0)]
+    for supplier in (False, True):
+        side = "supplier" if supplier else "customer"
+        (
+            residuals,
+            documents,
+            term_account,
+            checkpoint,
+            partial_ids,
+            full_id,
+        ) = _exercise_financial_refunds(
+            client, alias, run_id, ids, today, before, supplier=supplier
+        )
+        assert final_partial_ids.isdisjoint(partial_ids)
+        final_partial_ids.update(partial_ids)
+        final_full_ids.add(full_id)
+        traces[side] = residuals
+        if checkpoint is not None:
+            source_checkpoint = checkpoint
+        move_ids.update(documents)
+        debit_account = ids["expense"] if supplier else term_account
+        credit_account = term_account if supplier else ids["income"]
+        account_balances: dict[int, Decimal] = {}
+        for move_id, signed_amount in documents.items():
+            page = core._cli(
+                client,
+                alias,
+                run_id,
+                "journal_item.search",
+                {
+                    "move_id": move_id,
+                    "posted_only": True,
+                    "limit": 1000,
+                    "cursor": None,
+                },
+            )
+            assert page["has_more"] is False and page["next_cursor"] is None
+            assert len(page["items"]) == 2
+            expected = {
+                debit_account: (Decimal(signed_amount), Decimal(0)),
+                credit_account: (Decimal(0), Decimal(signed_amount)),
+            }
+            assert {item["account"]["id"] for item in page["items"]} == set(expected)
+            for item in page["items"]:
+                assert item["id"] not in line_ids
+                line_ids.add(item["id"])
+                assert (
+                    item["move"]["id"] == move_id and item["move"]["state"] == "posted"
+                )
+                assert item["company_id"] == _COMPANY_ID and item["date"] == today
+                assert item["currency"]["id"] == ids["currency"]
+                account_id = item["account"]["id"]
+                debit, credit, balance = (
+                    Decimal(item[field]) for field in ("debit", "credit", "balance")
+                )
+                # Red-storno credits are -40/-80 on the original debit/credit side.
+                assert (debit, credit) == expected[account_id]
+                assert balance == debit - credit
+                if account_id == term_account:
+                    assert item["reconciled"] is True
+                account_balances[account_id] = (
+                    account_balances.get(account_id, Decimal(0)) + balance
+                )
+                signed_totals[0] += debit
+                signed_totals[1] += credit
+                absolute_totals[0] += abs(debit)
+                absolute_totals[1] += abs(credit)
+        assert all(value == 0 for value in account_balances.values())
+    after = core._trial_balance_totals(client, alias, run_id, today)
+    delta = [new - old for old, new in zip(before, after, strict=True)]
+    assert signed_totals == [Decimal(0), Decimal(0)]
+    assert delta == [Decimal(0), *signed_totals, Decimal(0)]
+    assert absolute_totals == [Decimal(480), Decimal(480)]
+    assert len(move_ids) == 6 and len(line_ids) == 12
+    assert client.tracked["account.move"] == move_ids
+    assert len(final_partial_ids) == 4 and len(final_full_ids) == 2
+    assert final_partial_ids <= client.tracked["account.partial.reconcile"]
+    assert final_full_ids <= client.tracked["account.full.reconcile"]
+    # Retain automatic reconciliations deleted by undo for rollback verification.
+    assert len(client.tracked["account.partial.reconcile"]) == 8
+    assert len(client.tracked["account.full.reconcile"]) == 4
+    assert not client.tracked["account.payment"]
+    assert not client.tracked["account.bank.statement.line"]
+    assert source_checkpoint is not None
+    return {
+        "source_documents": len(traces),
+        "credit_notes": len(move_ids) - len(traces),
+        "posted_journal_items": len(line_ids),
+        "account_storno": storno,
+        "source_residuals": traces,
+        "trial_balance_period_delta": {
+            field: format(value.normalize(), "f")
+            for field, value in zip(
+                ("opening_balance", "debit", "credit", "closing_balance"),
+                delta,
+                strict=True,
+            )
+        },
+        "source_only_trial_balance_delta": {
+            "debit": format(source_checkpoint[1].normalize(), "f"),
+            "credit": format(source_checkpoint[2].normalize(), "f"),
+        },
+        "absolute_journal_item_movement": {
+            "debit": format(absolute_totals[0].normalize(), "f"),
+            "credit": format(absolute_totals[1].normalize(), "f"),
+        },
+        "final_reconciliations": {
+            "partial": len(final_partial_ids),
+            "full": len(final_full_ids),
+        },
+        "tracked_reconciliations": {
+            "partial": len(client.tracked["account.partial.reconcile"]),
+            "full": len(client.tracked["account.full.reconcile"]),
+        },
+    }
+
+
 def _live_worker(argv: list[str] | None = None) -> int:
     args = _arguments(argv)
     sys.path.insert(0, str(args.odoo_source.resolve(strict=True)))
@@ -645,6 +1105,7 @@ def _live_worker(argv: list[str] | None = None) -> int:
     tracked: dict[str, set[int]] = {model: set() for model in core._BUSINESS_MODELS}
     env = client = None
     failure: BaseException | None = None
+    details: dict[str, Any] = {}
     try:
         env = api.Environment(
             cursor,
@@ -667,8 +1128,16 @@ def _live_worker(argv: list[str] | None = None) -> int:
             or _COMPANY_ID not in user.company_ids.ids
         ):
             raise RuntimeError("the fixed business user is unavailable")
-        _run_chain(client, args.alias, args.run_id)
-        assert client.capabilities == _CAPABILITIES
+        if args.refund_only:
+            details = _run_refund_chain(client, args.alias, args.run_id)
+            assert client.capabilities == _REFUND_CAPABILITIES
+        else:
+            _run_chain(client, args.alias, args.run_id)
+            assert client.capabilities == _CAPABILITIES
+            details = {
+                "accounting_dates_verified": True,
+                "marker_migration_verified": True,
+            }
     except BaseException as exc:  # noqa: BLE001 - re-raised after rollback verification
         failure = exc
     finally:
@@ -696,15 +1165,14 @@ def _live_worker(argv: list[str] | None = None) -> int:
     sys.stdout.write(
         json.dumps(
             {
-                "accounting_dates_verified": True,
                 "alias": args.alias,
                 "capabilities": sorted(client.capabilities),
                 "company_id": _COMPANY_ID,
                 "database": args.database,
                 "execution": "in_process_cli_real_orm",
-                "marker_migration_verified": True,
                 "rollback_verified": True,
                 "user_id": _USER_ID,
+                **details,
             },
             ensure_ascii=False,
             sort_keys=True,

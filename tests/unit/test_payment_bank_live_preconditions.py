@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import runpy
 import uuid
 from pathlib import Path
@@ -82,3 +83,93 @@ def test_live_cli_preserves_native_failure_chain_only_for_test_diagnostics(monke
             client, "v4-dev", uuid.uuid4(), "payment.get", {"payment_id": 1}
         )
     assert caught.value.__cause__ is native_failure
+
+
+@pytest.mark.parametrize("record_id", [None, 17])
+def test_live_runtime_tracks_reconciliation_lines_without_a_null_record_id(
+    monkeypatch, record_id
+):
+    from odoo_accounting_cli_v4.bridge import runtime
+
+    helpers = runpy.run_path(str(_LIVE_TEST))
+    client = helpers["_RuntimeClient"](SimpleNamespace(invalidate_all=lambda: None))
+    result = {
+        "model": "account.move.line" if record_id is None else "account.move",
+        "id": record_id,
+        "line_ids": [21, 22],
+        "partial_reconcile_ids": [31],
+        "full_reconcile_id": 32,
+    }
+    monkeypatch.setattr(runtime, "_dispatch", lambda *_args: {"result": result})
+    monkeypatch.setitem(
+        client.invoke.__globals__, "_collect_related", lambda _env, _tracked: None
+    )
+
+    assert client.invoke("accounting.core_write.execute", {}) == {"result": result}
+    assert client.tracked["account.move"] == ({17} if record_id else set())
+    assert client.tracked["account.move.line"] == {21, 22}
+    assert client.tracked["account.partial.reconcile"] == {31}
+    assert client.tracked["account.full.reconcile"] == {32}
+    assert all(None not in ids for ids in client.tracked.values())
+
+
+@pytest.mark.parametrize(
+    ("record_id", "record_ids", "valid"),
+    [(None, [21, 22], True), (17, [17], True), (None, [None], False)],
+)
+def test_live_cli_checks_multi_record_reconciliation_metadata(
+    monkeypatch, record_id, record_ids, valid
+):
+    from odoo_accounting_cli_v4 import cli
+
+    helpers = runpy.run_path(str(_LIVE_TEST))
+    client = helpers["_RuntimeClient"](object())
+    capability_id = "reconciliation.apply"
+    result = {
+        "model": "account.move.line" if record_id is None else "account.move",
+        "id": record_id,
+        "line_ids": [21, 22],
+    }
+
+    def respond(_argv, *, stdin, stdout, **_kwargs):
+        request = json.load(stdin)
+        stdout.write(
+            json.dumps(
+                {
+                    "schema_version": "v1",
+                    "request_id": request["request_id"],
+                    "capability": capability_id,
+                    "success": True,
+                    "status": "verified",
+                    "error": None,
+                    "odoo": {
+                        "database": "v4-dev",
+                        "company_id": 1,
+                        "user_id": 5,
+                        "model": result["model"],
+                        "record_ids": record_ids,
+                    },
+                    "data": {"result": result},
+                }
+            )
+            + "\n"
+        )
+        return 0
+
+    monkeypatch.setattr(cli, "main", respond)
+
+    def call():
+        return helpers["_cli"](
+            client,
+            "v4-dev",
+            uuid.uuid4(),
+            capability_id,
+            {"invoice_id": 17, "outstanding_line_id": 22},
+            key="reconciliation.apply:17:22",
+        )
+
+    if valid:
+        assert call() == {"result": result}
+    else:
+        with pytest.raises(AssertionError):
+            call()
