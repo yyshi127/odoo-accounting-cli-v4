@@ -98,6 +98,20 @@ ACCOUNTING_INSIGHT_CAPABILITY_IDS = frozenset(
         "report.external_value.get",
     }
 )
+SUPPORTING_OBJECT_CAPABILITY_IDS = frozenset(
+    {
+        "asset.group.search",
+        "asset.group.get",
+        "report.budget_definition.search",
+        "report.budget_definition.get",
+        "report.budget_item.search",
+        "report.budget_item.get",
+        "tax.unit.search",
+        "tax.unit.get",
+        "account.return.account_status.search",
+        "account.return.account_status.get",
+    }
+)
 
 
 class Client:
@@ -129,6 +143,7 @@ def test_bridge_exports_only_the_fixed_core_object_read_contract() -> None:
         EXPECTED_CAPABILITY_IDS
         | FISCAL_POSITION_MAPPING_CAPABILITY_IDS
         | ACCOUNTING_INSIGHT_CAPABILITY_IDS
+        | SUPPORTING_OBJECT_CAPABILITY_IDS
     )
 
 

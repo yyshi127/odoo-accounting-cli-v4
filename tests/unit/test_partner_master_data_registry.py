@@ -462,9 +462,9 @@ def test_partner_batch_registry_counts_handlers_and_schema_inventory_are_exact()
     registry = _registry()
     ids = registry.ids()
 
-    assert len(ids) == 345
+    assert len(ids) == 355
     assert (
-        sum(registry.describe(item)["handler_key"] is not None for item in ids) == 330
+        sum(registry.describe(item)["handler_key"] is not None for item in ids) == 340
     )
     assert (
         sum(
@@ -472,7 +472,7 @@ def test_partner_batch_registry_counts_handlers_and_schema_inventory_are_exact()
             and registry.describe(item)["access"] == "read"
             for item in ids
         )
-        == 200
+        == 210
     )
     assert (
         sum(
@@ -484,14 +484,14 @@ def test_partner_batch_registry_counts_handlers_and_schema_inventory_are_exact()
     )
     statuses = [registry.describe(item)["status"]["value"] for item in ids]
     assert statuses.count("disabled") == 15
-    assert statuses.count("unconfigured") == 297
+    assert statuses.count("unconfigured") == 307
     assert statuses.count("degraded") == 33
     assert (
         hashlib.sha256("\n".join(ids).encode()).hexdigest()
-        == "79e2fb08cf06789c3689f536a1c447f5b936413810de63df7ef0d3a51b677c8c"
+        == "19ebbf7a41194146c4e89056ca81eab166fc2c23af4984b4c4d9dd9c86e47a72"
     )
     schema_root = Path(__file__).resolve().parents[2] / "schemas" / "v1"
-    assert len(list(schema_root.glob("*.schema.json"))) == 665
+    assert len(list(schema_root.glob("*.schema.json"))) == 685
 
 
 def test_partner_batch_registry_models_acl_groups_and_evidence_are_exact() -> None:

@@ -98,6 +98,16 @@ CAPABILITY_IDS = frozenset(
         "account.lock_exception.get",
         "report.external_value.search",
         "report.external_value.get",
+        "asset.group.search",
+        "asset.group.get",
+        "report.budget_definition.search",
+        "report.budget_definition.get",
+        "report.budget_item.search",
+        "report.budget_item.get",
+        "tax.unit.search",
+        "tax.unit.get",
+        "account.return.account_status.search",
+        "account.return.account_status.get",
     }
 )
 
@@ -174,6 +184,45 @@ _GET_IDS = {
         "account.report.external.value",
         "external_value_id",
     ),
+    "asset.group.get": ("account.asset.group", "asset_group_id"),
+    "report.budget_definition.get": (
+        "account.report.budget",
+        "budget_definition_id",
+    ),
+    "report.budget_item.get": (
+        "account.report.budget.item",
+        "budget_item_id",
+    ),
+    "tax.unit.get": ("account.tax.unit", "tax_unit_id"),
+    "account.return.account_status.get": (
+        "account.audit.account.status",
+        "account_status_id",
+    ),
+}
+
+_SUPPORTING_OBJECT_KINDS = {
+    "asset.group.search": "asset_group",
+    "asset.group.get": "asset_group",
+    "report.budget_definition.search": "report_budget_definition",
+    "report.budget_definition.get": "report_budget_definition",
+    "report.budget_item.search": "report_budget_item",
+    "report.budget_item.get": "report_budget_item",
+    "tax.unit.search": "tax_unit",
+    "tax.unit.get": "tax_unit",
+    "account.return.account_status.search": "account_return_status",
+    "account.return.account_status.get": "account_return_status",
+}
+_SUPPORTING_SEARCH_IDS = frozenset(
+    capability_id
+    for capability_id in _SUPPORTING_OBJECT_KINDS
+    if capability_id.endswith(".search")
+)
+_SUPPORTING_MODELS = {
+    "asset_group": "account.asset.group",
+    "report_budget_definition": "account.report.budget",
+    "report_budget_item": "account.report.budget.item",
+    "tax_unit": "account.tax.unit",
+    "account_return_status": "account.audit.account.status",
 }
 _PAGED_REFERENCE_MODELS = {
     "partner.search": "res.partner",
@@ -574,6 +623,43 @@ _EXTERNAL_VALUE_FIELDS = (
     "carryover_origin_expression_label",
     "carryover_origin_report_line_id",
 )
+_SUPPORTING_FIELDS = {
+    "asset_group": (
+        "id",
+        "name",
+        "company_id",
+        "count_linked_assets",
+    ),
+    "report_budget_definition": (
+        "id",
+        "name",
+        "sequence",
+        "company_id",
+        "item_ids",
+    ),
+    "report_budget_item": (
+        "id",
+        "budget_id",
+        "account_id",
+        "amount",
+        "date",
+    ),
+    "tax_unit": (
+        "id",
+        "name",
+        "country_id",
+        "vat",
+        "company_ids",
+        "main_company_id",
+        "fpos_synced",
+    ),
+    "account_return_status": (
+        "id",
+        "audit_id",
+        "account_id",
+        "status",
+    ),
+}
 _ANALYTIC_COLUMN_PATTERN = re.compile(r"^(?:account_id|x_plan[1-9][0-9]*_id)$")
 _PARTNER_REF_MARKER_SUFFIX = re.compile(r"(?:^| )\[ODACV4:[0-9a-f]{64}\]$")
 _REQUIRED_MODELS = {
@@ -982,6 +1068,64 @@ _REQUIRED_MODELS = {
         "account.report.line",
         "account.report",
     ),
+    "asset.group.search": (
+        "res.company",
+        "account.asset.group",
+        "account.asset",
+    ),
+    "asset.group.get": (
+        "res.company",
+        "account.asset.group",
+        "account.asset",
+    ),
+    "report.budget_definition.search": (
+        "res.company",
+        "account.report.budget",
+        "account.report.budget.item",
+    ),
+    "report.budget_definition.get": (
+        "res.company",
+        "account.report.budget",
+        "account.report.budget.item",
+    ),
+    "report.budget_item.search": (
+        "res.company",
+        "account.report.budget.item",
+        "account.report.budget",
+        "account.account",
+    ),
+    "report.budget_item.get": (
+        "res.company",
+        "account.report.budget.item",
+        "account.report.budget",
+        "account.account",
+    ),
+    "tax.unit.search": (
+        "res.company",
+        "account.tax.unit",
+        "res.country",
+        "account.fiscal.position",
+        "res.partner",
+    ),
+    "tax.unit.get": (
+        "res.company",
+        "account.tax.unit",
+        "res.country",
+        "account.fiscal.position",
+        "res.partner",
+    ),
+    "account.return.account_status.search": (
+        "res.company",
+        "account.audit.account.status",
+        "account.return",
+        "account.account",
+    ),
+    "account.return.account_status.get": (
+        "res.company",
+        "account.audit.account.status",
+        "account.return",
+        "account.account",
+    ),
 }
 
 
@@ -1174,12 +1318,17 @@ def _related_rows(
     model_name: str,
     record_ids: set[int],
     fields: tuple[str, ...],
+    *,
+    company_id: int | None = None,
 ) -> dict[int, dict[str, Any]]:
     if not record_ids:
         return {}
+    context: dict[str, Any] = {"active_test": False}
+    if company_id is not None:
+        context["allowed_company_ids"] = [company_id]
     rows = (
         env[model_name]
-        .with_context(active_test=False)
+        .with_context(**context)
         .search_read(
             [("id", "in", sorted(record_ids))],
             fields=["id", *fields],
@@ -1252,6 +1401,25 @@ def _owner_company_ids(
 def _scope_domain(env: Any, capability_id: str, company_id: int) -> list[Any]:
     if capability_id == "account.account.get":
         return [("company_ids", "in", [company_id])]
+    if capability_id in {"asset.group.search", "asset.group.get"}:
+        return [("company_id", "=", company_id)]
+    if capability_id in {
+        "report.budget_definition.search",
+        "report.budget_definition.get",
+    }:
+        return [("company_id", "=", company_id)]
+    if capability_id in {
+        "report.budget_item.search",
+        "report.budget_item.get",
+    }:
+        return [("budget_id.company_id", "=", company_id)]
+    if capability_id in {"tax.unit.search", "tax.unit.get"}:
+        return [("company_ids", "in", [company_id])]
+    if capability_id in {
+        "account.return.account_status.search",
+        "account.return.account_status.get",
+    }:
+        return [("audit_id.company_id", "=", company_id)]
     if capability_id in {
         "recurring.journal_entry.search",
         "recurring.journal_entry.get",
@@ -1363,6 +1531,91 @@ def _valid_parameters(capability_id: str, parameters: Any) -> bool:
     if capability_id in _GET_IDS:
         id_field = _GET_IDS[capability_id][1]
         return set(parameters) == {id_field} and _valid_id(parameters[id_field])
+    if capability_id in {
+        "asset.group.search",
+        "report.budget_definition.search",
+    }:
+        if set(parameters) != {"query", "after_id", "limit"}:
+            return False
+        query = parameters["query"]
+        return bool(
+            (
+                query is None
+                or isinstance(query, str)
+                and query == query.strip()
+                and 1 <= len(query) <= 200
+            )
+            and (parameters["after_id"] is None or _valid_id(parameters["after_id"]))
+            and _valid_limit(parameters["limit"])
+        )
+    if capability_id == "report.budget_item.search":
+        if set(parameters) != {
+            "budget_id",
+            "account_id",
+            "date_from",
+            "date_to",
+            "after_id",
+            "limit",
+        }:
+            return False
+        return bool(
+            all(
+                parameters[field] is None or _valid_id(parameters[field])
+                for field in ("budget_id", "account_id", "after_id")
+            )
+            and _optional_date(parameters["date_from"])
+            and _optional_date(parameters["date_to"])
+            and not (
+                parameters["date_from"] is not None
+                and parameters["date_to"] is not None
+                and parameters["date_from"] > parameters["date_to"]
+            )
+            and _valid_limit(parameters["limit"])
+        )
+    if capability_id == "tax.unit.search":
+        if set(parameters) != {
+            "query",
+            "country_id",
+            "main_company_only",
+            "after_id",
+            "limit",
+        }:
+            return False
+        query = parameters["query"]
+        return bool(
+            (
+                query is None
+                or isinstance(query, str)
+                and query == query.strip()
+                and 1 <= len(query) <= 200
+            )
+            and (
+                parameters["country_id"] is None or _valid_id(parameters["country_id"])
+            )
+            and isinstance(parameters["main_company_only"], bool)
+            and (parameters["after_id"] is None or _valid_id(parameters["after_id"]))
+            and _valid_limit(parameters["limit"])
+        )
+    if capability_id == "account.return.account_status.search":
+        if set(parameters) != {
+            "return_id",
+            "account_id",
+            "statuses",
+            "after_id",
+            "limit",
+        }:
+            return False
+        return bool(
+            all(
+                parameters[field] is None or _valid_id(parameters[field])
+                for field in ("return_id", "account_id", "after_id")
+            )
+            and _valid_optional_enum_list(
+                parameters["statuses"],
+                frozenset({"todo", "reviewed", "supervised", "anomaly"}),
+            )
+            and _valid_limit(parameters["limit"])
+        )
     if capability_id == "invoice.duplicate_candidates.list":
         return bool(
             set(parameters) == {"invoice_id", "after_id", "limit"}
@@ -2578,6 +2831,74 @@ def _id_page_rows(
         ),
         True,
     )
+
+
+def _supporting_object_domain(
+    env: Any,
+    capability_id: str,
+    parameters: dict[str, Any],
+    company_id: int,
+) -> list[Any]:
+    domains: list[list[Any]] = [_scope_domain(env, capability_id, company_id)]
+    if capability_id not in _SUPPORTING_SEARCH_IDS:
+        id_field = _GET_IDS[capability_id][1]
+        domains.append([("id", "=", parameters[id_field])])
+    elif capability_id in {
+        "asset.group.search",
+        "report.budget_definition.search",
+    }:
+        if parameters["query"] is not None:
+            domains.append([("name", "ilike", parameters["query"])])
+    elif capability_id == "report.budget_item.search":
+        if parameters["budget_id"] is not None:
+            domains.append([("budget_id", "=", parameters["budget_id"])])
+        if parameters["account_id"] is not None:
+            domains.append([("account_id", "=", parameters["account_id"])])
+        if parameters["date_from"] is not None:
+            domains.append([("date", ">=", parameters["date_from"])])
+        if parameters["date_to"] is not None:
+            domains.append([("date", "<=", parameters["date_to"])])
+    elif capability_id == "tax.unit.search":
+        if parameters["query"] is not None:
+            domains.append([("name", "ilike", parameters["query"])])
+        if parameters["country_id"] is not None:
+            domains.append([("country_id", "=", parameters["country_id"])])
+        if parameters["main_company_only"]:
+            domains.append([("main_company_id", "=", company_id)])
+    elif capability_id == "account.return.account_status.search":
+        if parameters["return_id"] is not None:
+            domains.append([("audit_id", "=", parameters["return_id"])])
+        if parameters["account_id"] is not None:
+            domains.append([("account_id", "=", parameters["account_id"])])
+        if parameters["statuses"] is not None:
+            domains.append([("status", "in", list(parameters["statuses"]))])
+    from odoo.osv import expression
+
+    return expression.AND(domains)
+
+
+def _supporting_object_rows(
+    env: Any,
+    capability_id: str,
+    parameters: dict[str, Any],
+    company_id: int,
+) -> tuple[list[dict[str, Any]], bool]:
+    kind = _SUPPORTING_OBJECT_KINDS[capability_id]
+    model = env[_SUPPORTING_MODELS[kind]].with_context(
+        active_test=False, allowed_company_ids=[company_id]
+    )
+    domain = _supporting_object_domain(env, capability_id, parameters, company_id)
+    fields = _SUPPORTING_FIELDS[kind]
+    if capability_id in _SUPPORTING_SEARCH_IDS:
+        return _id_page_rows(
+            model,
+            domain,
+            after_id=parameters["after_id"],
+            limit=parameters["limit"],
+            fields=fields,
+        )
+    rows = model.search_read(domain, fields=list(fields), limit=1, order="id")
+    return rows, True
 
 
 def _fiscal_position_row(
@@ -5368,6 +5689,181 @@ def _normalize_external_values(
     return items
 
 
+def _normalize_supporting_objects(
+    env: Any, capability_id: str, rows: list[dict[str, Any]], company_id: int
+) -> list[dict[str, Any]]:
+    kind = _SUPPORTING_OBJECT_KINDS[capability_id]
+
+    def required_text(value: Any) -> str:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("invalid supporting object text")
+        return value
+
+    if kind == "asset_group":
+        items = []
+        for row in rows:
+            linked_asset_count = row["count_linked_assets"]
+            if (
+                _reference_id(row["company_id"]) != company_id
+                or not isinstance(linked_asset_count, int)
+                or isinstance(linked_asset_count, bool)
+                or linked_asset_count < 0
+            ):
+                raise ValueError("asset group outside company")
+            items.append(
+                {
+                    "id": row["id"],
+                    "name": _optional_text(row["name"]),
+                    "company_id": company_id,
+                    "linked_asset_count": linked_asset_count,
+                }
+            )
+        return items
+
+    if kind == "report_budget_definition":
+        items = []
+        for row in rows:
+            item_ids = _sorted_relation_ids(row["item_ids"])
+            if _reference_id(row["company_id"]) != company_id:
+                raise ValueError("report budget outside company")
+            sequence = row["sequence"]
+            if not isinstance(sequence, int) or isinstance(sequence, bool):
+                raise TypeError("invalid report budget sequence")
+            items.append(
+                {
+                    "id": row["id"],
+                    "name": required_text(row["name"]),
+                    "sequence": sequence,
+                    "company_id": company_id,
+                    "item_count": len(item_ids),
+                }
+            )
+        return items
+
+    if kind == "report_budget_item":
+        budget_ids = {_reference_id(row.get("budget_id")) for row in rows}
+        account_ids = {_reference_id(row.get("account_id")) for row in rows}
+        if None in budget_ids or None in account_ids:
+            raise ValueError("missing report budget item relation")
+        budgets = _related_rows(
+            env,
+            "account.report.budget",
+            budget_ids,
+            ("name", "company_id"),
+            company_id=company_id,
+        )
+        accounts = _related_rows(
+            env,
+            "account.account",
+            account_ids,
+            ("code", "name", "company_ids"),
+            company_id=company_id,
+        )
+        items = []
+        for row in rows:
+            budget_id = _reference_id(row["budget_id"])
+            account_id = _reference_id(row["account_id"])
+            if _reference_id(
+                budgets[budget_id]["company_id"]
+            ) != company_id or company_id not in _sorted_relation_ids(
+                accounts[account_id]["company_ids"]
+            ):
+                raise ValueError("report budget item outside company")
+            items.append(
+                {
+                    "id": row["id"],
+                    "company_id": company_id,
+                    "budget_definition": _named_reference(budgets[budget_id]),
+                    "account": _coded_reference(accounts[account_id]),
+                    "amount": _decimal_string(row["amount"]),
+                    "date": _date_string(row["date"]),
+                }
+            )
+        return items
+
+    if kind == "tax_unit":
+        country_ids = {_reference_id(row.get("country_id")) for row in rows}
+        if None in country_ids:
+            raise ValueError("missing tax unit country")
+        countries = _related_rows(
+            env,
+            "res.country",
+            country_ids,
+            ("code", "name"),
+            company_id=company_id,
+        )
+        items = []
+        for row in rows:
+            country_id = _reference_id(row["country_id"])
+            main_company_id = _reference_id(row["main_company_id"])
+            company_ids = _sorted_relation_ids(row["company_ids"], nonempty=True)
+            country = countries[country_id]
+            if (
+                company_id not in company_ids
+                or main_company_id not in company_ids
+                or not isinstance(row["fpos_synced"], bool)
+            ):
+                raise ValueError("tax unit outside company")
+            items.append(
+                {
+                    "id": row["id"],
+                    "company_id": company_id,
+                    "name": required_text(row["name"]),
+                    "country": {
+                        "id": country_id,
+                        "code": required_text(country["code"]),
+                        "name": required_text(country["name"]),
+                    },
+                    "vat": _optional_text(row["vat"]),
+                    "is_main_company": main_company_id == company_id,
+                    "fpos_synced": row["fpos_synced"],
+                }
+            )
+        return items
+
+    return_ids = {_reference_id(row.get("audit_id")) for row in rows}
+    account_ids = {_reference_id(row.get("account_id")) for row in rows}
+    if None in return_ids or None in account_ids:
+        raise ValueError("missing account return status relation")
+    returns = _related_rows(
+        env,
+        "account.return",
+        return_ids,
+        ("name", "company_id"),
+        company_id=company_id,
+    )
+    accounts = _related_rows(
+        env,
+        "account.account",
+        account_ids,
+        ("code", "name", "company_ids"),
+        company_id=company_id,
+    )
+    allowed_statuses = {None, "todo", "reviewed", "supervised", "anomaly"}
+    items = []
+    for row in rows:
+        return_id = _reference_id(row["audit_id"])
+        account_id = _reference_id(row["account_id"])
+        status = row["status"] or None
+        if (
+            _reference_id(returns[return_id]["company_id"]) != company_id
+            or company_id
+            not in _sorted_relation_ids(accounts[account_id]["company_ids"])
+            or status not in allowed_statuses
+        ):
+            raise ValueError("account return status outside company")
+        items.append(
+            {
+                "id": row["id"],
+                "company_id": company_id,
+                "return": _named_reference(returns[return_id]),
+                "account": _coded_reference(accounts[account_id]),
+                "status": status,
+            }
+        )
+    return items
+
+
 def _normalize_support(
     env: Any, capability_id: str, rows: list[dict[str, Any]], company_id: int
 ) -> list[dict[str, Any]]:
@@ -5515,6 +6011,10 @@ def dispatch(
                 env, parameters, company_id
             )
             rows = []
+        elif capability_id in _SUPPORTING_OBJECT_KINDS:
+            rows, cursor_found = _supporting_object_rows(
+                env, capability_id, parameters, company_id
+            )
         elif capability_id in _GET_IDS:
             rows = _raw_get_rows(env, capability_id, company_id, parameters)
         elif capability_id == "journal_item.search":
@@ -5584,6 +6084,8 @@ def dispatch(
             "report.external_value.get",
         }:
             items = _normalize_external_values(env, rows, company_id)
+        elif capability_id in _SUPPORTING_OBJECT_KINDS:
+            items = _normalize_supporting_objects(env, capability_id, rows, company_id)
         elif capability_id in {
             "fiscal_position.account_mapping.list",
             "fiscal_position.tax_mapping.list",

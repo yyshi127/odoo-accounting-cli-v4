@@ -1544,3 +1544,110 @@ and no new stock or picking capability was added here. Do not interpret the
 345 total registry IDs as proof of complete accounting coverage; continue with
 the next verified 8-12-command accounting gap rather than command-count
 inflation or the deferred control plane.
+
+## 2026-08-31 accounting supporting-object checkpoint (latest completed batch)
+
+This batch adds ten pure-accounting reads. It does not add stock, picking,
+sales-order, or purchase-order capabilities:
+
+1. `asset.group.search`
+2. `asset.group.get`
+3. `report.budget_definition.search`
+4. `report.budget_definition.get`
+5. `report.budget_item.search`
+6. `report.budget_item.get`
+7. `tax.unit.search`
+8. `tax.unit.get`
+9. `account.return.account_status.search`
+10. `account.return.account_status.get`
+
+The exact registry closure is 355 capability IDs: 340 enabled, including
+210 reads and 130 writes, plus 15 disabled. Statuses are 307 `unconfigured`,
+33 `degraded`, and 15 `disabled`; there are 685 public schema files. These
+totals include earlier non-accounting capabilities and are not a percentage
+of complete accounting coverage. This supporting-object batch must not be
+presented as another high-frequency core-workflow breakthrough.
+
+Implementation, independent review, and targeted regressions are complete:
+1042 local tests and the same 1042 server tests passed (889 focused tests plus
+153 existing core-object CLI regressions). After the smoke status was recorded,
+the focused registry/CLI metadata selection passed another 15 tests locally and
+15 on the server. Ruff and diff checks passed. The
+initial deployment contained exactly 36 files; local/server SHA-256 manifest
+digests matched at
+`a9804362f797d56576c45d23e45973e4d9fa673017ea7401d855077eaf02067c`.
+After recording the smoke result, the final 36-code-file manifest digest is
+`5ef93ec319e23f091fc7696a1fc6899beab6c1e5b4d9674ea11c2d09ebc0648d`.
+The sorted ID-list SHA-256 is
+`19ebbf7a41194146c4e89056ca81eab166fc2c23af4984b4c4d9dd9c86e47a72`,
+the canonical registry digest is
+`e327439190b9521cfc16e5a05c8cbf77822a21c2d0dfe067aa728157f518d702`,
+and the registry-file SHA-256 is
+`21b6a57b0bd3b7f17432663de5c82c25b0d63a38c8c9ed6bad2e58732c75572e`.
+
+The server retained a targeted backup of the twelve overwritten files at
+`/opt/odoo-accounting-cli-v4/.tooling/accounting-supporting-reads-20260831-a5e2b90d/overwritten-files.tgz`,
+SHA-256
+`2304fc42b5da06bab6699fc0bf384c57bff8f16c214fbb84679de90df9aa0e10`.
+The other twenty-four deployment files were new. Do not replace the server
+checkout wholesale: it still has the older Git HEAD plus accumulated deployed
+files, while the local/GitHub checkpoint is the source-control baseline.
+The four-file evidence/handoff update also has a pre-update backup at
+`/opt/odoo-accounting-cli-v4/.tooling/accounting-supporting-reads-20260831-a5e2b90d/metadata-before.tgz`,
+SHA-256
+`f659f32429b0ade0c46b47c365a674832af478a55223e3ef4fa299c61ec03ea4`.
+
+The single shared read-only smoke passed in 382.14 seconds as uid 5 against
+exactly `odoo_cli_v4_dev` and `odoo_cli_v4_e2e`. Its durable result files are:
+
+- `/opt/odoo-accounting-cli-v4/.tooling/accounting-supporting-reads-20260831-a5e2b90d/live-smoke.log`
+- `/opt/odoo-accounting-cli-v4/.tooling/accounting-supporting-reads-20260831-a5e2b90d/live-smoke.exit`
+
+The exit file contains `0` and the log reports `1 passed in 382.14s`.
+The log SHA-256 is
+`0f3fdcc479703327cd16a7948e01cc0e787056f5c8ea3796f9223d087eac2ce9`.
+The first SSH-attached attempt lost its output connection; only that exact
+test process group was terminated before the logged retry.
+No business service was stopped or restarted. Odoo19 remained active with
+`MainPID=1678372`, `NRestarts=2`, and
+`ActiveEnterTimestamp=Sun 2026-08-30 10:25:07 CST`.
+
+Review corrections included preserving native empty audit-account status as
+`null` (not `todo`), accepting an unnamed asset group, aligning nullable
+status filters and unbounded native VAT text with schemas, preserving verified
+audit context for missing `get` records, and including only the selected
+`company_id` in tax-unit output for contract-level company validation. No
+member-company details or ACL bypass were introduced.
+
+Both isolated databases currently have zero rows in these five object types.
+The live smoke therefore verifies real model/field availability, ordinary-user
+ACL, company domains, empty pages, and missing-record behavior. It cannot prove
+populated-row normalization or the native `count_linked_assets` and
+`fpos_synced` computations. Those paths have source review and unit coverage,
+but populated live fixtures remain an explicitly unverified boundary.
+
+### Next highest-value work
+
+The invoice/bill, journal-entry, payment, and reconciliation command chains
+already cover the ordinary daily workflow at code level. Prefer a complete
+pure-CLI acceptance flow next (customer invoice, partial payment, final payment,
+bank match; supplier bill and payment; adjustment journal and reversal), checking
+residual amounts and trial-balance consistency. Reuse the existing core-write
+and payment/bank shared tests rather than registering more supporting objects
+solely to increase the count.
+
+Two conditional gaps remain explicit:
+
+- `period.lock.change` is disabled, so final period locking is not yet an
+  end-to-end CLI action. Native locking requires an accounting manager; uid 5
+  must not be elevated or bypassed to force it through.
+- Deferred generation exists, but current CLI line parameters do not expose
+  `deferred_start_date` / `deferred_end_date`; the existing extended-write
+  integration fixture sets them directly through ORM. If a fully CLI-driven
+  deferred workflow is required, extend the existing line parameters instead
+  of adding a new auxiliary capability family.
+
+`period.adjustment.create` is not a reason to duplicate functionality: ordinary
+`journal_entry.create`, `journal_entry.post`, and `journal_entry.reverse` already
+provide the manual adjustment route. These are source/contract audit findings,
+not a claim that a fresh end-to-end business acceptance run has passed.

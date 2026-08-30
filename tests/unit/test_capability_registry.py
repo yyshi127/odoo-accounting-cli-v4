@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 345
-EXPECTED_ENABLED_CAPABILITY_COUNT = 330
-EXPECTED_IMPLEMENTED_READ_COUNT = 200
+EXPECTED_CAPABILITY_COUNT = 355
+EXPECTED_ENABLED_CAPABILITY_COUNT = 340
+EXPECTED_IMPLEMENTED_READ_COUNT = 210
 EXPECTED_IMPLEMENTED_WRITE_COUNT = 130
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 297
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 307
 EXPECTED_DEGRADED_CAPABILITY_COUNT = 33
-EXPECTED_SCHEMA_COUNT = 665
+EXPECTED_SCHEMA_COUNT = 685
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "79e2fb08cf06789c3689f536a1c447f5b936413810de63df7ef0d3a51b677c8c"
+    "19ebbf7a41194146c4e89056ca81eab166fc2c23af4984b4c4d9dd9c86e47a72"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -270,6 +270,16 @@ IMPLEMENTED_READS = {
     "account.lock_exception.get": "account_lock_exception_get",
     "report.external_value.search": "report_external_value_search",
     "report.external_value.get": "report_external_value_get",
+    "asset.group.search": "asset_group_search",
+    "asset.group.get": "asset_group_get",
+    "report.budget_definition.search": "report_budget_definition_search",
+    "report.budget_definition.get": "report_budget_definition_get",
+    "report.budget_item.search": "report_budget_item_search",
+    "report.budget_item.get": "report_budget_item_get",
+    "tax.unit.search": "tax_unit_search",
+    "tax.unit.get": "tax_unit_get",
+    "account.return.account_status.search": "account_return_account_status_search",
+    "account.return.account_status.get": "account_return_account_status_get",
 }
 ORDER_DOCUMENT_WRITES = {
     "purchase.order.cancel",
@@ -589,6 +599,18 @@ ACCOUNTING_OPERATIONAL_READS = {
     "report.external_value.search",
     "report.external_value.get",
 }
+ACCOUNTING_SUPPORTING_OBJECT_READS = {
+    "asset.group.search",
+    "asset.group.get",
+    "report.budget_definition.search",
+    "report.budget_definition.get",
+    "report.budget_item.search",
+    "report.budget_item.get",
+    "tax.unit.search",
+    "tax.unit.get",
+    "account.return.account_status.search",
+    "account.return.account_status.get",
+}
 PENDING_LIVE_READS = {
     "product.accounting_profile.get",
 }
@@ -759,6 +781,16 @@ CORE_OBJECT_READ_HANDLERS = {
     "account.lock_exception.get": "account_lock_exception_get",
     "report.external_value.search": "report_external_value_search",
     "report.external_value.get": "report_external_value_get",
+    "asset.group.search": "asset_group_search",
+    "asset.group.get": "asset_group_get",
+    "report.budget_definition.search": "report_budget_definition_search",
+    "report.budget_definition.get": "report_budget_definition_get",
+    "report.budget_item.search": "report_budget_item_search",
+    "report.budget_item.get": "report_budget_item_get",
+    "tax.unit.search": "tax_unit_search",
+    "tax.unit.get": "tax_unit_get",
+    "account.return.account_status.search": "account_return_account_status_search",
+    "account.return.account_status.get": "account_return_account_status_get",
 }
 REFERENCE_OBJECT_BATCH_LIVE_READS = {
     "account.tag.get",
@@ -821,6 +853,7 @@ CORE_OBJECT_BATCH_LIVE_READS = (
     - ACCOUNTING_CONFIGURATION_EXPANSION_LIVE_READS
     - ACCOUNTING_RULES_FISCAL_YEAR_READS
     - ACCOUNTING_OPERATIONAL_READS
+    - ACCOUNTING_SUPPORTING_OBJECT_READS
 )
 
 
@@ -980,6 +1013,12 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
             assert descriptor["tests"]["integration"]["status"] == "implemented"
             assert descriptor["tests"]["integration"]["references"] == [
                 "tests/integration/test_accounting_operational_reads_live.py"
+            ]
+            continue
+        if capability_id in ACCOUNTING_SUPPORTING_OBJECT_READS:
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == [
+                "tests/integration/test_accounting_supporting_object_reads_live.py"
             ]
             continue
         if capability_id in PENDING_LIVE_READS:
@@ -1153,7 +1192,9 @@ def test_core_object_reads_and_bank_report_match_the_fixed_runtime() -> None:
         source_models = descriptor["source"]["models"]
 
         assert descriptor["handler_key"] == handler_key
-        if capability_id in ACCOUNTING_OPERATIONAL_READS:
+        if capability_id in (
+            ACCOUNTING_OPERATIONAL_READS | ACCOUNTING_SUPPORTING_OBJECT_READS
+        ):
             # These descriptors freeze full source/ACL provenance separately from
             # the runtime bridge's smaller model-availability preflight.
             assert models[0] == source_models[0] == "res.company"

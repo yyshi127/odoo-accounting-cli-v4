@@ -63,6 +63,11 @@ CORE_OBJECT_GET_CAPABILITY_IDS = frozenset(
         "partner.credit_exposure.inspect",
         "account.lock_exception.get",
         "report.external_value.get",
+        "asset.group.get",
+        "report.budget_definition.get",
+        "report.budget_item.get",
+        "tax.unit.get",
+        "account.return.account_status.get",
     }
 )
 CORE_OBJECT_LIST_CAPABILITY_IDS = frozenset(
@@ -106,6 +111,11 @@ _CORE_OBJECT_SEARCH_CAPABILITY_IDS = frozenset(
         "journal.sequence_irregularity.list",
         "account.lock_exception.search",
         "report.external_value.search",
+        "asset.group.search",
+        "report.budget_definition.search",
+        "report.budget_item.search",
+        "tax.unit.search",
+        "account.return.account_status.search",
     }
 )
 CORE_OBJECT_READ_CAPABILITY_IDS = frozenset(
@@ -158,6 +168,11 @@ _ID_FIELDS = {
     "partner.credit_exposure.inspect": "partner_id",
     "account.lock_exception.get": "lock_exception_id",
     "report.external_value.get": "external_value_id",
+    "asset.group.get": "asset_group_id",
+    "report.budget_definition.get": "budget_definition_id",
+    "report.budget_item.get": "budget_item_id",
+    "tax.unit.get": "tax_unit_id",
+    "account.return.account_status.get": "account_status_id",
 }
 _JOURNAL_ITEM_FILTERS = frozenset(
     {
@@ -216,6 +231,15 @@ _SEARCH_FILTERS = {
     ),
     "report.external_value.search": frozenset(
         {"report_id", "expression_id", "date_from", "date_to"}
+    ),
+    "asset.group.search": frozenset({"query"}),
+    "report.budget_definition.search": frozenset({"query"}),
+    "report.budget_item.search": frozenset(
+        {"budget_id", "account_id", "date_from", "date_to"}
+    ),
+    "tax.unit.search": frozenset({"query", "country_id", "main_company_only"}),
+    "account.return.account_status.search": frozenset(
+        {"return_id", "account_id", "statuses"}
     ),
 }
 
@@ -559,6 +583,91 @@ def validate_core_object_read_request(
         if date_from is not None and date_to is not None and date_from > date_to:
             raise _invalid("date_from cannot be after date_to.")
         filters.update({"date_from": date_from, "date_to": date_to})
+    elif capability_id in {
+        "asset.group.search",
+        "report.budget_definition.search",
+    }:
+        if not set(parameters) <= _SEARCH_FILTERS[capability_id] | {
+            "limit",
+            "cursor",
+        }:
+            raise _invalid(f"{capability_id} contains an unsupported parameter.")
+        query = parameters.get("query")
+        if query is not None and (
+            not isinstance(query, str)
+            or not 1 <= len(query) <= 200
+            or query != query.strip()
+        ):
+            raise _invalid(
+                "parameters.query must be null or a trimmed 1-200 character string."
+            )
+        filters = {"query": query}
+    elif capability_id == "report.budget_item.search":
+        if not set(parameters) <= _SEARCH_FILTERS[capability_id] | {
+            "limit",
+            "cursor",
+        }:
+            raise _invalid(f"{capability_id} contains an unsupported parameter.")
+        filters = {}
+        for field in ("budget_id", "account_id"):
+            value = parameters.get(field)
+            if value is not None and not _valid_id(value):
+                raise _invalid(
+                    f"parameters.{field} must be null or a positive integer."
+                )
+            filters[field] = value
+        date_from = parameters.get("date_from")
+        date_to = parameters.get("date_to")
+        if not _optional_date(date_from) or not _optional_date(date_to):
+            raise _invalid("date_from and date_to must be null or YYYY-MM-DD dates.")
+        if date_from is not None and date_to is not None and date_from > date_to:
+            raise _invalid("date_from cannot be after date_to.")
+        filters.update({"date_from": date_from, "date_to": date_to})
+    elif capability_id == "tax.unit.search":
+        if not set(parameters) <= _SEARCH_FILTERS[capability_id] | {
+            "limit",
+            "cursor",
+        }:
+            raise _invalid(f"{capability_id} contains an unsupported parameter.")
+        query = parameters.get("query")
+        if query is not None and (
+            not isinstance(query, str)
+            or not 1 <= len(query) <= 200
+            or query != query.strip()
+        ):
+            raise _invalid(
+                "parameters.query must be null or a trimmed 1-200 character string."
+            )
+        country_id = parameters.get("country_id")
+        if country_id is not None and not _valid_id(country_id):
+            raise _invalid("parameters.country_id must be null or a positive integer.")
+        main_company_only = parameters.get("main_company_only", False)
+        if not isinstance(main_company_only, bool):
+            raise _invalid("parameters.main_company_only must be a boolean.")
+        filters = {
+            "query": query,
+            "country_id": country_id,
+            "main_company_only": main_company_only,
+        }
+    elif capability_id == "account.return.account_status.search":
+        if not set(parameters) <= _SEARCH_FILTERS[capability_id] | {
+            "limit",
+            "cursor",
+        }:
+            raise _invalid(f"{capability_id} contains an unsupported parameter.")
+        filters = {}
+        for field in ("return_id", "account_id"):
+            value = parameters.get(field)
+            if value is not None and not _valid_id(value):
+                raise _invalid(
+                    f"parameters.{field} must be null or a positive integer."
+                )
+            filters[field] = value
+        filters["statuses"] = _normalized_optional_enum_list(
+            parameters.get("statuses"),
+            field="statuses",
+            allowed=frozenset({"todo", "reviewed", "supervised", "anomaly"}),
+        )
     elif capability_id == "account.group.list":
         allowed = _SEARCH_FILTERS[capability_id]
         if not set(parameters) <= allowed | {"limit", "cursor"}:
@@ -2506,6 +2615,93 @@ def _valid_external_value_item(item: Any, company_id: int) -> bool:
     )
 
 
+def _valid_asset_group_item(item: Any, company_id: int) -> bool:
+    return bool(
+        isinstance(item, dict)
+        and set(item) == {"id", "company_id", "name", "linked_asset_count"}
+        and _valid_id(item["id"])
+        and item["company_id"] == company_id
+        and (item["name"] is None or _nonempty(item["name"]))
+        and _is_integer(item["linked_asset_count"])
+        and item["linked_asset_count"] >= 0
+    )
+
+
+def _valid_budget_definition_item(item: Any, company_id: int) -> bool:
+    return bool(
+        isinstance(item, dict)
+        and set(item) == {"id", "company_id", "name", "sequence", "item_count"}
+        and _valid_id(item["id"])
+        and item["company_id"] == company_id
+        and _nonempty(item["name"])
+        and _is_integer(item["sequence"])
+        and _is_integer(item["item_count"])
+        and item["item_count"] >= 0
+    )
+
+
+def _valid_budget_definition_line_item(item: Any, company_id: int) -> bool:
+    return bool(
+        isinstance(item, dict)
+        and set(item)
+        == {
+            "id",
+            "company_id",
+            "budget_definition",
+            "account",
+            "amount",
+            "date",
+        }
+        and _valid_id(item["id"])
+        and item["company_id"] == company_id
+        and _named_reference(item["budget_definition"])
+        and _coded_reference(item["account"])
+        and _decimal_text(item["amount"])
+        and _canonical_date(item["date"])
+    )
+
+
+def _valid_tax_unit_item(item: Any, company_id: int) -> bool:
+    country = item.get("country") if isinstance(item, dict) else None
+    return bool(
+        isinstance(item, dict)
+        and set(item)
+        == {
+            "id",
+            "company_id",
+            "name",
+            "country",
+            "vat",
+            "is_main_company",
+            "fpos_synced",
+        }
+        and _valid_id(item["id"])
+        and item["company_id"] == company_id
+        and _nonempty(item["name"])
+        and isinstance(country, dict)
+        and set(country) == {"id", "code", "name"}
+        and _valid_id(country["id"])
+        and _nonempty(country["code"])
+        and len(country["code"]) <= 3
+        and _nonempty(country["name"])
+        and (item["vat"] is None or _nonempty(item["vat"]))
+        and isinstance(item["is_main_company"], bool)
+        and isinstance(item["fpos_synced"], bool)
+    )
+
+
+def _valid_account_status_item(item: Any, company_id: int) -> bool:
+    return bool(
+        isinstance(item, dict)
+        and set(item) == {"id", "company_id", "return", "account", "status"}
+        and _valid_id(item["id"])
+        and item["company_id"] == company_id
+        and _named_reference(item["return"])
+        and _coded_reference(item["account"])
+        and item["status"] in {None, "todo", "reviewed", "supervised", "anomaly"}
+    )
+
+
 def _valid_item(capability_id: str, item: Any, company_id: int) -> bool:
     if capability_id == "account.account.get":
         return _valid_account_item(item, company_id)
@@ -2620,6 +2816,25 @@ def _valid_item(capability_id: str, item: Any, company_id: int) -> bool:
         "report.external_value.get",
     }:
         return _valid_external_value_item(item, company_id)
+    if capability_id in {"asset.group.search", "asset.group.get"}:
+        return _valid_asset_group_item(item, company_id)
+    if capability_id in {
+        "report.budget_definition.search",
+        "report.budget_definition.get",
+    }:
+        return _valid_budget_definition_item(item, company_id)
+    if capability_id in {
+        "report.budget_item.search",
+        "report.budget_item.get",
+    }:
+        return _valid_budget_definition_line_item(item, company_id)
+    if capability_id in {"tax.unit.search", "tax.unit.get"}:
+        return _valid_tax_unit_item(item, company_id)
+    if capability_id in {
+        "account.return.account_status.search",
+        "account.return.account_status.get",
+    }:
+        return _valid_account_status_item(item, company_id)
     return _valid_support_item(capability_id, item, company_id)
 
 

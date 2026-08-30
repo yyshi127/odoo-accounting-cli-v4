@@ -83,6 +83,16 @@ CAPABILITY_IDS = frozenset(
         "account.lock_exception.get",
         "report.external_value.search",
         "report.external_value.get",
+        "asset.group.search",
+        "asset.group.get",
+        "report.budget_definition.search",
+        "report.budget_definition.get",
+        "report.budget_item.search",
+        "report.budget_item.get",
+        "tax.unit.search",
+        "tax.unit.get",
+        "account.return.account_status.search",
+        "account.return.account_status.get",
     }
 )
 

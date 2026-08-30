@@ -519,6 +519,24 @@ _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
         read_core_object, "report.external_value.search"
     ),
     "report_external_value_get": partial(read_core_object, "report.external_value.get"),
+    "asset_group_search": partial(read_core_object, "asset.group.search"),
+    "asset_group_get": partial(read_core_object, "asset.group.get"),
+    "report_budget_definition_search": partial(
+        read_core_object, "report.budget_definition.search"
+    ),
+    "report_budget_definition_get": partial(
+        read_core_object, "report.budget_definition.get"
+    ),
+    "report_budget_item_search": partial(read_core_object, "report.budget_item.search"),
+    "report_budget_item_get": partial(read_core_object, "report.budget_item.get"),
+    "tax_unit_search": partial(read_core_object, "tax.unit.search"),
+    "tax_unit_get": partial(read_core_object, "tax.unit.get"),
+    "account_return_account_status_search": partial(
+        read_core_object, "account.return.account_status.search"
+    ),
+    "account_return_account_status_get": partial(
+        read_core_object, "account.return.account_status.get"
+    ),
     "diagnostic_journal_integrity_inspect": inspect_journal_integrity,
     "user_accounting_access_inspect": read_accounting_access,
     "company_accounting_configuration_inspect": partial(
@@ -971,6 +989,30 @@ _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "report_external_value_get": partial(
         validate_core_object_read_request, "report.external_value.get"
     ),
+    "asset_group_search": partial(
+        validate_core_object_read_request, "asset.group.search"
+    ),
+    "asset_group_get": partial(validate_core_object_read_request, "asset.group.get"),
+    "report_budget_definition_search": partial(
+        validate_core_object_read_request, "report.budget_definition.search"
+    ),
+    "report_budget_definition_get": partial(
+        validate_core_object_read_request, "report.budget_definition.get"
+    ),
+    "report_budget_item_search": partial(
+        validate_core_object_read_request, "report.budget_item.search"
+    ),
+    "report_budget_item_get": partial(
+        validate_core_object_read_request, "report.budget_item.get"
+    ),
+    "tax_unit_search": partial(validate_core_object_read_request, "tax.unit.search"),
+    "tax_unit_get": partial(validate_core_object_read_request, "tax.unit.get"),
+    "account_return_account_status_search": partial(
+        validate_core_object_read_request, "account.return.account_status.search"
+    ),
+    "account_return_account_status_get": partial(
+        validate_core_object_read_request, "account.return.account_status.get"
+    ),
     "diagnostic_journal_integrity_inspect": validate_journal_integrity_request,
     "user_accounting_access_inspect": validate_accounting_access_request,
     "company_accounting_configuration_inspect": partial(
@@ -1297,6 +1339,16 @@ _CAPABILITY_MODELS = {
     "account.lock_exception.get": "account.lock_exception",
     "report.external_value.search": "account.report.external.value",
     "report.external_value.get": "account.report.external.value",
+    "asset.group.search": "account.asset.group",
+    "asset.group.get": "account.asset.group",
+    "report.budget_definition.search": "account.report.budget",
+    "report.budget_definition.get": "account.report.budget",
+    "report.budget_item.search": "account.report.budget.item",
+    "report.budget_item.get": "account.report.budget.item",
+    "tax.unit.search": "account.tax.unit",
+    "tax.unit.get": "account.tax.unit",
+    "account.return.account_status.search": "account.audit.account.status",
+    "account.return.account_status.get": "account.audit.account.status",
     "fiscal_year.get": "account.fiscal.year",
     "fiscal_year.search": "account.fiscal.year",
     "fiscal_year.create": "account.fiscal.year",
@@ -2044,6 +2096,10 @@ def _execute_read(
                         "report.catalog.get",
                         "report.external_value.search",
                         "report.external_value.get",
+                        "report.budget_definition.search",
+                        "report.budget_definition.get",
+                        "report.budget_item.search",
+                        "report.budget_item.get",
                     }
                 )
                 or capability_id

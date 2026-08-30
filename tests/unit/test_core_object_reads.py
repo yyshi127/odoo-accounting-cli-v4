@@ -98,6 +98,24 @@ FISCAL_POSITION_MAPPING_CAPABILITIES = frozenset(
         "fiscal_position.tax_mapping.list",
     }
 )
+SUPPORTING_GET_CAPABILITIES = frozenset(
+    {
+        "asset.group.get",
+        "report.budget_definition.get",
+        "report.budget_item.get",
+        "tax.unit.get",
+        "account.return.account_status.get",
+    }
+)
+SUPPORTING_PAGE_CAPABILITIES = frozenset(
+    {
+        "asset.group.search",
+        "report.budget_definition.search",
+        "report.budget_item.search",
+        "tax.unit.search",
+        "account.return.account_status.search",
+    }
+)
 JOURNAL_ITEM_DEFAULTS = {
     "date_from": None,
     "date_to": None,
@@ -974,9 +992,17 @@ def _required_page_parameters(capability_id: str) -> dict:
 
 
 def test_public_capability_sets_match_fixed_ids_without_report_execution() -> None:
-    assert CORE_OBJECT_GET_CAPABILITY_IDS == frozenset(GET_ID_FIELDS)
+    assert CORE_OBJECT_GET_CAPABILITY_IDS == frozenset(
+        {*GET_ID_FIELDS, *SUPPORTING_GET_CAPABILITIES}
+    )
     assert CORE_OBJECT_READ_CAPABILITY_IDS == frozenset(
-        {*GET_ID_FIELDS, *PAGE_CAPABILITIES, *FISCAL_POSITION_MAPPING_CAPABILITIES}
+        {
+            *GET_ID_FIELDS,
+            *PAGE_CAPABILITIES,
+            *FISCAL_POSITION_MAPPING_CAPABILITIES,
+            *SUPPORTING_GET_CAPABILITIES,
+            *SUPPORTING_PAGE_CAPABILITIES,
+        }
     )
     assert "report.bank_reconciliation" not in CORE_OBJECT_READ_CAPABILITY_IDS
     assert "report.budget" not in CORE_OBJECT_READ_CAPABILITY_IDS
