@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/analytic.distribution_model.create.request.schema.json",
+  "title": "analytic.distribution_model.create request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": "string", "format": "uuid"},
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sequence", "account_prefix", "partner_id", "partner_category_id", "product_id", "product_category_id", "analytic_distribution"],
+      "properties": {
+        "sequence": {"type": "integer", "minimum": 0},
+        "account_prefix": {"$ref": "#/$defs/nullablePrefix"},
+        "partner_id": {"type": ["integer", "null"], "minimum": 1},
+        "partner_category_id": {"type": ["integer", "null"], "minimum": 1},
+        "product_id": {"type": ["integer", "null"], "minimum": 1},
+        "product_category_id": {"type": ["integer", "null"], "minimum": 1},
+        "analytic_distribution": {"$ref": "#/$defs/distribution"}
+      }
+    }
+  },
+  "$defs": {
+    "nullablePrefix": {"type": ["string", "null"], "minLength": 1, "maxLength": 64, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"},
+    "percentage": {"type": "string", "maxLength": 8, "pattern": "^(?:100|(?:[1-9][0-9]?)(?:\\.[0-9]{0,3}[1-9])?|0\\.[0-9]{0,3}[1-9])$"},
+    "distribution": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 16,
+      "propertyNames": {"pattern": "^[1-9][0-9]*(?:,[1-9][0-9]*)*$"},
+      "additionalProperties": {"$ref": "#/$defs/percentage"}
+    }
+  }
+}

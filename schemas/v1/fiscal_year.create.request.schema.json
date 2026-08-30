@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/fiscal_year.create.request.schema.json",
+  "title": "fiscal_year.create request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": "string", "format": "uuid"},
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "date_from", "date_to"],
+      "properties": {
+        "name": {"$ref": "#/$defs/text"},
+        "date_from": {"type": "string", "format": "date"},
+        "date_to": {"type": "string", "format": "date"}
+      }
+    }
+  },
+  "$defs": {
+    "text": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"}
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/account.transfer_model.search.response.schema.json",
+  "title": "account.transfer_model.search response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "account.transfer_model.search"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{"if": {"properties": {"success": {"const": true}}, "required": ["success"]}, "then": {"properties": {"request_id": {"type": "string", "format": "uuid"}, "status": {"const": "verified"}, "data": {"$ref": "#/$defs/data"}, "error": {"type": "null"}}}, "else": {"properties": {"data": {"type": "null"}, "error": {"$ref": "response.schema.json#/$defs/error"}}}}],
+  "$defs": {
+    "data": {
+      "type": "object", "additionalProperties": false,
+      "required": ["items", "has_more", "next_cursor"],
+      "properties": {"items": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/item"}}, "has_more": {"type": "boolean"}, "next_cursor": {"type": ["string", "null"], "minLength": 1, "maxLength": 4096}},
+      "allOf": [{"if": {"properties": {"has_more": {"const": true}}, "required": ["has_more"]}, "then": {"properties": {"items": {"type": "array", "minItems": 1}, "next_cursor": {"type": "string"}}}, "else": {"properties": {"next_cursor": {"type": "null"}}}}]
+    },
+    "item": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "name", "active", "state", "company_id", "journal", "date_start", "date_stop", "frequency", "origin_accounts", "destination_lines", "move_ids_count", "has_draft_moves", "total_percent"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "minLength": 1},
+        "active": {"type": "boolean"},
+        "state": {"enum": ["disabled", "in_progress"]},
+        "company_id": {"type": "integer", "minimum": 1},
+        "journal": {"$ref": "#/$defs/coded"},
+        "date_start": {"type": "string", "format": "date"},
+        "date_stop": {"type": ["string", "null"], "format": "date"},
+        "frequency": {"enum": ["month", "quarter", "year"]},
+        "origin_accounts": {"type": "array", "maxItems": 1000, "uniqueItems": true, "items": {"$ref": "#/$defs/coded"}},
+        "destination_lines": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/destination_line"}},
+        "move_ids_count": {"type": "integer", "minimum": 0},
+        "has_draft_moves": {"type": "boolean"},
+        "total_percent": {"$ref": "#/$defs/decimal"}
+      }
+    },
+    "destination_line": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "sequence", "account", "percentage"],
+      "properties": {"id": {"type": "integer", "minimum": 1}, "sequence": {"type": "integer"}, "account": {"$ref": "#/$defs/coded"}, "percentage": {"$ref": "#/$defs/decimal"}}
+    },
+    "coded": {"type": "object", "additionalProperties": false, "required": ["id", "code", "name"], "properties": {"id": {"type": "integer", "minimum": 1}, "code": {"type": "string", "minLength": 1}, "name": {"type": "string", "minLength": 1}}},
+    "decimal": {"type": "string", "maxLength": 256, "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"}
+  }
+}

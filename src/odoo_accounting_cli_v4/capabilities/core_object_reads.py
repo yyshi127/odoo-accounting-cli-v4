@@ -7,7 +7,7 @@ import binascii
 import json
 import re
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 
@@ -16,6 +16,9 @@ MAX_LIMIT = 1000
 _CURSOR_VERSION = 1
 _DECIMAL_PATTERN = re.compile(r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 _DAY_OF_MONTH_PATTERN = re.compile(r"^(?:[0-9]|[12][0-9]|3[01])$")
+_UTC_DATETIME_PATTERN = re.compile(
+    r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+)
 
 CORE_OBJECT_GET_CAPABILITY_IDS = frozenset(
     {
@@ -48,10 +51,24 @@ CORE_OBJECT_GET_CAPABILITY_IDS = frozenset(
         "analytic.applicability.get",
         "budget.get",
         "budget.line.get",
+        "account.group.get",
+        "journal.configuration.inspect",
+        "tax.repartition_line.get",
+        "reconciliation.model.line.get",
+        "bank.get",
+        "report.catalog.get",
+        "invoice.tax_breakdown.inspect",
+        "recurring.journal_entry.get",
+        "account.transfer_model.get",
+        "partner.credit_exposure.inspect",
+        "account.lock_exception.get",
+        "report.external_value.get",
     }
 )
 CORE_OBJECT_LIST_CAPABILITY_IDS = frozenset(
     {
+        "fiscal_position.account_mapping.list",
+        "fiscal_position.tax_mapping.list",
         "payment.method.list",
         "reconciliation.model.list",
         "analytic.plan.list",
@@ -78,6 +95,17 @@ _CORE_OBJECT_SEARCH_CAPABILITY_IDS = frozenset(
         "analytic.line.search",
         "budget.search",
         "budget.line.list",
+        "account.group.list",
+        "tax.repartition_line.list",
+        "reconciliation.model.line.list",
+        "bank.list",
+        "report.catalog.list",
+        "invoice.duplicate_candidates.list",
+        "recurring.journal_entry.search",
+        "account.transfer_model.search",
+        "journal.sequence_irregularity.list",
+        "account.lock_exception.search",
+        "report.external_value.search",
     }
 )
 CORE_OBJECT_READ_CAPABILITY_IDS = frozenset(
@@ -118,6 +146,18 @@ _ID_FIELDS = {
     "analytic.applicability.get": "applicability_id",
     "budget.get": "budget_id",
     "budget.line.get": "budget_line_id",
+    "account.group.get": "account_group_id",
+    "journal.configuration.inspect": "journal_id",
+    "tax.repartition_line.get": "tax_repartition_line_id",
+    "reconciliation.model.line.get": "reconciliation_model_line_id",
+    "bank.get": "bank_id",
+    "report.catalog.get": "report_id",
+    "invoice.tax_breakdown.inspect": "invoice_id",
+    "recurring.journal_entry.get": "entry_id",
+    "account.transfer_model.get": "transfer_model_id",
+    "partner.credit_exposure.inspect": "partner_id",
+    "account.lock_exception.get": "lock_exception_id",
+    "report.external_value.get": "external_value_id",
 }
 _JOURNAL_ITEM_FILTERS = frozenset(
     {
@@ -146,6 +186,37 @@ _SEARCH_FILTERS = {
         {"query", "state", "budget_type", "date_from", "date_to"}
     ),
     "budget.line.list": frozenset({"budget_id", "plan_id", "analytic_account_id"}),
+    "account.group.list": frozenset({"query", "parent_id"}),
+    "tax.repartition_line.list": frozenset(
+        {
+            "tax_id",
+            "document_types",
+            "repartition_types",
+            "account_id",
+            "use_in_tax_closing",
+        }
+    ),
+    "reconciliation.model.line.list": frozenset(
+        {"reconciliation_model_id", "account_id", "partner_id", "amount_types"}
+    ),
+    "bank.list": frozenset({"query", "country_id", "active"}),
+    "report.catalog.list": frozenset(
+        {"country_id", "root_report_id", "availability_conditions", "active"}
+    ),
+    "invoice.duplicate_candidates.list": frozenset({"invoice_id"}),
+    "recurring.journal_entry.search": frozenset(
+        {"states", "auto_post_types", "date_from", "date_to"}
+    ),
+    "account.transfer_model.search": frozenset({"query", "active"}),
+    "journal.sequence_irregularity.list": frozenset(
+        {"journal_id", "date_from", "date_to"}
+    ),
+    "account.lock_exception.search": frozenset(
+        {"states", "user_id", "lock_date_fields"}
+    ),
+    "report.external_value.search": frozenset(
+        {"report_id", "expression_id", "date_from", "date_to"}
+    ),
 }
 
 
@@ -216,6 +287,16 @@ def _optional_date(value: Any) -> bool:
     return value is None or _canonical_date(value)
 
 
+def _utc_datetime(value: Any) -> bool:
+    if not isinstance(value, str) or _UTC_DATETIME_PATTERN.fullmatch(value) is None:
+        return False
+    try:
+        datetime.strptime(value, "%Y-%m-%dT%H:%M:%S%z")
+        return True
+    except ValueError:
+        return False
+
+
 def _decimal_text(value: Any) -> bool:
     if not isinstance(value, str) or _DECIMAL_PATTERN.fullmatch(value) is None:
         return False
@@ -256,6 +337,24 @@ def _currency_reference(value: Any) -> bool:
 
 def _optional_reference(value: Any, validator: Any) -> bool:
     return value is None or validator(value)
+
+
+def _normalized_optional_enum_list(
+    value: Any, *, field: str, allowed: frozenset[str]
+) -> list[str] | None:
+    if value is None:
+        return None
+    if (
+        not isinstance(value, list)
+        or not value
+        or len(value) > len(allowed)
+        or any(not isinstance(item, str) or item not in allowed for item in value)
+        or len(value) != len(set(value))
+    ):
+        raise _invalid(
+            f"parameters.{field} must be null or a non-empty unique supported list."
+        )
+    return sorted(value)
 
 
 def _validate_envelope(
@@ -321,10 +420,246 @@ def validate_core_object_read_request(
             raise _invalid(f"parameters.{id_field} must be a positive integer.")
         return request_id, context, {id_field: parameters[id_field]}
 
-    if capability_id in CORE_OBJECT_LIST_CAPABILITY_IDS:
+    if capability_id in {
+        "fiscal_position.account_mapping.list",
+        "fiscal_position.tax_mapping.list",
+    }:
+        if not set(parameters) <= {"fiscal_position_id", "limit", "cursor"}:
+            raise _invalid(f"{capability_id} contains an unsupported parameter.")
+        fiscal_position_id = parameters.get("fiscal_position_id")
+        if not _valid_id(fiscal_position_id):
+            raise _invalid("parameters.fiscal_position_id must be a positive integer.")
+        filters = {"fiscal_position_id": fiscal_position_id}
+    elif capability_id in CORE_OBJECT_LIST_CAPABILITY_IDS:
         if not set(parameters) <= {"limit", "cursor"}:
             raise _invalid(f"{capability_id} contains an unsupported parameter.")
         filters: dict[str, Any] = {}
+    elif capability_id == "invoice.duplicate_candidates.list":
+        if not set(parameters) <= _SEARCH_FILTERS[capability_id] | {
+            "limit",
+            "cursor",
+        }:
+            raise _invalid(f"{capability_id} contains an unsupported parameter.")
+        invoice_id = parameters.get("invoice_id")
+        if not _valid_id(invoice_id):
+            raise _invalid("parameters.invoice_id must be a positive integer.")
+        filters = {"invoice_id": invoice_id}
+    elif capability_id == "recurring.journal_entry.search":
+        if not set(parameters) <= _SEARCH_FILTERS[capability_id] | {
+            "limit",
+            "cursor",
+        }:
+            raise _invalid(f"{capability_id} contains an unsupported parameter.")
+        date_from = parameters.get("date_from")
+        date_to = parameters.get("date_to")
+        if not _optional_date(date_from) or not _optional_date(date_to):
+            raise _invalid("date_from and date_to must be null or YYYY-MM-DD dates.")
+        if date_from is not None and date_to is not None and date_from > date_to:
+            raise _invalid("date_from cannot be after date_to.")
+        filters = {
+            "states": _normalized_optional_enum_list(
+                parameters.get("states"),
+                field="states",
+                allowed=frozenset({"draft", "posted", "cancel"}),
+            ),
+            "auto_post_types": _normalized_optional_enum_list(
+                parameters.get("auto_post_types"),
+                field="auto_post_types",
+                allowed=frozenset({"at_date", "monthly", "quarterly", "yearly"}),
+            ),
+            "date_from": date_from,
+            "date_to": date_to,
+        }
+    elif capability_id == "account.transfer_model.search":
+        if not set(parameters) <= _SEARCH_FILTERS[capability_id] | {
+            "limit",
+            "cursor",
+        }:
+            raise _invalid(f"{capability_id} contains an unsupported parameter.")
+        query = parameters.get("query")
+        if query is not None and (
+            not isinstance(query, str)
+            or not 1 <= len(query) <= 200
+            or query != query.strip()
+        ):
+            raise _invalid(
+                "parameters.query must be null or a trimmed 1-200 character string."
+            )
+        active = parameters.get("active")
+        if active is not None and not isinstance(active, bool):
+            raise _invalid("parameters.active must be null or a boolean.")
+        filters = {"query": query, "active": active}
+    elif capability_id == "journal.sequence_irregularity.list":
+        if not set(parameters) <= _SEARCH_FILTERS[capability_id] | {
+            "limit",
+            "cursor",
+        }:
+            raise _invalid(f"{capability_id} contains an unsupported parameter.")
+        journal_id = parameters.get("journal_id")
+        if journal_id is not None and not _valid_id(journal_id):
+            raise _invalid("parameters.journal_id must be null or a positive integer.")
+        date_from = parameters.get("date_from")
+        date_to = parameters.get("date_to")
+        if not _optional_date(date_from) or not _optional_date(date_to):
+            raise _invalid("date_from and date_to must be null or YYYY-MM-DD dates.")
+        if date_from is not None and date_to is not None and date_from > date_to:
+            raise _invalid("date_from cannot be after date_to.")
+        filters = {
+            "journal_id": journal_id,
+            "date_from": date_from,
+            "date_to": date_to,
+        }
+    elif capability_id == "account.lock_exception.search":
+        if not set(parameters) <= _SEARCH_FILTERS[capability_id] | {
+            "limit",
+            "cursor",
+        }:
+            raise _invalid(f"{capability_id} contains an unsupported parameter.")
+        user_id = parameters.get("user_id")
+        if user_id is not None and not _valid_id(user_id):
+            raise _invalid("parameters.user_id must be null or a positive integer.")
+        filters = {
+            "states": _normalized_optional_enum_list(
+                parameters.get("states"),
+                field="states",
+                allowed=frozenset({"active", "revoked", "expired"}),
+            ),
+            "user_id": user_id,
+            "lock_date_fields": _normalized_optional_enum_list(
+                parameters.get("lock_date_fields"),
+                field="lock_date_fields",
+                allowed=frozenset(
+                    {
+                        "fiscalyear_lock_date",
+                        "tax_lock_date",
+                        "sale_lock_date",
+                        "purchase_lock_date",
+                    }
+                ),
+            ),
+        }
+    elif capability_id == "report.external_value.search":
+        if not set(parameters) <= _SEARCH_FILTERS[capability_id] | {
+            "limit",
+            "cursor",
+        }:
+            raise _invalid(f"{capability_id} contains an unsupported parameter.")
+        filters = {}
+        for field in ("report_id", "expression_id"):
+            value = parameters.get(field)
+            if value is not None and not _valid_id(value):
+                raise _invalid(
+                    f"parameters.{field} must be null or a positive integer."
+                )
+            filters[field] = value
+        date_from = parameters.get("date_from")
+        date_to = parameters.get("date_to")
+        if not _optional_date(date_from) or not _optional_date(date_to):
+            raise _invalid("date_from and date_to must be null or YYYY-MM-DD dates.")
+        if date_from is not None and date_to is not None and date_from > date_to:
+            raise _invalid("date_from cannot be after date_to.")
+        filters.update({"date_from": date_from, "date_to": date_to})
+    elif capability_id == "account.group.list":
+        allowed = _SEARCH_FILTERS[capability_id]
+        if not set(parameters) <= allowed | {"limit", "cursor"}:
+            raise _invalid(f"{capability_id} contains an unsupported parameter.")
+        query = parameters.get("query")
+        if query is not None and (
+            not isinstance(query, str)
+            or not 1 <= len(query) <= 200
+            or query != query.strip()
+        ):
+            raise _invalid(
+                "parameters.query must be null or a trimmed 1-200 character string."
+            )
+        parent_id = parameters.get("parent_id")
+        if parent_id is not None and not _valid_id(parent_id):
+            raise _invalid("parameters.parent_id must be null or a positive integer.")
+        filters = {"query": query, "parent_id": parent_id}
+    elif capability_id == "tax.repartition_line.list":
+        allowed = _SEARCH_FILTERS[capability_id]
+        if not set(parameters) <= allowed | {"limit", "cursor"}:
+            raise _invalid(f"{capability_id} contains an unsupported parameter.")
+        filters = {}
+        for field in ("tax_id", "account_id"):
+            value = parameters.get(field)
+            if value is not None and not _valid_id(value):
+                raise _invalid(
+                    f"parameters.{field} must be null or a positive integer."
+                )
+            filters[field] = value
+        filters["document_types"] = _normalized_optional_enum_list(
+            parameters.get("document_types"),
+            field="document_types",
+            allowed=frozenset({"invoice", "refund"}),
+        )
+        filters["repartition_types"] = _normalized_optional_enum_list(
+            parameters.get("repartition_types"),
+            field="repartition_types",
+            allowed=frozenset({"base", "tax"}),
+        )
+        use_in_tax_closing = parameters.get("use_in_tax_closing")
+        if use_in_tax_closing is not None and not isinstance(use_in_tax_closing, bool):
+            raise _invalid("parameters.use_in_tax_closing must be null or a boolean.")
+        filters["use_in_tax_closing"] = use_in_tax_closing
+    elif capability_id == "reconciliation.model.line.list":
+        allowed = _SEARCH_FILTERS[capability_id]
+        if not set(parameters) <= allowed | {"limit", "cursor"}:
+            raise _invalid(f"{capability_id} contains an unsupported parameter.")
+        filters = {}
+        for field in ("reconciliation_model_id", "account_id", "partner_id"):
+            value = parameters.get(field)
+            if value is not None and not _valid_id(value):
+                raise _invalid(
+                    f"parameters.{field} must be null or a positive integer."
+                )
+            filters[field] = value
+        filters["amount_types"] = _normalized_optional_enum_list(
+            parameters.get("amount_types"),
+            field="amount_types",
+            allowed=frozenset({"fixed", "percentage", "percentage_st_line", "regex"}),
+        )
+    elif capability_id == "bank.list":
+        allowed = _SEARCH_FILTERS[capability_id]
+        if not set(parameters) <= allowed | {"limit", "cursor"}:
+            raise _invalid(f"{capability_id} contains an unsupported parameter.")
+        query = parameters.get("query")
+        if query is not None and (
+            not isinstance(query, str)
+            or not 1 <= len(query) <= 200
+            or query != query.strip()
+        ):
+            raise _invalid(
+                "parameters.query must be null or a trimmed 1-200 character string."
+            )
+        country_id = parameters.get("country_id")
+        if country_id is not None and not _valid_id(country_id):
+            raise _invalid("parameters.country_id must be null or a positive integer.")
+        active = parameters.get("active")
+        if active is not None and not isinstance(active, bool):
+            raise _invalid("parameters.active must be null or a boolean.")
+        filters = {"query": query, "country_id": country_id, "active": active}
+    elif capability_id == "report.catalog.list":
+        allowed = _SEARCH_FILTERS[capability_id]
+        if not set(parameters) <= allowed | {"limit", "cursor"}:
+            raise _invalid(f"{capability_id} contains an unsupported parameter.")
+        filters = {}
+        for field in ("country_id", "root_report_id"):
+            value = parameters.get(field)
+            if value is not None and not _valid_id(value):
+                raise _invalid(
+                    f"parameters.{field} must be null or a positive integer."
+                )
+            filters[field] = value
+        filters["availability_conditions"] = _normalized_optional_enum_list(
+            parameters.get("availability_conditions"),
+            field="availability_conditions",
+            allowed=frozenset({"country", "coa", "always"}),
+        )
+        active = parameters.get("active")
+        if active is not None and not isinstance(active, bool):
+            raise _invalid("parameters.active must be null or a boolean.")
+        filters["active"] = active
     elif capability_id == "analytic.line.search":
         if not set(parameters) <= _SEARCH_FILTERS[capability_id] | {
             "limit",
@@ -1332,6 +1667,31 @@ def _valid_fiscal_position_item(item: Any, company_id: int) -> bool:
     )
 
 
+def _valid_fiscal_position_account_mapping_item(item: Any, company_id: int) -> bool:
+    return bool(
+        isinstance(item, dict)
+        and set(item) == {"id", "company_id", "source_account", "destination_account"}
+        and _valid_id(item["id"])
+        and item["company_id"] == company_id
+        and _coded_reference(item["source_account"])
+        and _coded_reference(item["destination_account"])
+    )
+
+
+def _valid_fiscal_position_tax_mapping_item(item: Any) -> bool:
+    destinations = item.get("destination_taxes") if isinstance(item, dict) else None
+    return bool(
+        isinstance(item, dict)
+        and set(item) == {"source_tax", "destination_taxes"}
+        and _named_reference(item["source_tax"])
+        and isinstance(destinations, list)
+        and bool(destinations)
+        and all(_named_reference(tax) for tax in destinations)
+        and [tax["id"] for tax in destinations]
+        == sorted({tax["id"] for tax in destinations})
+    )
+
+
 def _valid_tag_item(item: Any) -> bool:
     return bool(
         isinstance(item, dict)
@@ -1555,6 +1915,597 @@ def _valid_budget_line_item(item: Any, company_id: int) -> bool:
     )
 
 
+def _valid_account_group_item(item: Any, _company_id: int) -> bool:
+    return bool(
+        isinstance(item, dict)
+        and set(item)
+        == {
+            "id",
+            "name",
+            "code_prefix_start",
+            "code_prefix_end",
+            "parent",
+            "company_id",
+        }
+        and _valid_id(item["id"])
+        and _nonempty(item["name"])
+        and _optional_text(item["code_prefix_start"])
+        and _optional_text(item["code_prefix_end"])
+        and _optional_reference(item["parent"], _named_reference)
+        and _valid_id(item["company_id"])
+    )
+
+
+def _valid_journal_configuration_item(item: Any, _company_id: int) -> bool:
+    return bool(
+        isinstance(item, dict)
+        and set(item)
+        == {
+            "id",
+            "code",
+            "name",
+            "type",
+            "active",
+            "company_id",
+            "currency",
+            "default_account",
+            "suspense_account",
+            "profit_account",
+            "loss_account",
+            "bank_account",
+            "inbound_payment_methods",
+            "outbound_payment_methods",
+            "invoice_reference_type",
+            "invoice_reference_model",
+            "restrict_mode_hash_table",
+        }
+        and _valid_id(item["id"])
+        and _nonempty(item["code"])
+        and _nonempty(item["name"])
+        and item["type"] in {"sale", "purchase", "cash", "bank", "credit", "general"}
+        and isinstance(item["active"], bool)
+        and _valid_id(item["company_id"])
+        and _optional_reference(item["currency"], _currency_reference)
+        and all(
+            _optional_reference(item[field], _coded_reference)
+            for field in (
+                "default_account",
+                "suspense_account",
+                "profit_account",
+                "loss_account",
+            )
+        )
+        and _optional_reference(item["bank_account"], _named_reference)
+        and _valid_named_references(item["inbound_payment_methods"], nonempty=False)
+        and _valid_named_references(item["outbound_payment_methods"], nonempty=False)
+        and item["invoice_reference_type"] in {"partner", "invoice"}
+        and _nonempty(item["invoice_reference_model"])
+        and isinstance(item["restrict_mode_hash_table"], bool)
+    )
+
+
+def _valid_tax_repartition_line_item(item: Any, _company_id: int) -> bool:
+    return bool(
+        isinstance(item, dict)
+        and set(item)
+        == {
+            "id",
+            "sequence",
+            "company_id",
+            "tax",
+            "document_type",
+            "repartition_type",
+            "factor_percent",
+            "factor",
+            "account",
+            "tags",
+            "use_in_tax_closing",
+        }
+        and _valid_id(item["id"])
+        and _is_integer(item["sequence"])
+        and _valid_id(item["company_id"])
+        and _named_reference(item["tax"])
+        and item["document_type"] in {"invoice", "refund"}
+        and item["repartition_type"] in {"base", "tax"}
+        and _decimal_text(item["factor_percent"])
+        and _decimal_text(item["factor"])
+        and _optional_reference(item["account"], _coded_reference)
+        and _valid_named_references(item["tags"], nonempty=False)
+        and isinstance(item["use_in_tax_closing"], bool)
+    )
+
+
+def _valid_analytic_distribution(value: Any) -> bool:
+    if not isinstance(value, list):
+        return False
+    keys: list[tuple[int, ...]] = []
+    for allocation in value:
+        if (
+            not isinstance(allocation, dict)
+            or set(allocation) != {"analytic_accounts", "percentage"}
+            or not _valid_named_references(allocation["analytic_accounts"])
+            or not _decimal_text(allocation["percentage"])
+        ):
+            return False
+        keys.append(
+            tuple(reference["id"] for reference in allocation["analytic_accounts"])
+        )
+    return keys == sorted(set(keys))
+
+
+def _valid_reconciliation_model_line_item(item: Any, _company_id: int) -> bool:
+    return bool(
+        isinstance(item, dict)
+        and set(item)
+        == {
+            "id",
+            "sequence",
+            "company_id",
+            "reconciliation_model",
+            "account",
+            "partner",
+            "label",
+            "amount_type",
+            "amount",
+            "amount_string",
+            "taxes",
+            "analytic_distribution",
+        }
+        and _valid_id(item["id"])
+        and _is_integer(item["sequence"])
+        and _valid_id(item["company_id"])
+        and _named_reference(item["reconciliation_model"])
+        and _optional_reference(item["account"], _coded_reference)
+        and _optional_reference(item["partner"], _named_reference)
+        and _optional_text(item["label"])
+        and item["amount_type"]
+        in {"fixed", "percentage", "percentage_st_line", "regex"}
+        and _decimal_text(item["amount"])
+        and _nonempty(item["amount_string"])
+        and _valid_named_references(item["taxes"], nonempty=False)
+        and _valid_analytic_distribution(item["analytic_distribution"])
+    )
+
+
+def _valid_bank_directory_item(item: Any) -> bool:
+    return bool(
+        isinstance(item, dict)
+        and set(item)
+        == {
+            "id",
+            "name",
+            "bic",
+            "active",
+            "street",
+            "street2",
+            "zip",
+            "city",
+            "state",
+            "country",
+            "email",
+            "phone",
+        }
+        and _valid_id(item["id"])
+        and _nonempty(item["name"])
+        and all(
+            _optional_text(item[field])
+            for field in ("bic", "street", "street2", "zip", "city", "email", "phone")
+        )
+        and isinstance(item["active"], bool)
+        and _optional_reference(item["state"], _named_reference)
+        and _optional_reference(item["country"], _named_reference)
+    )
+
+
+def _valid_report_column(value: Any) -> bool:
+    return bool(
+        isinstance(value, dict)
+        and set(value)
+        == {
+            "id",
+            "name",
+            "expression_label",
+            "figure_type",
+            "sortable",
+            "blank_if_zero",
+        }
+        and _valid_id(value["id"])
+        and _nonempty(value["name"])
+        and _nonempty(value["expression_label"])
+        and value["figure_type"]
+        in {
+            "monetary",
+            "percentage",
+            "integer",
+            "float",
+            "date",
+            "datetime",
+            "boolean",
+            "string",
+        }
+        and isinstance(value["sortable"], bool)
+        and isinstance(value["blank_if_zero"], bool)
+    )
+
+
+def _valid_report_filters(value: Any) -> bool:
+    return bool(
+        isinstance(value, dict)
+        and set(value)
+        == {
+            "multi_company",
+            "date_range",
+            "show_draft",
+            "unreconciled",
+            "unfold_all",
+            "journals",
+            "analytic",
+            "partner",
+        }
+        and value["multi_company"] in {None, "selector", "tax_units"}
+        and all(
+            isinstance(value[field], bool)
+            for field in (
+                "date_range",
+                "show_draft",
+                "unreconciled",
+                "unfold_all",
+                "journals",
+                "analytic",
+                "partner",
+            )
+        )
+    )
+
+
+def _valid_report_catalog_item(item: Any) -> bool:
+    if not isinstance(item, dict):
+        return False
+    columns = item.get("columns")
+    return bool(
+        set(item)
+        == {
+            "id",
+            "name",
+            "active",
+            "root_report",
+            "country",
+            "availability_condition",
+            "variants",
+            "sections",
+            "columns",
+            "filters",
+        }
+        and _valid_id(item["id"])
+        and _nonempty(item["name"])
+        and isinstance(item["active"], bool)
+        and _optional_reference(item["root_report"], _named_reference)
+        and _optional_reference(item["country"], _named_reference)
+        and item["availability_condition"] in {"country", "coa", "always"}
+        and _valid_named_references(item["variants"], nonempty=False)
+        and _valid_named_references(item["sections"], nonempty=False)
+        and isinstance(columns, list)
+        and all(_valid_report_column(column) for column in columns)
+        and len(columns) == len({column["id"] for column in columns})
+        and _valid_report_filters(item["filters"])
+    )
+
+
+def _valid_duplicate_invoice_item(item: Any, company_id: int) -> bool:
+    return bool(
+        isinstance(item, dict)
+        and set(item)
+        == {
+            "id",
+            "company_id",
+            "name",
+            "move_type",
+            "state",
+            "invoice_date",
+            "reference",
+            "partner",
+            "currency",
+            "amount_total",
+        }
+        and _valid_id(item["id"])
+        and item["company_id"] == company_id
+        and _nonempty(item["name"])
+        and item["move_type"]
+        in {"out_invoice", "out_refund", "in_invoice", "in_refund"}
+        and item["state"] in {"draft", "posted", "cancel"}
+        and _optional_date(item["invoice_date"])
+        and _optional_text(item["reference"])
+        and _optional_reference(item["partner"], _named_reference)
+        and _currency_reference(item["currency"])
+        and _decimal_text(item["amount_total"])
+    )
+
+
+def _valid_tax_breakdown_item(item: Any, company_id: int) -> bool:
+    if not isinstance(item, dict):
+        return False
+    invoice = item.get("invoice")
+    subtotals = item.get("subtotals")
+    if not isinstance(subtotals, list):
+        return False
+    for subtotal in subtotals:
+        if (
+            not isinstance(subtotal, dict)
+            or set(subtotal) != {"name", "base_amount", "tax_amount", "tax_groups"}
+            or not _nonempty(subtotal["name"])
+            or not _decimal_text(subtotal["base_amount"])
+            or not _decimal_text(subtotal["tax_amount"])
+            or not isinstance(subtotal["tax_groups"], list)
+        ):
+            return False
+        for tax_group in subtotal["tax_groups"]:
+            if (
+                not isinstance(tax_group, dict)
+                or set(tax_group) != {"id", "name", "base_amount", "tax_amount"}
+                or (tax_group["id"] is not None and not _valid_id(tax_group["id"]))
+                or not _nonempty(tax_group["name"])
+                or not _decimal_text(tax_group["base_amount"])
+                or not _decimal_text(tax_group["tax_amount"])
+            ):
+                return False
+    return bool(
+        set(item)
+        == {
+            "id",
+            "invoice",
+            "company_id",
+            "currency",
+            "amount_untaxed",
+            "amount_tax",
+            "amount_total",
+            "has_tax_groups",
+            "subtotals",
+        }
+        and _valid_id(item["id"])
+        and isinstance(invoice, dict)
+        and set(invoice) == {"id", "name", "move_type", "state"}
+        and invoice["id"] == item["id"]
+        and _nonempty(invoice["name"])
+        and invoice["move_type"]
+        in {"out_invoice", "out_refund", "in_invoice", "in_refund"}
+        and invoice["state"] in {"draft", "posted", "cancel"}
+        and item["company_id"] == company_id
+        and _currency_reference(item["currency"])
+        and all(
+            _decimal_text(item[field])
+            for field in ("amount_untaxed", "amount_tax", "amount_total")
+        )
+        and isinstance(item["has_tax_groups"], bool)
+        and item["has_tax_groups"]
+        == any(subtotal["tax_groups"] for subtotal in subtotals)
+    )
+
+
+def _valid_recurring_entry_item(item: Any, company_id: int) -> bool:
+    return bool(
+        isinstance(item, dict)
+        and set(item)
+        == {
+            "id",
+            "company_id",
+            "name",
+            "date",
+            "state",
+            "journal",
+            "reference",
+            "auto_post",
+            "auto_post_until",
+            "auto_post_origin",
+        }
+        and _valid_id(item["id"])
+        and item["company_id"] == company_id
+        and _nonempty(item["name"])
+        and _canonical_date(item["date"])
+        and item["state"] in {"draft", "posted", "cancel"}
+        and _coded_reference(item["journal"])
+        and _optional_text(item["reference"])
+        and item["auto_post"] in {"at_date", "monthly", "quarterly", "yearly"}
+        and _optional_date(item["auto_post_until"])
+        and _optional_reference(item["auto_post_origin"], _named_reference)
+    )
+
+
+def _valid_transfer_model_item(item: Any, company_id: int) -> bool:
+    if not isinstance(item, dict):
+        return False
+    origin_accounts = item.get("origin_accounts")
+    destination_lines = item.get("destination_lines")
+    return bool(
+        set(item)
+        == {
+            "id",
+            "name",
+            "active",
+            "state",
+            "company_id",
+            "journal",
+            "date_start",
+            "date_stop",
+            "frequency",
+            "origin_accounts",
+            "destination_lines",
+            "move_ids_count",
+            "has_draft_moves",
+            "total_percent",
+        }
+        and _valid_id(item["id"])
+        and _nonempty(item["name"])
+        and isinstance(item["active"], bool)
+        and item["state"] in {"disabled", "in_progress"}
+        and item["company_id"] == company_id
+        and _coded_reference(item["journal"])
+        and _canonical_date(item["date_start"])
+        and _optional_date(item["date_stop"])
+        and item["frequency"] in {"month", "quarter", "year"}
+        and isinstance(origin_accounts, list)
+        and all(_coded_reference(account) for account in origin_accounts)
+        and [account["id"] for account in origin_accounts]
+        == sorted({account["id"] for account in origin_accounts})
+        and isinstance(destination_lines, list)
+        and all(
+            isinstance(line, dict)
+            and set(line) == {"id", "sequence", "account", "percentage"}
+            and _valid_id(line["id"])
+            and _is_integer(line["sequence"])
+            and _coded_reference(line["account"])
+            and _decimal_text(line["percentage"])
+            for line in destination_lines
+        )
+        and len(destination_lines) == len({line["id"] for line in destination_lines})
+        and _is_integer(item["move_ids_count"])
+        and item["move_ids_count"] >= 0
+        and isinstance(item["has_draft_moves"], bool)
+        and _decimal_text(item["total_percent"])
+    )
+
+
+def _valid_credit_exposure_item(item: Any, company_id: int) -> bool:
+    return bool(
+        isinstance(item, dict)
+        and set(item)
+        == {
+            "id",
+            "partner",
+            "company_id",
+            "company_currency",
+            "credit",
+            "debit",
+            "credit_to_invoice",
+            "credit_limit",
+            "use_partner_credit_limit",
+            "days_sales_outstanding",
+            "total_invoiced",
+        }
+        and _valid_id(item["id"])
+        and _named_reference(item["partner"])
+        and item["partner"]["id"] == item["id"]
+        and item["company_id"] == company_id
+        and _currency_reference(item["company_currency"])
+        and all(
+            _decimal_text(item[field])
+            for field in (
+                "credit",
+                "debit",
+                "credit_to_invoice",
+                "credit_limit",
+                "days_sales_outstanding",
+                "total_invoiced",
+            )
+        )
+        and isinstance(item["use_partner_credit_limit"], bool)
+    )
+
+
+def _valid_sequence_irregularity_item(item: Any, company_id: int) -> bool:
+    return bool(
+        isinstance(item, dict)
+        and set(item)
+        == {
+            "id",
+            "company_id",
+            "name",
+            "date",
+            "state",
+            "move_type",
+            "journal",
+            "sequence_prefix",
+            "sequence_number",
+            "made_sequence_gap",
+        }
+        and _valid_id(item["id"])
+        and item["company_id"] == company_id
+        and _nonempty(item["name"])
+        and _canonical_date(item["date"])
+        and item["state"] in {"draft", "posted", "cancel"}
+        and _nonempty(item["move_type"])
+        and _coded_reference(item["journal"])
+        and _optional_text(item["sequence_prefix"])
+        and _is_integer(item["sequence_number"])
+        and item["sequence_number"] >= 0
+        and item["made_sequence_gap"] is True
+    )
+
+
+def _valid_lock_exception_item(item: Any, company_id: int) -> bool:
+    return bool(
+        isinstance(item, dict)
+        and set(item)
+        == {
+            "id",
+            "company_id",
+            "user",
+            "reason",
+            "end_datetime",
+            "state",
+            "active",
+            "lock_date_field",
+            "lock_date",
+            "company_lock_date",
+        }
+        and _valid_id(item["id"])
+        and item["company_id"] == company_id
+        and _optional_reference(item["user"], _named_reference)
+        and _optional_text(item["reason"])
+        and (item["end_datetime"] is None or _utc_datetime(item["end_datetime"]))
+        and item["state"] in {"active", "revoked", "expired"}
+        and isinstance(item["active"], bool)
+        and item["lock_date_field"]
+        in {
+            "fiscalyear_lock_date",
+            "tax_lock_date",
+            "sale_lock_date",
+            "purchase_lock_date",
+        }
+        and _optional_date(item["lock_date"])
+        and _optional_date(item["company_lock_date"])
+    )
+
+
+def _valid_external_value_item(item: Any, company_id: int) -> bool:
+    report_line = item.get("report_line") if isinstance(item, dict) else None
+    expression = item.get("expression") if isinstance(item, dict) else None
+    return bool(
+        isinstance(item, dict)
+        and set(item)
+        == {
+            "id",
+            "company_id",
+            "name",
+            "date",
+            "value",
+            "text_value",
+            "report",
+            "report_line",
+            "expression",
+            "carryover_origin_line",
+            "carryover_origin_expression_label",
+        }
+        and _valid_id(item["id"])
+        and item["company_id"] == company_id
+        and _nonempty(item["name"])
+        and _canonical_date(item["date"])
+        and _decimal_text(item["value"])
+        and _optional_text(item["text_value"])
+        and _optional_reference(item["report"], _named_reference)
+        and isinstance(report_line, dict)
+        and set(report_line) == {"id", "name", "code"}
+        and _valid_id(report_line["id"])
+        and _nonempty(report_line["name"])
+        and _optional_text(report_line["code"])
+        and isinstance(expression, dict)
+        and set(expression) == {"id", "label"}
+        and _valid_id(expression["id"])
+        and _nonempty(expression["label"])
+        and _optional_reference(item["carryover_origin_line"], _named_reference)
+        and _optional_text(item["carryover_origin_expression_label"])
+    )
+
+
 def _valid_item(capability_id: str, item: Any, company_id: int) -> bool:
     if capability_id == "account.account.get":
         return _valid_account_item(item, company_id)
@@ -1576,6 +2527,10 @@ def _valid_item(capability_id: str, item: Any, company_id: int) -> bool:
         return _valid_analytic_item(item, company_id)
     if capability_id in {"fiscal_position.search", "fiscal_position.get"}:
         return _valid_fiscal_position_item(item, company_id)
+    if capability_id == "fiscal_position.account_mapping.list":
+        return _valid_fiscal_position_account_mapping_item(item, company_id)
+    if capability_id == "fiscal_position.tax_mapping.list":
+        return _valid_fiscal_position_tax_mapping_item(item)
     if capability_id in {"account.tag.list", "account.tag.get"}:
         return _valid_tag_item(item)
     if capability_id in {"tax.group.list", "tax.group.get"}:
@@ -1619,6 +2574,52 @@ def _valid_item(capability_id: str, item: Any, company_id: int) -> bool:
         return _valid_budget_item(item, company_id)
     if capability_id in {"budget.line.list", "budget.line.get"}:
         return _valid_budget_line_item(item, company_id)
+    if capability_id in {"account.group.list", "account.group.get"}:
+        return _valid_account_group_item(item, company_id)
+    if capability_id == "journal.configuration.inspect":
+        return _valid_journal_configuration_item(item, company_id)
+    if capability_id in {
+        "tax.repartition_line.list",
+        "tax.repartition_line.get",
+    }:
+        return _valid_tax_repartition_line_item(item, company_id)
+    if capability_id in {
+        "reconciliation.model.line.list",
+        "reconciliation.model.line.get",
+    }:
+        return _valid_reconciliation_model_line_item(item, company_id)
+    if capability_id in {"bank.list", "bank.get"}:
+        return _valid_bank_directory_item(item)
+    if capability_id in {"report.catalog.list", "report.catalog.get"}:
+        return _valid_report_catalog_item(item)
+    if capability_id == "invoice.duplicate_candidates.list":
+        return _valid_duplicate_invoice_item(item, company_id)
+    if capability_id == "invoice.tax_breakdown.inspect":
+        return _valid_tax_breakdown_item(item, company_id)
+    if capability_id in {
+        "recurring.journal_entry.search",
+        "recurring.journal_entry.get",
+    }:
+        return _valid_recurring_entry_item(item, company_id)
+    if capability_id in {
+        "account.transfer_model.search",
+        "account.transfer_model.get",
+    }:
+        return _valid_transfer_model_item(item, company_id)
+    if capability_id == "partner.credit_exposure.inspect":
+        return _valid_credit_exposure_item(item, company_id)
+    if capability_id == "journal.sequence_irregularity.list":
+        return _valid_sequence_irregularity_item(item, company_id)
+    if capability_id in {
+        "account.lock_exception.search",
+        "account.lock_exception.get",
+    }:
+        return _valid_lock_exception_item(item, company_id)
+    if capability_id in {
+        "report.external_value.search",
+        "report.external_value.get",
+    }:
+        return _valid_external_value_item(item, company_id)
     return _valid_support_item(capability_id, item, company_id)
 
 
@@ -1630,17 +2631,24 @@ def _validated_page(
     company_id: int,
     maximum: int,
 ) -> list[dict[str, Any]]:
+    expected_keys = {
+        "user_id",
+        "company_visible",
+        "module_installed",
+        "access_allowed",
+        "cursor_found",
+        "items",
+    }
+    if (
+        capability_id == "fiscal_position.tax_mapping.list"
+        and isinstance(page, dict)
+        and page.get("access_allowed") is True
+        and page.get("cursor_found") is True
+    ):
+        expected_keys.add("removes_all_taxes")
     if (
         not isinstance(page, dict)
-        or set(page)
-        != {
-            "user_id",
-            "company_visible",
-            "module_installed",
-            "access_allowed",
-            "cursor_found",
-            "items",
-        }
+        or set(page) != expected_keys
         or not _valid_id(page["user_id"])
         or not _valid_id(port.user_id)
         or page["user_id"] != port.user_id
@@ -1660,6 +2668,16 @@ def _validated_page(
             and not (page["company_visible"] and page["module_installed"])
         )
         or (not page["access_allowed"] and page["items"])
+        or (
+            capability_id == "fiscal_position.tax_mapping.list"
+            and page["access_allowed"]
+            and page["cursor_found"]
+            and (
+                not isinstance(page["removes_all_taxes"], bool)
+                or page["removes_all_taxes"]
+                and bool(page["items"])
+            )
+        )
     ):
         raise _failed("Odoo returned an invalid core-object page.")
     if not page["company_visible"]:
@@ -1683,7 +2701,12 @@ def _validated_page(
     items = [dict(item) for item in page["items"]]
     if any(not _valid_item(capability_id, item, company_id) for item in items):
         raise _failed("Odoo returned an invalid accounting object.")
-    ids = [item["id"] for item in items]
+    ids = [
+        item["source_tax"]["id"]
+        if capability_id == "fiscal_position.tax_mapping.list"
+        else item["id"]
+        for item in items
+    ]
     if ids != sorted(ids) or len(ids) != len(set(ids)):
         raise _failed("Odoo returned accounting objects in an unstable order.")
     return items
@@ -1751,16 +2774,41 @@ def read_core_object(
         item["budget"]["id"] != filters["budget_id"] for item in items
     ):
         raise _failed("Odoo returned a budget line from the wrong budget.")
-    if after_id is not None and any(item["id"] <= after_id for item in items):
+    item_ids = [
+        item["source_tax"]["id"]
+        if capability_id == "fiscal_position.tax_mapping.list"
+        else item["id"]
+        for item in items
+    ]
+    if after_id is not None and any(item_id <= after_id for item_id in item_ids):
         raise _failed("Odoo returned an invalid accounting-object cursor page.")
     has_more = len(items) > limit
     visible = items[:limit]
     next_cursor = None
     if has_more and visible:
         next_cursor = _encode_cursor(
-            visible[-1]["id"],
+            (
+                visible[-1]["source_tax"]["id"]
+                if capability_id == "fiscal_position.tax_mapping.list"
+                else visible[-1]["id"]
+            ),
             capability_id=capability_id,
             context=context,
             filters=filters,
         )
-    return {"items": visible, "has_more": has_more, "next_cursor": next_cursor}
+    result = {"items": visible, "has_more": has_more, "next_cursor": next_cursor}
+    if capability_id == "fiscal_position.tax_mapping.list":
+        result["removes_all_taxes"] = page["removes_all_taxes"]
+    return result
+
+
+def list_fiscal_position_account_mappings(
+    port: CoreObjectReadPort, request: dict[str, Any]
+) -> dict[str, Any]:
+    return read_core_object("fiscal_position.account_mapping.list", port, request)
+
+
+def list_fiscal_position_tax_mappings(
+    port: CoreObjectReadPort, request: dict[str, Any]
+) -> dict[str, Any]:
+    return read_core_object("fiscal_position.tax_mapping.list", port, request)

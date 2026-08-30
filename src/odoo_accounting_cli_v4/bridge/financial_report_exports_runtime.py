@@ -1,4 +1,4 @@
-"""Odoo-side runtime for ten fixed financial-report file exports."""
+"""Odoo-side runtime for fixed financial-report file exports."""
 
 from __future__ import annotations
 
@@ -50,6 +50,103 @@ CAPABILITY_SPECS = {
         "xml_id": "account_reports.executive_summary",
         "mode": "range",
     },
+    "report.journal.export": {
+        "xml_id": "account_reports.journal_report",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.move",
+            "account.move.line",
+            "res.currency",
+        ),
+        "dispatch_export": True,
+    },
+    "report.asset.export": {
+        "xml_id": "account_asset.assets_report",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.asset",
+            "account.move",
+            "account.move.line",
+            "res.currency",
+        ),
+    },
+    "report.deferred_expense.export": {
+        "xml_id": "account_reports.deferred_expense_report",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.move",
+            "account.move.line",
+            "res.currency",
+        ),
+    },
+    "report.deferred_revenue.export": {
+        "xml_id": "account_reports.deferred_revenue_report",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.move",
+            "account.move.line",
+            "res.currency",
+        ),
+    },
+    "report.multicurrency_revaluation.export": {
+        "xml_id": "account_reports.multicurrency_revaluation_report",
+        "mode": "single",
+        "models": ("account.report", "account.move.line", "res.currency"),
+    },
+    "report.china.balance_sheet.export": {
+        "xml_id": "l10n_cn_reports.account_financial_report_cn_balancesheet0",
+        "mode": "single",
+        "models": (
+            "account.report",
+            "account.move.line",
+            "res.currency",
+            "res.country",
+        ),
+        "fiscal_country_code": "CN",
+        "chart_template": "cn_oscg",
+    },
+    "report.china.profit_and_loss.export": {
+        "xml_id": "l10n_cn_reports.account_financial_report_cn_profitloss0",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.move.line",
+            "res.currency",
+            "res.country",
+        ),
+        "fiscal_country_code": "CN",
+        "chart_template": "cn_oscg",
+    },
+    "report.china.cash_flow.export": {
+        "xml_id": "l10n_cn_reports.account_report_cn_cs_flow",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.move.line",
+            "account.cash.flow.line",
+            "res.currency",
+            "res.country",
+        ),
+        "fiscal_country_code": "CN",
+        "chart_template": "cn_oscg",
+    },
+    "report.singapore.gst.export": {
+        "xml_id": "l10n_sg.tax_report",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.move.line",
+            "account.tax",
+            "res.currency",
+            "res.country",
+        ),
+        "fiscal_country_code": "SG",
+        "chart_template": "sg",
+    },
 }
 _FORMATS = {
     "pdf": {
@@ -97,9 +194,25 @@ def _canonical_date(value: Any) -> bool:
         return False
 
 
+def _reference_id(value: Any, failure_type: Any) -> int | None:
+    if value is False or value is None:
+        return None
+    if (
+        isinstance(value, (list, tuple))
+        and len(value) == 2
+        and isinstance(value[0], int)
+        and not isinstance(value[0], bool)
+        and value[0] > 0
+    ):
+        return value[0]
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    raise _runtime_failure(failure_type)
+
+
 def _validated_payload(
     payload: Any, company_id: int, failure_type: Any
-) -> tuple[dict[str, str], str, str | None, str, str]:
+) -> tuple[dict[str, Any], str, str | None, str, str]:
     if not isinstance(payload, dict) or set(payload) != _PAYLOAD_KEYS:
         raise _protocol_failure(failure_type)
 
@@ -185,21 +298,49 @@ def dispatch(
     spec, _capability_id, date_from, date_to, file_format = _validated_payload(
         payload, company_id, failure_type
     )
+    company_model = env["res.company"]
     company_visible = bool(
-        env["res.company"].search_count([("id", "=", company_id)], limit=1)
+        company_model.search_count([("id", "=", company_id)], limit=1)
     )
-    report_registered = env.registry.get("account.report") is not None
+    required_models = spec.get("models", ("account.report",))
+    models_installed = all(
+        env.registry.get(model_name) is not None for model_name in required_models
+    )
+    localization_applicable = True
+    expected_country_code = spec.get("fiscal_country_code")
+    if company_visible and models_installed and expected_country_code is not None:
+        companies = company_model.search_read(
+            [("id", "=", company_id)],
+            fields=["id", "account_fiscal_country_id", "chart_template"],
+            limit=1,
+        )
+        if len(companies) != 1 or companies[0].get("id") != company_id:
+            raise _runtime_failure(failure_type)
+        fiscal_country_id = _reference_id(
+            companies[0].get("account_fiscal_country_id"), failure_type
+        )
+        countries = env["res.country"].search_read(
+            [("id", "=", fiscal_country_id)], fields=["id", "code"], limit=1
+        )
+        localization_applicable = bool(
+            len(countries) == 1
+            and countries[0].get("id") == fiscal_country_id
+            and countries[0].get("code") == expected_country_code
+            and companies[0].get("chart_template") == spec.get("chart_template")
+        )
     root_report = (
         env.ref(spec["xml_id"], raise_if_not_found=False)
-        if report_registered
+        if models_installed and localization_applicable
         else None
     )
-    module_installed = bool(report_registered and root_report)
-    report_model = env["account.report"] if report_registered else None
+    module_installed = bool(
+        models_installed and localization_applicable and root_report
+    )
     access_allowed = bool(
         company_visible
         and module_installed
-        and report_model.has_access("read")
+        and company_model.has_access("read")
+        and all(env[model_name].has_access("read") for model_name in required_models)
     )
     if not access_allowed:
         return _empty_page(
@@ -229,14 +370,14 @@ def dispatch(
     ):
         raise _runtime_failure(failure_type)
 
+    report_model = env["account.report"]
     scoped_report_model = report_model.with_context(allowed_company_ids=[company_id])
     effective_report = scoped_report_model.browse(report_id)
-    exporter = (
-        effective_report.export_to_xlsx
-        if file_format == "xlsx"
-        else effective_report.export_to_pdf
-    )
-    native = exporter(options)
+    export_action = f"export_to_{file_format}"
+    if spec.get("dispatch_export") is True:
+        native = effective_report.dispatch_report_action(options, export_action)
+    else:
+        native = getattr(effective_report, export_action)(options)
     if not isinstance(native, dict):
         raise _runtime_failure(failure_type)
     filename = native.get("file_name")

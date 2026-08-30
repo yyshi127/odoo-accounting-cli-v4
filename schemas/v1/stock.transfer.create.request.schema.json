@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/stock.transfer.create.request.schema.json",
+  "title": "stock.transfer.create request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": "string", "format": "uuid", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"},
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {"$ref": "#/$defs/parameters"}
+  },
+  "$defs": {
+    "id": {"type": "integer", "minimum": 1},
+    "nullable_id": {"type": ["integer", "null"], "minimum": 1},
+    "nullable_datetime": {"type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$"},
+    "nullable_text": {"type": ["string", "null"], "minLength": 1, "maxLength": 200, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"},
+    "positive_decimal": {"type": "string", "maxLength": 256, "pattern": "^(?:[1-9][0-9]*(?:\\.[0-9]*[1-9])?|0\\.[0-9]*[1-9])$(?![\\s\\S])"},
+    "move": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product_id", "name", "quantity", "uom_id"],
+      "properties": {
+        "product_id": {"$ref": "#/$defs/id"},
+        "name": {"type": "string", "minLength": 1, "maxLength": 500, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"},
+        "quantity": {"$ref": "#/$defs/positive_decimal"},
+        "uom_id": {"$ref": "#/$defs/id"}
+      }
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["picking_type_id", "location_id", "location_dest_id", "partner_id", "scheduled_date", "origin", "moves"],
+      "properties": {
+        "picking_type_id": {"$ref": "#/$defs/id"},
+        "location_id": {"$ref": "#/$defs/id"},
+        "location_dest_id": {"$ref": "#/$defs/id"},
+        "partner_id": {"$ref": "#/$defs/nullable_id"},
+        "scheduled_date": {"$ref": "#/$defs/nullable_datetime"},
+        "origin": {"$ref": "#/$defs/nullable_text"},
+        "moves": {"type": "array", "minItems": 1, "maxItems": 200, "items": {"$ref": "#/$defs/move"}}
+      }
+    }
+  }
+}

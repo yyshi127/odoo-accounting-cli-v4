@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/reconciliation.model.create.request.schema.json",
+  "title": "reconciliation.model.create request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": "string", "format": "uuid"},
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {"$ref": "#/$defs/model_values"}
+  },
+  "$defs": {
+    "nonnegative_decimal": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^(?:0|[1-9][0-9]*|(?:0|[1-9][0-9]*)\\.[0-9]*[1-9])$"
+    },
+    "positive_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "integer", "minimum": 1}
+    },
+    "match_amount": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operator", "minimum", "maximum"],
+          "properties": {
+            "operator": {"const": "lower"},
+            "minimum": {"type": "null"},
+            "maximum": {"$ref": "#/$defs/nonnegative_decimal"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operator", "minimum", "maximum"],
+          "properties": {
+            "operator": {"const": "greater"},
+            "minimum": {"$ref": "#/$defs/nonnegative_decimal"},
+            "maximum": {"type": "null"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operator", "minimum", "maximum"],
+          "properties": {
+            "operator": {"const": "between"},
+            "minimum": {"$ref": "#/$defs/nonnegative_decimal"},
+            "maximum": {"$ref": "#/$defs/nonnegative_decimal"}
+          }
+        }
+      ]
+    },
+    "match_label": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operator", "value"],
+          "properties": {
+            "operator": {"enum": ["contains", "not_contains", "match_regex"]},
+            "value": {"type": "string", "minLength": 1, "maxLength": 500}
+          }
+        }
+      ]
+    },
+    "model_values": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "sequence",
+        "trigger",
+        "match_journal_ids",
+        "match_partner_ids",
+        "match_amount",
+        "match_label"
+      ],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 256},
+        "sequence": {"type": "integer", "minimum": 0},
+        "trigger": {"enum": ["manual", "auto_reconcile"]},
+        "match_journal_ids": {"$ref": "#/$defs/positive_ids"},
+        "match_partner_ids": {"$ref": "#/$defs/positive_ids"},
+        "match_amount": {"$ref": "#/$defs/match_amount"},
+        "match_label": {"$ref": "#/$defs/match_label"}
+      }
+    }
+  }
+}

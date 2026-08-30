@@ -82,17 +82,8 @@ def purchase_line(line_id: int, order: Any) -> SimpleNamespace:
     )
 
 
-def test_scope_contains_only_the_three_procurement_capabilities() -> None:
+def test_procurement_capabilities_keep_invoice_only_scope() -> None:
     assert set(CAPABILITIES) <= runtime.CAPABILITIES
-    assert not any(
-        capability.startswith("stock.transfer.")
-        for capability in runtime.CAPABILITIES
-        if capability
-        not in {
-            "stock.transfer.search",
-            "stock.transfer.get",
-        }
-    )
     assert {runtime._GROUPS[item] for item in CAPABILITIES} == {
         "account.group_account_invoice"
     }

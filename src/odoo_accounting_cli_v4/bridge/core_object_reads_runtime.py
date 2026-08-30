@@ -4,11 +4,22 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from datetime import date as date_type
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
 ACTION = "accounting.core_object.read"
+
+
+class _FiscalPositionNotFound(LookupError):
+    pass
+
+
+class _InvoiceNotFound(LookupError):
+    pass
+
+
 CAPABILITY_IDS = frozenset(
     {
         "account.account.get",
@@ -32,6 +43,8 @@ CAPABILITY_IDS = frozenset(
         "analytic.account.get",
         "fiscal_position.search",
         "fiscal_position.get",
+        "fiscal_position.account_mapping.list",
+        "fiscal_position.tax_mapping.list",
         "account.tag.list",
         "account.tag.get",
         "tax.group.list",
@@ -62,6 +75,29 @@ CAPABILITY_IDS = frozenset(
         "budget.get",
         "budget.line.list",
         "budget.line.get",
+        "account.group.list",
+        "account.group.get",
+        "journal.configuration.inspect",
+        "tax.repartition_line.list",
+        "tax.repartition_line.get",
+        "reconciliation.model.line.list",
+        "reconciliation.model.line.get",
+        "bank.list",
+        "bank.get",
+        "report.catalog.list",
+        "report.catalog.get",
+        "invoice.duplicate_candidates.list",
+        "invoice.tax_breakdown.inspect",
+        "recurring.journal_entry.search",
+        "recurring.journal_entry.get",
+        "account.transfer_model.search",
+        "account.transfer_model.get",
+        "partner.credit_exposure.inspect",
+        "journal.sequence_irregularity.list",
+        "account.lock_exception.search",
+        "account.lock_exception.get",
+        "report.external_value.search",
+        "report.external_value.get",
     }
 )
 
@@ -113,6 +149,31 @@ _GET_IDS = {
     ),
     "budget.get": ("budget.analytic", "budget_id"),
     "budget.line.get": ("budget.line", "budget_line_id"),
+    "account.group.get": ("account.group", "account_group_id"),
+    "journal.configuration.inspect": ("account.journal", "journal_id"),
+    "tax.repartition_line.get": (
+        "account.tax.repartition.line",
+        "tax_repartition_line_id",
+    ),
+    "reconciliation.model.line.get": (
+        "account.reconcile.model.line",
+        "reconciliation_model_line_id",
+    ),
+    "bank.get": ("res.bank", "bank_id"),
+    "report.catalog.get": ("account.report", "report_id"),
+    "recurring.journal_entry.get": ("account.move", "entry_id"),
+    "account.transfer_model.get": (
+        "account.transfer.model",
+        "transfer_model_id",
+    ),
+    "account.lock_exception.get": (
+        "account.lock_exception",
+        "lock_exception_id",
+    ),
+    "report.external_value.get": (
+        "account.report.external.value",
+        "external_value_id",
+    ),
 }
 _PAGED_REFERENCE_MODELS = {
     "partner.search": "res.partner",
@@ -363,6 +424,156 @@ _BUDGET_LINE_FIELDS = (
     "currency_id",
     "company_id",
 )
+_ACCOUNT_GROUP_FIELDS = (
+    "id",
+    "name",
+    "code_prefix_start",
+    "code_prefix_end",
+    "parent_id",
+    "company_id",
+)
+_JOURNAL_CONFIGURATION_FIELDS = (
+    "id",
+    "code",
+    "name",
+    "type",
+    "active",
+    "company_id",
+    "currency_id",
+    "default_account_id",
+    "suspense_account_id",
+    "profit_account_id",
+    "loss_account_id",
+    "bank_account_id",
+    "inbound_payment_method_line_ids",
+    "outbound_payment_method_line_ids",
+    "invoice_reference_type",
+    "invoice_reference_model",
+    "restrict_mode_hash_table",
+)
+_TAX_REPARTITION_LINE_FIELDS = (
+    "id",
+    "sequence",
+    "company_id",
+    "tax_id",
+    "document_type",
+    "repartition_type",
+    "factor_percent",
+    "factor",
+    "account_id",
+    "tag_ids",
+    "use_in_tax_closing",
+)
+_RECONCILIATION_MODEL_LINE_FIELDS = (
+    "id",
+    "sequence",
+    "company_id",
+    "model_id",
+    "account_id",
+    "partner_id",
+    "label",
+    "amount_type",
+    "amount",
+    "amount_string",
+    "tax_ids",
+    "analytic_distribution",
+)
+_BANK_DIRECTORY_FIELDS = (
+    "id",
+    "name",
+    "bic",
+    "active",
+    "street",
+    "street2",
+    "zip",
+    "city",
+    "state",
+    "country",
+    "email",
+    "phone",
+)
+_REPORT_CATALOG_FIELDS = (
+    "id",
+    "name",
+    "active",
+    "root_report_id",
+    "country_id",
+    "availability_condition",
+    "variant_report_ids",
+    "section_report_ids",
+    "column_ids",
+    "filter_multi_company",
+    "filter_date_range",
+    "filter_show_draft",
+    "filter_unreconciled",
+    "filter_unfold_all",
+    "filter_journals",
+    "filter_analytic",
+    "filter_partner",
+)
+_REPORT_COLUMN_FIELDS = (
+    "name",
+    "expression_label",
+    "sequence",
+    "figure_type",
+    "sortable",
+    "blank_if_zero",
+    "report_id",
+)
+_INVOICE_TYPES = ("out_invoice", "out_refund", "in_invoice", "in_refund")
+_RECURRING_ENTRY_FIELDS = (
+    "id",
+    "company_id",
+    "name",
+    "date",
+    "state",
+    "ref",
+    "journal_id",
+    "auto_post",
+    "auto_post_until",
+    "auto_post_origin_id",
+)
+_TRANSFER_MODEL_FIELDS = (
+    "id",
+    "name",
+    "active",
+    "state",
+    "journal_id",
+    "company_id",
+    "date_start",
+    "date_stop",
+    "frequency",
+    "account_ids",
+    "line_ids",
+    "move_ids_count",
+    "has_draft_moves",
+    "total_percent",
+)
+_LOCK_EXCEPTION_FIELDS = (
+    "id",
+    "active",
+    "state",
+    "company_id",
+    "user_id",
+    "reason",
+    "end_datetime",
+    "lock_date_field",
+    "lock_date",
+    "company_lock_date",
+)
+_EXTERNAL_VALUE_FIELDS = (
+    "id",
+    "name",
+    "value",
+    "text_value",
+    "date",
+    "target_report_expression_id",
+    "target_report_line_id",
+    "target_report_expression_label",
+    "company_id",
+    "carryover_origin_expression_label",
+    "carryover_origin_report_line_id",
+)
 _ANALYTIC_COLUMN_PATTERN = re.compile(r"^(?:account_id|x_plan[1-9][0-9]*_id)$")
 _PARTNER_REF_MARKER_SUFFIX = re.compile(r"(?:^| )\[ODACV4:[0-9a-f]{64}\]$")
 _REQUIRED_MODELS = {
@@ -501,6 +712,17 @@ _REQUIRED_MODELS = {
         "res.country.group",
         "res.country.state",
     ),
+    "fiscal_position.account_mapping.list": (
+        "res.company",
+        "account.fiscal.position",
+        "account.fiscal.position.account",
+        "account.account",
+    ),
+    "fiscal_position.tax_mapping.list": (
+        "res.company",
+        "account.fiscal.position",
+        "account.tax",
+    ),
     "account.tag.list": ("res.company", "account.account.tag", "res.country"),
     "account.tag.get": ("res.company", "account.account.tag", "res.country"),
     "tax.group.list": ("res.company", "account.tax.group", "res.country"),
@@ -631,6 +853,135 @@ _REQUIRED_MODELS = {
         "account.analytic.plan",
         "account.analytic.account",
     ),
+    "account.group.list": ("res.company", "account.group"),
+    "account.group.get": ("res.company", "account.group"),
+    "journal.configuration.inspect": (
+        "res.company",
+        "account.journal",
+        "res.currency",
+        "account.account",
+        "res.partner.bank",
+        "account.payment.method.line",
+    ),
+    "tax.repartition_line.list": (
+        "res.company",
+        "account.tax",
+        "account.tax.repartition.line",
+        "account.account",
+        "account.account.tag",
+    ),
+    "tax.repartition_line.get": (
+        "res.company",
+        "account.tax",
+        "account.tax.repartition.line",
+        "account.account",
+        "account.account.tag",
+    ),
+    "reconciliation.model.line.list": (
+        "res.company",
+        "account.reconcile.model",
+        "account.reconcile.model.line",
+        "account.account",
+        "res.partner",
+        "account.tax",
+        "account.analytic.account",
+    ),
+    "reconciliation.model.line.get": (
+        "res.company",
+        "account.reconcile.model",
+        "account.reconcile.model.line",
+        "account.account",
+        "res.partner",
+        "account.tax",
+        "account.analytic.account",
+    ),
+    "bank.list": ("res.company", "res.bank", "res.country", "res.country.state"),
+    "bank.get": ("res.company", "res.bank", "res.country", "res.country.state"),
+    "report.catalog.list": (
+        "res.company",
+        "account.report",
+        "account.report.column",
+        "res.country",
+    ),
+    "report.catalog.get": (
+        "res.company",
+        "account.report",
+        "account.report.column",
+        "res.country",
+    ),
+    "invoice.duplicate_candidates.list": (
+        "res.company",
+        "account.move",
+        "res.partner",
+        "res.currency",
+    ),
+    "invoice.tax_breakdown.inspect": (
+        "res.company",
+        "account.move",
+        "res.currency",
+    ),
+    "recurring.journal_entry.search": (
+        "res.company",
+        "account.move",
+        "account.journal",
+    ),
+    "recurring.journal_entry.get": (
+        "res.company",
+        "account.move",
+        "account.journal",
+    ),
+    "account.transfer_model.search": (
+        "res.company",
+        "account.transfer.model",
+        "account.transfer.model.line",
+        "account.account",
+        "account.journal",
+    ),
+    "account.transfer_model.get": (
+        "res.company",
+        "account.transfer.model",
+        "account.transfer.model.line",
+        "account.account",
+        "account.journal",
+    ),
+    "partner.credit_exposure.inspect": (
+        "res.company",
+        "res.partner",
+        "res.currency",
+        "account.move",
+        "account.move.line",
+        "account.account",
+        "account.invoice.report",
+    ),
+    "journal.sequence_irregularity.list": (
+        "res.company",
+        "account.move",
+        "account.journal",
+    ),
+    "account.lock_exception.search": (
+        "res.company",
+        "account.lock_exception",
+        "res.users",
+    ),
+    "account.lock_exception.get": (
+        "res.company",
+        "account.lock_exception",
+        "res.users",
+    ),
+    "report.external_value.search": (
+        "res.company",
+        "account.report.external.value",
+        "account.report.expression",
+        "account.report.line",
+        "account.report",
+    ),
+    "report.external_value.get": (
+        "res.company",
+        "account.report.external.value",
+        "account.report.expression",
+        "account.report.line",
+        "account.report",
+    ),
 }
 
 
@@ -662,6 +1013,16 @@ def _valid_id(value: Any) -> bool:
 
 def _valid_limit(value: Any) -> bool:
     return _valid_id(value) and value <= 1001
+
+
+def _valid_optional_enum_list(value: Any, allowed: frozenset[str]) -> bool:
+    return bool(
+        value is None
+        or isinstance(value, list)
+        and value
+        and len(value) == len(set(value))
+        and all(isinstance(item, str) and item in allowed for item in value)
+    )
 
 
 def _valid_date(value: Any) -> bool:
@@ -704,6 +1065,17 @@ def _date_string(value: Any) -> str:
 
 def _optional_date_string(value: Any) -> str | None:
     return None if value in (None, False) else _date_string(value)
+
+
+def _optional_utc_datetime_string(value: Any) -> str | None:
+    if value in (None, False):
+        return None
+    parsed = datetime.fromisoformat(value) if isinstance(value, str) else value
+    if not isinstance(parsed, datetime):
+        raise TypeError("invalid datetime")
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(UTC).replace(tzinfo=None)
+    return parsed.replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _decimal_string(value: Any) -> str:
@@ -852,9 +1224,43 @@ def _company_fiscal_country_id(env: Any, company_id: int) -> int | None:
     return _reference_id(rows[0].get("account_fiscal_country_id"))
 
 
+def _owner_company_ids(
+    env: Any, rows: list[dict[str, Any]], company_id: int
+) -> dict[int, int]:
+    owners: dict[int, int] = {}
+    for row in rows:
+        row_id = row.get("id")
+        owner_company_id = _reference_id(row.get("company_id"))
+        if not _valid_id(row_id) or owner_company_id is None or row_id in owners:
+            raise ValueError("invalid owner company")
+        owners[row_id] = owner_company_id
+    company_model = env["res.company"].with_context(
+        active_test=False, allowed_company_ids=[company_id]
+    )
+    for owner_company_id in set(owners.values()):
+        if not company_model.search_count(
+            [
+                ("id", "=", company_id),
+                ("id", "child_of", owner_company_id),
+            ],
+            limit=1,
+        ):
+            raise ValueError("owner company outside hierarchy")
+    return owners
+
+
 def _scope_domain(env: Any, capability_id: str, company_id: int) -> list[Any]:
     if capability_id == "account.account.get":
         return [("company_ids", "in", [company_id])]
+    if capability_id in {
+        "recurring.journal_entry.search",
+        "recurring.journal_entry.get",
+    }:
+        return [
+            ("company_id", "=", company_id),
+            ("move_type", "=", "entry"),
+            ("auto_post", "!=", "no"),
+        ]
     if capability_id in {
         "journal.get",
         "tax.get",
@@ -875,8 +1281,29 @@ def _scope_domain(env: Any, capability_id: str, company_id: int) -> list[Any]:
         "reconciliation.partial.get",
         "analytic.line.search",
         "analytic.line.get",
+        "invoice.duplicate_candidates.list",
+        "invoice.tax_breakdown.inspect",
+        "recurring.journal_entry.search",
+        "recurring.journal_entry.get",
+        "account.transfer_model.search",
+        "account.transfer_model.get",
+        "journal.sequence_irregularity.list",
+        "account.lock_exception.search",
+        "account.lock_exception.get",
+        "report.external_value.search",
+        "report.external_value.get",
     }:
         return [("company_id", "=", company_id)]
+    if capability_id in {
+        "account.group.list",
+        "account.group.get",
+        "journal.configuration.inspect",
+        "tax.repartition_line.list",
+        "tax.repartition_line.get",
+        "reconciliation.model.line.list",
+        "reconciliation.model.line.get",
+    }:
+        return [("company_id", "parent_of", [company_id])]
     if capability_id in {
         "payment_term.get",
         "partner.accounting.get",
@@ -894,6 +1321,7 @@ def _scope_domain(env: Any, capability_id: str, company_id: int) -> list[Any]:
         "analytic.applicability.get",
         "budget.search",
         "budget.get",
+        "partner.credit_exposure.inspect",
     }:
         return ["|", ("company_id", "=", False), ("company_id", "=", company_id)]
     if capability_id in {"budget.line.list", "budget.line.get"}:
@@ -912,7 +1340,12 @@ def _scope_domain(env: Any, capability_id: str, company_id: int) -> list[Any]:
         return [("reconciled_line_ids.company_id", "=", company_id)]
     if capability_id in {"journal.group.list", "journal.group.get"}:
         return ["|", ("company_id", "=", False), ("company_id", "=", company_id)]
-    if capability_id in {"account.tag.list", "account.tag.get"}:
+    if capability_id in {
+        "account.tag.list",
+        "account.tag.get",
+        "report.catalog.list",
+        "report.catalog.get",
+    }:
         fiscal_country_id = _company_fiscal_country_id(env, company_id)
         if fiscal_country_id is None:
             return [("country_id", "=", False)]
@@ -930,6 +1363,147 @@ def _valid_parameters(capability_id: str, parameters: Any) -> bool:
     if capability_id in _GET_IDS:
         id_field = _GET_IDS[capability_id][1]
         return set(parameters) == {id_field} and _valid_id(parameters[id_field])
+    if capability_id == "invoice.duplicate_candidates.list":
+        return bool(
+            set(parameters) == {"invoice_id", "after_id", "limit"}
+            and _valid_id(parameters["invoice_id"])
+            and (parameters["after_id"] is None or _valid_id(parameters["after_id"]))
+            and _valid_limit(parameters["limit"])
+        )
+    if capability_id == "invoice.tax_breakdown.inspect":
+        return bool(
+            set(parameters) == {"invoice_id"} and _valid_id(parameters["invoice_id"])
+        )
+    if capability_id == "recurring.journal_entry.search":
+        if set(parameters) != {
+            "states",
+            "auto_post_types",
+            "date_from",
+            "date_to",
+            "after_id",
+            "limit",
+        }:
+            return False
+        return bool(
+            _valid_optional_enum_list(
+                parameters["states"], frozenset({"draft", "posted", "cancel"})
+            )
+            and _valid_optional_enum_list(
+                parameters["auto_post_types"],
+                frozenset({"at_date", "monthly", "quarterly", "yearly"}),
+            )
+            and _optional_date(parameters["date_from"])
+            and _optional_date(parameters["date_to"])
+            and not (
+                parameters["date_from"] is not None
+                and parameters["date_to"] is not None
+                and parameters["date_from"] > parameters["date_to"]
+            )
+            and (parameters["after_id"] is None or _valid_id(parameters["after_id"]))
+            and _valid_limit(parameters["limit"])
+        )
+    if capability_id == "account.transfer_model.search":
+        if set(parameters) != {"query", "active", "after_id", "limit"}:
+            return False
+        query = parameters["query"]
+        return bool(
+            (
+                query is None
+                or isinstance(query, str)
+                and query == query.strip()
+                and 1 <= len(query) <= 200
+            )
+            and (parameters["active"] is None or isinstance(parameters["active"], bool))
+            and (parameters["after_id"] is None or _valid_id(parameters["after_id"]))
+            and _valid_limit(parameters["limit"])
+        )
+    if capability_id == "partner.credit_exposure.inspect":
+        return bool(
+            set(parameters) == {"partner_id"} and _valid_id(parameters["partner_id"])
+        )
+    if capability_id == "journal.sequence_irregularity.list":
+        if set(parameters) != {
+            "journal_id",
+            "date_from",
+            "date_to",
+            "after_id",
+            "limit",
+        }:
+            return False
+        return bool(
+            (parameters["journal_id"] is None or _valid_id(parameters["journal_id"]))
+            and _optional_date(parameters["date_from"])
+            and _optional_date(parameters["date_to"])
+            and not (
+                parameters["date_from"] is not None
+                and parameters["date_to"] is not None
+                and parameters["date_from"] > parameters["date_to"]
+            )
+            and (parameters["after_id"] is None or _valid_id(parameters["after_id"]))
+            and _valid_limit(parameters["limit"])
+        )
+    if capability_id == "account.lock_exception.search":
+        if set(parameters) != {
+            "states",
+            "user_id",
+            "lock_date_fields",
+            "after_id",
+            "limit",
+        }:
+            return False
+        return bool(
+            _valid_optional_enum_list(
+                parameters["states"], frozenset({"active", "revoked", "expired"})
+            )
+            and (parameters["user_id"] is None or _valid_id(parameters["user_id"]))
+            and _valid_optional_enum_list(
+                parameters["lock_date_fields"],
+                frozenset(
+                    {
+                        "fiscalyear_lock_date",
+                        "tax_lock_date",
+                        "sale_lock_date",
+                        "purchase_lock_date",
+                    }
+                ),
+            )
+            and (parameters["after_id"] is None or _valid_id(parameters["after_id"]))
+            and _valid_limit(parameters["limit"])
+        )
+    if capability_id == "report.external_value.search":
+        if set(parameters) != {
+            "report_id",
+            "expression_id",
+            "date_from",
+            "date_to",
+            "after_id",
+            "limit",
+        }:
+            return False
+        return bool(
+            all(
+                parameters[field] is None or _valid_id(parameters[field])
+                for field in ("report_id", "expression_id", "after_id")
+            )
+            and _optional_date(parameters["date_from"])
+            and _optional_date(parameters["date_to"])
+            and not (
+                parameters["date_from"] is not None
+                and parameters["date_to"] is not None
+                and parameters["date_from"] > parameters["date_to"]
+            )
+            and _valid_limit(parameters["limit"])
+        )
+    if capability_id in {
+        "fiscal_position.account_mapping.list",
+        "fiscal_position.tax_mapping.list",
+    }:
+        return bool(
+            set(parameters) == {"fiscal_position_id", "after_id", "limit"}
+            and _valid_id(parameters["fiscal_position_id"])
+            and (parameters["after_id"] is None or _valid_id(parameters["after_id"]))
+            and _valid_limit(parameters["limit"])
+        )
     if capability_id in {
         "payment.method.list",
         "reconciliation.model.list",
@@ -946,6 +1520,123 @@ def _valid_parameters(capability_id: str, parameters: Any) -> bool:
     }:
         return (
             set(parameters) == {"after_id", "limit"}
+            and (parameters["after_id"] is None or _valid_id(parameters["after_id"]))
+            and _valid_limit(parameters["limit"])
+        )
+    if capability_id == "account.group.list":
+        if set(parameters) != {"query", "parent_id", "after_id", "limit"}:
+            return False
+        query = parameters["query"]
+        return bool(
+            (
+                query is None
+                or isinstance(query, str)
+                and query == query.strip()
+                and 1 <= len(query) <= 200
+            )
+            and (parameters["parent_id"] is None or _valid_id(parameters["parent_id"]))
+            and (parameters["after_id"] is None or _valid_id(parameters["after_id"]))
+            and _valid_limit(parameters["limit"])
+        )
+    if capability_id == "tax.repartition_line.list":
+        if set(parameters) != {
+            "tax_id",
+            "document_types",
+            "repartition_types",
+            "account_id",
+            "use_in_tax_closing",
+            "after_id",
+            "limit",
+        }:
+            return False
+        return bool(
+            (parameters["tax_id"] is None or _valid_id(parameters["tax_id"]))
+            and _valid_optional_enum_list(
+                parameters["document_types"], frozenset({"invoice", "refund"})
+            )
+            and _valid_optional_enum_list(
+                parameters["repartition_types"], frozenset({"base", "tax"})
+            )
+            and (
+                parameters["account_id"] is None or _valid_id(parameters["account_id"])
+            )
+            and (
+                parameters["use_in_tax_closing"] is None
+                or isinstance(parameters["use_in_tax_closing"], bool)
+            )
+            and (parameters["after_id"] is None or _valid_id(parameters["after_id"]))
+            and _valid_limit(parameters["limit"])
+        )
+    if capability_id == "reconciliation.model.line.list":
+        if set(parameters) != {
+            "reconciliation_model_id",
+            "account_id",
+            "partner_id",
+            "amount_types",
+            "after_id",
+            "limit",
+        }:
+            return False
+        return bool(
+            all(
+                parameters[field] is None or _valid_id(parameters[field])
+                for field in (
+                    "reconciliation_model_id",
+                    "account_id",
+                    "partner_id",
+                )
+            )
+            and _valid_optional_enum_list(
+                parameters["amount_types"],
+                frozenset({"fixed", "percentage", "percentage_st_line", "regex"}),
+            )
+            and (parameters["after_id"] is None or _valid_id(parameters["after_id"]))
+            and _valid_limit(parameters["limit"])
+        )
+    if capability_id == "bank.list":
+        if set(parameters) != {
+            "query",
+            "country_id",
+            "active",
+            "after_id",
+            "limit",
+        }:
+            return False
+        query = parameters["query"]
+        return bool(
+            (
+                query is None
+                or isinstance(query, str)
+                and query == query.strip()
+                and 1 <= len(query) <= 200
+            )
+            and (
+                parameters["country_id"] is None or _valid_id(parameters["country_id"])
+            )
+            and (parameters["active"] is None or isinstance(parameters["active"], bool))
+            and (parameters["after_id"] is None or _valid_id(parameters["after_id"]))
+            and _valid_limit(parameters["limit"])
+        )
+    if capability_id == "report.catalog.list":
+        if set(parameters) != {
+            "country_id",
+            "root_report_id",
+            "availability_conditions",
+            "active",
+            "after_id",
+            "limit",
+        }:
+            return False
+        return bool(
+            all(
+                parameters[field] is None or _valid_id(parameters[field])
+                for field in ("country_id", "root_report_id")
+            )
+            and _valid_optional_enum_list(
+                parameters["availability_conditions"],
+                frozenset({"country", "coa", "always"}),
+            )
+            and (parameters["active"] is None or isinstance(parameters["active"], bool))
             and (parameters["after_id"] is None or _valid_id(parameters["after_id"]))
             and _valid_limit(parameters["limit"])
         )
@@ -1238,6 +1929,26 @@ def _raw_get_rows(
         fields = _BUDGET_FIELDS
     elif capability_id == "budget.line.get":
         fields = (*_BUDGET_LINE_FIELDS, *_analytic_column_names(raw_model))
+    elif capability_id == "account.group.get":
+        fields = _ACCOUNT_GROUP_FIELDS
+    elif capability_id == "journal.configuration.inspect":
+        fields = _JOURNAL_CONFIGURATION_FIELDS
+    elif capability_id == "tax.repartition_line.get":
+        fields = _TAX_REPARTITION_LINE_FIELDS
+    elif capability_id == "reconciliation.model.line.get":
+        fields = _RECONCILIATION_MODEL_LINE_FIELDS
+    elif capability_id == "bank.get":
+        fields = _BANK_DIRECTORY_FIELDS
+    elif capability_id == "report.catalog.get":
+        fields = _REPORT_CATALOG_FIELDS
+    elif capability_id == "recurring.journal_entry.get":
+        fields = _RECURRING_ENTRY_FIELDS
+    elif capability_id == "account.transfer_model.get":
+        fields = _TRANSFER_MODEL_FIELDS
+    elif capability_id == "account.lock_exception.get":
+        fields = _LOCK_EXCEPTION_FIELDS
+    elif capability_id == "report.external_value.get":
+        fields = _EXTERNAL_VALUE_FIELDS
     else:
         fields = {
             "account.account.get": (
@@ -1372,7 +2083,7 @@ def _raw_get_rows(
         ]
     )
     model = raw_model.with_context(active_test=False, allowed_company_ids=[company_id])
-    if capability_id == "cash_rounding.get":
+    if capability_id in {"cash_rounding.get", "account.transfer_model.get"}:
         model = model.with_company(env["res.company"].browse(company_id))
     return model.search_read(domain, fields=list(fields), limit=1, order="id")
 
@@ -1866,6 +2577,279 @@ def _id_page_rows(
             order="id",
         ),
         True,
+    )
+
+
+def _fiscal_position_row(
+    env: Any,
+    fiscal_position_id: int,
+    company_id: int,
+    *,
+    fields: tuple[str, ...] = (),
+) -> dict[str, Any] | None:
+    rows = (
+        env["account.fiscal.position"]
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+        .search_read(
+            [
+                ("id", "=", fiscal_position_id),
+                ("company_id", "=", company_id),
+            ],
+            fields=["id", "company_id", *fields],
+            limit=1,
+            order="id",
+        )
+    )
+    if not rows:
+        return None
+    row = rows[0]
+    if (
+        row.get("id") != fiscal_position_id
+        or _reference_id(row.get("company_id")) != company_id
+    ):
+        raise ValueError("fiscal position outside company")
+    return row
+
+
+def _fiscal_position_account_mapping_items(
+    env: Any, parameters: dict[str, Any], company_id: int
+) -> tuple[list[dict[str, Any]], bool]:
+    fiscal_position_id = parameters["fiscal_position_id"]
+    if _fiscal_position_row(env, fiscal_position_id, company_id) is None:
+        raise _FiscalPositionNotFound
+    model = env["account.fiscal.position.account"].with_context(
+        active_test=False, allowed_company_ids=[company_id]
+    )
+    rows, cursor_found = _id_page_rows(
+        model,
+        [
+            ("position_id", "=", fiscal_position_id),
+            ("company_id", "=", company_id),
+        ],
+        after_id=parameters["after_id"],
+        limit=parameters["limit"],
+        fields=(
+            "id",
+            "position_id",
+            "company_id",
+            "account_src_id",
+            "account_dest_id",
+        ),
+    )
+    if not cursor_found:
+        return [], False
+    account_ids = {
+        account_id
+        for row in rows
+        for field in ("account_src_id", "account_dest_id")
+        if (account_id := _reference_id(row.get(field))) is not None
+    }
+    if any(
+        _reference_id(row.get(field)) is None
+        for row in rows
+        for field in ("account_src_id", "account_dest_id")
+    ):
+        raise ValueError("invalid fiscal position account mapping")
+    accounts = _related_rows(
+        env, "account.account", account_ids, ("code", "name", "company_ids")
+    )
+    company_model = env["res.company"].with_context(
+        active_test=False, allowed_company_ids=[company_id]
+    )
+    for account in accounts.values():
+        account_company_ids = _sorted_relation_ids(
+            account["company_ids"], nonempty=True
+        )
+        if not company_model.search_count(
+            [
+                ("id", "=", company_id),
+                ("id", "child_of", account_company_ids),
+            ],
+            limit=1,
+        ):
+            raise ValueError("fiscal position account mapping outside company")
+    result = []
+    for row in rows:
+        source_id = _reference_id(row["account_src_id"])
+        destination_id = _reference_id(row["account_dest_id"])
+        if (
+            _reference_id(row["position_id"]) != fiscal_position_id
+            or _reference_id(row["company_id"]) != company_id
+            or source_id is None
+            or destination_id is None
+        ):
+            raise ValueError("fiscal position account mapping outside company")
+        result.append(
+            {
+                "id": row["id"],
+                "company_id": company_id,
+                "source_account": _coded_reference(accounts[source_id]),
+                "destination_account": _coded_reference(accounts[destination_id]),
+            }
+        )
+    return result, True
+
+
+def _fiscal_position_tax_mapping_items(
+    env: Any, parameters: dict[str, Any], company_id: int
+) -> tuple[list[dict[str, Any]], bool, bool]:
+    """Return grouped rows, cursor state, and target Odoo's remove-all state.
+
+    The deployed Odoo 19 ``account.fiscal.position.map_tax`` returns an empty
+    tax recordset when ``tax_ids`` is empty, so the third value is exactly
+    ``not bool(position.tax_ids)`` for that server runtime.
+    """
+
+    fiscal_position_id = parameters["fiscal_position_id"]
+    position = _fiscal_position_row(
+        env, fiscal_position_id, company_id, fields=("tax_ids",)
+    )
+    if position is None:
+        raise _FiscalPositionNotFound
+    destination_ids = _sorted_relation_ids(position.get("tax_ids"))
+    if not destination_ids:
+        return [], parameters["after_id"] is None, True
+    destinations = _related_rows(
+        env,
+        "account.tax",
+        set(destination_ids),
+        ("name", "company_id", "original_tax_ids"),
+    )
+    destination_ids_by_source: dict[int, set[int]] = {}
+    source_ids: set[int] = set()
+    for destination_id in destination_ids:
+        destination = destinations[destination_id]
+        if _reference_id(destination["company_id"]) != company_id:
+            raise ValueError("fiscal position destination tax outside company")
+        original_ids = _sorted_relation_ids(destination["original_tax_ids"])
+        for source_id in original_ids:
+            source_ids.add(source_id)
+            destination_ids_by_source.setdefault(source_id, set()).add(destination_id)
+    sources = _related_rows(env, "account.tax", source_ids, ("name", "company_id"))
+    if any(
+        _reference_id(source["company_id"]) != company_id for source in sources.values()
+    ):
+        raise ValueError("fiscal position source tax outside company")
+    after_id = parameters["after_id"]
+    if after_id is not None and after_id not in source_ids:
+        return [], False, False
+    visible_source_ids = sorted(
+        source_id
+        for source_id in source_ids
+        if after_id is None or source_id > after_id
+    )[: parameters["limit"]]
+    return (
+        [
+            {
+                "source_tax": _named_reference(sources[source_id]),
+                "destination_taxes": [
+                    _named_reference(destinations[destination_id])
+                    for destination_id in sorted(destination_ids_by_source[source_id])
+                ],
+            }
+            for source_id in visible_source_ids
+        ],
+        True,
+        False,
+    )
+
+
+def _accounting_metadata_rows(
+    env: Any, capability_id: str, parameters: dict[str, Any], company_id: int
+) -> tuple[list[dict[str, Any]], bool]:
+    from odoo.osv import expression
+
+    model_name, fields = {
+        "account.group.list": ("account.group", _ACCOUNT_GROUP_FIELDS),
+        "tax.repartition_line.list": (
+            "account.tax.repartition.line",
+            _TAX_REPARTITION_LINE_FIELDS,
+        ),
+        "reconciliation.model.line.list": (
+            "account.reconcile.model.line",
+            _RECONCILIATION_MODEL_LINE_FIELDS,
+        ),
+        "bank.list": ("res.bank", _BANK_DIRECTORY_FIELDS),
+        "report.catalog.list": ("account.report", _REPORT_CATALOG_FIELDS),
+    }[capability_id]
+    domains: list[list[Any]] = [_scope_domain(env, capability_id, company_id)]
+    if capability_id == "account.group.list":
+        if parameters["query"] is not None:
+            domains.append(
+                [
+                    "|",
+                    "|",
+                    ("name", "ilike", parameters["query"]),
+                    ("code_prefix_start", "ilike", parameters["query"]),
+                    ("code_prefix_end", "ilike", parameters["query"]),
+                ]
+            )
+        if parameters["parent_id"] is not None:
+            domains.append([("parent_id", "=", parameters["parent_id"])])
+    elif capability_id == "tax.repartition_line.list":
+        for parameter_name, field_name in (
+            ("tax_id", "tax_id"),
+            ("account_id", "account_id"),
+            ("use_in_tax_closing", "use_in_tax_closing"),
+        ):
+            if parameters[parameter_name] is not None:
+                domains.append([(field_name, "=", parameters[parameter_name])])
+        if parameters["document_types"] is not None:
+            domains.append([("document_type", "in", parameters["document_types"])])
+        if parameters["repartition_types"] is not None:
+            domains.append(
+                [("repartition_type", "in", parameters["repartition_types"])]
+            )
+    elif capability_id == "reconciliation.model.line.list":
+        for parameter_name, field_name in (
+            ("reconciliation_model_id", "model_id"),
+            ("account_id", "account_id"),
+            ("partner_id", "partner_id"),
+        ):
+            if parameters[parameter_name] is not None:
+                domains.append([(field_name, "=", parameters[parameter_name])])
+        if parameters["amount_types"] is not None:
+            domains.append([("amount_type", "in", parameters["amount_types"])])
+    elif capability_id == "bank.list":
+        if parameters["query"] is not None:
+            domains.append(
+                [
+                    "|",
+                    ("name", "ilike", parameters["query"]),
+                    ("bic", "ilike", parameters["query"]),
+                ]
+            )
+        if parameters["country_id"] is not None:
+            domains.append([("country", "=", parameters["country_id"])])
+        if parameters["active"] is not None:
+            domains.append([("active", "=", parameters["active"])])
+    else:
+        for parameter_name, field_name in (
+            ("country_id", "country_id"),
+            ("root_report_id", "root_report_id"),
+            ("active", "active"),
+        ):
+            if parameters[parameter_name] is not None:
+                domains.append([(field_name, "=", parameters[parameter_name])])
+        if parameters["availability_conditions"] is not None:
+            domains.append(
+                [
+                    (
+                        "availability_condition",
+                        "in",
+                        parameters["availability_conditions"],
+                    )
+                ]
+            )
+    model = env[model_name].with_context(
+        active_test=False, allowed_company_ids=[company_id]
+    )
+    return _id_page_rows(
+        model,
+        expression.AND(domains),
+        after_id=parameters["after_id"],
+        limit=parameters["limit"],
+        fields=fields,
     )
 
 
@@ -2744,6 +3728,8 @@ def _normalize_analytic_lines(
 
 
 def _parsed_distribution(value: Any) -> list[tuple[tuple[int, ...], str]]:
+    if value is False:
+        return []
     if not isinstance(value, dict):
         raise TypeError("invalid analytic distribution")
     allocations: list[tuple[tuple[int, ...], str]] = []
@@ -3161,6 +4147,458 @@ def _normalize_reference_items(
     return _normalize_tags_or_tax_groups(env, capability_id, rows, company_id)
 
 
+def _normalize_account_groups(
+    env: Any, rows: list[dict[str, Any]], company_id: int
+) -> list[dict[str, Any]]:
+    owner_company_ids = _owner_company_ids(env, rows, company_id)
+    parent_ids = {_reference_id(row.get("parent_id")) for row in rows}
+    parent_ids.discard(None)
+    parents = _related_rows(env, "account.group", parent_ids, ("name", "company_id"))
+    result = []
+    for row in rows:
+        owner_company_id = owner_company_ids[row["id"]]
+        parent_id = _reference_id(row["parent_id"])
+        if parent_id is not None and (
+            _reference_id(parents[parent_id]["company_id"]) != owner_company_id
+        ):
+            raise ValueError("account group outside company")
+        result.append(
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "code_prefix_start": _optional_text(row["code_prefix_start"]),
+                "code_prefix_end": _optional_text(row["code_prefix_end"]),
+                "parent": _named_reference(parents[parent_id])
+                if parent_id is not None
+                else None,
+                "company_id": owner_company_id,
+            }
+        )
+    return result
+
+
+def _normalize_journal_configuration(
+    env: Any, rows: list[dict[str, Any]], company_id: int
+) -> list[dict[str, Any]]:
+    owner_company_ids = _owner_company_ids(env, rows, company_id)
+    currency_ids = {_reference_id(row.get("currency_id")) for row in rows}
+    currency_ids.discard(None)
+    account_fields = (
+        "default_account_id",
+        "suspense_account_id",
+        "profit_account_id",
+        "loss_account_id",
+    )
+    account_ids = {
+        account_id
+        for row in rows
+        for field in account_fields
+        if (account_id := _reference_id(row.get(field))) is not None
+    }
+    bank_ids = {_reference_id(row.get("bank_account_id")) for row in rows}
+    bank_ids.discard(None)
+    inbound_ids = {
+        row["id"]: _sorted_relation_ids(row["inbound_payment_method_line_ids"])
+        for row in rows
+    }
+    outbound_ids = {
+        row["id"]: _sorted_relation_ids(row["outbound_payment_method_line_ids"])
+        for row in rows
+    }
+    method_ids = {
+        method_id
+        for row_ids in (*inbound_ids.values(), *outbound_ids.values())
+        for method_id in row_ids
+    }
+    currencies = _related_rows(env, "res.currency", currency_ids, ("name",))
+    accounts = _related_rows(
+        env, "account.account", account_ids, ("code", "name", "company_ids")
+    )
+    banks = _related_rows(
+        env, "res.partner.bank", bank_ids, ("acc_number", "company_id")
+    )
+    methods = _related_rows(
+        env,
+        "account.payment.method.line",
+        method_ids,
+        ("name", "journal_id", "company_id"),
+    )
+    result = []
+    for row in rows:
+        owner_company_id = owner_company_ids[row["id"]]
+        currency_id = _reference_id(row["currency_id"])
+        bank_id = _reference_id(row["bank_account_id"])
+        journal_method_ids = (*inbound_ids[row["id"]], *outbound_ids[row["id"]])
+        row_account_ids = {
+            account_id
+            for field in account_fields
+            if (account_id := _reference_id(row[field])) is not None
+        }
+        if (
+            any(
+                owner_company_id not in accounts[account_id]["company_ids"]
+                for account_id in row_account_ids
+            )
+            or (
+                bank_id is not None
+                and _reference_id(banks[bank_id]["company_id"])
+                not in {None, owner_company_id}
+            )
+            or any(
+                _reference_id(methods[method_id]["journal_id"]) != row["id"]
+                or _reference_id(methods[method_id]["company_id"]) != owner_company_id
+                for method_id in journal_method_ids
+            )
+        ):
+            raise ValueError("journal configuration outside company")
+        account_references = {
+            field: _coded_reference(accounts[account_id])
+            if (account_id := _reference_id(row[field])) is not None
+            else None
+            for field in account_fields
+        }
+        result.append(
+            {
+                "id": row["id"],
+                "code": row["code"],
+                "name": row["name"],
+                "type": row["type"],
+                "active": row["active"],
+                "company_id": owner_company_id,
+                "currency": _currency_reference(currencies[currency_id])
+                if currency_id is not None
+                else None,
+                "default_account": account_references["default_account_id"],
+                "suspense_account": account_references["suspense_account_id"],
+                "profit_account": account_references["profit_account_id"],
+                "loss_account": account_references["loss_account_id"],
+                "bank_account": _named_reference(
+                    {"id": bank_id, "name": banks[bank_id]["acc_number"]}
+                )
+                if bank_id is not None
+                else None,
+                "inbound_payment_methods": [
+                    _named_reference(methods[method_id])
+                    for method_id in inbound_ids[row["id"]]
+                ],
+                "outbound_payment_methods": [
+                    _named_reference(methods[method_id])
+                    for method_id in outbound_ids[row["id"]]
+                ],
+                "invoice_reference_type": row["invoice_reference_type"],
+                "invoice_reference_model": row["invoice_reference_model"],
+                "restrict_mode_hash_table": row["restrict_mode_hash_table"],
+            }
+        )
+    return result
+
+
+def _normalize_tax_repartition_lines(
+    env: Any, rows: list[dict[str, Any]], company_id: int
+) -> list[dict[str, Any]]:
+    owner_company_ids = _owner_company_ids(env, rows, company_id)
+    tax_ids = {_reference_id(row.get("tax_id")) for row in rows}
+    account_ids = {_reference_id(row.get("account_id")) for row in rows}
+    account_ids.discard(None)
+    tag_ids_by_line = {row["id"]: _sorted_relation_ids(row["tag_ids"]) for row in rows}
+    tag_ids = {tag_id for ids in tag_ids_by_line.values() for tag_id in ids}
+    if None in tax_ids:
+        raise ValueError("missing tax repartition relation")
+    taxes = _related_rows(env, "account.tax", tax_ids, ("name", "company_id"))
+    accounts = _related_rows(
+        env, "account.account", account_ids, ("code", "name", "company_ids")
+    )
+    tags = _related_rows(env, "account.account.tag", tag_ids, ("name",))
+    result = []
+    for row in rows:
+        owner_company_id = owner_company_ids[row["id"]]
+        tax_id = _reference_id(row["tax_id"])
+        account_id = _reference_id(row["account_id"])
+        if _reference_id(taxes[tax_id]["company_id"]) != owner_company_id or (
+            account_id is not None
+            and owner_company_id not in accounts[account_id]["company_ids"]
+        ):
+            raise ValueError("tax repartition line outside company")
+        result.append(
+            {
+                "id": row["id"],
+                "sequence": row["sequence"],
+                "company_id": owner_company_id,
+                "tax": _named_reference(taxes[tax_id]),
+                "document_type": row["document_type"],
+                "repartition_type": row["repartition_type"],
+                "factor_percent": _decimal_string(row["factor_percent"]),
+                "factor": _decimal_string(row["factor"]),
+                "account": _coded_reference(accounts[account_id])
+                if account_id is not None
+                else None,
+                "tags": [
+                    _named_reference(tags[tag_id])
+                    for tag_id in tag_ids_by_line[row["id"]]
+                ],
+                "use_in_tax_closing": row["use_in_tax_closing"],
+            }
+        )
+    return result
+
+
+def _normalize_reconciliation_model_lines(
+    env: Any, rows: list[dict[str, Any]], company_id: int
+) -> list[dict[str, Any]]:
+    owner_company_ids = _owner_company_ids(env, rows, company_id)
+    model_ids = {_reference_id(row.get("model_id")) for row in rows}
+    account_ids = {_reference_id(row.get("account_id")) for row in rows}
+    partner_ids = {_reference_id(row.get("partner_id")) for row in rows}
+    account_ids.discard(None)
+    partner_ids.discard(None)
+    tax_ids_by_line = {row["id"]: _sorted_relation_ids(row["tax_ids"]) for row in rows}
+    tax_ids = {tax_id for ids in tax_ids_by_line.values() for tax_id in ids}
+    distributions = {
+        row["id"]: _parsed_distribution(row["analytic_distribution"]) for row in rows
+    }
+    if None in model_ids:
+        raise ValueError("missing reconciliation model relation")
+    models = _related_rows(
+        env, "account.reconcile.model", model_ids, ("name", "company_id")
+    )
+    accounts = _related_rows(
+        env, "account.account", account_ids, ("code", "name", "company_ids")
+    )
+    partners = _related_rows(
+        env, "res.partner", partner_ids, ("complete_name", "company_id")
+    )
+    taxes = _related_rows(env, "account.tax", tax_ids, ("name", "company_id"))
+    analytic_account_ids_by_owner: dict[int, set[int]] = {}
+    for row in rows:
+        owner_company_id = owner_company_ids[row["id"]]
+        owner_account_ids = analytic_account_ids_by_owner.setdefault(
+            owner_company_id, set()
+        )
+        for allocation_ids, _percentage in distributions[row["id"]]:
+            owner_account_ids.update(allocation_ids)
+    analytic_accounts: dict[int, dict[str, Any]] = {}
+    for owner_company_id, analytic_account_ids in analytic_account_ids_by_owner.items():
+        analytic_accounts.update(
+            _analytic_account_references(
+                env,
+                analytic_account_ids,
+                company_id=owner_company_id,
+                owner_company_id=owner_company_id,
+            )
+        )
+    result = []
+    for row in rows:
+        owner_company_id = owner_company_ids[row["id"]]
+        model_id = _reference_id(row["model_id"])
+        account_id = _reference_id(row["account_id"])
+        partner_id = _reference_id(row["partner_id"])
+        amount_string = _optional_text(row["amount_string"])
+        if (
+            amount_string is None
+            or _reference_id(models[model_id]["company_id"]) != owner_company_id
+            or (
+                account_id is not None
+                and owner_company_id not in accounts[account_id]["company_ids"]
+            )
+            or (
+                partner_id is not None
+                and _reference_id(partners[partner_id]["company_id"])
+                not in {None, owner_company_id}
+            )
+            or any(
+                _reference_id(taxes[tax_id]["company_id"]) != owner_company_id
+                for tax_id in tax_ids_by_line[row["id"]]
+            )
+        ):
+            raise ValueError("reconciliation model line outside company")
+        result.append(
+            {
+                "id": row["id"],
+                "sequence": row["sequence"],
+                "company_id": owner_company_id,
+                "reconciliation_model": _named_reference(models[model_id]),
+                "account": _coded_reference(accounts[account_id])
+                if account_id is not None
+                else None,
+                "partner": _named_reference(
+                    {
+                        "id": partner_id,
+                        "name": partners[partner_id]["complete_name"],
+                    }
+                )
+                if partner_id is not None
+                else None,
+                "label": _optional_text(row["label"]),
+                "amount_type": row["amount_type"],
+                "amount": _decimal_string(row["amount"]),
+                "amount_string": amount_string,
+                "taxes": [
+                    _named_reference(taxes[tax_id])
+                    for tax_id in tax_ids_by_line[row["id"]]
+                ],
+                "analytic_distribution": [
+                    {
+                        "analytic_accounts": [
+                            _named_reference(analytic_accounts[analytic_account_id])
+                            for analytic_account_id in allocation_ids
+                        ],
+                        "percentage": percentage,
+                    }
+                    for allocation_ids, percentage in distributions[row["id"]]
+                ],
+            }
+        )
+    return result
+
+
+def _normalize_bank_directory(
+    env: Any, rows: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    state_ids = {_reference_id(row.get("state")) for row in rows}
+    country_ids = {_reference_id(row.get("country")) for row in rows}
+    state_ids.discard(None)
+    country_ids.discard(None)
+    states = _related_rows(env, "res.country.state", state_ids, ("name", "country_id"))
+    countries = _related_rows(env, "res.country", country_ids, ("name",))
+    result = []
+    for row in rows:
+        state_id = _reference_id(row["state"])
+        country_id = _reference_id(row["country"])
+        if (
+            state_id is not None
+            and _reference_id(states[state_id]["country_id"]) != country_id
+        ):
+            raise ValueError("bank state outside country")
+        result.append(
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "bic": _optional_text(row["bic"]),
+                "active": row["active"],
+                "street": _optional_text(row["street"]),
+                "street2": _optional_text(row["street2"]),
+                "zip": _optional_text(row["zip"]),
+                "city": _optional_text(row["city"]),
+                "state": _named_reference(states[state_id])
+                if state_id is not None
+                else None,
+                "country": _named_reference(countries[country_id])
+                if country_id is not None
+                else None,
+                "email": _optional_text(row["email"]),
+                "phone": _optional_text(row["phone"]),
+            }
+        )
+    return result
+
+
+def _normalize_report_catalog(
+    env: Any, rows: list[dict[str, Any]], company_id: int
+) -> list[dict[str, Any]]:
+    root_ids = {_reference_id(row.get("root_report_id")) for row in rows}
+    root_ids.discard(None)
+    variant_ids_by_report = {
+        row["id"]: _sorted_relation_ids(row["variant_report_ids"]) for row in rows
+    }
+    section_ids_by_report = {
+        row["id"]: _sorted_relation_ids(row["section_report_ids"]) for row in rows
+    }
+    report_reference_ids = {
+        report_id
+        for ids in (
+            root_ids,
+            *variant_ids_by_report.values(),
+            *section_ids_by_report.values(),
+        )
+        for report_id in ids
+    }
+    reports = _related_rows(
+        env, "account.report", report_reference_ids, ("name", "country_id")
+    )
+    country_ids = {_reference_id(row.get("country_id")) for row in rows}
+    country_ids.update(_reference_id(row["country_id"]) for row in reports.values())
+    country_ids.discard(None)
+    countries = _related_rows(env, "res.country", country_ids, ("name",))
+    column_ids_by_report = {
+        row["id"]: _sorted_relation_ids(row["column_ids"]) for row in rows
+    }
+    column_ids = {
+        column_id for ids in column_ids_by_report.values() for column_id in ids
+    }
+    columns = _related_rows(
+        env, "account.report.column", column_ids, _REPORT_COLUMN_FIELDS
+    )
+    fiscal_country_id = _company_fiscal_country_id(env, company_id)
+    visible_country_ids = {None, fiscal_country_id}
+    if any(_reference_id(row["country_id"]) not in visible_country_ids for row in rows):
+        raise ValueError("report catalog outside fiscal country")
+    visible_report_ids = {
+        report_id
+        for report_id, report in reports.items()
+        if _reference_id(report["country_id"]) in visible_country_ids
+    }
+    if any(root_id not in visible_report_ids for root_id in root_ids):
+        raise ValueError("report root outside fiscal country")
+    result = []
+    for row in rows:
+        root_id = _reference_id(row["root_report_id"])
+        country_id = _reference_id(row["country_id"])
+        report_columns = [
+            columns[column_id] for column_id in column_ids_by_report[row["id"]]
+        ]
+        if any(
+            _reference_id(column["report_id"]) != row["id"] for column in report_columns
+        ):
+            raise ValueError("report column outside report")
+        report_columns.sort(key=lambda column: (column["sequence"], column["id"]))
+        result.append(
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "active": row["active"],
+                "root_report": _named_reference(reports[root_id])
+                if root_id is not None
+                else None,
+                "country": _named_reference(countries[country_id])
+                if country_id is not None
+                else None,
+                "availability_condition": row["availability_condition"],
+                "variants": [
+                    _named_reference(reports[report_id])
+                    for report_id in variant_ids_by_report[row["id"]]
+                    if report_id in visible_report_ids
+                ],
+                "sections": [
+                    _named_reference(reports[report_id])
+                    for report_id in section_ids_by_report[row["id"]]
+                    if report_id in visible_report_ids
+                ],
+                "columns": [
+                    {
+                        "id": column["id"],
+                        "name": column["name"],
+                        "expression_label": column["expression_label"],
+                        "figure_type": column["figure_type"],
+                        "sortable": column["sortable"],
+                        "blank_if_zero": column["blank_if_zero"],
+                    }
+                    for column in report_columns
+                ],
+                "filters": {
+                    "multi_company": _optional_text(row["filter_multi_company"]),
+                    "date_range": row["filter_date_range"],
+                    "show_draft": row["filter_show_draft"],
+                    "unreconciled": row["filter_unreconciled"],
+                    "unfold_all": row["filter_unfold_all"],
+                    "journals": row["filter_journals"],
+                    "analytic": row["filter_analytic"],
+                    "partner": row["filter_partner"],
+                },
+            }
+        )
+    return result
+
+
 def _support_rows(
     env: Any, capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> tuple[list[dict[str, Any]], bool]:
@@ -3214,6 +4652,720 @@ def _support_rows(
         model.search_read(domain, fields=fields, limit=parameters["limit"], order="id"),
         True,
     )
+
+
+def _duplicate_candidate_rows(
+    env: Any, parameters: dict[str, Any], company_id: int
+) -> tuple[list[dict[str, Any]], bool]:
+    model = env["account.move"].with_context(
+        active_test=False, allowed_company_ids=[company_id]
+    )
+    invoice = model.search_read(
+        [
+            ("id", "=", parameters["invoice_id"]),
+            ("company_id", "=", company_id),
+            ("move_type", "in", _INVOICE_TYPES),
+        ],
+        fields=["id", "duplicated_ref_ids"],
+        limit=1,
+        order="id",
+    )
+    if not invoice:
+        raise _InvoiceNotFound
+    duplicate_ids = _sorted_relation_ids(invoice[0].get("duplicated_ref_ids", []))
+    if not duplicate_ids:
+        return [], parameters["after_id"] is None
+
+    base_domain = [
+        ("id", "in", duplicate_ids),
+        ("company_id", "=", company_id),
+        ("move_type", "in", _INVOICE_TYPES),
+    ]
+    after_id = parameters["after_id"]
+    if after_id is not None and not model.search_count(
+        [*base_domain, ("id", "=", after_id)], limit=1
+    ):
+        return [], False
+    domain = [*base_domain]
+    if after_id is not None:
+        domain.append(("id", ">", after_id))
+    return (
+        model.search_read(
+            domain,
+            fields=[
+                "id",
+                "company_id",
+                "name",
+                "move_type",
+                "state",
+                "invoice_date",
+                "ref",
+                "partner_id",
+                "currency_id",
+                "amount_total",
+            ],
+            limit=parameters["limit"],
+            order="id",
+        ),
+        True,
+    )
+
+
+def _tax_breakdown_rows(
+    env: Any, parameters: dict[str, Any], company_id: int
+) -> list[dict[str, Any]]:
+    return (
+        env["account.move"]
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+        .search_read(
+            [
+                ("id", "=", parameters["invoice_id"]),
+                ("company_id", "=", company_id),
+                ("move_type", "in", _INVOICE_TYPES),
+            ],
+            fields=[
+                "id",
+                "company_id",
+                "name",
+                "move_type",
+                "state",
+                "currency_id",
+                "amount_untaxed",
+                "amount_tax",
+                "amount_total",
+                "tax_totals",
+            ],
+            limit=1,
+            order="id",
+        )
+    )
+
+
+def _new_accounting_read_rows(
+    env: Any,
+    capability_id: str,
+    parameters: dict[str, Any],
+    company_id: int,
+) -> tuple[list[dict[str, Any]], bool]:
+    domains: list[list[Any]] = [[("company_id", "=", company_id)]]
+    if capability_id == "recurring.journal_entry.search":
+        model_name = "account.move"
+        fields = _RECURRING_ENTRY_FIELDS
+        domains.extend([[("move_type", "=", "entry")], [("auto_post", "!=", "no")]])
+        if parameters["states"] is not None:
+            domains.append([("state", "in", parameters["states"])])
+        if parameters["auto_post_types"] is not None:
+            domains.append([("auto_post", "in", parameters["auto_post_types"])])
+        for field, operator in (("date_from", ">="), ("date_to", "<=")):
+            if parameters[field] is not None:
+                domains.append([("date", operator, parameters[field])])
+    elif capability_id == "account.transfer_model.search":
+        model_name = "account.transfer.model"
+        fields = _TRANSFER_MODEL_FIELDS
+        if parameters["query"] is not None:
+            domains.append([("name", "ilike", parameters["query"])])
+        if parameters["active"] is not None:
+            domains.append([("active", "=", parameters["active"])])
+    elif capability_id == "journal.sequence_irregularity.list":
+        model_name = "account.move"
+        fields = (
+            "id",
+            "company_id",
+            "name",
+            "date",
+            "state",
+            "move_type",
+            "journal_id",
+            "sequence_prefix",
+            "sequence_number",
+            "made_sequence_gap",
+        )
+        domains.append([("made_sequence_gap", "=", True)])
+        if parameters["journal_id"] is not None:
+            domains.append([("journal_id", "=", parameters["journal_id"])])
+        for field, operator in (("date_from", ">="), ("date_to", "<=")):
+            if parameters[field] is not None:
+                domains.append([("date", operator, parameters[field])])
+    elif capability_id == "account.lock_exception.search":
+        model_name = "account.lock_exception"
+        fields = _LOCK_EXCEPTION_FIELDS
+        if parameters["states"] is not None:
+            domains.append([("state", "in", parameters["states"])])
+        if parameters["user_id"] is not None:
+            domains.append([("user_id", "=", parameters["user_id"])])
+        if parameters["lock_date_fields"] is not None:
+            domains.append([("lock_date_field", "in", parameters["lock_date_fields"])])
+    else:
+        model_name = "account.report.external.value"
+        fields = _EXTERNAL_VALUE_FIELDS
+        if parameters["report_id"] is not None:
+            domains.append(
+                [
+                    (
+                        "target_report_expression_id.report_line_id.report_id",
+                        "=",
+                        parameters["report_id"],
+                    )
+                ]
+            )
+        if parameters["expression_id"] is not None:
+            domains.append(
+                [
+                    (
+                        "target_report_expression_id",
+                        "=",
+                        parameters["expression_id"],
+                    )
+                ]
+            )
+        for field, operator in (("date_from", ">="), ("date_to", "<=")):
+            if parameters[field] is not None:
+                domains.append([("date", operator, parameters[field])])
+
+    from odoo.osv import expression
+
+    base_domain = expression.AND(domains)
+    model = env[model_name].with_context(
+        active_test=False, allowed_company_ids=[company_id]
+    )
+    if capability_id == "account.transfer_model.search":
+        model = model.with_company(env["res.company"].browse(company_id))
+    after_id = parameters["after_id"]
+    if after_id is not None:
+        boundary_domain = expression.AND([base_domain, [("id", "=", after_id)]])
+        if not model.search_count(boundary_domain, limit=1):
+            return [], False
+    domain = base_domain
+    if after_id is not None:
+        domain = expression.AND([base_domain, [("id", ">", after_id)]])
+    return (
+        model.search_read(
+            domain,
+            fields=list(fields),
+            limit=parameters["limit"],
+            order="id",
+        ),
+        True,
+    )
+
+
+def _credit_exposure_rows(
+    env: Any, parameters: dict[str, Any], company_id: int
+) -> list[dict[str, Any]]:
+    company = (
+        env["res.company"]
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+        .search_read(
+            [("id", "=", company_id)],
+            fields=["id", "currency_id"],
+            limit=1,
+            order="id",
+        )
+    )
+    if len(company) != 1:
+        raise ValueError("missing company")
+    partner_model = (
+        env["res.partner"]
+        .with_company(env["res.company"].browse(company_id))
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+    )
+    partners = partner_model.search_read(
+        [
+            ("id", "=", parameters["partner_id"]),
+            "|",
+            ("company_id", "=", False),
+            ("company_id", "=", company_id),
+        ],
+        fields=[
+            "id",
+            "complete_name",
+            "company_id",
+            "commercial_partner_id",
+            "credit_to_invoice",
+            "credit_limit",
+            "use_partner_credit_limit",
+            "total_invoiced",
+        ],
+        limit=1,
+        order="id",
+    )
+    if not partners:
+        return []
+
+    line_model = (
+        env["account.move.line"]
+        .with_company(env["res.company"].browse(company_id))
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+    )
+
+    def amount_residual(account_type: str) -> Decimal:
+        rows = line_model._read_group(
+            [
+                ("company_id", "=", company_id),
+                ("partner_id", "=", partners[0]["id"]),
+                ("parent_state", "=", "posted"),
+                ("reconciled", "!=", True),
+                ("account_id.account_type", "=", account_type),
+            ],
+            groupby=[],
+            aggregates=["amount_residual:sum"],
+        )
+        if not rows:
+            return Decimal(0)
+        if len(rows) != 1 or len(rows[0]) != 1:
+            raise ValueError("invalid credit aggregate")
+        return Decimal(str(rows[0][0] or 0))
+
+    row = dict(partners[0])
+    row["company_currency_id"] = company[0]["currency_id"]
+    row["credit"] = amount_residual("asset_receivable")
+    row["debit"] = -amount_residual("liability_payable")
+    commercial_partner_id = _reference_id(row.pop("commercial_partner_id"))
+    if commercial_partner_id is None:
+        raise ValueError("missing commercial partner")
+    move_model = (
+        env["account.move"]
+        .with_company(env["res.company"].browse(company_id))
+        .with_context(active_test=False, allowed_company_ids=[company_id])
+    )
+    dso_rows = move_model._read_group(
+        [
+            ("company_id", "=", company_id),
+            ("commercial_partner_id", "=", commercial_partner_id),
+            ("state", "not in", ["draft", "cancel"]),
+            ("move_type", "in", ["out_invoice", "out_refund", "out_receipt"]),
+        ],
+        groupby=[],
+        aggregates=["invoice_date:min", "amount_total_signed:sum"],
+    )
+    if not dso_rows:
+        row["days_sales_outstanding"] = Decimal(0)
+    else:
+        if len(dso_rows) != 1 or len(dso_rows[0]) != 2:
+            raise ValueError("invalid DSO aggregate")
+        oldest_invoice_date, total_invoiced = dso_rows[0]
+        if oldest_invoice_date in (None, False) or not total_invoiced:
+            row["days_sales_outstanding"] = Decimal(0)
+        else:
+            from odoo import fields
+
+            today = date_type.fromisoformat(
+                _date_string(fields.Date.context_today(move_model))
+            )
+            oldest = date_type.fromisoformat(_date_string(oldest_invoice_date))
+            row["days_sales_outstanding"] = (
+                row["credit"]
+                / Decimal(str(total_invoiced))
+                * Decimal((today - oldest).days)
+            )
+    return [row]
+
+
+def _normalize_duplicate_candidates(
+    env: Any, rows: list[dict[str, Any]], company_id: int
+) -> list[dict[str, Any]]:
+    partner_ids = {_reference_id(row.get("partner_id")) for row in rows}
+    partner_ids.discard(None)
+    currency_ids = {_reference_id(row.get("currency_id")) for row in rows}
+    if None in currency_ids:
+        raise ValueError("missing invoice currency")
+    partners = _related_rows(env, "res.partner", partner_ids, ("complete_name",))
+    currencies = _related_rows(env, "res.currency", currency_ids, ("name",))
+    items = []
+    for row in rows:
+        partner_id = _reference_id(row["partner_id"])
+        currency_id = _reference_id(row["currency_id"])
+        if _reference_id(row["company_id"]) != company_id:
+            raise ValueError("duplicate candidate outside company")
+        items.append(
+            {
+                "id": row["id"],
+                "company_id": company_id,
+                "name": _optional_text(row["name"]) or "/",
+                "move_type": row["move_type"],
+                "state": row["state"],
+                "invoice_date": _optional_date_string(row["invoice_date"]),
+                "reference": _optional_text(row["ref"]),
+                "partner": (
+                    _named_reference(partners[partner_id])
+                    if partner_id is not None
+                    else None
+                ),
+                "currency": _currency_reference(currencies[currency_id]),
+                "amount_total": _decimal_string(row["amount_total"]),
+            }
+        )
+    return items
+
+
+def _normalize_tax_breakdown(
+    env: Any, rows: list[dict[str, Any]], company_id: int
+) -> list[dict[str, Any]]:
+    currency_ids = {_reference_id(row.get("currency_id")) for row in rows}
+    if None in currency_ids:
+        raise ValueError("missing invoice currency")
+    currencies = _related_rows(env, "res.currency", currency_ids, ("name",))
+    items = []
+    for row in rows:
+        if _reference_id(row["company_id"]) != company_id:
+            raise ValueError("invoice outside company")
+        totals = row.get("tax_totals")
+        if not isinstance(totals, Mapping):
+            raise TypeError("missing native tax totals")
+        subtotals = []
+        raw_subtotals = totals.get("subtotals")
+        if not isinstance(raw_subtotals, list):
+            raise TypeError("invalid native tax subtotals")
+        for subtotal in raw_subtotals:
+            if not isinstance(subtotal, Mapping):
+                raise TypeError("invalid native tax subtotal")
+            tax_groups = []
+            raw_groups = subtotal.get("tax_groups")
+            if not isinstance(raw_groups, list):
+                raise TypeError("invalid native tax groups")
+            for group in raw_groups:
+                if not isinstance(group, Mapping) or not _valid_id(group.get("id")):
+                    raise ValueError("invalid native tax group")
+                name = group.get("group_name")
+                if not isinstance(name, str) or not name.strip():
+                    raise ValueError("invalid native tax group name")
+                tax_groups.append(
+                    {
+                        "id": group["id"],
+                        "name": name,
+                        "base_amount": _decimal_string(group["base_amount_currency"]),
+                        "tax_amount": _decimal_string(group["tax_amount_currency"]),
+                    }
+                )
+            subtotals.append(
+                {
+                    "name": subtotal["name"],
+                    "base_amount": _decimal_string(subtotal["base_amount_currency"]),
+                    "tax_amount": _decimal_string(subtotal["tax_amount_currency"]),
+                    "tax_groups": tax_groups,
+                }
+            )
+        currency_id = _reference_id(row["currency_id"])
+        items.append(
+            {
+                "id": row["id"],
+                "invoice": {
+                    "id": row["id"],
+                    "name": _optional_text(row["name"]) or "/",
+                    "move_type": row["move_type"],
+                    "state": row["state"],
+                },
+                "company_id": company_id,
+                "currency": _currency_reference(currencies[currency_id]),
+                "amount_untaxed": _decimal_string(row["amount_untaxed"]),
+                "amount_tax": _decimal_string(row["amount_tax"]),
+                "amount_total": _decimal_string(row["amount_total"]),
+                "has_tax_groups": bool(totals.get("has_tax_groups")),
+                "subtotals": subtotals,
+            }
+        )
+    return items
+
+
+def _normalize_recurring_entries(
+    env: Any, rows: list[dict[str, Any]], company_id: int
+) -> list[dict[str, Any]]:
+    journal_ids = {_reference_id(row.get("journal_id")) for row in rows}
+    origin_ids = {_reference_id(row.get("auto_post_origin_id")) for row in rows}
+    origin_ids.discard(None)
+    if None in journal_ids:
+        raise ValueError("missing recurring journal")
+    journals = _related_rows(
+        env, "account.journal", journal_ids, ("code", "name", "company_id")
+    )
+    origins = _related_rows(env, "account.move", origin_ids, ("name", "company_id"))
+    items = []
+    for row in rows:
+        journal_id = _reference_id(row["journal_id"])
+        origin_id = _reference_id(row["auto_post_origin_id"])
+        if (
+            _reference_id(row["company_id"]) != company_id
+            or _reference_id(journals[journal_id]["company_id"]) != company_id
+            or (
+                origin_id is not None
+                and _reference_id(origins[origin_id]["company_id"]) != company_id
+            )
+        ):
+            raise ValueError("recurring entry outside company")
+        items.append(
+            {
+                "id": row["id"],
+                "company_id": company_id,
+                "name": _optional_text(row["name"]) or "/",
+                "date": _date_string(row["date"]),
+                "state": row["state"],
+                "journal": _coded_reference(journals[journal_id]),
+                "reference": _optional_text(row["ref"]),
+                "auto_post": row["auto_post"],
+                "auto_post_until": _optional_date_string(row["auto_post_until"]),
+                "auto_post_origin": (
+                    _named_reference(origins[origin_id])
+                    if origin_id is not None
+                    else None
+                ),
+            }
+        )
+    return items
+
+
+def _normalize_transfer_models(
+    env: Any, rows: list[dict[str, Any]], company_id: int
+) -> list[dict[str, Any]]:
+    journal_ids = {_reference_id(row.get("journal_id")) for row in rows}
+    origin_account_ids = {
+        account_id for row in rows for account_id in row.get("account_ids", [])
+    }
+    line_ids = {line_id for row in rows for line_id in row.get("line_ids", [])}
+    if None in journal_ids or any(not _valid_id(value) for value in origin_account_ids):
+        raise ValueError("invalid transfer relation")
+    journals = _related_rows(
+        env, "account.journal", journal_ids, ("code", "name", "company_id")
+    )
+    lines = _related_rows(
+        env,
+        "account.transfer.model.line",
+        line_ids,
+        ("transfer_model_id", "sequence", "account_id", "percent"),
+    )
+    destination_account_ids = {
+        _reference_id(line.get("account_id")) for line in lines.values()
+    }
+    if None in destination_account_ids:
+        raise ValueError("missing destination account")
+    account_ids = origin_account_ids | destination_account_ids
+    accounts = _related_rows(
+        env, "account.account", account_ids, ("code", "name", "company_ids")
+    )
+    for account in accounts.values():
+        if company_id not in account["company_ids"]:
+            raise ValueError("transfer account outside company")
+    items = []
+    for row in rows:
+        journal_id = _reference_id(row["journal_id"])
+        if (
+            _reference_id(row["company_id"]) != company_id
+            or _reference_id(journals[journal_id]["company_id"]) != company_id
+        ):
+            raise ValueError("transfer model outside company")
+        destination_lines = []
+        for line_id in row["line_ids"]:
+            line = lines[line_id]
+            if _reference_id(line["transfer_model_id"]) != row["id"]:
+                raise ValueError("transfer line outside model")
+            account_id = _reference_id(line["account_id"])
+            destination_lines.append(
+                {
+                    "id": line["id"],
+                    "sequence": line["sequence"],
+                    "account": _coded_reference(accounts[account_id]),
+                    "percentage": _decimal_string(line["percent"]),
+                }
+            )
+        destination_lines.sort(key=lambda item: (item["sequence"], item["id"]))
+        items.append(
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "active": row["active"],
+                "state": row["state"],
+                "company_id": company_id,
+                "journal": _coded_reference(journals[journal_id]),
+                "date_start": _date_string(row["date_start"]),
+                "date_stop": _optional_date_string(row["date_stop"]),
+                "frequency": row["frequency"],
+                "origin_accounts": [
+                    _coded_reference(accounts[account_id])
+                    for account_id in sorted(row["account_ids"])
+                ],
+                "destination_lines": destination_lines,
+                "move_ids_count": row["move_ids_count"],
+                "has_draft_moves": row["has_draft_moves"],
+                "total_percent": _decimal_string(row["total_percent"]),
+            }
+        )
+    return items
+
+
+def _normalize_credit_exposure(
+    env: Any, rows: list[dict[str, Any]], company_id: int
+) -> list[dict[str, Any]]:
+    currency_ids = {_reference_id(row.get("company_currency_id")) for row in rows}
+    if None in currency_ids:
+        raise ValueError("missing company currency")
+    currencies = _related_rows(env, "res.currency", currency_ids, ("name",))
+    items = []
+    for row in rows:
+        owner_company_id = _reference_id(row["company_id"])
+        if owner_company_id not in {None, company_id}:
+            raise ValueError("partner outside company")
+        currency_id = _reference_id(row["company_currency_id"])
+        items.append(
+            {
+                "id": row["id"],
+                "partner": _named_reference(
+                    {"id": row["id"], "name": row["complete_name"]}
+                ),
+                "company_id": company_id,
+                "company_currency": _currency_reference(currencies[currency_id]),
+                "credit": _decimal_string(row["credit"]),
+                "debit": _decimal_string(row["debit"]),
+                "credit_to_invoice": _decimal_string(row["credit_to_invoice"]),
+                "credit_limit": _decimal_string(row["credit_limit"]),
+                "use_partner_credit_limit": row["use_partner_credit_limit"],
+                "days_sales_outstanding": _decimal_string(
+                    row["days_sales_outstanding"]
+                ),
+                "total_invoiced": _decimal_string(row["total_invoiced"]),
+            }
+        )
+    return items
+
+
+def _normalize_sequence_irregularities(
+    env: Any, rows: list[dict[str, Any]], company_id: int
+) -> list[dict[str, Any]]:
+    journal_ids = {_reference_id(row.get("journal_id")) for row in rows}
+    if None in journal_ids:
+        raise ValueError("missing sequence journal")
+    journals = _related_rows(
+        env, "account.journal", journal_ids, ("code", "name", "company_id")
+    )
+    items = []
+    for row in rows:
+        journal_id = _reference_id(row["journal_id"])
+        if (
+            _reference_id(row["company_id"]) != company_id
+            or _reference_id(journals[journal_id]["company_id"]) != company_id
+            or row["made_sequence_gap"] is not True
+        ):
+            raise ValueError("invalid sequence marker")
+        items.append(
+            {
+                "id": row["id"],
+                "company_id": company_id,
+                "name": _optional_text(row["name"]) or "/",
+                "date": _date_string(row["date"]),
+                "state": row["state"],
+                "move_type": row["move_type"],
+                "journal": _coded_reference(journals[journal_id]),
+                "sequence_prefix": _optional_text(row["sequence_prefix"]),
+                "sequence_number": row["sequence_number"],
+                "made_sequence_gap": True,
+            }
+        )
+    return items
+
+
+def _normalize_lock_exceptions(
+    env: Any, rows: list[dict[str, Any]], company_id: int
+) -> list[dict[str, Any]]:
+    user_ids = {_reference_id(row.get("user_id")) for row in rows}
+    user_ids.discard(None)
+    users = _related_rows(env, "res.users", user_ids, ("name",))
+    items = []
+    for row in rows:
+        user_id = _reference_id(row["user_id"])
+        if _reference_id(row["company_id"]) != company_id:
+            raise ValueError("lock exception outside company")
+        items.append(
+            {
+                "id": row["id"],
+                "company_id": company_id,
+                "user": (
+                    _named_reference(users[user_id]) if user_id is not None else None
+                ),
+                "reason": _optional_text(row["reason"]),
+                "end_datetime": _optional_utc_datetime_string(row["end_datetime"]),
+                "state": row["state"],
+                "active": row["active"],
+                "lock_date_field": row["lock_date_field"],
+                "lock_date": _optional_date_string(row["lock_date"]),
+                "company_lock_date": _optional_date_string(row["company_lock_date"]),
+            }
+        )
+    return items
+
+
+def _normalize_external_values(
+    env: Any, rows: list[dict[str, Any]], company_id: int
+) -> list[dict[str, Any]]:
+    expression_ids = {
+        _reference_id(row.get("target_report_expression_id")) for row in rows
+    }
+    target_line_ids = {_reference_id(row.get("target_report_line_id")) for row in rows}
+    carryover_line_ids = {
+        _reference_id(row.get("carryover_origin_report_line_id")) for row in rows
+    }
+    carryover_line_ids.discard(None)
+    if None in expression_ids or None in target_line_ids:
+        raise ValueError("missing external value relation")
+    expressions = _related_rows(
+        env,
+        "account.report.expression",
+        expression_ids,
+        ("label", "report_line_id"),
+    )
+    line_ids = target_line_ids | carryover_line_ids
+    lines = _related_rows(
+        env, "account.report.line", line_ids, ("name", "code", "report_id")
+    )
+    report_ids = {
+        _reference_id(lines[line_id].get("report_id")) for line_id in target_line_ids
+    }
+    if None in report_ids:
+        raise ValueError("missing external value report")
+    reports = _related_rows(env, "account.report", report_ids, ("name",))
+
+    def line_reference(line_id: int) -> dict[str, Any]:
+        line = lines[line_id]
+        return {
+            "id": line["id"],
+            "name": line["name"],
+            "code": _optional_text(line["code"]),
+        }
+
+    items = []
+    for row in rows:
+        expression_id = _reference_id(row["target_report_expression_id"])
+        target_line_id = _reference_id(row["target_report_line_id"])
+        carryover_line_id = _reference_id(row["carryover_origin_report_line_id"])
+        expression = expressions[expression_id]
+        report_id = _reference_id(lines[target_line_id]["report_id"])
+        if (
+            _reference_id(row["company_id"]) != company_id
+            or _reference_id(expression["report_line_id"]) != target_line_id
+        ):
+            raise ValueError("external value outside relation scope")
+        label = expression["label"]
+        if not isinstance(label, str) or not label.strip():
+            raise ValueError("invalid report expression label")
+        items.append(
+            {
+                "id": row["id"],
+                "company_id": company_id,
+                "name": row["name"],
+                "date": _date_string(row["date"]),
+                "value": _decimal_string(row["value"]),
+                "text_value": _optional_text(row["text_value"]),
+                "report": _named_reference(reports[report_id]),
+                "report_line": line_reference(target_line_id),
+                "expression": {"id": expression_id, "label": label},
+                "carryover_origin_line": (
+                    _named_reference(lines[carryover_line_id])
+                    if carryover_line_id is not None
+                    else None
+                ),
+                "carryover_origin_expression_label": _optional_text(
+                    row["carryover_origin_expression_label"]
+                ),
+            }
+        )
+    return items
 
 
 def _normalize_support(
@@ -3336,7 +5488,34 @@ def dispatch(
             )
 
         cursor_found = True
-        if capability_id in _GET_IDS:
+        removes_all_taxes = False
+        if capability_id == "invoice.duplicate_candidates.list":
+            rows, cursor_found = _duplicate_candidate_rows(env, parameters, company_id)
+        elif capability_id == "invoice.tax_breakdown.inspect":
+            rows = _tax_breakdown_rows(env, parameters, company_id)
+        elif capability_id == "partner.credit_exposure.inspect":
+            rows = _credit_exposure_rows(env, parameters, company_id)
+        elif capability_id in {
+            "recurring.journal_entry.search",
+            "account.transfer_model.search",
+            "journal.sequence_irregularity.list",
+            "account.lock_exception.search",
+            "report.external_value.search",
+        }:
+            rows, cursor_found = _new_accounting_read_rows(
+                env, capability_id, parameters, company_id
+            )
+        elif capability_id == "fiscal_position.account_mapping.list":
+            items, cursor_found = _fiscal_position_account_mapping_items(
+                env, parameters, company_id
+            )
+            rows = []
+        elif capability_id == "fiscal_position.tax_mapping.list":
+            items, cursor_found, removes_all_taxes = _fiscal_position_tax_mapping_items(
+                env, parameters, company_id
+            )
+            rows = []
+        elif capability_id in _GET_IDS:
             rows = _raw_get_rows(env, capability_id, company_id, parameters)
         elif capability_id == "journal_item.search":
             rows, cursor_found = _journal_item_rows(env, parameters, company_id)
@@ -3350,6 +5529,16 @@ def dispatch(
             rows, cursor_found = _budget_rows(env, parameters, company_id)
         elif capability_id == "budget.line.list":
             rows, cursor_found = _budget_line_rows(env, parameters, company_id)
+        elif capability_id in {
+            "account.group.list",
+            "tax.repartition_line.list",
+            "reconciliation.model.line.list",
+            "bank.list",
+            "report.catalog.list",
+        }:
+            rows, cursor_found = _accounting_metadata_rows(
+                env, capability_id, parameters, company_id
+            )
         elif capability_id in _PAGED_REFERENCE_MODELS:
             rows, cursor_found = _reference_rows(
                 env, capability_id, parameters, company_id
@@ -3367,7 +5556,40 @@ def dispatch(
                 cursor_found=False,
             )
 
-        if capability_id in {
+        if capability_id == "invoice.duplicate_candidates.list":
+            items = _normalize_duplicate_candidates(env, rows, company_id)
+        elif capability_id == "invoice.tax_breakdown.inspect":
+            items = _normalize_tax_breakdown(env, rows, company_id)
+        elif capability_id in {
+            "recurring.journal_entry.search",
+            "recurring.journal_entry.get",
+        }:
+            items = _normalize_recurring_entries(env, rows, company_id)
+        elif capability_id in {
+            "account.transfer_model.search",
+            "account.transfer_model.get",
+        }:
+            items = _normalize_transfer_models(env, rows, company_id)
+        elif capability_id == "partner.credit_exposure.inspect":
+            items = _normalize_credit_exposure(env, rows, company_id)
+        elif capability_id == "journal.sequence_irregularity.list":
+            items = _normalize_sequence_irregularities(env, rows, company_id)
+        elif capability_id in {
+            "account.lock_exception.search",
+            "account.lock_exception.get",
+        }:
+            items = _normalize_lock_exceptions(env, rows, company_id)
+        elif capability_id in {
+            "report.external_value.search",
+            "report.external_value.get",
+        }:
+            items = _normalize_external_values(env, rows, company_id)
+        elif capability_id in {
+            "fiscal_position.account_mapping.list",
+            "fiscal_position.tax_mapping.list",
+        }:
+            pass
+        elif capability_id in {
             "account.account.get",
             "journal.get",
             "tax.get",
@@ -3397,11 +5619,29 @@ def dispatch(
             items = _normalize_budgets(env, rows, company_id)
         elif capability_id in {"budget.line.list", "budget.line.get"}:
             items = _normalize_budget_lines(env, rows, company_id)
+        elif capability_id in {"account.group.list", "account.group.get"}:
+            items = _normalize_account_groups(env, rows, company_id)
+        elif capability_id == "journal.configuration.inspect":
+            items = _normalize_journal_configuration(env, rows, company_id)
+        elif capability_id in {
+            "tax.repartition_line.list",
+            "tax.repartition_line.get",
+        }:
+            items = _normalize_tax_repartition_lines(env, rows, company_id)
+        elif capability_id in {
+            "reconciliation.model.line.list",
+            "reconciliation.model.line.get",
+        }:
+            items = _normalize_reconciliation_model_lines(env, rows, company_id)
+        elif capability_id in {"bank.list", "bank.get"}:
+            items = _normalize_bank_directory(env, rows)
+        elif capability_id in {"report.catalog.list", "report.catalog.get"}:
+            items = _normalize_report_catalog(env, rows, company_id)
         elif capability_id in _REFERENCE_KINDS:
             items = _normalize_reference_items(env, capability_id, rows, company_id)
         else:
             items = _normalize_support(env, capability_id, rows, company_id)
-        return {
+        page = {
             "user_id": env.uid,
             "company_visible": True,
             "module_installed": True,
@@ -3409,6 +5649,23 @@ def dispatch(
             "cursor_found": True,
             "items": items,
         }
+        if capability_id == "fiscal_position.tax_mapping.list":
+            page["removes_all_taxes"] = removes_all_taxes
+        return page
+    except _InvoiceNotFound as exc:
+        raise _failure(
+            failure_type,
+            "record_not_found",
+            "The requested invoice was not found.",
+            4,
+        ) from exc
+    except _FiscalPositionNotFound as exc:
+        raise _failure(
+            failure_type,
+            "record_not_found",
+            "The requested fiscal position was not found.",
+            4,
+        ) from exc
     except failure_type:
         raise
     except Exception as exc:

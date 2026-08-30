@@ -41,6 +41,15 @@ _EXPORT_CAPABILITY_IDS = frozenset(
         "report.aged_receivable.export",
         "report.aged_payable.export",
         "report.executive_summary.export",
+        "report.journal.export",
+        "report.asset.export",
+        "report.deferred_expense.export",
+        "report.deferred_revenue.export",
+        "report.multicurrency_revaluation.export",
+        "report.china.balance_sheet.export",
+        "report.china.profit_and_loss.export",
+        "report.china.cash_flow.export",
+        "report.singapore.gst.export",
     }
 )
 

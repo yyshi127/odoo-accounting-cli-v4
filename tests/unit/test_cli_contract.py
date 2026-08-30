@@ -42,7 +42,7 @@ def test_capabilities_list_is_stable_machine_readable_json() -> None:
     }
     listed_ids = [item["id"] for item in document["data"]["capabilities"]]
     assert listed_ids == list(load_registry().ids())
-    assert len(listed_ids) == 272
+    assert len(listed_ids) == 345
     assert (
         next(
             item

@@ -149,6 +149,88 @@ class Records:
                     setattr(record, key, lines)
                     if key == "invoice_line_ids":
                         record.line_ids = lines
+                elif self.model == "account.tax" and key in {
+                    "invoice_repartition_line_ids",
+                    "refund_repartition_line_ids",
+                    "repartition_line_ids",
+                }:
+                    document_type = (
+                        "invoice"
+                        if key.startswith("invoice")
+                        else "refund"
+                        if key.startswith("refund")
+                        else None
+                    )
+                    lines = self.env.tax_repartition_lines_from_commands(
+                        record, value, document_type=document_type
+                    )
+                    if key == "repartition_line_ids":
+                        record.repartition_line_ids = lines
+                        record.invoice_repartition_line_ids = lines.filtered(
+                            lambda line: line.document_type == "invoice"
+                        )
+                        record.refund_repartition_line_ids = lines.filtered(
+                            lambda line: line.document_type == "refund"
+                        )
+                    else:
+                        setattr(record, key, lines)
+                        record.repartition_line_ids = (
+                            record.invoice_repartition_line_ids
+                            | record.refund_repartition_line_ids
+                        )
+                elif self.model == "account.reconcile.model" and key in {
+                    "match_journal_ids",
+                    "match_partner_ids",
+                }:
+                    relation_model = (
+                        "account.journal"
+                        if key == "match_journal_ids"
+                        else "res.partner"
+                    )
+                    setattr(record, key, self.env.relation_from_commands(relation_model, value))
+                elif self.model == "account.reconcile.model" and key == "line_ids":
+                    record.line_ids = self.env.reconciliation_lines_from_commands(
+                        record, value
+                    )
+                elif self.model == "account.account.tag" and key == "country_id":
+                    setattr(record, key, self.env.models["res.country"].browse(value if isinstance(value, int) else []))
+                elif self.model == "account.cash.rounding" and key in {"profit_account_id", "loss_account_id"}:
+                    setattr(record, key, self.env.models["account.account"].browse(value if isinstance(value, int) else []))
+                elif self.model == "account.analytic.applicability" and key in {
+                    "analytic_plan_id",
+                    "product_categ_id",
+                }:
+                    relation_model = (
+                        "account.analytic.plan"
+                        if key == "analytic_plan_id"
+                        else "product.category"
+                    )
+                    setattr(
+                        record,
+                        key,
+                        self.env.models[relation_model].browse(
+                            value if isinstance(value, int) else []
+                        ),
+                    )
+                elif self.model == "account.analytic.distribution.model" and key in {
+                    "partner_id",
+                    "partner_category_id",
+                    "product_id",
+                    "product_categ_id",
+                }:
+                    relation_model = {
+                        "partner_id": "res.partner",
+                        "partner_category_id": "res.partner.category",
+                        "product_id": "product.product",
+                        "product_categ_id": "product.category",
+                    }[key]
+                    setattr(
+                        record,
+                        key,
+                        self.env.models[relation_model].browse(
+                            value if isinstance(value, int) else []
+                        ),
+                    )
                 else:
                     setattr(record, key, value)
         return True
@@ -249,6 +331,19 @@ def _matches(record: Record, domain: list[Any]) -> bool:
                     return False
             elif actual not in expected_values:
                 return False
+        elif operator == "not in":
+            expected_values = set(expected)
+            if isinstance(actual, list):
+                if set(actual).intersection(expected_values):
+                    return False
+            elif actual in expected_values:
+                return False
+        elif operator == "!=":
+            if isinstance(actual, list):
+                if expected in actual:
+                    return False
+            elif actual == expected:
+                return False
         elif operator == "=like":
             pattern = "^" + re.escape(str(expected)).replace(r"%", ".*") + "$"
             if not isinstance(actual, str) or re.fullmatch(pattern, actual) is None:
@@ -340,6 +435,18 @@ class Model:
             return self.env.create_bank_statement_line(values)
         if self.name == "account.asset":
             return self.env.create_asset(values)
+        if self.name in {
+            "res.currency.rate",
+            "account.group",
+            "account.reconcile.model",
+            "account.account.tag",
+            "account.tax.group",
+            "account.cash.rounding",
+            "account.fiscal.year",
+            "account.analytic.applicability",
+            "account.analytic.distribution.model",
+        }:
+            return self.env.create_reference_record(self.name, values)
         raise AssertionError(f"unexpected create: {self.name}")
 
     def sudo(self, *args: Any, **kwargs: Any):
@@ -380,6 +487,11 @@ class Env:
         self.user = User(self)
         self._next_id = 1000
         self.company = self.add("res.company", 7, name="Fixture Company")
+        self.company.root_id = Records(self, "res.company", [self.company])
+        self.company.parent_id = Records(self, "res.company")
+        self.country = self.add("res.country", 156, name="China")
+        self.company.country_id = Records(self, "res.country", [self.country])
+        self.company.account_fiscal_country_id = Records(self, "res.country", [self.country])
         self.partner = self.add(
             "res.partner", 20, name="Fixture Partner", company_id=False
         )
@@ -423,13 +535,66 @@ class Env:
         self.receivable = self.account(
             301, reconcile=True, account_type="asset_receivable"
         )
-        self.tax = self.add("account.tax", 31, name="Tax", company_id=self.company)
-        self.product = self.add("product.product", 41, name="Service", company_id=False)
+        self.tax = self.add(
+            "account.tax",
+            31,
+            name="Tax",
+            company_id=self.company,
+            active=True,
+            invoice_repartition_line_ids=Records(
+                self, "account.tax.repartition.line"
+            ),
+            refund_repartition_line_ids=Records(
+                self, "account.tax.repartition.line"
+            ),
+            repartition_line_ids=Records(self, "account.tax.repartition.line"),
+        )
+        self.tax_tag = self.add(
+            "account.account.tag", 71, name="VAT", applicability="taxes", color=0,
+            country_id=Records(self, "res.country", [self.country]), active=True,
+        )
+        self.product_category = self.add("product.category", 40, name="Services")
+        self.product = self.add(
+            "product.product",
+            41,
+            name="Service",
+            company_id=False,
+            categ_id=Records(self, "product.category", [self.product_category]),
+        )
+        self.partner_category = self.add(
+            "res.partner.category", 21, name="Preferred"
+        )
         self.payment_term = self.add(
             "account.payment.term", 51, name="Net 30", company_id=False
         )
+        self.analytic_plan = self.add(
+            "account.analytic.plan",
+            60,
+            name="Projects",
+            parent_id=False,
+        )
+        self.analytic_plan.root_id = Records(
+            self, "account.analytic.plan", [self.analytic_plan]
+        )
         self.analytic = self.add(
-            "account.analytic.account", 61, name="Project", company_id=self.company
+            "account.analytic.account",
+            61,
+            name="Project",
+            company_id=self.company,
+            plan_id=Records(self, "account.analytic.plan", [self.analytic_plan]),
+            root_plan_id=Records(
+                self, "account.analytic.plan", [self.analytic_plan]
+            ),
+        )
+        self.analytic_two = self.add(
+            "account.analytic.account",
+            63,
+            name="Department",
+            company_id=self.company,
+            plan_id=Records(self, "account.analytic.plan", [self.analytic_plan]),
+            root_plan_id=Records(
+                self, "account.analytic.plan", [self.analytic_plan]
+            ),
         )
 
     def __getitem__(self, model: str) -> Model:
@@ -455,7 +620,134 @@ class Env:
             company_ids=Records(self, "res.company", [self.company]),
             reconcile=reconcile,
             account_type=account_type,
+            active=True,
         )
+
+    def relation_from_commands(
+        self, model: str, commands: list[tuple[Any, ...]]
+    ) -> Records:
+        assert len(commands) == 1 and commands[0][0] == 6
+        return self.models[model].browse(commands[0][2])
+
+    def create_reference_record(
+        self, model: str, values: dict[str, Any]
+    ) -> Records:
+        stored = copy.deepcopy(values)
+        company_id = stored.pop("company_id", None)
+        if company_id is not None:
+            stored["company_id"] = self.models["res.company"].browse(company_id)
+        if model == "res.currency.rate":
+            stored["currency_id"] = self.models["res.currency"].browse(
+                stored["currency_id"]
+            )
+        elif model == "account.fiscal.year":
+            pass
+        elif model == "account.group":
+            stored["parent_id"] = Records(self, "account.group")
+        elif model in {"account.account.tag", "account.tax.group"}:
+            country_id = stored.pop("country_id")
+            stored["country_id"] = self.models["res.country"].browse(country_id if isinstance(country_id, int) else [])
+        elif model == "account.cash.rounding":
+            for field in ("profit_account_id", "loss_account_id"):
+                record_id = stored[field]
+                stored[field] = self.models["account.account"].browse(record_id if isinstance(record_id, int) else [])
+        elif model == "account.analytic.applicability":
+            for field, relation_model in (
+                ("analytic_plan_id", "account.analytic.plan"),
+                ("product_categ_id", "product.category"),
+            ):
+                record_id = stored[field]
+                stored[field] = self.models[relation_model].browse(
+                    record_id if isinstance(record_id, int) else []
+                )
+        elif model == "account.analytic.distribution.model":
+            for field, relation_model in (
+                ("partner_id", "res.partner"),
+                ("partner_category_id", "res.partner.category"),
+                ("product_id", "product.product"),
+                ("product_categ_id", "product.category"),
+            ):
+                record_id = stored[field]
+                stored[field] = self.models[relation_model].browse(
+                    record_id if isinstance(record_id, int) else []
+                )
+        else:
+            for field, relation_model in (
+                ("match_journal_ids", "account.journal"),
+                ("match_partner_ids", "res.partner"),
+            ):
+                stored[field] = self.relation_from_commands(
+                    relation_model, stored[field]
+                )
+            stored["line_ids"] = Records(self, "account.reconcile.model.line")
+        record = self.new_record(model, **stored)
+        return Records(self, model, [record])
+
+    def tax_repartition_lines_from_commands(
+        self,
+        tax: Record,
+        commands: list[tuple[Any, ...]],
+        *,
+        document_type: str | None,
+    ) -> Records:
+        lines: list[Record] = []
+        for command, _unused, values in commands:
+            if command == 5:
+                lines.clear()
+                continue
+            assert command == 0
+            stored = copy.deepcopy(values)
+            line_document_type = stored.pop("document_type", document_type)
+            assert line_document_type in {"invoice", "refund"}
+            account_id = stored["account_id"]
+            stored["account_id"] = self.models["account.account"].browse(
+                account_id if isinstance(account_id, int) else []
+            )
+            stored["tag_ids"] = self.relation_from_commands(
+                "account.account.tag", stored["tag_ids"]
+            )
+            lines.append(
+                self.new_record(
+                    "account.tax.repartition.line",
+                    **stored,
+                    tax_id=Records(self, "account.tax", [tax]),
+                    company_id=tax.company_id,
+                    document_type=line_document_type,
+                )
+            )
+        return Records(self, "account.tax.repartition.line", lines)
+
+    def reconciliation_lines_from_commands(
+        self, model: Record, commands: list[tuple[Any, ...]]
+    ) -> Records:
+        lines: list[Record] = []
+        for command, _unused, values in commands:
+            if command == 5:
+                lines.clear()
+                continue
+            assert command == 0
+            stored = copy.deepcopy(values)
+            for field, relation_model in (
+                ("account_id", "account.account"),
+                ("partner_id", "res.partner"),
+            ):
+                record_id = stored[field]
+                stored[field] = self.models[relation_model].browse(
+                    record_id if isinstance(record_id, int) else []
+                )
+            stored["tax_ids"] = self.relation_from_commands(
+                "account.tax", stored["tax_ids"]
+            )
+            stored.setdefault("analytic_distribution", False)
+            lines.append(
+                self.new_record(
+                    "account.reconcile.model.line",
+                    **stored,
+                    model_id=Records(self, "account.reconcile.model", [model]),
+                    company_id=model.company_id,
+                )
+            )
+        return Records(self, "account.reconcile.model.line", lines)
 
     def move_lines_from_commands(self, commands: list[tuple[Any, ...]]) -> Records:
         lines: list[Record] = []
@@ -1075,15 +1367,46 @@ def test_public_action_and_closed_capability_batch_are_exact() -> None:
         "payment_term.lines.replace",
         "payment_term.archive",
         "payment_term.restore",
-            "period.accrual.generate",
-            "fiscal_position.create",
-            "fiscal_position.update",
-            "fiscal_position.account_mappings.replace",
-            "fiscal_position.archive",
-            "fiscal_position.restore",
-            "journal.group.create",
-            "journal.group.update",
-        }
+        "period.accrual.generate",
+        "fiscal_position.create",
+        "fiscal_position.update",
+        "fiscal_position.account_mappings.replace",
+        "fiscal_position.archive",
+        "fiscal_position.restore",
+        "journal.group.create",
+        "journal.group.update",
+        "currency.rate.record",
+        "account.group.create",
+        "account.group.update",
+        "tax.repartition_lines.replace",
+        "reconciliation.model.create",
+        "reconciliation.model.update",
+        "reconciliation.model.lines.replace",
+        "reconciliation.model.archive",
+        "reconciliation.model.restore",
+        "account.tag.create",
+        "account.tag.update",
+        "account.tag.archive",
+        "account.tag.restore",
+        "tax.group.create",
+        "tax.group.update",
+        "cash_rounding.create",
+        "cash_rounding.update",
+        "fiscal_year.create",
+        "fiscal_year.update",
+        "analytic.applicability.create",
+        "analytic.applicability.update",
+        "analytic.distribution_model.create",
+        "analytic.distribution_model.update",
+        "sale.order.invoice.create",
+        "stock.transfer.create",
+        "stock.transfer.confirm",
+        "stock.transfer.assign",
+        "stock.transfer.quantities.set",
+        "stock.transfer.validate",
+        "stock.transfer.unreserve",
+        "stock.transfer.cancel",
+    }
 
 
 def test_optional_references_do_not_expand_static_access_gate() -> None:
@@ -2314,3 +2637,751 @@ def test_generated_move_pair_rejects_a_cancelled_underlying_move() -> None:
         writes._validated_move_pair(moves, 7, Failure)
 
     assert caught.value.code == "idempotency_conflict"
+
+
+def _accounting_reference_payload(
+    capability_id: str,
+    parameters: dict[str, Any],
+    *,
+    company_id: int = 7,
+) -> dict[str, Any]:
+    key = writes._deterministic_key(capability_id, parameters, company_id)
+    assert key is not None
+    payload = _payload(capability_id, parameters, key=key)
+    payload["company_id"] = company_id
+    return payload
+
+
+def _tax_repartition_parameters(env: Env) -> dict[str, Any]:
+    lines = [
+        {
+            "sequence": 10,
+            "repartition_type": "base",
+            "factor_percent": "100",
+            "account_id": None,
+            "tag_ids": [],
+            "use_in_tax_closing": False,
+        },
+        {
+            "sequence": 20,
+            "repartition_type": "tax",
+            "factor_percent": "100",
+            "account_id": env.expense.id,
+            "tag_ids": [env.tax_tag.id],
+            "use_in_tax_closing": True,
+        },
+    ]
+    return {
+        "tax_id": env.tax.id,
+        "invoice_lines": copy.deepcopy(lines),
+        "refund_lines": copy.deepcopy(lines),
+    }
+
+
+def test_currency_rate_record_uses_root_company_and_replays() -> None:
+    env = Env()
+    parameters = {
+        "currency_id": env.foreign_currency.id,
+        "date": "2025-03-01",
+        "company_units_per_foreign_unit": "0.125",
+    }
+    payload = _accounting_reference_payload("currency.rate.record", parameters)
+
+    created = writes.dispatch(env, payload, 7, Failure)
+    replay = writes.dispatch(env, payload, 7, Failure)
+
+    assert created["idempotent_replay"] is False
+    assert replay["idempotent_replay"] is True
+    assert created["result"]["model"] == "res.currency.rate"
+    assert created["result"]["source_id"] == env.foreign_currency.id
+    rate = env.data["res.currency.rate"][0]
+    assert rate.company_id.id == env.company.id
+    assert rate.currency_id.id == env.foreign_currency.id
+    assert rate.inverse_company_rate == Decimal("0.125")
+    assert sum(call[:2] == ("create", "res.currency.rate") for call in env.calls) == 1
+
+
+def test_account_tag_header_lifecycle_and_replay() -> None:
+    env = Env()
+    create_parameters = {
+        "name": "CLI VAT",
+        "applicability": "taxes",
+        "color": 3,
+        "country_id": env.country.id,
+    }
+    create_payload = _accounting_reference_payload("account.tag.create", create_parameters)
+    created = writes.dispatch(env, create_payload, 7, Failure)
+    assert writes.dispatch(env, create_payload, 7, Failure)["idempotent_replay"]
+    tag_id = created["result"]["id"]
+
+    update_parameters = {"account_tag_id": tag_id, "changes": {"name": "CLI VAT 2"}}
+    update_payload = _accounting_reference_payload("account.tag.update", update_parameters)
+    writes.dispatch(env, update_payload, 7, Failure)
+    assert writes.dispatch(env, update_payload, 7, Failure)["idempotent_replay"]
+    lifecycle = {"account_tag_id": tag_id}
+    archived = writes.dispatch(env, _accounting_reference_payload("account.tag.archive", lifecycle), 7, Failure)
+    assert archived["result"]["state"] == "archived"
+    restored = writes.dispatch(env, _accounting_reference_payload("account.tag.restore", lifecycle), 7, Failure)
+    assert restored["result"]["state"] == "active"
+
+
+def test_tax_group_create_update_and_replay() -> None:
+    env = Env()
+    create_parameters = {"name": "CLI VAT", "sequence": 10, "preceding_subtotal": None}
+    create_payload = _accounting_reference_payload("tax.group.create", create_parameters)
+    created = writes.dispatch(env, create_payload, 7, Failure)
+    assert writes.dispatch(env, create_payload, 7, Failure)["idempotent_replay"]
+    group_id = created["result"]["id"]
+    group = env.models["account.tax.group"].browse(group_id)
+    assert group.company_id.id == env.company.id
+    assert group.country_id.id == env.country.id
+    update_parameters = {"tax_group_id": group_id, "changes": {"preceding_subtotal": "Subtotal"}}
+    update_payload = _accounting_reference_payload("tax.group.update", update_parameters)
+    writes.dispatch(env, update_payload, 7, Failure)
+    assert writes.dispatch(env, update_payload, 7, Failure)["idempotent_replay"]
+
+
+def test_account_tag_lifecycle_rejects_foreign_country() -> None:
+    env = Env()
+    foreign = env.add("res.country", 392, name="Japan")
+    env.tax_tag.country_id = Records(env, "res.country", [foreign])
+    payload = _accounting_reference_payload(
+        "account.tag.archive", {"account_tag_id": env.tax_tag.id}
+    )
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(env, payload, 7, Failure)
+    assert caught.value.code == "record_not_found"
+    assert env.tax_tag.active is True
+
+
+def test_tax_group_update_rejects_foreign_country() -> None:
+    env = Env()
+    create_parameters = {"name": "CLI VAT", "sequence": 10, "preceding_subtotal": None}
+    created = writes.dispatch(
+        env,
+        _accounting_reference_payload("tax.group.create", create_parameters),
+        7,
+        Failure,
+    )
+    group = env.models["account.tax.group"].browse(created["result"]["id"])
+    foreign = env.add("res.country", 392, name="Japan")
+    group.records[0].country_id = Records(env, "res.country", [foreign])
+    payload = _accounting_reference_payload(
+        "tax.group.update",
+        {"tax_group_id": group.id, "changes": {"sequence": 20}},
+    )
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(env, payload, 7, Failure)
+    assert caught.value.code == "record_not_found"
+    assert group.sequence == 10
+
+
+def test_tax_group_create_does_not_replay_foreign_country_natural_key() -> None:
+    env = Env()
+    foreign = env.add("res.country", 392, name="Japan")
+    env.add(
+        "account.tax.group",
+        701,
+        name="CLI VAT",
+        sequence=10,
+        preceding_subtotal=False,
+        company_id=Records(env, "res.company", [env.company]),
+        country_id=Records(env, "res.country", [foreign]),
+    )
+    parameters = {"name": "CLI VAT", "sequence": 10, "preceding_subtotal": None}
+    payload = _accounting_reference_payload("tax.group.create", parameters)
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(env, payload, 7, Failure)
+    assert caught.value.code == "state_conflict"
+    assert sum(
+        call[:2] == ("create", "account.tax.group") for call in env.calls
+    ) == 0
+
+
+def test_cash_rounding_create_update_and_replay() -> None:
+    env = Env()
+    create_parameters = {
+        "name": "CLI rounding",
+        "rounding": "0.05",
+        "strategy": "add_invoice_line",
+        "rounding_method": "HALF-UP",
+        "profit_account_id": env.income.id,
+        "loss_account_id": env.expense.id,
+    }
+    create_payload = _accounting_reference_payload("cash_rounding.create", create_parameters)
+    created = writes.dispatch(env, create_payload, 7, Failure)
+    assert writes.dispatch(env, create_payload, 7, Failure)["idempotent_replay"]
+    rounding_id = created["result"]["id"]
+    update_parameters = {
+        "cash_rounding_id": rounding_id,
+        "changes": {"rounding": "0.1", "rounding_method": "UP"},
+    }
+    update_payload = _accounting_reference_payload("cash_rounding.update", update_parameters)
+    writes.dispatch(env, update_payload, 7, Failure)
+    assert writes.dispatch(env, update_payload, 7, Failure)["idempotent_replay"]
+
+
+def test_reference_write_contract_rejects_cross_scope_shapes() -> None:
+    assert not writes._valid_parameters("account.tag.create", {"name": "x"}, 7)
+    assert not writes._valid_parameters(
+        "account.tag.create",
+        {"name": "x", "applicability": "accounts", "color": 0, "country_id": 156},
+        7,
+    )
+    assert not writes._valid_parameters(
+        "cash_rounding.create",
+        {"name": "x", "rounding": "0.05", "strategy": "biggest_tax", "rounding_method": "UP", "profit_account_id": 101, "loss_account_id": None},
+        7,
+    )
+
+
+def test_fiscal_year_create_update_and_replay() -> None:
+    env = Env()
+    create_parameters = {
+        "name": "FY 2026",
+        "date_from": "2026-01-01",
+        "date_to": "2026-12-31",
+    }
+    create_payload = _accounting_reference_payload(
+        "fiscal_year.create", create_parameters
+    )
+
+    created = writes.dispatch(env, create_payload, 7, Failure)
+    replay = writes.dispatch(env, create_payload, 7, Failure)
+
+    assert created["idempotent_replay"] is False
+    assert replay["idempotent_replay"] is True
+    assert created["result"]["model"] == "account.fiscal.year"
+    assert created["result"]["state"] == "active"
+    fiscal_year = env.models["account.fiscal.year"].browse(created["result"]["id"])
+    assert fiscal_year.company_id.id == 7
+
+    update_parameters = {
+        "id": fiscal_year.id,
+        "changes": {"name": "Fiscal 2026"},
+    }
+    update_payload = _accounting_reference_payload(
+        "fiscal_year.update", update_parameters
+    )
+    updated = writes.dispatch(env, update_payload, 7, Failure)
+    update_replay = writes.dispatch(env, update_payload, 7, Failure)
+
+    assert updated["result"]["name"] == "Fiscal 2026"
+    assert update_replay["idempotent_replay"] is True
+    assert sum(
+        call[:2] == ("create", "account.fiscal.year") for call in env.calls
+    ) == 1
+    assert sum(
+        call[:2] == ("write", "account.fiscal.year") for call in env.calls
+    ) == 1
+
+
+def test_fiscal_year_rejects_child_company_and_invalid_merged_dates() -> None:
+    env = Env()
+    parent = env.add("res.company", 8, name="Parent")
+    env.company.parent_id = Records(env, "res.company", [parent])
+    parameters = {
+        "name": "FY 2026",
+        "date_from": "2026-01-01",
+        "date_to": "2026-12-31",
+    }
+
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(
+            env,
+            _accounting_reference_payload("fiscal_year.create", parameters),
+            7,
+            Failure,
+        )
+    assert caught.value.code == "company_unavailable"
+    assert not env.data["account.fiscal.year"]
+
+    env.company.parent_id = Records(env, "res.company")
+    created = writes.dispatch(
+        env,
+        _accounting_reference_payload("fiscal_year.create", parameters),
+        7,
+        Failure,
+    )
+    update = {
+        "id": created["result"]["id"],
+        "changes": {"date_from": "2027-01-01"},
+    }
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(
+            env,
+            _accounting_reference_payload("fiscal_year.update", update),
+            7,
+            Failure,
+        )
+    assert caught.value.code == "state_conflict"
+
+
+def test_analytic_applicability_create_update_root_plan_and_replay() -> None:
+    env = Env()
+    create_parameters = {
+        "plan_id": env.analytic_plan.id,
+        "business_domain": "invoice",
+        "applicability": "mandatory",
+        "account_prefix": "40",
+        "product_category_id": env.product_category.id,
+    }
+    create_payload = _accounting_reference_payload(
+        "analytic.applicability.create", create_parameters
+    )
+
+    created = writes.dispatch(env, create_payload, 7, Failure)
+    replay = writes.dispatch(env, create_payload, 7, Failure)
+
+    assert replay["idempotent_replay"] is True
+    assert created["result"]["model"] == "account.analytic.applicability"
+    assert created["result"]["name"] is None
+    rule = env.models["account.analytic.applicability"].browse(
+        created["result"]["id"]
+    )
+    assert rule.company_id.id == 7
+    assert rule.analytic_plan_id.id == env.analytic_plan.id
+
+    other_root = env.add(
+        "account.analytic.plan", 62, name="Departments", parent_id=False
+    )
+    other_root.root_id = Records(env, "account.analytic.plan", [other_root])
+    update_parameters = {
+        "id": rule.id,
+        "changes": {"plan_id": other_root.id, "applicability": "optional"},
+    }
+    update_payload = _accounting_reference_payload(
+        "analytic.applicability.update", update_parameters
+    )
+    writes.dispatch(env, update_payload, 7, Failure)
+    assert writes.dispatch(env, update_payload, 7, Failure)["idempotent_replay"]
+    assert rule.analytic_plan_id.id == other_root.id
+
+
+def test_analytic_applicability_rejects_child_plan() -> None:
+    env = Env()
+    child_plan = env.add(
+        "account.analytic.plan",
+        62,
+        name="Child",
+        parent_id=Records(env, "account.analytic.plan", [env.analytic_plan]),
+        root_id=Records(env, "account.analytic.plan", [env.analytic_plan]),
+    )
+    parameters = {
+        "plan_id": child_plan.id,
+        "business_domain": "general",
+        "applicability": "optional",
+        "account_prefix": None,
+        "product_category_id": None,
+    }
+
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(
+            env,
+            _accounting_reference_payload(
+                "analytic.applicability.create", parameters
+            ),
+            7,
+            Failure,
+        )
+    assert caught.value.code == "record_not_found"
+    assert not env.data["account.analytic.applicability"]
+
+
+def test_analytic_applicability_update_rejects_another_rule_selector() -> None:
+    env = Env()
+    first_parameters = {
+        "plan_id": env.analytic_plan.id,
+        "business_domain": "invoice",
+        "applicability": "mandatory",
+        "account_prefix": "40",
+        "product_category_id": env.product_category.id,
+    }
+    second_parameters = {
+        **first_parameters,
+        "business_domain": "bill",
+        "account_prefix": "60",
+    }
+    first = writes.dispatch(
+        env,
+        _accounting_reference_payload(
+            "analytic.applicability.create", first_parameters
+        ),
+        7,
+        Failure,
+    )
+    writes.dispatch(
+        env,
+        _accounting_reference_payload(
+            "analytic.applicability.create", second_parameters
+        ),
+        7,
+        Failure,
+    )
+    update_parameters = {
+        "id": first["result"]["id"],
+        "changes": {"business_domain": "bill", "account_prefix": "60"},
+    }
+
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(
+            env,
+            _accounting_reference_payload(
+                "analytic.applicability.update", update_parameters
+            ),
+            7,
+            Failure,
+        )
+
+    assert caught.value.code == "state_conflict"
+    assert sum(
+        call[:2] == ("write", "account.analytic.applicability")
+        for call in env.calls
+    ) == 0
+
+
+def _distribution_model_parameters(env: Env) -> dict[str, Any]:
+    return {
+        "sequence": 10,
+        "account_prefix": "60",
+        "partner_id": env.partner.id,
+        "partner_category_id": env.partner_category.id,
+        "product_id": env.product.id,
+        "product_category_id": env.product_category.id,
+        "analytic_distribution": {str(env.analytic.id): "100"},
+    }
+
+
+def test_analytic_distribution_model_create_update_and_replay() -> None:
+    env = Env()
+    create_parameters = _distribution_model_parameters(env)
+    create_payload = _accounting_reference_payload(
+        "analytic.distribution_model.create", create_parameters
+    )
+
+    created = writes.dispatch(env, create_payload, 7, Failure)
+    replay = writes.dispatch(env, create_payload, 7, Failure)
+
+    assert created["idempotent_replay"] is False
+    assert replay["idempotent_replay"] is True
+    assert created["result"]["model"] == "account.analytic.distribution.model"
+    model = env.models["account.analytic.distribution.model"].browse(
+        created["result"]["id"]
+    )
+    assert model.company_id.id == 7
+    assert model.product_id.id == env.product.id
+    assert model.analytic_distribution == {str(env.analytic.id): 100.0}
+
+    update_parameters = {
+        "id": model.id,
+        "changes": {"sequence": 20, "analytic_distribution": None},
+    }
+    update_payload = _accounting_reference_payload(
+        "analytic.distribution_model.update", update_parameters
+    )
+    updated = writes.dispatch(env, update_payload, 7, Failure)
+    update_replay = writes.dispatch(env, update_payload, 7, Failure)
+
+    assert updated["idempotent_replay"] is False
+    assert update_replay["idempotent_replay"] is True
+    assert model.sequence == 20
+    assert model.analytic_distribution is False
+
+
+def test_analytic_distribution_model_rejects_cross_company_references() -> None:
+    env = Env()
+    foreign_company = env.add("res.company", 8, name="Foreign")
+    foreign_product = env.add(
+        "product.product", 42, name="Foreign Product", company_id=foreign_company
+    )
+    parameters = _distribution_model_parameters(env)
+    parameters["product_id"] = foreign_product.id
+
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(
+            env,
+            _accounting_reference_payload(
+                "analytic.distribution_model.create", parameters
+            ),
+            7,
+            Failure,
+        )
+    assert caught.value.code == "record_not_found"
+
+    env = Env()
+    foreign_company = env.add("res.company", 8, name="Foreign")
+    foreign_account = env.add(
+        "account.analytic.account",
+        64,
+        name="Foreign Analytic",
+        company_id=foreign_company,
+        plan_id=Records(env, "account.analytic.plan", [env.analytic_plan]),
+        root_plan_id=Records(env, "account.analytic.plan", [env.analytic_plan]),
+    )
+    parameters = _distribution_model_parameters(env)
+    parameters["analytic_distribution"] = {str(foreign_account.id): "100"}
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(
+            env,
+            _accounting_reference_payload(
+                "analytic.distribution_model.create", parameters
+            ),
+            7,
+            Failure,
+        )
+    assert caught.value.code == "record_not_found"
+
+
+def test_distribution_model_same_selector_allows_distinct_rules_and_replays_exact() -> None:
+    env = Env()
+    first_parameters = _distribution_model_parameters(env)
+    second_parameters = {**first_parameters, "sequence": 20}
+
+    first = writes.dispatch(
+        env,
+        _accounting_reference_payload(
+            "analytic.distribution_model.create", first_parameters
+        ),
+        7,
+        Failure,
+    )
+    second = writes.dispatch(
+        env,
+        _accounting_reference_payload(
+            "analytic.distribution_model.create", second_parameters
+        ),
+        7,
+        Failure,
+    )
+    replay = writes.dispatch(
+        env,
+        _accounting_reference_payload(
+            "analytic.distribution_model.create", second_parameters
+        ),
+        7,
+        Failure,
+    )
+
+    assert first["result"]["id"] != second["result"]["id"]
+    assert replay["result"]["id"] == second["result"]["id"]
+    assert replay["idempotent_replay"] is True
+    assert len(env.data["account.analytic.distribution.model"]) == 2
+
+    duplicate = env.models["account.analytic.distribution.model"].browse(
+        second["result"]["id"]
+    )
+    env.add(
+        "account.analytic.distribution.model",
+        2000,
+        sequence=duplicate.sequence,
+        account_prefix=duplicate.account_prefix,
+        partner_id=duplicate.partner_id,
+        partner_category_id=duplicate.partner_category_id,
+        product_id=duplicate.product_id,
+        product_categ_id=duplicate.product_categ_id,
+        analytic_distribution=dict(duplicate.analytic_distribution),
+        company_id=duplicate.company_id,
+    )
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(
+            env,
+            _accounting_reference_payload(
+                "analytic.distribution_model.create", second_parameters
+            ),
+            7,
+            Failure,
+        )
+    assert caught.value.code == "state_conflict"
+
+
+def test_accounting_configuration_writes_require_manager_without_sudo() -> None:
+    env = Env()
+    env.denied_group = "account.group_account_manager"
+    parameters = {
+        "name": "FY 2026",
+        "date_from": "2026-01-01",
+        "date_to": "2026-12-31",
+    }
+
+    result = writes.dispatch(
+        env,
+        _accounting_reference_payload("fiscal_year.create", parameters),
+        7,
+        Failure,
+    )
+
+    assert result["access_allowed"] is False
+    assert not env.data["account.fiscal.year"]
+    assert writes._GROUPS["analytic.applicability.create"] == (
+        "account.group_account_manager"
+    )
+    assert writes._GROUPS["analytic.distribution_model.update"] == (
+        "account.group_account_manager"
+    )
+
+
+def test_account_group_create_update_use_root_company_and_replay() -> None:
+    env = Env()
+    create_parameters = {
+        "name": "Current assets",
+        "code_prefix_start": "10",
+        "code_prefix_end": "19",
+    }
+    create_payload = _accounting_reference_payload(
+        "account.group.create", create_parameters
+    )
+
+    created = writes.dispatch(env, create_payload, 7, Failure)
+    replay = writes.dispatch(env, create_payload, 7, Failure)
+
+    group_id = created["result"]["id"]
+    group = env.models["account.group"].browse(group_id)
+    assert replay["idempotent_replay"] is True
+    assert group.company_id.id == env.company.id
+    assert group.code_prefix_start == "10"
+    update_parameters = {
+        "account_group_id": group_id,
+        "changes": {"name": "Liquid assets"},
+    }
+    update_payload = _accounting_reference_payload(
+        "account.group.update", update_parameters
+    )
+
+    updated = writes.dispatch(env, update_payload, 7, Failure)
+    update_replay = writes.dispatch(env, update_payload, 7, Failure)
+
+    assert updated["result"]["name"] == "Liquid assets"
+    assert update_replay["idempotent_replay"] is True
+    group_writes = [call for call in env.calls if call[:2] == ("write", "account.group")]
+    assert len(group_writes) == 1
+
+
+def test_tax_repartition_lines_replace_uses_native_commands_and_replays() -> None:
+    env = Env()
+    parameters = _tax_repartition_parameters(env)
+    payload = _accounting_reference_payload(
+        "tax.repartition_lines.replace", parameters
+    )
+
+    replaced = writes.dispatch(env, payload, 7, Failure)
+    replay = writes.dispatch(env, payload, 7, Failure)
+
+    assert replaced["idempotent_replay"] is False
+    assert replay["idempotent_replay"] is True
+    assert len(replaced["result"]["line_ids"]) == 4
+    assert [line.document_type for line in env.tax.invoice_repartition_line_ids] == [
+        "invoice",
+        "invoice",
+    ]
+    assert [line.repartition_type for line in env.tax.invoice_repartition_line_ids] == [
+        "base",
+        "tax",
+    ]
+    assert env.tax.invoice_repartition_line_ids.records[1].account_id.id == (
+        env.expense.id
+    )
+    assert env.tax.invoice_repartition_line_ids.records[1].tag_ids.ids == [
+        env.tax_tag.id
+    ]
+    tax_writes = [call for call in env.calls if call[:2] == ("write", "account.tax")]
+    assert len(tax_writes) == 1
+    commands = tax_writes[0][3]["repartition_line_ids"]
+    assert [command[0] for command in commands] == [5, 0, 0, 0, 0]
+    assert [command[2].get("document_type") for command in commands[1:]] == [
+        "invoice",
+        "invoice",
+        "refund",
+        "refund",
+    ]
+
+
+def test_reconciliation_model_header_lines_lifecycle_and_replay() -> None:
+    env = Env()
+    create_parameters = {
+        "name": "Bank fees",
+        "sequence": 10,
+        "trigger": "manual",
+        "match_journal_ids": [env.bank_journal.id],
+        "match_partner_ids": [env.partner.id],
+        "match_amount": {
+            "operator": "lower",
+            "minimum": None,
+            "maximum": "500",
+        },
+        "match_label": {"operator": "contains", "value": "fee"},
+    }
+    create_payload = _accounting_reference_payload(
+        "reconciliation.model.create", create_parameters
+    )
+    created = writes.dispatch(env, create_payload, 7, Failure)
+    assert writes.dispatch(env, create_payload, 7, Failure)["idempotent_replay"]
+    model_id = created["result"]["id"]
+
+    update_parameters = {
+        "reconciliation_model_id": model_id,
+        "changes": {
+            "match_amount": {
+                "operator": "between",
+                "minimum": "10",
+                "maximum": "20",
+            },
+            "match_label": {"operator": "match_regex", "value": "^fee"},
+        },
+    }
+    update_payload = _accounting_reference_payload(
+        "reconciliation.model.update", update_parameters
+    )
+    writes.dispatch(env, update_payload, 7, Failure)
+    assert writes.dispatch(env, update_payload, 7, Failure)["idempotent_replay"]
+
+    line_parameters = {
+        "reconciliation_model_id": model_id,
+        "lines": [
+            {
+                "sequence": 10,
+                "account_id": env.expense.id,
+                "partner_id": env.partner.id,
+                "label": "Bank fee",
+                "amount_type": "fixed",
+                "amount_string": "10",
+                "tax_ids": [env.tax.id],
+                "analytic_distribution": [
+                    {
+                        "analytic_account_ids": [
+                            env.analytic.id,
+                            env.analytic_two.id,
+                        ],
+                        "percentage": "100",
+                    }
+                ],
+            }
+        ],
+    }
+    line_payload = _accounting_reference_payload(
+        "reconciliation.model.lines.replace", line_parameters
+    )
+    lines_result = writes.dispatch(env, line_payload, 7, Failure)
+    assert writes.dispatch(env, line_payload, 7, Failure)["idempotent_replay"]
+    assert len(lines_result["result"]["line_ids"]) == 1
+    model = env.models["account.reconcile.model"].browse(model_id)
+    analytic_key = f"{env.analytic.id},{env.analytic_two.id}"
+    assert model.line_ids.records[0].analytic_distribution == {analytic_key: 100.0}
+
+    archive_parameters = {"reconciliation_model_id": model_id}
+    archive_payload = _accounting_reference_payload(
+        "reconciliation.model.archive", archive_parameters
+    )
+    archived = writes.dispatch(env, archive_payload, 7, Failure)
+    assert writes.dispatch(env, archive_payload, 7, Failure)["idempotent_replay"]
+    assert archived["result"]["state"] == "archived"
+    restore_payload = _accounting_reference_payload(
+        "reconciliation.model.restore", archive_parameters
+    )
+    restored = writes.dispatch(env, restore_payload, 7, Failure)
+    assert writes.dispatch(env, restore_payload, 7, Failure)["idempotent_replay"]
+    assert restored["result"]["state"] == "active"
+
+    model_writes = [
+        call for call in env.calls if call[:2] == ("write", "account.reconcile.model")
+    ]
+    assert len(model_writes) == 4

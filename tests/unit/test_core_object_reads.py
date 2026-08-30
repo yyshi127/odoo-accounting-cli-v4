@@ -44,6 +44,18 @@ GET_ID_FIELDS = {
     "analytic.applicability.get": "applicability_id",
     "budget.get": "budget_id",
     "budget.line.get": "budget_line_id",
+    "account.group.get": "account_group_id",
+    "journal.configuration.inspect": "journal_id",
+    "tax.repartition_line.get": "tax_repartition_line_id",
+    "reconciliation.model.line.get": "reconciliation_model_line_id",
+    "bank.get": "bank_id",
+    "report.catalog.get": "report_id",
+    "invoice.tax_breakdown.inspect": "invoice_id",
+    "recurring.journal_entry.get": "entry_id",
+    "account.transfer_model.get": "transfer_model_id",
+    "partner.credit_exposure.inspect": "partner_id",
+    "account.lock_exception.get": "lock_exception_id",
+    "report.external_value.get": "external_value_id",
 }
 PAGE_CAPABILITIES = (
     "journal_item.search",
@@ -68,6 +80,23 @@ PAGE_CAPABILITIES = (
     "analytic.applicability.list",
     "budget.search",
     "budget.line.list",
+    "account.group.list",
+    "tax.repartition_line.list",
+    "reconciliation.model.line.list",
+    "bank.list",
+    "report.catalog.list",
+    "invoice.duplicate_candidates.list",
+    "recurring.journal_entry.search",
+    "account.transfer_model.search",
+    "journal.sequence_irregularity.list",
+    "account.lock_exception.search",
+    "report.external_value.search",
+)
+FISCAL_POSITION_MAPPING_CAPABILITIES = frozenset(
+    {
+        "fiscal_position.account_mapping.list",
+        "fiscal_position.tax_mapping.list",
+    }
 )
 JOURNAL_ITEM_DEFAULTS = {
     "date_from": None,
@@ -129,6 +158,51 @@ PAGE_DEFAULTS = {
         "budget_id": 71,
         "plan_id": None,
         "analytic_account_id": None,
+    },
+    "account.group.list": {"query": None, "parent_id": None},
+    "tax.repartition_line.list": {
+        "tax_id": None,
+        "account_id": None,
+        "document_types": None,
+        "repartition_types": None,
+        "use_in_tax_closing": None,
+    },
+    "reconciliation.model.line.list": {
+        "reconciliation_model_id": None,
+        "account_id": None,
+        "partner_id": None,
+        "amount_types": None,
+    },
+    "bank.list": {"query": None, "country_id": None, "active": None},
+    "report.catalog.list": {
+        "country_id": None,
+        "root_report_id": None,
+        "availability_conditions": None,
+        "active": None,
+    },
+    "invoice.duplicate_candidates.list": {"invoice_id": 31},
+    "recurring.journal_entry.search": {
+        "states": None,
+        "auto_post_types": None,
+        "date_from": None,
+        "date_to": None,
+    },
+    "account.transfer_model.search": {"query": None, "active": None},
+    "journal.sequence_irregularity.list": {
+        "journal_id": None,
+        "date_from": None,
+        "date_to": None,
+    },
+    "account.lock_exception.search": {
+        "states": None,
+        "user_id": None,
+        "lock_date_fields": None,
+    },
+    "report.external_value.search": {
+        "report_id": None,
+        "expression_id": None,
+        "date_from": None,
+        "date_to": None,
     },
 }
 
@@ -581,6 +655,268 @@ def _item(capability_id: str, record_id: int = 31) -> dict:
             "company_id": 7,
             "analytic_accounts": [{"id": 31, "name": "Project Alpha"}],
         }
+    if capability_id in {"account.group.list", "account.group.get"}:
+        return {
+            "id": record_id,
+            "name": "Current Assets",
+            "code_prefix_start": "10",
+            "code_prefix_end": "19",
+            "parent": {"id": 21, "name": "Assets"},
+            "company_id": 7,
+        }
+    if capability_id == "journal.configuration.inspect":
+        return {
+            "id": record_id,
+            "code": "BNK1",
+            "name": "Bank",
+            "type": "bank",
+            "active": True,
+            "company_id": 7,
+            "currency": {"id": 6, "code": "CNY"},
+            "default_account": _coded(101, "100200", "Bank Account"),
+            "suspense_account": _coded(102, "112900", "Bank Suspense"),
+            "profit_account": _coded(701, "759000", "Cash Difference Gain"),
+            "loss_account": _coded(702, "659000", "Cash Difference Loss"),
+            "bank_account": {"id": 18, "name": "CN621234"},
+            "inbound_payment_methods": [{"id": 41, "name": "Manual Inbound"}],
+            "outbound_payment_methods": [{"id": 42, "name": "Manual Outbound"}],
+            "invoice_reference_type": "invoice",
+            "invoice_reference_model": "odoo",
+            "restrict_mode_hash_table": False,
+        }
+    if capability_id in {
+        "tax.repartition_line.list",
+        "tax.repartition_line.get",
+    }:
+        return {
+            "id": record_id,
+            "sequence": 1,
+            "company_id": 7,
+            "tax": {"id": 51, "name": "VAT 13%"},
+            "document_type": "invoice",
+            "repartition_type": "tax",
+            "factor_percent": "100",
+            "factor": "1",
+            "account": _coded(221, "222100", "VAT Payable"),
+            "tags": [{"id": 61, "name": "+13% VAT"}],
+            "use_in_tax_closing": True,
+        }
+    if capability_id in {
+        "reconciliation.model.line.list",
+        "reconciliation.model.line.get",
+    }:
+        return {
+            "id": record_id,
+            "sequence": 10,
+            "company_id": 7,
+            "reconciliation_model": {"id": 71, "name": "Bank Fees"},
+            "account": _coded(701, "660300", "Bank Fees"),
+            "partner": None,
+            "label": "Fee",
+            "amount_type": "percentage",
+            "amount": "100",
+            "amount_string": "100",
+            "taxes": [],
+            "analytic_distribution": [
+                {
+                    "analytic_accounts": [{"id": 31, "name": "Project Alpha"}],
+                    "percentage": "100",
+                }
+            ],
+        }
+    if capability_id in {"bank.list", "bank.get"}:
+        return {
+            "id": record_id,
+            "name": "Fixture Bank",
+            "bic": "FIXTCNBJ",
+            "active": True,
+            "street": "1 Finance Street",
+            "street2": None,
+            "zip": "200000",
+            "city": "Shanghai",
+            "state": {"id": 91, "name": "Shanghai"},
+            "country": {"id": 156, "name": "China"},
+            "email": "bank@example.com",
+            "phone": None,
+        }
+    if capability_id in {"report.catalog.list", "report.catalog.get"}:
+        return {
+            "id": record_id,
+            "name": "Balance Sheet",
+            "active": True,
+            "root_report": None,
+            "country": {"id": 156, "name": "China"},
+            "availability_condition": "country",
+            "variants": [{"id": 81, "name": "China Balance Sheet"}],
+            "sections": [],
+            "columns": [
+                {
+                    "id": 91,
+                    "name": "Balance",
+                    "expression_label": "balance",
+                    "figure_type": "monetary",
+                    "sortable": True,
+                    "blank_if_zero": False,
+                }
+            ],
+            "filters": {
+                "multi_company": "selector",
+                "date_range": True,
+                "show_draft": True,
+                "unreconciled": False,
+                "unfold_all": False,
+                "journals": True,
+                "analytic": True,
+                "partner": False,
+            },
+        }
+    if capability_id == "invoice.duplicate_candidates.list":
+        return {
+            "id": record_id,
+            "company_id": 7,
+            "name": "BILL/2026/0042",
+            "move_type": "in_invoice",
+            "state": "draft",
+            "invoice_date": None,
+            "reference": "SUP-42",
+            "partner": None,
+            "currency": {"id": 1, "code": "CNY"},
+            "amount_total": "100.00",
+        }
+    if capability_id == "invoice.tax_breakdown.inspect":
+        return {
+            "id": record_id,
+            "invoice": {
+                "id": record_id,
+                "name": "INV/2026/0043",
+                "move_type": "out_invoice",
+                "state": "posted",
+            },
+            "company_id": 7,
+            "currency": {"id": 1, "code": "CNY"},
+            "amount_untaxed": "100.00",
+            "amount_tax": "13.00",
+            "amount_total": "113.00",
+            "has_tax_groups": True,
+            "subtotals": [
+                {
+                    "name": "Untaxed Amount",
+                    "base_amount": "100.00",
+                    "tax_amount": "13.00",
+                    "tax_groups": [
+                        {
+                            "id": 21,
+                            "name": "VAT 13%",
+                            "base_amount": "100.00",
+                            "tax_amount": "13.00",
+                        }
+                    ],
+                }
+            ],
+        }
+    if capability_id in {
+        "recurring.journal_entry.search",
+        "recurring.journal_entry.get",
+    }:
+        return {
+            "id": record_id,
+            "company_id": 7,
+            "name": "MISC/2026/0001",
+            "date": "2026-01-31",
+            "state": "posted",
+            "journal": _coded(12, "MISC", "Miscellaneous"),
+            "reference": None,
+            "auto_post": "monthly",
+            "auto_post_until": None,
+            "auto_post_origin": None,
+        }
+    if capability_id in {
+        "account.transfer_model.search",
+        "account.transfer_model.get",
+    }:
+        return {
+            "id": record_id,
+            "name": "Monthly accrual transfer",
+            "active": True,
+            "state": "in_progress",
+            "company_id": 7,
+            "journal": _coded(12, "MISC", "Miscellaneous"),
+            "date_start": "2026-01-01",
+            "date_stop": None,
+            "frequency": "month",
+            "origin_accounts": [_coded(31, "6000", "Expense")],
+            "destination_lines": [
+                {
+                    "id": 302,
+                    "sequence": 10,
+                    "account": _coded(32, "1700", "Prepayments"),
+                    "percentage": "100.0",
+                }
+            ],
+            "move_ids_count": 2,
+            "has_draft_moves": False,
+            "total_percent": "100.0",
+        }
+    if capability_id == "partner.credit_exposure.inspect":
+        return {
+            "id": record_id,
+            "partner": {"id": record_id, "name": "ABC Customer"},
+            "company_id": 7,
+            "company_currency": {"id": 1, "code": "CNY"},
+            "credit": "200.00",
+            "debit": "25.00",
+            "credit_to_invoice": "50.00",
+            "credit_limit": "1000.00",
+            "use_partner_credit_limit": True,
+            "days_sales_outstanding": "12.5",
+            "total_invoiced": "500.00",
+        }
+    if capability_id == "journal.sequence_irregularity.list":
+        return {
+            "id": record_id,
+            "company_id": 7,
+            "name": "MISC/2026/0042",
+            "date": "2026-06-30",
+            "state": "posted",
+            "move_type": "entry",
+            "journal": _coded(12, "MISC", "Miscellaneous"),
+            "sequence_prefix": "MISC/2026/",
+            "sequence_number": 42,
+            "made_sequence_gap": True,
+        }
+    if capability_id in {
+        "account.lock_exception.search",
+        "account.lock_exception.get",
+    }:
+        return {
+            "id": record_id,
+            "company_id": 7,
+            "user": None,
+            "reason": None,
+            "end_datetime": "2026-08-31T12:30:00Z",
+            "state": "active",
+            "active": True,
+            "lock_date_field": "fiscalyear_lock_date",
+            "lock_date": None,
+            "company_lock_date": None,
+        }
+    if capability_id in {
+        "report.external_value.search",
+        "report.external_value.get",
+    }:
+        return {
+            "id": record_id,
+            "company_id": 7,
+            "name": "Manual adjustment",
+            "date": "2026-06-30",
+            "value": "125.50",
+            "text_value": None,
+            "report": {"id": 71, "name": "Balance Sheet"},
+            "report_line": {"id": 72, "name": "Cash", "code": None},
+            "expression": {"id": 73, "label": "balance"},
+            "carryover_origin_line": None,
+            "carryover_origin_expression_label": None,
+        }
     raise AssertionError(capability_id)
 
 
@@ -629,10 +965,18 @@ def _page_parameters(capability_id: str, *, after_id: int | None, limit: int) ->
     return {**PAGE_DEFAULTS[capability_id], "after_id": after_id, "limit": limit}
 
 
-def test_public_capability_sets_are_the_fixed_fifty_one_without_reports() -> None:
+def _required_page_parameters(capability_id: str) -> dict:
+    if capability_id == "budget.line.list":
+        return {"budget_id": 71}
+    if capability_id == "invoice.duplicate_candidates.list":
+        return {"invoice_id": 31}
+    return {}
+
+
+def test_public_capability_sets_match_fixed_ids_without_report_execution() -> None:
     assert CORE_OBJECT_GET_CAPABILITY_IDS == frozenset(GET_ID_FIELDS)
     assert CORE_OBJECT_READ_CAPABILITY_IDS == frozenset(
-        {*GET_ID_FIELDS, *PAGE_CAPABILITIES}
+        {*GET_ID_FIELDS, *PAGE_CAPABILITIES, *FISCAL_POSITION_MAPPING_CAPABILITIES}
     )
     assert "report.bank_reconciliation" not in CORE_OBJECT_READ_CAPABILITY_IDS
     assert "report.budget" not in CORE_OBJECT_READ_CAPABILITY_IDS
@@ -669,7 +1013,7 @@ def test_page_reads_apply_closed_defaults_and_return_the_public_page(
     capability_id: str,
 ) -> None:
     item = _item(capability_id)
-    request = _request({"budget_id": 71} if capability_id == "budget.line.list" else {})
+    request = _request(_required_page_parameters(capability_id))
 
     _, _, parameters = validate_core_object_read_request(capability_id, request)
     port = FakePort([item])
@@ -804,6 +1148,63 @@ def test_journal_item_search_passes_every_normalized_filter() -> None:
             {"budget_id": 71, "plan_id": 21, "analytic_account_id": 31},
             {"budget_id": 71, "plan_id": 21, "analytic_account_id": 31},
         ),
+        (
+            "account.group.list",
+            {"query": "Assets", "parent_id": 21},
+            {"query": "Assets", "parent_id": 21},
+        ),
+        (
+            "tax.repartition_line.list",
+            {
+                "tax_id": 51,
+                "document_types": ["refund", "invoice"],
+                "repartition_types": ["tax", "base"],
+                "account_id": 221,
+                "use_in_tax_closing": True,
+            },
+            {
+                "tax_id": 51,
+                "account_id": 221,
+                "document_types": ["invoice", "refund"],
+                "repartition_types": ["base", "tax"],
+                "use_in_tax_closing": True,
+            },
+        ),
+        (
+            "reconciliation.model.line.list",
+            {
+                "reconciliation_model_id": 71,
+                "account_id": 701,
+                "partner_id": 16,
+                "amount_types": ["regex", "fixed"],
+            },
+            {
+                "reconciliation_model_id": 71,
+                "account_id": 701,
+                "partner_id": 16,
+                "amount_types": ["fixed", "regex"],
+            },
+        ),
+        (
+            "bank.list",
+            {"query": "Fixture", "country_id": 156, "active": True},
+            {"query": "Fixture", "country_id": 156, "active": True},
+        ),
+        (
+            "report.catalog.list",
+            {
+                "country_id": 156,
+                "root_report_id": 81,
+                "availability_conditions": ["country", "always"],
+                "active": False,
+            },
+            {
+                "country_id": 156,
+                "root_report_id": 81,
+                "availability_conditions": ["always", "country"],
+                "active": False,
+            },
+        ),
     ],
 )
 def test_reference_searches_pass_their_closed_normalized_filters(
@@ -909,6 +1310,29 @@ def test_get_ids_are_positive_non_boolean_integers(
             "budget.line.list",
             {"budget_id": 71, "analytic_account_id": 31},
         ),
+        ("account.group.list", {"domain": []}),
+        ("account.group.list", {"query": " Assets "}),
+        ("account.group.list", {"parent_id": True}),
+        ("tax.repartition_line.list", {"tax_id": True}),
+        ("tax.repartition_line.list", {"document_types": []}),
+        (
+            "tax.repartition_line.list",
+            {"document_types": ["invoice", "invoice"]},
+        ),
+        ("tax.repartition_line.list", {"repartition_types": ["percentage"]}),
+        ("tax.repartition_line.list", {"use_in_tax_closing": 1}),
+        ("reconciliation.model.line.list", {"partner_id": True}),
+        ("reconciliation.model.line.list", {"amount_types": ["balance"]}),
+        ("bank.list", {"query": " Bank "}),
+        ("bank.list", {"country_id": True}),
+        ("bank.list", {"active": 1}),
+        ("report.catalog.list", {"root_report_id": True}),
+        (
+            "report.catalog.list",
+            {"availability_conditions": ["country", "country"]},
+        ),
+        ("report.catalog.list", {"availability_conditions": ["global"]}),
+        ("report.catalog.list", {"active": 1}),
     ],
 )
 def test_invalid_parameters_fail_before_the_port(
@@ -1017,9 +1441,7 @@ def test_every_item_contract_is_closed(capability_id: str) -> None:
     parameters = (
         {GET_ID_FIELDS[capability_id]: item["id"]}
         if capability_id in GET_ID_FIELDS
-        else {"budget_id": 71}
-        if capability_id == "budget.line.list"
-        else {}
+        else _required_page_parameters(capability_id)
     )
 
     with pytest.raises(CoreObjectReadError) as caught:
@@ -1099,6 +1521,87 @@ def test_invalid_or_out_of_scope_item_fields_fail_closed(
     assert caught.value.code == "failed_validation"
 
 
+@pytest.mark.parametrize(
+    ("capability_id", "mutation"),
+    [
+        ("account.group.list", lambda item: item.update(company_id=0)),
+        ("account.group.get", lambda item: item.update(company_id=0)),
+        (
+            "journal.configuration.inspect",
+            lambda item: item.update(invoice_reference_type="free_text"),
+        ),
+        (
+            "tax.repartition_line.get",
+            lambda item: item.update(factor_percent=100.0),
+        ),
+        (
+            "reconciliation.model.line.get",
+            lambda item: item["analytic_distribution"][0].update(percentage=100.0),
+        ),
+        ("bank.get", lambda item: item.update(active=1)),
+        (
+            "report.catalog.get",
+            lambda item: item["filters"].update(unexpected=True),
+        ),
+        (
+            "report.catalog.get",
+            lambda item: item["columns"].append(deepcopy(item["columns"][0])),
+        ),
+    ],
+)
+def test_new_accounting_reference_items_fail_closed(
+    capability_id: str, mutation
+) -> None:
+    item = _item(capability_id)
+    mutation(item)
+    parameters = (
+        {GET_ID_FIELDS[capability_id]: item["id"]}
+        if capability_id in GET_ID_FIELDS
+        else {}
+    )
+
+    with pytest.raises(CoreObjectReadError) as caught:
+        read_core_object(capability_id, FakePort([item]), _request(parameters))
+
+    assert caught.value.code == "failed_validation"
+    assert caught.value.exit_code == 8
+
+
+@pytest.mark.parametrize(
+    "capability_id",
+    [
+        "account.group.list",
+        "account.group.get",
+        "journal.configuration.inspect",
+        "tax.repartition_line.get",
+        "reconciliation.model.line.get",
+    ],
+)
+def test_parent_company_owned_accounting_configuration_is_valid(
+    capability_id: str,
+) -> None:
+    item = _item(capability_id)
+    item["company_id"] = 3
+    parameters = (
+        {GET_ID_FIELDS[capability_id]: item["id"]}
+        if capability_id in GET_ID_FIELDS
+        else {}
+    )
+
+    result = read_core_object(
+        capability_id,
+        FakePort([item]),
+        _request(parameters, company_id=7),
+    )
+
+    expected = (
+        {"items": [item], "has_more": False, "next_cursor": None}
+        if capability_id == "account.group.list"
+        else item
+    )
+    assert result == expected
+
+
 def test_nullable_new_object_relations_remain_explicitly_closed() -> None:
     cash_rounding = _item("cash_rounding.get")
     cash_rounding.update(profit_account=None, loss_account=None)
@@ -1120,6 +1623,76 @@ def test_nullable_new_object_relations_remain_explicitly_closed() -> None:
     assert cash_result["loss_account"] is None
     assert group_result["company_id"] is None
     assert group_result["excluded_journals"] == []
+
+
+def test_new_accounting_reference_nullable_fields_remain_closed() -> None:
+    journal = _item("journal.configuration.inspect")
+    journal.update(
+        currency=None,
+        default_account=None,
+        suspense_account=None,
+        profit_account=None,
+        loss_account=None,
+        bank_account=None,
+        inbound_payment_methods=[],
+        outbound_payment_methods=[],
+    )
+    tax_line = _item("tax.repartition_line.get")
+    tax_line.update(account=None, tags=[])
+    reconciliation_line = _item("reconciliation.model.line.get")
+    reconciliation_line.update(
+        account=None,
+        partner=None,
+        label=None,
+        taxes=[],
+        analytic_distribution=[],
+    )
+    bank = _item("bank.get")
+    bank.update(
+        bic=None,
+        street=None,
+        street2=None,
+        zip=None,
+        city=None,
+        state=None,
+        country=None,
+        email=None,
+        phone=None,
+    )
+    report = _item("report.catalog.get")
+    report.update(root_report=None, country=None, variants=[], sections=[], columns=[])
+
+    fixtures = {
+        "journal.configuration.inspect": journal,
+        "tax.repartition_line.get": tax_line,
+        "reconciliation.model.line.get": reconciliation_line,
+        "bank.get": bank,
+        "report.catalog.get": report,
+    }
+    for capability_id, item in fixtures.items():
+        assert (
+            read_core_object(
+                capability_id,
+                FakePort([item]),
+                _request({GET_ID_FIELDS[capability_id]: item["id"]}),
+            )
+            == item
+        )
+
+
+def test_report_catalog_preserves_semantic_column_order_not_numeric_id_order() -> None:
+    report = _item("report.catalog.get")
+    earlier_sequence_column = deepcopy(report["columns"][0])
+    earlier_sequence_column.update(id=90, name="Earlier by sequence")
+    report["columns"].append(earlier_sequence_column)
+
+    result = read_core_object(
+        "report.catalog.get",
+        FakePort([report]),
+        _request({"report_id": report["id"]}),
+    )
+
+    assert [column["id"] for column in result["columns"]] == [91, 90]
 
 
 def test_nullable_bank_relations_remain_explicitly_closed() -> None:
@@ -1259,7 +1832,7 @@ def test_each_page_capability_paginates_with_an_id_keyset_cursor(
 ) -> None:
     first_items = [_item(capability_id, 40), _item(capability_id, 41)]
     first_port = FakePort(first_items)
-    required = {"budget_id": 71} if capability_id == "budget.line.list" else {}
+    required = _required_page_parameters(capability_id)
 
     first = read_core_object(
         capability_id, first_port, _request({**required, "limit": 1})
@@ -1434,6 +2007,63 @@ def test_journal_item_cursor_is_bound_to_every_normalized_filter() -> None:
             "budget.line.list",
             {"budget_id": 71, "plan_id": 21, "analytic_account_id": 31},
             {"budget_id": 72, "plan_id": 22, "analytic_account_id": 32},
+        ),
+        (
+            "account.group.list",
+            {"query": "Assets", "parent_id": 21},
+            {"query": "Liabilities", "parent_id": 22},
+        ),
+        (
+            "tax.repartition_line.list",
+            {
+                "tax_id": 51,
+                "document_types": ["invoice"],
+                "repartition_types": ["tax"],
+                "account_id": 221,
+                "use_in_tax_closing": True,
+            },
+            {
+                "tax_id": 52,
+                "document_types": ["refund"],
+                "repartition_types": ["base"],
+                "account_id": 222,
+                "use_in_tax_closing": False,
+            },
+        ),
+        (
+            "reconciliation.model.line.list",
+            {
+                "reconciliation_model_id": 71,
+                "account_id": 701,
+                "partner_id": 16,
+                "amount_types": ["fixed"],
+            },
+            {
+                "reconciliation_model_id": 72,
+                "account_id": 702,
+                "partner_id": 17,
+                "amount_types": ["regex"],
+            },
+        ),
+        (
+            "bank.list",
+            {"query": "Fixture", "country_id": 156, "active": True},
+            {"query": "Other", "country_id": 157, "active": False},
+        ),
+        (
+            "report.catalog.list",
+            {
+                "country_id": 156,
+                "root_report_id": 81,
+                "availability_conditions": ["country"],
+                "active": True,
+            },
+            {
+                "country_id": 157,
+                "root_report_id": 82,
+                "availability_conditions": ["coa"],
+                "active": False,
+            },
         ),
     ],
 )

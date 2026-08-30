@@ -11,38 +11,155 @@ from odoo_accounting_cli_v4.bridge import client, runtime
 from odoo_accounting_cli_v4.bridge import financial_report_exports_runtime as exports
 from odoo_accounting_cli_v4.bridge.runtime import RuntimeFailure
 
+_REPORT_ONLY = ("account.report",)
 _SPECS = {
-    "report.trial_balance.export": (
-        "account_reports.trial_balance_report",
-        "range",
-    ),
-    "report.balance_sheet.export": ("account_reports.balance_sheet", "single"),
-    "report.profit_and_loss.export": (
-        "account_reports.profit_and_loss",
-        "range",
-    ),
-    "report.cash_flow.export": ("account_reports.cash_flow_report", "range"),
-    "report.tax.export": ("account.generic_tax_report", "range"),
-    "report.general_ledger.export": (
-        "account_reports.general_ledger_report",
-        "range",
-    ),
-    "report.partner_ledger.export": (
-        "account_reports.partner_ledger_report",
-        "range",
-    ),
-    "report.aged_receivable.export": (
-        "account_reports.aged_receivable_report",
-        "single",
-    ),
-    "report.aged_payable.export": (
-        "account_reports.aged_payable_report",
-        "single",
-    ),
-    "report.executive_summary.export": (
-        "account_reports.executive_summary",
-        "range",
-    ),
+    "report.trial_balance.export": {
+        "xml_id": "account_reports.trial_balance_report",
+        "mode": "range",
+        "models": _REPORT_ONLY,
+    },
+    "report.balance_sheet.export": {
+        "xml_id": "account_reports.balance_sheet",
+        "mode": "single",
+        "models": _REPORT_ONLY,
+    },
+    "report.profit_and_loss.export": {
+        "xml_id": "account_reports.profit_and_loss",
+        "mode": "range",
+        "models": _REPORT_ONLY,
+    },
+    "report.cash_flow.export": {
+        "xml_id": "account_reports.cash_flow_report",
+        "mode": "range",
+        "models": _REPORT_ONLY,
+    },
+    "report.tax.export": {
+        "xml_id": "account.generic_tax_report",
+        "mode": "range",
+        "models": _REPORT_ONLY,
+    },
+    "report.general_ledger.export": {
+        "xml_id": "account_reports.general_ledger_report",
+        "mode": "range",
+        "models": _REPORT_ONLY,
+    },
+    "report.partner_ledger.export": {
+        "xml_id": "account_reports.partner_ledger_report",
+        "mode": "range",
+        "models": _REPORT_ONLY,
+    },
+    "report.aged_receivable.export": {
+        "xml_id": "account_reports.aged_receivable_report",
+        "mode": "single",
+        "models": _REPORT_ONLY,
+    },
+    "report.aged_payable.export": {
+        "xml_id": "account_reports.aged_payable_report",
+        "mode": "single",
+        "models": _REPORT_ONLY,
+    },
+    "report.executive_summary.export": {
+        "xml_id": "account_reports.executive_summary",
+        "mode": "range",
+        "models": _REPORT_ONLY,
+    },
+    "report.journal.export": {
+        "xml_id": "account_reports.journal_report",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.move",
+            "account.move.line",
+            "res.currency",
+        ),
+        "dispatch_export": True,
+    },
+    "report.asset.export": {
+        "xml_id": "account_asset.assets_report",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.asset",
+            "account.move",
+            "account.move.line",
+            "res.currency",
+        ),
+    },
+    "report.deferred_expense.export": {
+        "xml_id": "account_reports.deferred_expense_report",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.move",
+            "account.move.line",
+            "res.currency",
+        ),
+    },
+    "report.deferred_revenue.export": {
+        "xml_id": "account_reports.deferred_revenue_report",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.move",
+            "account.move.line",
+            "res.currency",
+        ),
+    },
+    "report.multicurrency_revaluation.export": {
+        "xml_id": "account_reports.multicurrency_revaluation_report",
+        "mode": "single",
+        "models": ("account.report", "account.move.line", "res.currency"),
+    },
+    "report.china.balance_sheet.export": {
+        "xml_id": "l10n_cn_reports.account_financial_report_cn_balancesheet0",
+        "mode": "single",
+        "models": (
+            "account.report",
+            "account.move.line",
+            "res.currency",
+            "res.country",
+        ),
+        "fiscal_country_code": "CN",
+        "chart_template": "cn_oscg",
+    },
+    "report.china.profit_and_loss.export": {
+        "xml_id": "l10n_cn_reports.account_financial_report_cn_profitloss0",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.move.line",
+            "res.currency",
+            "res.country",
+        ),
+        "fiscal_country_code": "CN",
+        "chart_template": "cn_oscg",
+    },
+    "report.china.cash_flow.export": {
+        "xml_id": "l10n_cn_reports.account_report_cn_cs_flow",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.move.line",
+            "account.cash.flow.line",
+            "res.currency",
+            "res.country",
+        ),
+        "fiscal_country_code": "CN",
+        "chart_template": "cn_oscg",
+    },
+    "report.singapore.gst.export": {
+        "xml_id": "l10n_sg.tax_report",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.move.line",
+            "account.tax",
+            "res.currency",
+            "res.country",
+        ),
+        "fiscal_country_code": "SG",
+        "chart_template": "sg",
+    },
 }
 
 
@@ -61,14 +178,53 @@ def _payload(
     }
 
 
-class CompanyModel:
-    def __init__(self, visible: bool) -> None:
-        self.visible = visible
+class AccessModel:
+    def __init__(self, access: bool = True) -> None:
+        self.access = access
         self.calls = []
 
+    def has_access(self, operation):
+        self.calls.append(("has_access", operation))
+        return self.access
+
+
+class CompanyModel(AccessModel):
+    def __init__(
+        self,
+        visible: bool,
+        *,
+        access: bool = True,
+        country_id: int = 86,
+        chart_template: str = "cn_oscg",
+    ) -> None:
+        super().__init__(access)
+        self.visible = visible
+        self.country_id = country_id
+        self.chart_template = chart_template
+
     def search_count(self, domain, *, limit):
-        self.calls.append((domain, limit))
+        self.calls.append(("search_count", domain, limit))
         return int(self.visible)
+
+    def search_read(self, domain, *, fields, limit):
+        self.calls.append(("search_read", domain, fields, limit))
+        return [
+            {
+                "id": 7,
+                "account_fiscal_country_id": [self.country_id, "Fiscal Country"],
+                "chart_template": self.chart_template,
+            }
+        ]
+
+
+class CountryModel(AccessModel):
+    def __init__(self, code: str, *, access: bool = True) -> None:
+        super().__init__(access)
+        self.code = code
+
+    def search_read(self, domain, *, fields, limit):
+        self.calls.append(("search_read", domain, fields, limit))
+        return [{"id": 86, "code": self.code}]
 
 
 class EffectiveReport:
@@ -84,16 +240,15 @@ class EffectiveReport:
         self.calls.append(("xlsx", options))
         return self.native
 
+    def dispatch_report_action(self, options, action):
+        self.calls.append(("dispatch", action, options))
+        return self.native
 
-class ReportModel:
+
+class ReportModel(AccessModel):
     def __init__(self, effective: EffectiveReport, *, access: bool) -> None:
+        super().__init__(access)
         self.effective = effective
-        self.access = access
-        self.calls = []
-
-    def has_access(self, operation):
-        self.calls.append(("has_access", operation))
-        return self.access
 
     def with_context(self, **context):
         self.calls.append(("with_context", context))
@@ -122,12 +277,11 @@ class RootReport:
 
 
 class Registry:
-    def __init__(self, installed: bool) -> None:
-        self.installed = installed
+    def __init__(self, model_names: set[str]) -> None:
+        self.model_names = model_names
 
     def get(self, model_name):
-        assert model_name == "account.report"
-        return object() if self.installed else None
+        return object() if model_name in self.model_names else None
 
 
 class FakeEnv:
@@ -140,10 +294,14 @@ class FakeEnv:
         installed: bool = True,
         xmlid_found: bool = True,
         access: bool = True,
+        denied_model: str | None = None,
+        missing_model: str | None = None,
+        country_code: str = "CN",
+        chart_template: str = "cn_oscg",
         native: dict | None = None,
         options: dict | None = None,
     ) -> None:
-        self.company = CompanyModel(visible)
+        self.company = CompanyModel(visible, chart_template=chart_template)
         self.effective = EffectiveReport(
             native
             or {
@@ -153,16 +311,32 @@ class FakeEnv:
             }
         )
         self.report_model = ReportModel(self.effective, access=access)
+        self.country = CountryModel(country_code)
         self.root = RootReport(options or {"report_id": 91})
-        self.registry = Registry(installed)
+        self.models = {
+            "res.company": self.company,
+            "account.report": self.report_model,
+            "account.asset": AccessModel(),
+            "account.move": AccessModel(),
+            "account.move.line": AccessModel(),
+            "account.cash.flow.line": AccessModel(),
+            "account.tax": AccessModel(),
+            "res.currency": AccessModel(),
+            "res.country": self.country,
+        }
+        if denied_model is not None:
+            self.models[denied_model].access = False
+        registered_models = set(self.models) - {"res.company"}
+        if not installed:
+            registered_models.remove("account.report")
+        if missing_model is not None:
+            registered_models.remove(missing_model)
+        self.registry = Registry(registered_models)
         self.xmlid_found = xmlid_found
         self.refs = []
 
     def __getitem__(self, model_name):
-        return {
-            "res.company": self.company,
-            "account.report": self.report_model,
-        }[model_name]
+        return self.models[model_name]
 
     def ref(self, xml_id, *, raise_if_not_found):
         self.refs.append((xml_id, raise_if_not_found))
@@ -170,12 +344,15 @@ class FakeEnv:
 
 
 @pytest.mark.parametrize(("capability_id", "expected"), _SPECS.items())
-def test_all_ten_exports_use_the_fixed_xmlid_mode_and_options(
-    capability_id: str, expected: tuple[str, str]
+def test_all_nineteen_exports_use_the_fixed_spec_acl_and_options(
+    capability_id: str, expected: dict
 ) -> None:
-    xml_id, mode = expected
+    xml_id = expected["xml_id"]
+    mode = expected["mode"]
+    country_code = expected.get("fiscal_country_code", "CN")
+    chart_template = expected.get("chart_template", "cn_oscg")
     date_from = None if mode == "single" else "2026-01-01"
-    env = FakeEnv()
+    env = FakeEnv(country_code=country_code, chart_template=chart_template)
 
     page = exports.dispatch(
         env,
@@ -184,6 +361,17 @@ def test_all_ten_exports_use_the_fixed_xmlid_mode_and_options(
         failure_type=RuntimeFailure,
     )
 
+    actual_spec = exports.CAPABILITY_SPECS[capability_id]
+    assert actual_spec["xml_id"] == xml_id
+    assert actual_spec["mode"] == mode
+    assert actual_spec.get("models", _REPORT_ONLY) == expected["models"]
+    assert actual_spec.get("fiscal_country_code") == expected.get(
+        "fiscal_country_code"
+    )
+    assert actual_spec.get("chart_template") == expected.get("chart_template")
+    assert actual_spec.get("dispatch_export", False) is expected.get(
+        "dispatch_export", False
+    )
     assert env.refs == [(xml_id, False)]
     assert env.root.calls == [
         ("with_context", {"allowed_company_ids": [7]}),
@@ -205,7 +393,15 @@ def test_all_ten_exports_use_the_fixed_xmlid_mode_and_options(
         ("with_context", {"allowed_company_ids": [7]}),
         ("browse", 91),
     ]
-    assert env.effective.calls == [("pdf", {"report_id": 91})]
+    assert ("has_access", "read") in env.company.calls
+    for model_name in expected["models"]:
+        assert ("has_access", "read") in env.models[model_name].calls
+    if expected.get("dispatch_export"):
+        assert env.effective.calls == [
+            ("dispatch", "export_to_pdf", {"report_id": 91})
+        ]
+    else:
+        assert env.effective.calls == [("pdf", {"report_id": 91})]
     assert page == {
         "user_id": 42,
         "company_visible": True,
@@ -243,6 +439,27 @@ def test_xlsx_accepts_bytes_like_content_and_uses_standard_base64() -> None:
     )
     assert page["content_base64"] == "UEsDBHhsc3g="
     assert base64.b64decode(page["content_base64"], validate=True) == bytes(content)
+
+
+def test_journal_xlsx_uses_the_native_report_action_dispatcher() -> None:
+    env = FakeEnv(
+        native={
+            "file_name": "journal.xlsx",
+            "file_content": b"PK\x03\x04journal",
+            "file_type": "xlsx",
+        }
+    )
+
+    exports.dispatch(
+        env,
+        _payload("report.journal.export", file_format="xlsx"),
+        7,
+        failure_type=RuntimeFailure,
+    )
+
+    assert env.effective.calls == [
+        ("dispatch", "export_to_xlsx", {"report_id": 91})
+    ]
 
 
 @pytest.mark.parametrize(
@@ -288,6 +505,60 @@ def test_scope_or_access_failure_returns_only_empty_file_metadata(
         "sha256": None,
         "content_base64": None,
     }
+    assert env.effective.calls == []
+
+
+@pytest.mark.parametrize(
+    ("missing_model", "denied_model", "expected_module_installed"),
+    [
+        ("account.asset", None, False),
+        (None, "account.asset", True),
+    ],
+)
+def test_required_model_registration_and_read_acl_are_enforced(
+    missing_model: str | None,
+    denied_model: str | None,
+    expected_module_installed: bool,
+) -> None:
+    env = FakeEnv(missing_model=missing_model, denied_model=denied_model)
+
+    page = exports.dispatch(
+        env,
+        _payload("report.asset.export"),
+        7,
+        failure_type=RuntimeFailure,
+    )
+
+    assert page["module_installed"] is expected_module_installed
+    assert page["access_allowed"] is False
+    assert env.effective.calls == []
+
+
+@pytest.mark.parametrize(
+    ("capability_id", "country_code", "chart_template"),
+    [
+        ("report.china.balance_sheet.export", "SG", "cn_oscg"),
+        ("report.china.profit_and_loss.export", "CN", "sg"),
+        ("report.china.cash_flow.export", "SG", "cn_oscg"),
+        ("report.singapore.gst.export", "CN", "sg"),
+    ],
+)
+def test_localized_exports_require_the_company_country_and_chart(
+    capability_id: str, country_code: str, chart_template: str
+) -> None:
+    mode = _SPECS[capability_id]["mode"]
+    env = FakeEnv(country_code=country_code, chart_template=chart_template)
+
+    page = exports.dispatch(
+        env,
+        _payload(capability_id, date_from=None if mode == "single" else "2026-01-01"),
+        7,
+        failure_type=RuntimeFailure,
+    )
+
+    assert page["module_installed"] is False
+    assert page["access_allowed"] is False
+    assert env.refs == []
     assert env.effective.calls == []
 
 

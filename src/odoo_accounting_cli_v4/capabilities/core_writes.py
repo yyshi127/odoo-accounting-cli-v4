@@ -9,7 +9,7 @@ import re
 import uuid
 from copy import deepcopy
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from time import strftime, strptime
 from typing import Any, Protocol
 
@@ -114,6 +114,37 @@ CORE_WRITE_CAPABILITY_IDS = frozenset(
         "fiscal_position.restore",
         "journal.group.create",
         "journal.group.update",
+        "currency.rate.record",
+        "account.group.create",
+        "account.group.update",
+        "tax.repartition_lines.replace",
+        "reconciliation.model.create",
+        "reconciliation.model.update",
+        "reconciliation.model.lines.replace",
+        "reconciliation.model.archive",
+        "reconciliation.model.restore",
+        "account.tag.create",
+        "account.tag.update",
+        "account.tag.archive",
+        "account.tag.restore",
+        "tax.group.create",
+        "tax.group.update",
+        "cash_rounding.create",
+        "cash_rounding.update",
+        "fiscal_year.create",
+        "fiscal_year.update",
+        "analytic.applicability.create",
+        "analytic.applicability.update",
+        "analytic.distribution_model.create",
+        "analytic.distribution_model.update",
+        "sale.order.invoice.create",
+        "stock.transfer.create",
+        "stock.transfer.confirm",
+        "stock.transfer.assign",
+        "stock.transfer.quantities.set",
+        "stock.transfer.validate",
+        "stock.transfer.unreserve",
+        "stock.transfer.cancel",
     }
 )
 
@@ -134,6 +165,7 @@ _CREATE_CAPABILITIES = frozenset(
         "period.accrual.generate",
         "fiscal_position.create",
         "journal.group.create",
+        "stock.transfer.create",
     }
 )
 _INVOICE_CREATE_CAPABILITIES = frozenset(
@@ -214,6 +246,21 @@ _ORDER_WRITE_CAPABILITIES = (
     | _ORDER_LINE_REPLACEMENT_CAPABILITIES
     | _ORDER_TRANSITION_CAPABILITIES
 )
+_SALE_ORDER_INVOICE_CAPABILITIES = frozenset({"sale.order.invoice.create"})
+_STOCK_TRANSFER_CREATE_CAPABILITIES = frozenset({"stock.transfer.create"})
+_STOCK_TRANSFER_ACTION_CAPABILITIES = frozenset(
+    {
+        "stock.transfer.confirm",
+        "stock.transfer.assign",
+        "stock.transfer.unreserve",
+        "stock.transfer.cancel",
+    }
+)
+_STOCK_TRANSFER_WRITE_CAPABILITIES = (
+    _STOCK_TRANSFER_CREATE_CAPABILITIES
+    | _STOCK_TRANSFER_ACTION_CAPABILITIES
+    | {"stock.transfer.quantities.set", "stock.transfer.validate"}
+)
 _PAYMENT_DRAFT_CAPABILITIES = frozenset(
     {"payment.create", "payment.update_draft", "payment.reset_to_draft"}
 )
@@ -290,6 +337,40 @@ _FISCAL_POSITION_WRITE_CAPABILITIES = frozenset(
 )
 _JOURNAL_GROUP_WRITE_CAPABILITIES = frozenset(
     {"journal.group.create", "journal.group.update"}
+)
+_ACCOUNT_GROUP_WRITE_CAPABILITIES = frozenset(
+    {"account.group.create", "account.group.update"}
+)
+_RECONCILIATION_MODEL_WRITE_CAPABILITIES = frozenset(
+    {
+        "reconciliation.model.create",
+        "reconciliation.model.update",
+        "reconciliation.model.lines.replace",
+        "reconciliation.model.archive",
+        "reconciliation.model.restore",
+    }
+)
+_ACCOUNT_TAG_WRITE_CAPABILITIES = frozenset(
+    {
+        "account.tag.create",
+        "account.tag.update",
+        "account.tag.archive",
+        "account.tag.restore",
+    }
+)
+_TAX_GROUP_WRITE_CAPABILITIES = frozenset({"tax.group.create", "tax.group.update"})
+_CASH_ROUNDING_WRITE_CAPABILITIES = frozenset(
+    {"cash_rounding.create", "cash_rounding.update"}
+)
+_ACCOUNTING_RULE_WRITE_CAPABILITIES = frozenset(
+    {
+        "fiscal_year.create",
+        "fiscal_year.update",
+        "analytic.applicability.create",
+        "analytic.applicability.update",
+        "analytic.distribution_model.create",
+        "analytic.distribution_model.update",
+    }
 )
 _CONTEXT_FIELDS = frozenset(
     {"database", "company_id", "user_login", "language", "timezone"}
@@ -1701,6 +1782,836 @@ def _validate_tax_configuration_update(parameters: Any) -> dict[str, Any]:
     }
 
 
+_ACCOUNT_TAG_FIELDS = frozenset({"name", "applicability", "color", "country_id"})
+
+
+def _validate_account_tag_values(values: Any, *, partial: bool) -> dict[str, Any]:
+    if (
+        not isinstance(values, dict)
+        or (partial and (not values or not set(values) <= _ACCOUNT_TAG_FIELDS))
+        or (not partial and set(values) != _ACCOUNT_TAG_FIELDS)
+    ):
+        raise _invalid("Account-tag parameters do not match the fixed contract.")
+    normalized = dict(values)
+    if "name" in normalized:
+        normalized["name"] = _normalize_configuration_text(
+            normalized["name"], field="name", maximum=256
+        )
+    if "applicability" in normalized and normalized["applicability"] not in {
+        "accounts",
+        "taxes",
+        "products",
+    }:
+        raise _invalid("applicability is not supported.")
+    if "color" in normalized and not (
+        _is_integer(normalized["color"]) and normalized["color"] >= 0
+    ):
+        raise _invalid("color must be a nonnegative integer.")
+    if "country_id" in normalized and not _valid_optional_id(normalized["country_id"]):
+        raise _invalid("country_id must be null or a positive integer.")
+    if (
+        normalized.get("applicability") in {"accounts", "products"}
+        and normalized.get("country_id") is not None
+    ):
+        raise _invalid("country_id must be null unless applicability is taxes.")
+    return normalized
+
+
+def _validate_account_tag_parameters(
+    capability_id: str, parameters: Any
+) -> dict[str, Any]:
+    if capability_id == "account.tag.create":
+        return _validate_account_tag_values(parameters, partial=False)
+    if capability_id in {"account.tag.archive", "account.tag.restore"}:
+        return _validate_single_id(parameters, "account_tag_id")
+    if not isinstance(parameters, dict) or set(parameters) != {
+        "account_tag_id",
+        "changes",
+    }:
+        raise _invalid("Account-tag update parameters do not match the contract.")
+    if not _valid_id(parameters["account_tag_id"]):
+        raise _invalid("parameters.account_tag_id must be a positive integer.")
+    return {
+        "account_tag_id": parameters["account_tag_id"],
+        "changes": _validate_account_tag_values(parameters["changes"], partial=True),
+    }
+
+
+_TAX_GROUP_FIELDS = frozenset({"name", "sequence", "preceding_subtotal"})
+
+
+def _validate_tax_group_values(values: Any, *, partial: bool) -> dict[str, Any]:
+    if (
+        not isinstance(values, dict)
+        or (partial and (not values or not set(values) <= _TAX_GROUP_FIELDS))
+        or (not partial and set(values) != _TAX_GROUP_FIELDS)
+    ):
+        raise _invalid("Tax-group parameters do not match the fixed contract.")
+    normalized = dict(values)
+    if "name" in normalized:
+        normalized["name"] = _normalize_configuration_text(
+            normalized["name"], field="name", maximum=256
+        )
+    if "sequence" in normalized and not (
+        _is_integer(normalized["sequence"]) and normalized["sequence"] >= 0
+    ):
+        raise _invalid("sequence must be a nonnegative integer.")
+    if "preceding_subtotal" in normalized:
+        subtotal = normalized["preceding_subtotal"]
+        normalized["preceding_subtotal"] = (
+            None
+            if subtotal is None
+            else _normalize_configuration_text(
+                subtotal, field="preceding_subtotal", maximum=256
+            )
+        )
+    return normalized
+
+
+def _validate_tax_group_parameters(
+    capability_id: str, parameters: Any
+) -> dict[str, Any]:
+    if capability_id == "tax.group.create":
+        return _validate_tax_group_values(parameters, partial=False)
+    if not isinstance(parameters, dict) or set(parameters) != {
+        "tax_group_id",
+        "changes",
+    }:
+        raise _invalid("Tax-group update parameters do not match the contract.")
+    if not _valid_id(parameters["tax_group_id"]):
+        raise _invalid("parameters.tax_group_id must be a positive integer.")
+    return {
+        "tax_group_id": parameters["tax_group_id"],
+        "changes": _validate_tax_group_values(parameters["changes"], partial=True),
+    }
+
+
+_CASH_ROUNDING_FIELDS = frozenset(
+    {
+        "name",
+        "rounding",
+        "strategy",
+        "rounding_method",
+        "profit_account_id",
+        "loss_account_id",
+    }
+)
+
+
+def _validate_cash_rounding_values(values: Any, *, partial: bool) -> dict[str, Any]:
+    if (
+        not isinstance(values, dict)
+        or (partial and (not values or not set(values) <= _CASH_ROUNDING_FIELDS))
+        or (not partial and set(values) != _CASH_ROUNDING_FIELDS)
+    ):
+        raise _invalid("Cash-rounding parameters do not match the fixed contract.")
+    normalized = dict(values)
+    if "name" in normalized:
+        normalized["name"] = _normalize_configuration_text(
+            normalized["name"], field="name", maximum=256
+        )
+    if "rounding" in normalized:
+        rounding = _canonical_decimal(normalized["rounding"], signed=False)
+        if rounding is None or rounding <= 0:
+            raise _invalid("rounding must be a canonical positive decimal.")
+    if "strategy" in normalized and normalized["strategy"] not in {
+        "biggest_tax",
+        "add_invoice_line",
+    }:
+        raise _invalid("strategy is not supported.")
+    if "rounding_method" in normalized and normalized["rounding_method"] not in {
+        "UP",
+        "DOWN",
+        "HALF-UP",
+    }:
+        raise _invalid("rounding_method is not supported.")
+    for field in ("profit_account_id", "loss_account_id"):
+        if field in normalized and not _valid_optional_id(normalized[field]):
+            raise _invalid(f"{field} must be null or a positive integer.")
+
+    profit_present = "profit_account_id" in normalized
+    loss_present = "loss_account_id" in normalized
+    profit = normalized.get("profit_account_id")
+    loss = normalized.get("loss_account_id")
+    if profit_present and loss_present and (profit is None) != (loss is None):
+        raise _invalid("Profit and loss accounts must be both set or both null.")
+    if normalized.get("strategy") == "biggest_tax" and (
+        profit is not None or loss is not None
+    ):
+        raise _invalid("biggest_tax requires both accounts to be null.")
+    if normalized.get("strategy") == "add_invoice_line" and (
+        (profit_present and profit is None) or (loss_present and loss is None)
+    ):
+        raise _invalid("add_invoice_line requires both accounts to be set.")
+    return normalized
+
+
+def _validate_cash_rounding_parameters(
+    capability_id: str, parameters: Any
+) -> dict[str, Any]:
+    if capability_id == "cash_rounding.create":
+        return _validate_cash_rounding_values(parameters, partial=False)
+    if not isinstance(parameters, dict) or set(parameters) != {
+        "cash_rounding_id",
+        "changes",
+    }:
+        raise _invalid("Cash-rounding update parameters do not match the contract.")
+    if not _valid_id(parameters["cash_rounding_id"]):
+        raise _invalid("parameters.cash_rounding_id must be a positive integer.")
+    return {
+        "cash_rounding_id": parameters["cash_rounding_id"],
+        "changes": _validate_cash_rounding_values(parameters["changes"], partial=True),
+    }
+
+
+_FISCAL_YEAR_FIELDS = frozenset({"name", "date_from", "date_to"})
+
+
+def _validate_fiscal_year_values(values: Any, *, partial: bool) -> dict[str, Any]:
+    if (
+        not isinstance(values, dict)
+        or (partial and (not values or not set(values) <= _FISCAL_YEAR_FIELDS))
+        or (not partial and set(values) != _FISCAL_YEAR_FIELDS)
+    ):
+        raise _invalid("Fiscal-year parameters do not match the fixed contract.")
+    normalized = dict(values)
+    if "name" in normalized:
+        normalized["name"] = _normalize_configuration_text(
+            normalized["name"], field="name", maximum=256
+        )
+    for field in ("date_from", "date_to"):
+        if field in normalized and not _is_date(normalized[field]):
+            raise _invalid(f"{field} must be a YYYY-MM-DD date.")
+    return normalized
+
+
+def _validate_fiscal_year_parameters(
+    capability_id: str, parameters: Any
+) -> dict[str, Any]:
+    if capability_id == "fiscal_year.create":
+        return _validate_fiscal_year_values(parameters, partial=False)
+    if not isinstance(parameters, dict) or set(parameters) != {
+        "id",
+        "changes",
+    }:
+        raise _invalid("Fiscal-year update parameters do not match the contract.")
+    if not _valid_id(parameters["id"]):
+        raise _invalid("parameters.id must be a positive integer.")
+    return {
+        "id": parameters["id"],
+        "changes": _validate_fiscal_year_values(parameters["changes"], partial=True),
+    }
+
+
+_ANALYTIC_APPLICABILITY_FIELDS = frozenset(
+    {
+        "plan_id",
+        "business_domain",
+        "applicability",
+        "account_prefix",
+        "product_category_id",
+    }
+)
+
+
+def _validate_analytic_applicability_values(
+    values: Any, *, partial: bool
+) -> dict[str, Any]:
+    if (
+        not isinstance(values, dict)
+        or (
+            partial
+            and (not values or not set(values) <= _ANALYTIC_APPLICABILITY_FIELDS)
+        )
+        or (not partial and set(values) != _ANALYTIC_APPLICABILITY_FIELDS)
+    ):
+        raise _invalid(
+            "Analytic-applicability parameters do not match the fixed contract."
+        )
+    normalized = dict(values)
+    if "plan_id" in normalized and not _valid_id(normalized["plan_id"]):
+        raise _invalid("plan_id must be a positive integer.")
+    if "business_domain" in normalized and normalized["business_domain"] not in {
+        "general",
+        "invoice",
+        "bill",
+    }:
+        raise _invalid("business_domain is not supported.")
+    if "applicability" in normalized and normalized["applicability"] not in {
+        "optional",
+        "mandatory",
+        "unavailable",
+    }:
+        raise _invalid("applicability is not supported.")
+    if "account_prefix" in normalized:
+        prefix = normalized["account_prefix"]
+        normalized["account_prefix"] = (
+            None
+            if prefix is None
+            else _normalize_configuration_text(
+                prefix, field="account_prefix", maximum=64
+            )
+        )
+    if "product_category_id" in normalized and not _valid_optional_id(
+        normalized["product_category_id"]
+    ):
+        raise _invalid("product_category_id must be null or a positive integer.")
+    return normalized
+
+
+def _validate_analytic_applicability_parameters(
+    capability_id: str, parameters: Any
+) -> dict[str, Any]:
+    if capability_id == "analytic.applicability.create":
+        return _validate_analytic_applicability_values(parameters, partial=False)
+    if not isinstance(parameters, dict) or set(parameters) != {
+        "id",
+        "changes",
+    }:
+        raise _invalid(
+            "Analytic-applicability update parameters do not match the contract."
+        )
+    if not _valid_id(parameters["id"]):
+        raise _invalid("parameters.id must be a positive integer.")
+    return {
+        "id": parameters["id"],
+        "changes": _validate_analytic_applicability_values(
+            parameters["changes"], partial=True
+        ),
+    }
+
+
+_ANALYTIC_DISTRIBUTION_MODEL_FIELDS = frozenset(
+    {
+        "sequence",
+        "account_prefix",
+        "partner_id",
+        "partner_category_id",
+        "product_id",
+        "product_category_id",
+        "analytic_distribution",
+    }
+)
+
+
+def _validate_analytic_distribution_model_values(
+    values: Any, *, partial: bool
+) -> dict[str, Any]:
+    if (
+        not isinstance(values, dict)
+        or (
+            partial
+            and (not values or not set(values) <= _ANALYTIC_DISTRIBUTION_MODEL_FIELDS)
+        )
+        or (not partial and set(values) != _ANALYTIC_DISTRIBUTION_MODEL_FIELDS)
+    ):
+        raise _invalid(
+            "Analytic-distribution-model parameters do not match the fixed contract."
+        )
+    normalized = dict(values)
+    if "sequence" in normalized and not (
+        _is_integer(normalized["sequence"]) and normalized["sequence"] >= 0
+    ):
+        raise _invalid("sequence must be a nonnegative integer.")
+    if "account_prefix" in normalized:
+        prefix = normalized["account_prefix"]
+        normalized["account_prefix"] = (
+            None
+            if prefix is None
+            else _normalize_configuration_text(
+                prefix, field="account_prefix", maximum=64
+            )
+        )
+    for field in (
+        "partner_id",
+        "partner_category_id",
+        "product_id",
+        "product_category_id",
+    ):
+        if field in normalized and not _valid_optional_id(normalized[field]):
+            raise _invalid(f"{field} must be null or a positive integer.")
+    if "analytic_distribution" in normalized:
+        normalized["analytic_distribution"] = _validate_analytic_distribution(
+            normalized["analytic_distribution"]
+        )
+        if not partial and normalized["analytic_distribution"] is None:
+            raise _invalid("analytic_distribution must be nonempty for creation.")
+    return normalized
+
+
+def _validate_analytic_distribution_model_parameters(
+    capability_id: str, parameters: Any
+) -> dict[str, Any]:
+    if capability_id == "analytic.distribution_model.create":
+        return _validate_analytic_distribution_model_values(parameters, partial=False)
+    if not isinstance(parameters, dict) or set(parameters) != {
+        "id",
+        "changes",
+    }:
+        raise _invalid(
+            "Analytic-distribution-model update parameters do not match the contract."
+        )
+    if not _valid_id(parameters["id"]):
+        raise _invalid("parameters.id must be a positive integer.")
+    return {
+        "id": parameters["id"],
+        "changes": _validate_analytic_distribution_model_values(
+            parameters["changes"], partial=True
+        ),
+    }
+
+
+def _validate_currency_rate_parameters(parameters: Any) -> dict[str, Any]:
+    if not isinstance(parameters, dict) or set(parameters) != {
+        "currency_id",
+        "date",
+        "company_units_per_foreign_unit",
+    }:
+        raise _invalid("Currency-rate parameters do not match the fixed contract.")
+    if not _valid_id(parameters["currency_id"]):
+        raise _invalid("parameters.currency_id must be a positive integer.")
+    if not _is_date(parameters["date"]):
+        raise _invalid("parameters.date must be a YYYY-MM-DD date.")
+    rate = _canonical_decimal(
+        parameters["company_units_per_foreign_unit"], signed=False
+    )
+    if rate is None or rate <= 0:
+        raise _invalid(
+            "company_units_per_foreign_unit must be a canonical positive decimal."
+        )
+    return dict(parameters)
+
+
+_ACCOUNT_GROUP_FIELDS = frozenset({"name", "code_prefix_start", "code_prefix_end"})
+
+
+def _validate_account_group_values(values: Any, *, partial: bool) -> dict[str, Any]:
+    if (
+        not isinstance(values, dict)
+        or (partial and (not values or not set(values) <= _ACCOUNT_GROUP_FIELDS))
+        or (not partial and set(values) != _ACCOUNT_GROUP_FIELDS)
+    ):
+        raise _invalid("Account-group parameters do not match the fixed contract.")
+    normalized = dict(values)
+    if "name" in normalized:
+        normalized["name"] = _normalize_configuration_text(
+            normalized["name"], field="name", maximum=256
+        )
+    for field in ("code_prefix_start", "code_prefix_end"):
+        if field in normalized:
+            normalized[field] = _normalize_configuration_text(
+                normalized[field], field=field, maximum=64
+            )
+    if {"code_prefix_start", "code_prefix_end"} <= set(normalized):
+        start = normalized["code_prefix_start"]
+        end = normalized["code_prefix_end"]
+        if len(start) != len(end) or start > end:
+            raise _invalid(
+                "Account-group prefixes must have equal length and start at or "
+                "before the end prefix."
+            )
+    return normalized
+
+
+def _validate_account_group_parameters(
+    capability_id: str, parameters: Any
+) -> dict[str, Any]:
+    if capability_id == "account.group.create":
+        return _validate_account_group_values(parameters, partial=False)
+    if not isinstance(parameters, dict) or set(parameters) != {
+        "account_group_id",
+        "changes",
+    }:
+        raise _invalid("Account-group update parameters do not match the contract.")
+    if not _valid_id(parameters["account_group_id"]):
+        raise _invalid("parameters.account_group_id must be a positive integer.")
+    return {
+        "account_group_id": parameters["account_group_id"],
+        "changes": _validate_account_group_values(parameters["changes"], partial=True),
+    }
+
+
+_TAX_REPARTITION_LINE_FIELDS = frozenset(
+    {
+        "sequence",
+        "repartition_type",
+        "factor_percent",
+        "account_id",
+        "tag_ids",
+        "use_in_tax_closing",
+    }
+)
+
+
+def _tax_factor_total_matches(total: Decimal, expected: Decimal) -> bool:
+    return total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) == expected
+
+
+def _validate_tax_repartition_lines(lines: Any, *, field: str) -> list[dict[str, Any]]:
+    if not isinstance(lines, list) or not 2 <= len(lines) <= 100:
+        raise _invalid(f"{field} must contain between 2 and 100 lines.")
+    normalized: list[dict[str, Any]] = []
+    factors: list[tuple[str, Decimal]] = []
+    for line in lines:
+        if not isinstance(line, dict) or set(line) != _TAX_REPARTITION_LINE_FIELDS:
+            raise _invalid("Each tax repartition line must use the fixed fields.")
+        if not (_is_integer(line["sequence"]) and line["sequence"] >= 0):
+            raise _invalid("Tax repartition sequence must be nonnegative.")
+        repartition_type = line["repartition_type"]
+        if repartition_type not in {"base", "tax"}:
+            raise _invalid("Tax repartition_type must be base or tax.")
+        factor = _canonical_decimal(line["factor_percent"], signed=True)
+        if factor is None:
+            raise _invalid("factor_percent must be a canonical signed decimal.")
+        if not _valid_optional_id(line["account_id"]):
+            raise _invalid("Tax repartition account_id must be null or positive.")
+        if repartition_type == "base" and line["account_id"] is not None:
+            raise _invalid("Base repartition lines cannot specify account_id.")
+        tag_ids = _validate_ids(line["tag_ids"])
+        if tag_ids is None:
+            raise _invalid("Tax repartition tag_ids must contain unique positive IDs.")
+        if not isinstance(line["use_in_tax_closing"], bool):
+            raise _invalid("use_in_tax_closing must be a boolean.")
+        normalized.append({**line, "tag_ids": sorted(tag_ids)})
+        factors.append((repartition_type, factor))
+
+    base_count = sum(kind == "base" for kind, _ in factors)
+    tax_factors = [factor for kind, factor in factors if kind == "tax"]
+    if base_count != 1 or not tax_factors:
+        raise _invalid(
+            "Each repartition side requires exactly one base and at least one tax line."
+        )
+    positive_total = sum((factor for factor in tax_factors if factor > 0), Decimal(0))
+    negative_total = sum((factor for factor in tax_factors if factor < 0), Decimal(0))
+    if not _tax_factor_total_matches(positive_total, Decimal("100.00")) or (
+        negative_total
+        and not _tax_factor_total_matches(negative_total, Decimal("-100.00"))
+    ):
+        raise _invalid(
+            "Positive tax factors must total 100 and negative tax factors, when "
+            "present, must total -100."
+        )
+    return normalized
+
+
+def _validate_tax_repartition_replacement(parameters: Any) -> dict[str, Any]:
+    if not isinstance(parameters, dict) or set(parameters) != {
+        "tax_id",
+        "invoice_lines",
+        "refund_lines",
+    }:
+        raise _invalid(
+            "Tax repartition replacement parameters do not match the fixed contract."
+        )
+    if not _valid_id(parameters["tax_id"]):
+        raise _invalid("parameters.tax_id must be a positive integer.")
+    invoice_lines = _validate_tax_repartition_lines(
+        parameters["invoice_lines"], field="invoice_lines"
+    )
+    refund_lines = _validate_tax_repartition_lines(
+        parameters["refund_lines"], field="refund_lines"
+    )
+    if len(invoice_lines) != len(refund_lines) or any(
+        invoice["repartition_type"] != refund["repartition_type"]
+        or invoice["factor_percent"] != refund["factor_percent"]
+        for invoice, refund in zip(invoice_lines, refund_lines, strict=True)
+    ):
+        raise _invalid(
+            "Invoice and refund repartition lines must have matching ordered "
+            "types and factors."
+        )
+    return {
+        "tax_id": parameters["tax_id"],
+        "invoice_lines": invoice_lines,
+        "refund_lines": refund_lines,
+    }
+
+
+_RECONCILIATION_MODEL_FIELDS = frozenset(
+    {
+        "name",
+        "sequence",
+        "trigger",
+        "match_journal_ids",
+        "match_partner_ids",
+        "match_amount",
+        "match_label",
+    }
+)
+_RECONCILIATION_AMOUNT_OPERATORS = frozenset({"lower", "greater", "between"})
+_RECONCILIATION_LABEL_OPERATORS = frozenset({"contains", "not_contains", "match_regex"})
+
+
+def _validate_reconciliation_match_amount(value: Any) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) != {
+        "operator",
+        "minimum",
+        "maximum",
+    }:
+        raise _invalid("match_amount must be null or use the fixed amount fields.")
+    operator = value["operator"]
+    if operator not in _RECONCILIATION_AMOUNT_OPERATORS:
+        raise _invalid("match_amount.operator is unsupported.")
+    minimum = (
+        None
+        if value["minimum"] is None
+        else _canonical_decimal(value["minimum"], signed=False)
+    )
+    maximum = (
+        None
+        if value["maximum"] is None
+        else _canonical_decimal(value["maximum"], signed=False)
+    )
+    if (value["minimum"] is not None and minimum is None) or (
+        value["maximum"] is not None and maximum is None
+    ):
+        raise _invalid("match_amount bounds must be canonical nonnegative decimals.")
+    valid_bounds = (
+        operator == "lower"
+        and minimum is None
+        and maximum is not None
+        or operator == "greater"
+        and minimum is not None
+        and maximum is None
+        or operator == "between"
+        and minimum is not None
+        and maximum is not None
+        and minimum <= maximum
+    )
+    if not valid_bounds:
+        raise _invalid("match_amount bounds do not match its operator.")
+    return dict(value)
+
+
+def _validate_reconciliation_match_label(value: Any) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) != {"operator", "value"}:
+        raise _invalid("match_label must be null or use the fixed label fields.")
+    operator = value["operator"]
+    if operator not in _RECONCILIATION_LABEL_OPERATORS:
+        raise _invalid("match_label.operator is unsupported.")
+    normalized_value = _normalize_configuration_text(
+        value["value"], field="match_label.value", maximum=500
+    )
+    if operator == "match_regex":
+        try:
+            re.compile(normalized_value)
+        except re.error as exc:
+            raise _invalid(
+                "match_label.value must be a valid regular expression."
+            ) from exc
+    return {"operator": operator, "value": normalized_value}
+
+
+def _validate_reconciliation_model_values(
+    values: Any, *, partial: bool
+) -> dict[str, Any]:
+    if (
+        not isinstance(values, dict)
+        or (partial and (not values or not set(values) <= _RECONCILIATION_MODEL_FIELDS))
+        or (not partial and set(values) != _RECONCILIATION_MODEL_FIELDS)
+    ):
+        raise _invalid(
+            "Reconciliation-model parameters do not match the fixed contract."
+        )
+    normalized = dict(values)
+    if "name" in normalized:
+        normalized["name"] = _normalize_configuration_text(
+            normalized["name"], field="name", maximum=256
+        )
+    if "sequence" in normalized and not (
+        _is_integer(normalized["sequence"]) and normalized["sequence"] >= 0
+    ):
+        raise _invalid("sequence must be a nonnegative integer.")
+    if "trigger" in normalized and normalized["trigger"] not in {
+        "manual",
+        "auto_reconcile",
+    }:
+        raise _invalid("trigger must be manual or auto_reconcile.")
+    for field in ("match_journal_ids", "match_partner_ids"):
+        if field in normalized:
+            identifiers = _validate_ids(normalized[field])
+            if identifiers is None:
+                raise _invalid(f"{field} must contain unique positive integers.")
+            normalized[field] = sorted(identifiers)
+    if "match_amount" in normalized:
+        normalized["match_amount"] = _validate_reconciliation_match_amount(
+            normalized["match_amount"]
+        )
+    if "match_label" in normalized:
+        normalized["match_label"] = _validate_reconciliation_match_label(
+            normalized["match_label"]
+        )
+    return normalized
+
+
+def _validate_reconciliation_analytic_distribution(
+    value: Any,
+) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or not 1 <= len(value) <= 16:
+        raise _invalid("analytic_distribution must contain between 1 and 16 entries.")
+    normalized: list[dict[str, Any]] = []
+    used_accounts: set[int] = set()
+    for entry in value:
+        if not isinstance(entry, dict) or set(entry) != {
+            "analytic_account_ids",
+            "percentage",
+        }:
+            raise _invalid("Analytic distribution entries must use the fixed fields.")
+        account_ids = _validate_ids(entry["analytic_account_ids"])
+        if (
+            account_ids is None
+            or not 1 <= len(account_ids) <= 16
+            or used_accounts.intersection(account_ids)
+        ):
+            raise _invalid(
+                "analytic_account_ids must be nonempty, unique across entries, "
+                "positive integers."
+            )
+        percentage = _canonical_decimal(entry["percentage"], signed=False)
+        decimal_places = (
+            max(0, -percentage.as_tuple().exponent) if percentage is not None else 0
+        )
+        if (
+            percentage is None
+            or percentage <= 0
+            or percentage > 100
+            or decimal_places > 4
+        ):
+            raise _invalid(
+                "Analytic percentages must be canonical values above 0 and at "
+                "most 100 with up to four decimal places."
+            )
+        sorted_ids = sorted(account_ids)
+        used_accounts.update(sorted_ids)
+        normalized.append(
+            {"analytic_account_ids": sorted_ids, "percentage": entry["percentage"]}
+        )
+    return sorted(normalized, key=lambda item: tuple(item["analytic_account_ids"]))
+
+
+def _validate_reconciliation_model_lines(parameters: Any) -> dict[str, Any]:
+    if not isinstance(parameters, dict) or set(parameters) != {
+        "reconciliation_model_id",
+        "lines",
+    }:
+        raise _invalid(
+            "Reconciliation-model line parameters do not match the fixed contract."
+        )
+    if not _valid_id(parameters["reconciliation_model_id"]):
+        raise _invalid("parameters.reconciliation_model_id must be positive.")
+    lines = parameters["lines"]
+    if not isinstance(lines, list) or len(lines) > 100:
+        raise _invalid("parameters.lines must contain at most 100 lines.")
+    required = {
+        "sequence",
+        "account_id",
+        "partner_id",
+        "label",
+        "amount_type",
+        "amount_string",
+        "tax_ids",
+    }
+    allowed = required | {"analytic_distribution"}
+    normalized_lines: list[dict[str, Any]] = []
+    for line in lines:
+        if not isinstance(line, dict) or not required <= set(line) <= allowed:
+            raise _invalid("Each reconciliation-model line must use the fixed fields.")
+        if not (_is_integer(line["sequence"]) and line["sequence"] >= 0):
+            raise _invalid("Reconciliation-model line sequence must be nonnegative.")
+        for field in ("account_id", "partner_id"):
+            if not _valid_optional_id(line[field]):
+                raise _invalid(
+                    f"Reconciliation-model {field} must be null or positive."
+                )
+        label = line["label"]
+        normalized_label = (
+            None
+            if label is None
+            else _normalize_configuration_text(label, field="label", maximum=500)
+        )
+        amount_type = line["amount_type"]
+        if amount_type not in {
+            "fixed",
+            "percentage",
+            "percentage_st_line",
+            "regex",
+        }:
+            raise _invalid("Reconciliation-model amount_type is unsupported.")
+        amount_string = line["amount_string"]
+        if amount_type == "regex":
+            normalized_amount = _normalize_configuration_text(
+                amount_string, field="amount_string", maximum=500
+            )
+            try:
+                re.compile(normalized_amount)
+            except re.error as exc:
+                raise _invalid(
+                    "amount_string must be a valid regular expression."
+                ) from exc
+        else:
+            amount = _canonical_decimal(amount_string, signed=True)
+            if (
+                amount is None
+                or amount == 0
+                or (amount_type == "percentage" and not 0 < amount <= 100)
+            ):
+                raise _invalid(
+                    "Numeric amount_string must be canonical and nonzero; balance "
+                    "percentages must be above 0 and at most 100."
+                )
+            normalized_amount = amount_string
+        tax_ids = _validate_ids(line["tax_ids"])
+        if tax_ids is None:
+            raise _invalid("Reconciliation-model tax_ids must contain unique IDs.")
+        normalized_line = {
+            **line,
+            "label": normalized_label,
+            "amount_string": normalized_amount,
+            "tax_ids": sorted(tax_ids),
+        }
+        if "analytic_distribution" in line:
+            normalized_line["analytic_distribution"] = (
+                _validate_reconciliation_analytic_distribution(
+                    line["analytic_distribution"]
+                )
+            )
+        normalized_lines.append(normalized_line)
+    return {
+        "reconciliation_model_id": parameters["reconciliation_model_id"],
+        "lines": normalized_lines,
+    }
+
+
+def _validate_reconciliation_model_parameters(
+    capability_id: str, parameters: Any
+) -> dict[str, Any]:
+    if capability_id == "reconciliation.model.create":
+        return _validate_reconciliation_model_values(parameters, partial=False)
+    if capability_id == "reconciliation.model.update":
+        if not isinstance(parameters, dict) or set(parameters) != {
+            "reconciliation_model_id",
+            "changes",
+        }:
+            raise _invalid(
+                "Reconciliation-model update parameters do not match the contract."
+            )
+        if not _valid_id(parameters["reconciliation_model_id"]):
+            raise _invalid("parameters.reconciliation_model_id must be positive.")
+        return {
+            "reconciliation_model_id": parameters["reconciliation_model_id"],
+            "changes": _validate_reconciliation_model_values(
+                parameters["changes"], partial=True
+            ),
+        }
+    if capability_id == "reconciliation.model.lines.replace":
+        return _validate_reconciliation_model_lines(parameters)
+    return _validate_single_id(parameters, "reconciliation_model_id")
+
+
 _FISCAL_POSITION_FIELDS = frozenset(
     {
         "name",
@@ -2177,6 +3088,114 @@ def _validate_order_line_replacement_parameters(
     }
 
 
+def _validate_stock_transfer_create_parameters(parameters: Any) -> dict[str, Any]:
+    expected = {
+        "picking_type_id",
+        "location_id",
+        "location_dest_id",
+        "partner_id",
+        "scheduled_date",
+        "origin",
+        "moves",
+    }
+    if not isinstance(parameters, dict) or set(parameters) != expected:
+        raise _invalid("Stock-transfer creation parameters are invalid.")
+    for field in ("picking_type_id", "location_id", "location_dest_id"):
+        if not _valid_id(parameters[field]):
+            raise _invalid(f"parameters.{field} must be a positive integer.")
+    if parameters["location_id"] == parameters["location_dest_id"]:
+        raise _invalid("Stock-transfer source and destination locations must differ.")
+    if not _valid_optional_id(parameters["partner_id"]):
+        raise _invalid("parameters.partner_id must be null or a positive integer.")
+    if not (
+        parameters["scheduled_date"] is None
+        or _is_datetime(parameters["scheduled_date"])
+    ):
+        raise _invalid(
+            "parameters.scheduled_date must be null or use YYYY-MM-DD HH:MM:SS."
+        )
+    if not _is_nullable_bounded_text(parameters["origin"], 200):
+        raise _invalid("parameters.origin must be null or a bounded non-empty string.")
+    if parameters["origin"] is not None and "ODACV4" in parameters["origin"]:
+        raise _invalid("parameters.origin contains a reserved marker.")
+    moves = parameters["moves"]
+    if not isinstance(moves, list) or not 1 <= len(moves) <= 200:
+        raise _invalid("parameters.moves must contain between 1 and 200 moves.")
+    normalized_moves: list[dict[str, Any]] = []
+    for move in moves:
+        if not isinstance(move, dict) or set(move) != {
+            "product_id",
+            "name",
+            "quantity",
+            "uom_id",
+        }:
+            raise _invalid("Each stock move must match the fixed move contract.")
+        if not _valid_id(move["product_id"]):
+            raise _invalid("Stock move product_id must be a positive integer.")
+        if not _valid_id(move["uom_id"]):
+            raise _invalid("Stock move uom_id must be a positive integer.")
+        if not _is_bounded_text(move["name"], 500):
+            raise _invalid("Stock move names must be bounded non-empty strings.")
+        quantity = _canonical_decimal(move["quantity"], signed=False)
+        if quantity is None or quantity <= 0:
+            raise _invalid("Stock move quantity must be a canonical positive decimal.")
+        normalized_moves.append(dict(move))
+    return {**parameters, "moves": normalized_moves}
+
+
+def _validate_stock_transfer_parameters(
+    capability_id: str, parameters: Any
+) -> dict[str, Any]:
+    if capability_id == "stock.transfer.create":
+        return _validate_stock_transfer_create_parameters(parameters)
+    if capability_id == "stock.transfer.quantities.set":
+        if not isinstance(parameters, dict) or set(parameters) != {
+            "transfer_id",
+            "lines",
+        }:
+            raise _invalid("Stock-transfer quantity parameters are invalid.")
+        if not _valid_id(parameters["transfer_id"]):
+            raise _invalid("parameters.transfer_id must be a positive integer.")
+        lines = parameters["lines"]
+        if not isinstance(lines, list) or not 1 <= len(lines) <= 200:
+            raise _invalid("parameters.lines must contain between 1 and 200 lines.")
+        normalized_lines: list[dict[str, Any]] = []
+        move_ids: set[int] = set()
+        for line in lines:
+            if not isinstance(line, dict) or set(line) != {"move_id", "quantity"}:
+                raise _invalid(
+                    "Each stock quantity line must match the fixed line contract."
+                )
+            move_id = line["move_id"]
+            if not _valid_id(move_id) or move_id in move_ids:
+                raise _invalid(
+                    "Stock quantity move_id values must be distinct positive integers."
+                )
+            quantity = _canonical_decimal(line["quantity"], signed=False)
+            if quantity is None:
+                raise _invalid(
+                    "Stock quantity values must be canonical nonnegative decimals."
+                )
+            move_ids.add(move_id)
+            normalized_lines.append(dict(line))
+        return {
+            "transfer_id": parameters["transfer_id"],
+            "lines": sorted(normalized_lines, key=lambda item: item["move_id"]),
+        }
+    if capability_id == "stock.transfer.validate":
+        if not isinstance(parameters, dict) or set(parameters) != {
+            "transfer_id",
+            "backorder_policy",
+        }:
+            raise _invalid("Stock-transfer validation parameters are invalid.")
+        if not _valid_id(parameters["transfer_id"]):
+            raise _invalid("parameters.transfer_id must be a positive integer.")
+        if parameters["backorder_policy"] not in {"create", "cancel"}:
+            raise _invalid("parameters.backorder_policy must be create or cancel.")
+        return dict(parameters)
+    return _validate_single_id(parameters, "transfer_id")
+
+
 def _validate_purchase_bill_parameters(
     capability_id: str, parameters: Any
 ) -> dict[str, Any]:
@@ -2453,6 +3472,36 @@ def validate_core_write_request(
         "purchase.order.bill.create"
     ):
         normalized = _validate_purchase_bill_parameters(capability_id, parameters)
+    elif capability_id == "sale.order.invoice.create":
+        normalized = _validate_single_id(parameters, "order_id")
+    elif capability_id in _STOCK_TRANSFER_WRITE_CAPABILITIES:
+        normalized = _validate_stock_transfer_parameters(capability_id, parameters)
+    elif capability_id.startswith("fiscal_year."):
+        normalized = _validate_fiscal_year_parameters(capability_id, parameters)
+    elif capability_id.startswith("analytic.applicability."):
+        normalized = _validate_analytic_applicability_parameters(
+            capability_id, parameters
+        )
+    elif capability_id.startswith("analytic.distribution_model."):
+        normalized = _validate_analytic_distribution_model_parameters(
+            capability_id, parameters
+        )
+    elif capability_id in _ACCOUNT_TAG_WRITE_CAPABILITIES:
+        normalized = _validate_account_tag_parameters(capability_id, parameters)
+    elif capability_id in _TAX_GROUP_WRITE_CAPABILITIES:
+        normalized = _validate_tax_group_parameters(capability_id, parameters)
+    elif capability_id in _CASH_ROUNDING_WRITE_CAPABILITIES:
+        normalized = _validate_cash_rounding_parameters(capability_id, parameters)
+    elif capability_id == "currency.rate.record":
+        normalized = _validate_currency_rate_parameters(parameters)
+    elif capability_id in _ACCOUNT_GROUP_WRITE_CAPABILITIES:
+        normalized = _validate_account_group_parameters(capability_id, parameters)
+    elif capability_id == "tax.repartition_lines.replace":
+        normalized = _validate_tax_repartition_replacement(parameters)
+    elif capability_id in _RECONCILIATION_MODEL_WRITE_CAPABILITIES:
+        normalized = _validate_reconciliation_model_parameters(
+            capability_id, parameters
+        )
     elif capability_id in _FISCAL_POSITION_WRITE_CAPABILITIES:
         normalized = _validate_fiscal_position_parameters(capability_id, parameters)
     elif capability_id in _JOURNAL_GROUP_WRITE_CAPABILITIES:
@@ -2588,6 +3637,99 @@ def validate_core_write_request(
 def _expected_idempotency_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in {
+        "account.tag.create",
+        "tax.group.create",
+        "cash_rounding.create",
+        "fiscal_year.create",
+        "analytic.applicability.create",
+        "analytic.distribution_model.create",
+    }:
+        canonical = json.dumps(
+            parameters, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        return f"{capability_id}:{company_id}:{digest}"
+    if capability_id in {
+        "account.tag.update",
+        "tax.group.update",
+        "cash_rounding.update",
+        "fiscal_year.update",
+        "analytic.applicability.update",
+        "analytic.distribution_model.update",
+    }:
+        canonical = json.dumps(
+            parameters["changes"],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        primary_field = {
+            "account.tag.update": "account_tag_id",
+            "tax.group.update": "tax_group_id",
+            "cash_rounding.update": "cash_rounding_id",
+            "fiscal_year.update": "id",
+            "analytic.applicability.update": "id",
+            "analytic.distribution_model.update": "id",
+        }[capability_id]
+        return f"{capability_id}:{parameters[primary_field]}:{digest}"
+    if capability_id in {"account.tag.archive", "account.tag.restore"}:
+        return f"{capability_id}:{parameters['account_tag_id']}"
+    if capability_id in {
+        "currency.rate.record",
+        "account.group.create",
+        "reconciliation.model.create",
+    }:
+        canonical = json.dumps(
+            parameters, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        return f"{capability_id}:{company_id}:{digest}"
+    if capability_id in {
+        "account.group.update",
+        "reconciliation.model.update",
+    }:
+        canonical = json.dumps(
+            parameters["changes"],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        primary = (
+            parameters["account_group_id"]
+            if capability_id == "account.group.update"
+            else parameters["reconciliation_model_id"]
+        )
+        return f"{capability_id}:{primary}:{digest}"
+    if capability_id in {
+        "tax.repartition_lines.replace",
+        "reconciliation.model.lines.replace",
+    }:
+        target = (
+            {
+                "invoice_lines": parameters["invoice_lines"],
+                "refund_lines": parameters["refund_lines"],
+            }
+            if capability_id == "tax.repartition_lines.replace"
+            else parameters["lines"]
+        )
+        canonical = json.dumps(
+            target, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        primary = (
+            parameters["tax_id"]
+            if capability_id == "tax.repartition_lines.replace"
+            else parameters["reconciliation_model_id"]
+        )
+        return f"{capability_id}:{primary}:{digest}"
+    if capability_id in {
+        "reconciliation.model.archive",
+        "reconciliation.model.restore",
+    }:
+        return f"{capability_id}:{parameters['reconciliation_model_id']}"
     if capability_id in {"fiscal_position.create", "journal.group.create"}:
         canonical = json.dumps(
             parameters, ensure_ascii=False, sort_keys=True, separators=(",", ":")
@@ -2735,6 +3877,26 @@ def _expected_idempotency_key(
         return f"{capability_id}:{parameters['payment_term_id']}:{digest}"
     if capability_id in {"payment_term.archive", "payment_term.restore"}:
         return f"{capability_id}:{parameters['payment_term_id']}"
+    if capability_id == "sale.order.invoice.create":
+        return f"sale.order.invoice.create:{parameters['order_id']}"
+    if capability_id == "stock.transfer.create":
+        return None
+    if capability_id == "stock.transfer.quantities.set":
+        canonical = json.dumps(
+            parameters["lines"],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        return f"stock.transfer.quantities.set:{parameters['transfer_id']}:{digest}"
+    if capability_id == "stock.transfer.validate":
+        return (
+            f"stock.transfer.validate:{parameters['transfer_id']}:"
+            f"{parameters['backorder_policy']}"
+        )
+    if capability_id in _STOCK_TRANSFER_ACTION_CAPABILITIES:
+        return f"{capability_id}:{parameters['transfer_id']}"
     if capability_id == "purchase.order.bill.create":
         return f"purchase.order.bill.create:{parameters['order_id']}"
     if capability_id in _CREATE_CAPABILITIES:
@@ -3087,6 +4249,222 @@ def _validate_result(
 
     if not _valid_id(result["id"]):
         raise _failed("Odoo returned a core-write result without a record ID.")
+    if capability_id == "currency.rate.record":
+        if (
+            result["model"] != "res.currency.rate"
+            or not _is_text(result["name"])
+            or result["state"] != "active"
+            or result["move_type"] is not None
+            or result["source_id"] != parameters["currency_id"]
+            or result["line_ids"]
+            or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None
+            or result["reconciled"]
+        ):
+            raise _failed("Odoo returned a mismatched currency-rate result.")
+        return deepcopy(result)
+    if capability_id in (
+        _ACCOUNT_TAG_WRITE_CAPABILITIES
+        | _TAX_GROUP_WRITE_CAPABILITIES
+        | _CASH_ROUNDING_WRITE_CAPABILITIES
+        | _ACCOUNTING_RULE_WRITE_CAPABILITIES
+    ):
+        identifier_field = (
+            "account_tag_id"
+            if capability_id.startswith("account.tag.")
+            else "tax_group_id"
+            if capability_id.startswith("tax.group.")
+            else "id"
+            if capability_id in _ACCOUNTING_RULE_WRITE_CAPABILITIES
+            else "cash_rounding_id"
+        )
+        expected_id = (
+            result["id"]
+            if capability_id.endswith(".create")
+            else parameters[identifier_field]
+        )
+        expected_model = (
+            "account.account.tag"
+            if capability_id.startswith("account.tag.")
+            else "account.tax.group"
+            if capability_id.startswith("tax.group.")
+            else "account.fiscal.year"
+            if capability_id.startswith("fiscal_year.")
+            else "account.analytic.applicability"
+            if capability_id.startswith("analytic.applicability.")
+            else "account.analytic.distribution.model"
+            if capability_id.startswith("analytic.distribution_model.")
+            else "account.cash.rounding"
+        )
+        expected_states = (
+            {"archived"}
+            if capability_id == "account.tag.archive"
+            else {"active"}
+            if capability_id
+            in {
+                "account.tag.create",
+                "account.tag.restore",
+                "tax.group.create",
+                "tax.group.update",
+                "cash_rounding.create",
+                "cash_rounding.update",
+                "fiscal_year.create",
+                "fiscal_year.update",
+                "analytic.applicability.create",
+                "analytic.applicability.update",
+                "analytic.distribution_model.create",
+                "analytic.distribution_model.update",
+            }
+            else {"active", "archived"}
+        )
+        nullable_name = capability_id.startswith(
+            ("analytic.applicability.", "analytic.distribution_model.")
+        )
+        if (
+            result["model"] != expected_model
+            or result["id"] != expected_id
+            or not (
+                _is_text(result["name"]) or (nullable_name and result["name"] is None)
+            )
+            or result["state"] not in expected_states
+            or result["move_type"] is not None
+            or result["source_id"] is not None
+            or result["line_ids"]
+            or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None
+            or result["reconciled"]
+        ):
+            raise _failed("Odoo returned a mismatched accounting master-data result.")
+        return deepcopy(result)
+    if capability_id in _ACCOUNT_GROUP_WRITE_CAPABILITIES:
+        expected_id = (
+            result["id"]
+            if capability_id == "account.group.create"
+            else parameters["account_group_id"]
+        )
+        if (
+            result["model"] != "account.group"
+            or result["id"] != expected_id
+            or not _is_text(result["name"])
+            or result["state"] != "active"
+            or result["move_type"] is not None
+            or result["source_id"] is not None
+            or result["line_ids"]
+            or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None
+            or result["reconciled"]
+        ):
+            raise _failed("Odoo returned a mismatched account-group result.")
+        return deepcopy(result)
+    if capability_id == "tax.repartition_lines.replace":
+        if (
+            result["model"] != "account.tax"
+            or result["id"] != parameters["tax_id"]
+            or not _is_text(result["name"])
+            or result["state"] not in {"active", "archived"}
+            or result["move_type"] is not None
+            or result["source_id"] is not None
+            or len(result["line_ids"])
+            != len(parameters["invoice_lines"]) + len(parameters["refund_lines"])
+            or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None
+            or result["reconciled"]
+        ):
+            raise _failed("Odoo returned mismatched tax-repartition lines.")
+        return deepcopy(result)
+    if capability_id in _RECONCILIATION_MODEL_WRITE_CAPABILITIES:
+        expected_id = (
+            result["id"]
+            if capability_id == "reconciliation.model.create"
+            else parameters["reconciliation_model_id"]
+        )
+        expected_states = (
+            {"archived"}
+            if capability_id == "reconciliation.model.archive"
+            else {"active"}
+            if capability_id
+            in {"reconciliation.model.create", "reconciliation.model.restore"}
+            else {"active", "archived"}
+        )
+        expected_line_count = (
+            len(parameters["lines"])
+            if capability_id == "reconciliation.model.lines.replace"
+            else None
+        )
+        if (
+            result["model"] != "account.reconcile.model"
+            or result["id"] != expected_id
+            or not _is_text(result["name"])
+            or result["state"] not in expected_states
+            or result["move_type"] is not None
+            or result["source_id"] is not None
+            or (
+                expected_line_count is not None
+                and len(result["line_ids"]) != expected_line_count
+            )
+            or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None
+            or result["reconciled"]
+        ):
+            raise _failed("Odoo returned a mismatched reconciliation-model result.")
+        return deepcopy(result)
+    if capability_id == "sale.order.invoice.create":
+        expected_states = (
+            {"draft", "posted", "cancel"} if idempotent_replay else {"draft"}
+        )
+        if (
+            result["model"] != "account.move"
+            or result["state"] not in expected_states
+            or result["move_type"] != "out_invoice"
+            or result["source_id"] != parameters["order_id"]
+            or not result["line_ids"]
+            or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None
+            or result["reconciled"]
+        ):
+            raise _failed("Odoo returned a mismatched sales-order invoice result.")
+        return deepcopy(result)
+    if capability_id in _STOCK_TRANSFER_WRITE_CAPABILITIES:
+        expected_id = (
+            result["id"]
+            if capability_id == "stock.transfer.create"
+            else parameters["transfer_id"]
+        )
+        all_states = {"draft", "waiting", "confirmed", "assigned", "done", "cancel"}
+        if capability_id == "stock.transfer.create":
+            expected_states = all_states if idempotent_replay else {"draft"}
+        elif capability_id == "stock.transfer.validate":
+            expected_states = {"done"}
+        elif capability_id == "stock.transfer.cancel":
+            expected_states = {"cancel"}
+        elif capability_id == "stock.transfer.unreserve":
+            expected_states = {"waiting", "confirmed"}
+        elif capability_id in {"stock.transfer.confirm", "stock.transfer.assign"}:
+            expected_states = {"waiting", "confirmed", "assigned"}
+            if idempotent_replay:
+                expected_states.add("done")
+        else:
+            expected_states = {"draft", "waiting", "confirmed", "assigned"}
+            if idempotent_replay:
+                expected_states.add("done")
+        if (
+            result["model"] != "stock.picking"
+            or result["id"] != expected_id
+            or not _is_text(result["name"])
+            or result["state"] not in expected_states
+            or result["move_type"] is not None
+            or not _valid_id(result["source_id"])
+            or (
+                capability_id == "stock.transfer.create"
+                and result["source_id"] != parameters["picking_type_id"]
+            )
+            or not result["line_ids"]
+            or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None
+            or result["reconciled"]
+        ):
+            raise _failed("Odoo returned a mismatched stock-transfer result.")
+        return deepcopy(result)
     if capability_id in {
         "purchase.order.bill.create",
         "purchase_bill.match",

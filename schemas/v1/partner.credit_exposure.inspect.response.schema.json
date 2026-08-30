@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/partner.credit_exposure.inspect.response.schema.json",
+  "title": "partner.credit_exposure.inspect response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "partner.credit_exposure.inspect"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/item"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{"if": {"properties": {"success": {"const": true}}, "required": ["success"]}, "then": {"properties": {"request_id": {"type": "string", "format": "uuid"}, "status": {"const": "verified"}, "data": {"$ref": "#/$defs/item"}, "error": {"type": "null"}}}, "else": {"properties": {"data": {"type": "null"}, "error": {"$ref": "response.schema.json#/$defs/error"}}}}],
+  "$defs": {
+    "item": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "partner", "company_id", "company_currency", "credit", "debit", "credit_to_invoice", "credit_limit", "use_partner_credit_limit", "days_sales_outstanding", "total_invoiced"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "partner": {"$ref": "#/$defs/named"},
+        "company_id": {"type": "integer", "minimum": 1},
+        "company_currency": {"$ref": "#/$defs/currency"},
+        "credit": {"$ref": "#/$defs/decimal"},
+        "debit": {"$ref": "#/$defs/decimal"},
+        "credit_to_invoice": {"$ref": "#/$defs/decimal"},
+        "credit_limit": {"$ref": "#/$defs/decimal"},
+        "use_partner_credit_limit": {"type": "boolean"},
+        "days_sales_outstanding": {"$ref": "#/$defs/decimal"},
+        "total_invoiced": {"$ref": "#/$defs/decimal"}
+      }
+    },
+    "named": {"type": "object", "additionalProperties": false, "required": ["id", "name"], "properties": {"id": {"type": "integer", "minimum": 1}, "name": {"type": "string", "minLength": 1}}},
+    "currency": {"type": "object", "additionalProperties": false, "required": ["id", "code"], "properties": {"id": {"type": "integer", "minimum": 1}, "code": {"type": "string", "minLength": 1, "maxLength": 3}}},
+    "decimal": {"type": "string", "maxLength": 256, "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"}
+  }
+}

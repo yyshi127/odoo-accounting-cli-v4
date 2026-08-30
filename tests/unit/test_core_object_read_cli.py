@@ -64,6 +64,14 @@ CAPABILITIES = {
         "fiscal_position_search",
         "account.fiscal.position",
     ),
+    "fiscal_position.account_mapping.list": (
+        "fiscal_position_account_mapping_list",
+        "account.fiscal.position.account",
+    ),
+    "fiscal_position.tax_mapping.list": (
+        "fiscal_position_tax_mapping_list",
+        "account.fiscal.position",
+    ),
     "partner.accounting.get": ("partner_accounting_get", "res.partner"),
     "partner.bank_account.get": ("partner_bank_account_get", "res.partner.bank"),
     "partner.bank_account.search": (
@@ -169,6 +177,14 @@ SEARCH_PARAMETERS = {
         "query": "Fixture",
         "active": True,
         "auto_apply": False,
+        "limit": 1,
+    },
+    "fiscal_position.account_mapping.list": {
+        "fiscal_position_id": 31,
+        "limit": 1,
+    },
+    "fiscal_position.tax_mapping.list": {
+        "fiscal_position_id": 31,
         "limit": 1,
     },
     "partner.bank_account.search": {
@@ -623,6 +639,18 @@ def _item(capability_id: str) -> dict[str, Any]:
             "name": "Free on Board",
             "active": True,
         }
+    if capability_id == "fiscal_position.account_mapping.list":
+        return {
+            "id": 41,
+            "company_id": 7,
+            "source_account": _coded(101, "4000", "Sales"),
+            "destination_account": _coded(102, "4100", "Mapped Sales"),
+        }
+    if capability_id == "fiscal_position.tax_mapping.list":
+        return {
+            "source_tax": {"id": 51, "name": "Source Tax"},
+            "destination_taxes": [{"id": 52, "name": "Destination Tax"}],
+        }
     raise AssertionError(capability_id)
 
 
@@ -685,7 +713,7 @@ class _SuccessPort:
                 "parameters": parameters,
             }
         )
-        return {
+        page = {
             "user_id": self.user_id,
             "company_visible": True,
             "module_installed": True,
@@ -693,6 +721,9 @@ class _SuccessPort:
             "cursor_found": True,
             "items": [_item(self.capability_id)],
         }
+        if capability_id == "fiscal_position.tax_mapping.list":
+            page["removes_all_taxes"] = False
+        return page
 
 
 def _assert_partial(value: object, function: object, capability_id: str) -> None:
@@ -782,7 +813,16 @@ def test_cli_emits_schema_valid_success_and_exact_odoo_metadata(
     expected_data = (
         item
         if capability_id in GET_ID_FIELDS
-        else {"items": [item], "has_more": False, "next_cursor": None}
+        else {
+            "items": [item],
+            "has_more": False,
+            "next_cursor": None,
+            **(
+                {"removes_all_taxes": False}
+                if capability_id == "fiscal_position.tax_mapping.list"
+                else {}
+            ),
+        }
     )
     assert exit_code == 0
     assert stderr.getvalue() == ""
@@ -802,7 +842,11 @@ def test_cli_emits_schema_valid_success_and_exact_odoo_metadata(
         "company_id": 7,
         "user_id": 42,
         "model": CAPABILITIES[capability_id][1],
-        "record_ids": [item["id"]],
+        "record_ids": (
+            [REQUESTS[capability_id]["parameters"]["fiscal_position_id"]]
+            if capability_id == "fiscal_position.tax_mapping.list"
+            else [item["id"]]
+        ),
     }
     descriptor = registry.describe(capability_id)
     registry.validate_instance(descriptor["schemas"]["response"], document)

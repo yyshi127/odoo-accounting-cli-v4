@@ -18,6 +18,35 @@ from odoo_accounting_cli_v4.registry import InstanceValidationError, load_regist
 
 REQUEST_ID = "7bc39413-0d69-4092-9319-795d33f3167c"
 _DEFAULT_RESULT = object()
+ACCOUNTING_CONFIGURATION_EXPANSION_WRITES = {
+    "currency.rate.record",
+    "account.group.create",
+    "account.group.update",
+    "tax.repartition_lines.replace",
+    "reconciliation.model.create",
+    "reconciliation.model.update",
+    "reconciliation.model.lines.replace",
+    "reconciliation.model.archive",
+    "reconciliation.model.restore",
+}
+ACCOUNTING_MASTER_DATA_COMPLETION_WRITES = {
+    "account.tag.create",
+    "account.tag.update",
+    "account.tag.archive",
+    "account.tag.restore",
+    "tax.group.create",
+    "tax.group.update",
+    "cash_rounding.create",
+    "cash_rounding.update",
+}
+ACCOUNTING_RULES_FISCAL_YEAR_WRITES = {
+    "fiscal_year.create",
+    "fiscal_year.update",
+    "analytic.applicability.create",
+    "analytic.applicability.update",
+    "analytic.distribution_model.create",
+    "analytic.distribution_model.update",
+}
 
 
 def _invoice_parameters() -> dict:
@@ -334,6 +363,35 @@ PARAMETERS = {
     "sale.order.confirm": {"order_id": 101},
     "sale.order.cancel": {"order_id": 101},
     "sale.order.reset_to_draft": {"order_id": 101},
+    "sale.order.invoice.create": {"order_id": 101},
+    "stock.transfer.create": {
+        "picking_type_id": 2,
+        "location_id": 8,
+        "location_dest_id": 9,
+        "partner_id": 31,
+        "scheduled_date": "2026-08-30 08:00:00",
+        "origin": "CLI transfer",
+        "moves": [
+            {
+                "product_id": 51,
+                "name": "Stock item",
+                "quantity": "3",
+                "uom_id": 1,
+            }
+        ],
+    },
+    "stock.transfer.confirm": {"transfer_id": 401},
+    "stock.transfer.assign": {"transfer_id": 401},
+    "stock.transfer.quantities.set": {
+        "transfer_id": 401,
+        "lines": [{"move_id": 501, "quantity": "2"}],
+    },
+    "stock.transfer.validate": {
+        "transfer_id": 401,
+        "backorder_policy": "create",
+    },
+    "stock.transfer.unreserve": {"transfer_id": 401},
+    "stock.transfer.cancel": {"transfer_id": 401},
     "purchase.order.create": {
         "partner_id": 32,
         "currency_id": 6,
@@ -442,6 +500,168 @@ PARAMETERS = {
         "journal_group_id": 304,
         "changes": {"sequence": 10, "excluded_journal_ids": [14, 13]},
     },
+    "currency.rate.record": {
+        "currency_id": 6,
+        "date": "2026-08-30",
+        "company_units_per_foreign_unit": "7.125",
+    },
+    "account.group.create": {
+        "name": "Operating expenses",
+        "code_prefix_start": "6100",
+        "code_prefix_end": "6199",
+    },
+    "account.group.update": {
+        "account_group_id": 305,
+        "changes": {"name": "Operating expenses updated"},
+    },
+    "tax.repartition_lines.replace": {
+        "tax_id": 306,
+        "invoice_lines": [
+            {
+                "sequence": 1,
+                "repartition_type": "base",
+                "factor_percent": "100",
+                "account_id": None,
+                "tag_ids": [],
+                "use_in_tax_closing": False,
+            },
+            {
+                "sequence": 2,
+                "repartition_type": "tax",
+                "factor_percent": "100",
+                "account_id": 31,
+                "tag_ids": [9, 8],
+                "use_in_tax_closing": False,
+            },
+        ],
+        "refund_lines": [
+            {
+                "sequence": 1,
+                "repartition_type": "base",
+                "factor_percent": "100",
+                "account_id": None,
+                "tag_ids": [],
+                "use_in_tax_closing": False,
+            },
+            {
+                "sequence": 2,
+                "repartition_type": "tax",
+                "factor_percent": "100",
+                "account_id": 31,
+                "tag_ids": [9, 8],
+                "use_in_tax_closing": False,
+            },
+        ],
+    },
+    "reconciliation.model.create": {
+        "name": "Bank fee",
+        "sequence": 10,
+        "trigger": "manual",
+        "match_journal_ids": [12, 11],
+        "match_partner_ids": [22, 21],
+        "match_amount": None,
+        "match_label": None,
+    },
+    "reconciliation.model.update": {
+        "reconciliation_model_id": 307,
+        "changes": {"name": "Bank fee updated", "sequence": 20},
+    },
+    "reconciliation.model.lines.replace": {
+        "reconciliation_model_id": 307,
+        "lines": [
+            {
+                "sequence": 1,
+                "account_id": 31,
+                "partner_id": None,
+                "label": "Bank fee",
+                "amount_type": "fixed",
+                "amount_string": "10",
+                "tax_ids": [9, 8],
+            }
+        ],
+    },
+    "reconciliation.model.archive": {"reconciliation_model_id": 307},
+    "reconciliation.model.restore": {"reconciliation_model_id": 307},
+    "account.tag.create": {
+        "name": "CLI Accounts",
+        "applicability": "accounts",
+        "color": 4,
+        "country_id": None,
+    },
+    "account.tag.update": {
+        "account_tag_id": 308,
+        "changes": {"name": "CLI Accounts Updated", "color": 5},
+    },
+    "account.tag.archive": {"account_tag_id": 309},
+    "account.tag.restore": {"account_tag_id": 309},
+    "tax.group.create": {
+        "name": "CLI Tax Group",
+        "sequence": 10,
+        "preceding_subtotal": None,
+    },
+    "tax.group.update": {
+        "tax_group_id": 310,
+        "changes": {"sequence": 20, "preceding_subtotal": "Untaxed Amount"},
+    },
+    "cash_rounding.create": {
+        "name": "CLI Cash Rounding",
+        "rounding": "0.05",
+        "strategy": "biggest_tax",
+        "rounding_method": "HALF-UP",
+        "profit_account_id": None,
+        "loss_account_id": None,
+    },
+    "cash_rounding.update": {
+        "cash_rounding_id": 311,
+        "changes": {
+            "strategy": "add_invoice_line",
+            "profit_account_id": 31,
+            "loss_account_id": 32,
+        },
+    },
+    "fiscal_year.create": {
+        "name": "FY 2027",
+        "date_from": "2027-01-01",
+        "date_to": "2027-12-31",
+    },
+    "fiscal_year.update": {
+        "id": 41,
+        "changes": {"name": "Fiscal 2027", "date_to": "2027-11-30"},
+    },
+    "analytic.applicability.create": {
+        "plan_id": 11,
+        "business_domain": "invoice",
+        "applicability": "mandatory",
+        "account_prefix": "4",
+        "product_category_id": None,
+    },
+    "analytic.applicability.update": {
+        "id": 51,
+        "changes": {
+            "plan_id": 12,
+            "business_domain": "bill",
+            "applicability": "optional",
+            "account_prefix": None,
+            "product_category_id": 17,
+        },
+    },
+    "analytic.distribution_model.create": {
+        "sequence": 10,
+        "account_prefix": "6",
+        "partner_id": None,
+        "partner_category_id": 21,
+        "product_id": None,
+        "product_category_id": 31,
+        "analytic_distribution": {"11": "25", "7,8": "75"},
+    },
+    "analytic.distribution_model.update": {
+        "id": 61,
+        "changes": {
+            "sequence": 20,
+            "partner_category_id": None,
+            "analytic_distribution": None,
+        },
+    },
 }
 
 
@@ -482,6 +702,9 @@ def _key(capability_id: str) -> str:
         "fiscal_position.restore",
         "journal.group.create",
         "journal.group.update",
+        *ACCOUNTING_CONFIGURATION_EXPANSION_WRITES,
+        *ACCOUNTING_MASTER_DATA_COMPLETION_WRITES,
+        *ACCOUNTING_RULES_FISCAL_YEAR_WRITES,
     }:
         _, context, parameters = validate_core_write_request(
             capability_id, _request(capability_id)
@@ -502,6 +725,8 @@ def _key(capability_id: str) -> str:
         return key
     if capability_id in {"sale.order.create", "purchase.order.create"}:
         return "order-create-safe-key-001"
+    if capability_id == "stock.transfer.create":
+        return "stock-transfer-create-safe-key-001"
     if capability_id in {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -514,6 +739,23 @@ def _key(capability_id: str) -> str:
     }:
         return f"smoke:{capability_id}:0001"
     parameters = PARAMETERS[capability_id]
+    if capability_id == "stock.transfer.quantities.set":
+        digest = sha256(
+            json.dumps(
+                parameters["lines"],
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()[:32]
+        return f"{capability_id}:{parameters['transfer_id']}:{digest}"
+    if capability_id == "stock.transfer.validate":
+        return (
+            f"{capability_id}:{parameters['transfer_id']}:"
+            f"{parameters['backorder_policy']}"
+        )
+    if capability_id.startswith("stock.transfer."):
+        return f"{capability_id}:{parameters['transfer_id']}"
     if capability_id.startswith(("sale.order.", "purchase.order.")):
         if capability_id.endswith((".update_draft", ".lines.replace")):
             target = (
@@ -694,6 +936,47 @@ def _key(capability_id: str) -> str:
 
 def _result(capability_id: str, **changes) -> dict:
     parameters = PARAMETERS[capability_id]
+    if capability_id == "sale.order.invoice.create":
+        result = {
+            "model": "account.move",
+            "id": 907,
+            "name": "INV/2026/00907",
+            "state": "draft",
+            "company_id": 7,
+            "move_type": "out_invoice",
+            "source_id": parameters["order_id"],
+            "line_ids": [507],
+            "partial_reconcile_ids": [],
+            "full_reconcile_id": None,
+            "reconciled": False,
+        }
+        result.update(changes)
+        return result
+    if capability_id.startswith("stock.transfer."):
+        state = {
+            "stock.transfer.create": "draft",
+            "stock.transfer.confirm": "confirmed",
+            "stock.transfer.assign": "assigned",
+            "stock.transfer.quantities.set": "assigned",
+            "stock.transfer.validate": "done",
+            "stock.transfer.unreserve": "confirmed",
+            "stock.transfer.cancel": "cancel",
+        }[capability_id]
+        result = {
+            "model": "stock.picking",
+            "id": 908 if capability_id == "stock.transfer.create" else 401,
+            "name": "WH/INT/00908",
+            "state": state,
+            "company_id": 7,
+            "move_type": None,
+            "source_id": 2,
+            "line_ids": [501],
+            "partial_reconcile_ids": [],
+            "full_reconcile_id": None,
+            "reconciled": False,
+        }
+        result.update(changes)
+        return result
     if capability_id.startswith("fiscal_position."):
         result = {
             "model": "account.fiscal.position",
@@ -728,6 +1011,124 @@ def _result(capability_id: str, **changes) -> dict:
             "move_type": None,
             "source_id": None,
             "line_ids": [],
+            "partial_reconcile_ids": [],
+            "full_reconcile_id": None,
+            "reconciled": False,
+        }
+        result.update(changes)
+        return result
+    if capability_id in ACCOUNTING_MASTER_DATA_COMPLETION_WRITES:
+        identifier_field = (
+            "account_tag_id"
+            if capability_id.startswith("account.tag.")
+            else "tax_group_id"
+            if capability_id.startswith("tax.group.")
+            else "cash_rounding_id"
+        )
+        model = (
+            "account.account.tag"
+            if capability_id.startswith("account.tag.")
+            else "account.tax.group"
+            if capability_id.startswith("tax.group.")
+            else "account.cash.rounding"
+        )
+        result = {
+            "model": model,
+            "id": 913
+            if capability_id.endswith(".create")
+            else parameters[identifier_field],
+            "name": "Configured record",
+            "state": "archived"
+            if capability_id == "account.tag.archive"
+            else "active",
+            "company_id": 7,
+            "move_type": None,
+            "source_id": None,
+            "line_ids": [],
+            "partial_reconcile_ids": [],
+            "full_reconcile_id": None,
+            "reconciled": False,
+        }
+        result.update(changes)
+        return result
+    if capability_id in ACCOUNTING_RULES_FISCAL_YEAR_WRITES:
+        model = (
+            "account.fiscal.year"
+            if capability_id.startswith("fiscal_year.")
+            else "account.analytic.applicability"
+            if capability_id.startswith("analytic.applicability.")
+            else "account.analytic.distribution.model"
+        )
+        result = {
+            "model": model,
+            "id": 914 if capability_id.endswith(".create") else parameters["id"],
+            "name": "Accounting rule",
+            "state": "active",
+            "company_id": 7,
+            "move_type": None,
+            "source_id": None,
+            "line_ids": [],
+            "partial_reconcile_ids": [],
+            "full_reconcile_id": None,
+            "reconciled": False,
+        }
+        result.update(changes)
+        return result
+    if capability_id in ACCOUNTING_CONFIGURATION_EXPANSION_WRITES:
+        primary_id = (
+            909
+            if capability_id
+            in {
+                "currency.rate.record",
+                "account.group.create",
+                "reconciliation.model.create",
+            }
+            else parameters.get(
+                "account_group_id",
+                parameters.get(
+                    "tax_id", parameters.get("reconciliation_model_id", 909)
+                ),
+            )
+        )
+        model = (
+            "res.currency.rate"
+            if capability_id == "currency.rate.record"
+            else "account.group"
+            if capability_id.startswith("account.group.")
+            else "account.tax"
+            if capability_id == "tax.repartition_lines.replace"
+            else "account.reconcile.model"
+        )
+        result = {
+            "model": model,
+            "id": primary_id,
+            "name": "Configured record",
+            "state": (
+                "archived"
+                if capability_id == "reconciliation.model.archive"
+                else "active"
+            ),
+            "company_id": 7,
+            "move_type": None,
+            "source_id": (
+                parameters["currency_id"]
+                if capability_id == "currency.rate.record"
+                else None
+            ),
+            "line_ids": (
+                list(
+                    range(
+                        1101,
+                        1101
+                        + len(parameters["invoice_lines"])
+                        + len(parameters["refund_lines"]),
+                    )
+                )
+                if capability_id == "tax.repartition_lines.replace"
+                else list(range(1201, 1201 + len(parameters.get("lines", []))))
+                if capability_id == "reconciliation.model.lines.replace"
+                else []
+            ),
             "partial_reconcile_ids": [],
             "full_reconcile_id": None,
             "reconciled": False,
@@ -1170,7 +1571,11 @@ def test_each_core_write_validates_and_calls_one_fixed_port_operation(
         )
     elif capability_id == "period.accrual.generate":
         expected_parameters["order_ids"] = sorted(expected_parameters["order_ids"])
-    elif capability_id.startswith(("fiscal_position.", "journal.group.")):
+    elif (
+        capability_id.startswith(("fiscal_position.", "journal.group."))
+        or capability_id in ACCOUNTING_CONFIGURATION_EXPANSION_WRITES
+        or capability_id in ACCOUNTING_MASTER_DATA_COMPLETION_WRITES
+    ):
         expected_parameters = validate_core_write_request(capability_id, request)[2]
     elif capability_id == "partner.create":
         for field in (

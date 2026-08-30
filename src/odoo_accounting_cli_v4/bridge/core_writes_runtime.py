@@ -13,7 +13,7 @@ import json
 import re
 from collections.abc import Mapping
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from time import strftime, strptime
 from typing import Any
 
@@ -91,12 +91,43 @@ CAPABILITIES = frozenset(
         "tax.update",
         "tax.archive",
         "tax.restore",
+        "currency.rate.record",
+        "account.group.create",
+        "account.group.update",
+        "tax.repartition_lines.replace",
+        "reconciliation.model.create",
+        "reconciliation.model.update",
+        "reconciliation.model.lines.replace",
+        "reconciliation.model.archive",
+        "reconciliation.model.restore",
+        "account.tag.create",
+        "account.tag.update",
+        "account.tag.archive",
+        "account.tag.restore",
+        "tax.group.create",
+        "tax.group.update",
+        "cash_rounding.create",
+        "cash_rounding.update",
+        "fiscal_year.create",
+        "fiscal_year.update",
+        "analytic.applicability.create",
+        "analytic.applicability.update",
+        "analytic.distribution_model.create",
+        "analytic.distribution_model.update",
         "sale.order.create",
         "sale.order.update_draft",
         "sale.order.lines.replace",
         "sale.order.confirm",
         "sale.order.cancel",
         "sale.order.reset_to_draft",
+        "sale.order.invoice.create",
+        "stock.transfer.create",
+        "stock.transfer.confirm",
+        "stock.transfer.assign",
+        "stock.transfer.quantities.set",
+        "stock.transfer.validate",
+        "stock.transfer.unreserve",
+        "stock.transfer.cancel",
         "purchase.order.create",
         "purchase.order.update_draft",
         "purchase.order.lines.replace",
@@ -193,6 +224,26 @@ _ORDER_WRITE_CAPABILITIES = (
     | _ORDER_LINE_REPLACEMENT_CAPABILITIES
     | _ORDER_TRANSITION_CAPABILITIES
 )
+_SALE_ORDER_INVOICE_CAPABILITY = "sale.order.invoice.create"
+_STOCK_TRANSFER_CREATE_CAPABILITY = "stock.transfer.create"
+_STOCK_TRANSFER_ACTION_CAPABILITIES = frozenset(
+    {
+        "stock.transfer.confirm",
+        "stock.transfer.assign",
+        "stock.transfer.unreserve",
+        "stock.transfer.cancel",
+    }
+)
+_STOCK_TRANSFER_QUANTITIES_CAPABILITY = "stock.transfer.quantities.set"
+_STOCK_TRANSFER_VALIDATE_CAPABILITY = "stock.transfer.validate"
+_STOCK_TRANSFER_CAPABILITIES = (
+    {_STOCK_TRANSFER_CREATE_CAPABILITY}
+    | _STOCK_TRANSFER_ACTION_CAPABILITIES
+    | {
+        _STOCK_TRANSFER_QUANTITIES_CAPABILITY,
+        _STOCK_TRANSFER_VALIDATE_CAPABILITY,
+    }
+)
 _PURCHASE_BILL_CAPABILITIES = frozenset(
     {
         "purchase.order.bill.create",
@@ -267,6 +318,92 @@ _JOURNAL_GROUP_CAPABILITIES = frozenset(
 )
 _JOURNAL_GROUP_FIELDS = frozenset({"name", "sequence", "excluded_journal_ids"})
 _JOURNAL_GROUP_CREATE_DEFAULTS = {"sequence": 10, "excluded_journal_ids": []}
+_ACCOUNTING_REFERENCE_WRITE_CAPABILITIES = frozenset(
+    {
+        "currency.rate.record",
+        "account.group.create",
+        "account.group.update",
+        "tax.repartition_lines.replace",
+        "reconciliation.model.create",
+        "reconciliation.model.update",
+        "reconciliation.model.lines.replace",
+        "reconciliation.model.archive",
+        "reconciliation.model.restore",
+        "account.tag.create",
+        "account.tag.update",
+        "account.tag.archive",
+        "account.tag.restore",
+        "tax.group.create",
+        "tax.group.update",
+        "cash_rounding.create",
+        "cash_rounding.update",
+        "fiscal_year.create",
+        "fiscal_year.update",
+        "analytic.applicability.create",
+        "analytic.applicability.update",
+        "analytic.distribution_model.create",
+        "analytic.distribution_model.update",
+    }
+)
+_ACCOUNT_TAG_FIELDS = frozenset({"name", "applicability", "color", "country_id"})
+_TAX_GROUP_FIELDS = frozenset({"name", "sequence", "preceding_subtotal"})
+_CASH_ROUNDING_FIELDS = frozenset(
+    {
+        "name",
+        "rounding",
+        "strategy",
+        "rounding_method",
+        "profit_account_id",
+        "loss_account_id",
+    }
+)
+_FISCAL_YEAR_FIELDS = frozenset({"name", "date_from", "date_to"})
+_ANALYTIC_APPLICABILITY_FIELDS = frozenset(
+    {
+        "plan_id",
+        "business_domain",
+        "applicability",
+        "account_prefix",
+        "product_category_id",
+    }
+)
+_ANALYTIC_DISTRIBUTION_MODEL_FIELDS = frozenset(
+    {
+        "sequence",
+        "account_prefix",
+        "partner_id",
+        "partner_category_id",
+        "product_id",
+        "product_category_id",
+        "analytic_distribution",
+    }
+)
+_ACCOUNT_GROUP_WRITE_CAPABILITIES = frozenset(
+    {"account.group.create", "account.group.update"}
+)
+_RECONCILIATION_MODEL_WRITE_CAPABILITIES = frozenset(
+    {
+        "reconciliation.model.create",
+        "reconciliation.model.update",
+        "reconciliation.model.lines.replace",
+        "reconciliation.model.archive",
+        "reconciliation.model.restore",
+    }
+)
+_ACCOUNT_GROUP_FIELDS = frozenset(
+    {"name", "code_prefix_start", "code_prefix_end"}
+)
+_RECONCILIATION_MODEL_FIELDS = frozenset(
+    {
+        "name",
+        "sequence",
+        "trigger",
+        "match_journal_ids",
+        "match_partner_ids",
+        "match_amount",
+        "match_label",
+    }
+)
 _SALE_ORDER_UPDATE_KEYS = frozenset(
     {"client_order_ref", "validity_date", "commitment_date", "payment_term_id"}
 )
@@ -554,6 +691,42 @@ _PARAMETER_KEYS = {
     "tax.update": {"tax_id", "changes"},
     "tax.archive": {"tax_id"},
     "tax.restore": {"tax_id"},
+    "currency.rate.record": {
+        "currency_id",
+        "date",
+        "company_units_per_foreign_unit",
+    },
+    "account.group.create": set(_ACCOUNT_GROUP_FIELDS),
+    "account.group.update": {"account_group_id", "changes"},
+    "tax.repartition_lines.replace": {
+        "tax_id",
+        "invoice_lines",
+        "refund_lines",
+    },
+    "reconciliation.model.create": set(_RECONCILIATION_MODEL_FIELDS),
+    "reconciliation.model.update": {"reconciliation_model_id", "changes"},
+    "reconciliation.model.lines.replace": {
+        "reconciliation_model_id",
+        "lines",
+    },
+    "reconciliation.model.archive": {"reconciliation_model_id"},
+    "reconciliation.model.restore": {"reconciliation_model_id"},
+    "account.tag.create": set(_ACCOUNT_TAG_FIELDS),
+    "account.tag.update": {"account_tag_id", "changes"},
+    "account.tag.archive": {"account_tag_id"},
+    "account.tag.restore": {"account_tag_id"},
+    "tax.group.create": set(_TAX_GROUP_FIELDS),
+    "tax.group.update": {"tax_group_id", "changes"},
+    "cash_rounding.create": set(_CASH_ROUNDING_FIELDS),
+    "cash_rounding.update": {"cash_rounding_id", "changes"},
+    "fiscal_year.create": set(_FISCAL_YEAR_FIELDS),
+    "fiscal_year.update": {"id", "changes"},
+    "analytic.applicability.create": set(_ANALYTIC_APPLICABILITY_FIELDS),
+    "analytic.applicability.update": {"id", "changes"},
+    "analytic.distribution_model.create": set(
+        _ANALYTIC_DISTRIBUTION_MODEL_FIELDS
+    ),
+    "analytic.distribution_model.update": {"id", "changes"},
     "sale.order.create": {
         "partner_id",
         "pricelist_id",
@@ -569,6 +742,22 @@ _PARAMETER_KEYS = {
     "sale.order.confirm": {"order_id"},
     "sale.order.cancel": {"order_id"},
     "sale.order.reset_to_draft": {"order_id"},
+    "sale.order.invoice.create": {"order_id"},
+    "stock.transfer.create": {
+        "picking_type_id",
+        "location_id",
+        "location_dest_id",
+        "partner_id",
+        "scheduled_date",
+        "origin",
+        "moves",
+    },
+    "stock.transfer.confirm": {"transfer_id"},
+    "stock.transfer.assign": {"transfer_id"},
+    "stock.transfer.quantities.set": {"transfer_id", "lines"},
+    "stock.transfer.validate": {"transfer_id", "backorder_policy"},
+    "stock.transfer.unreserve": {"transfer_id"},
+    "stock.transfer.cancel": {"transfer_id"},
     "purchase.order.create": {
         "partner_id",
         "currency_id",
@@ -686,12 +875,43 @@ _GROUPS = {
     "tax.update": "account.group_account_manager",
     "tax.archive": "account.group_account_manager",
     "tax.restore": "account.group_account_manager",
+    "currency.rate.record": "account.group_account_manager",
+    "account.group.create": "account.group_account_manager",
+    "account.group.update": "account.group_account_manager",
+    "tax.repartition_lines.replace": "account.group_account_manager",
+    "reconciliation.model.create": "account.group_account_manager",
+    "reconciliation.model.update": "account.group_account_manager",
+    "reconciliation.model.lines.replace": "account.group_account_manager",
+    "reconciliation.model.archive": "account.group_account_manager",
+    "reconciliation.model.restore": "account.group_account_manager",
+    "account.tag.create": "account.group_account_manager",
+    "account.tag.update": "account.group_account_manager",
+    "account.tag.archive": "account.group_account_manager",
+    "account.tag.restore": "account.group_account_manager",
+    "tax.group.create": "account.group_account_manager",
+    "tax.group.update": "account.group_account_manager",
+    "cash_rounding.create": "account.group_account_manager",
+    "cash_rounding.update": "account.group_account_manager",
+    "fiscal_year.create": "account.group_account_manager",
+    "fiscal_year.update": "account.group_account_manager",
+    "analytic.applicability.create": "account.group_account_manager",
+    "analytic.applicability.update": "account.group_account_manager",
+    "analytic.distribution_model.create": "account.group_account_manager",
+    "analytic.distribution_model.update": "account.group_account_manager",
     "sale.order.create": "sales_team.group_sale_salesman",
     "sale.order.update_draft": "sales_team.group_sale_salesman",
     "sale.order.lines.replace": "sales_team.group_sale_salesman",
     "sale.order.confirm": "sales_team.group_sale_salesman",
     "sale.order.cancel": "sales_team.group_sale_salesman",
     "sale.order.reset_to_draft": "sales_team.group_sale_salesman",
+    "sale.order.invoice.create": "sales_team.group_sale_salesman",
+    "stock.transfer.create": "stock.group_stock_user",
+    "stock.transfer.confirm": "stock.group_stock_user",
+    "stock.transfer.assign": "stock.group_stock_user",
+    "stock.transfer.quantities.set": "stock.group_stock_user",
+    "stock.transfer.validate": "stock.group_stock_user",
+    "stock.transfer.unreserve": "stock.group_stock_user",
+    "stock.transfer.cancel": "stock.group_stock_user",
     "purchase.order.create": "purchase.group_purchase_user",
     "purchase.order.update_draft": "purchase.group_purchase_user",
     "purchase.order.lines.replace": "purchase.group_purchase_user",
@@ -1653,6 +1873,116 @@ for _capability_id in _ORDER_WRITE_CAPABILITIES:
             {(_line_model, "create"), (_line_model, "write"), (_line_model, "unlink")}
         )
 
+_MODELS[_SALE_ORDER_INVOICE_CAPABILITY] = {
+    "res.company",
+    "sale.order",
+    "sale.order.line",
+    "account.move",
+    "account.move.line",
+}
+_ACCESS[_SALE_ORDER_INVOICE_CAPABILITY] = {
+    ("res.company", "read"),
+    ("sale.order", "read"),
+    ("sale.order", "write"),
+    ("sale.order.line", "read"),
+    ("account.move", "read"),
+    ("account.move", "create"),
+    ("account.move.line", "read"),
+}
+
+_STOCK_TRANSFER_MODELS = {
+    "res.company",
+    "stock.picking",
+    "stock.move",
+    "stock.move.line",
+    "stock.quant",
+}
+_STOCK_TRANSFER_BASE_ACCESS = {
+    ("res.company", "read"),
+    ("stock.picking", "read"),
+    ("stock.move", "read"),
+    ("stock.move.line", "read"),
+    ("stock.quant", "read"),
+}
+for _capability_id in _STOCK_TRANSFER_CAPABILITIES:
+    _MODELS[_capability_id] = set(_STOCK_TRANSFER_MODELS)
+    _ACCESS[_capability_id] = set(_STOCK_TRANSFER_BASE_ACCESS)
+
+_MODELS[_STOCK_TRANSFER_CREATE_CAPABILITY].update(
+    {
+        "res.partner",
+        "stock.picking.type",
+        "stock.location",
+        "product.product",
+        "uom.uom",
+    }
+)
+_ACCESS[_STOCK_TRANSFER_CREATE_CAPABILITY].update(
+    {
+        ("res.partner", "read"),
+        ("stock.picking.type", "read"),
+        ("stock.location", "read"),
+        ("product.product", "read"),
+        ("uom.uom", "read"),
+        ("stock.picking", "create"),
+        ("stock.picking", "write"),
+        ("stock.move", "create"),
+        ("stock.move", "write"),
+    }
+)
+_ACCESS["stock.transfer.confirm"].update(
+    {("stock.picking", "write"), ("stock.move", "write")}
+)
+_ACCESS["stock.transfer.assign"].update(
+    {
+        ("stock.picking", "write"),
+        ("stock.move", "write"),
+        ("stock.move.line", "create"),
+        ("stock.move.line", "write"),
+        ("stock.quant", "write"),
+    }
+)
+_ACCESS[_STOCK_TRANSFER_QUANTITIES_CAPABILITY].update(
+    {
+        ("stock.move", "write"),
+        ("stock.move.line", "create"),
+        ("stock.move.line", "write"),
+        ("stock.move.line", "unlink"),
+        ("stock.quant", "write"),
+    }
+)
+_MODELS[_STOCK_TRANSFER_VALIDATE_CAPABILITY].update(
+    {"stock.picking.type", "account.move", "account.move.line"}
+)
+_ACCESS[_STOCK_TRANSFER_VALIDATE_CAPABILITY].update(
+    {
+        ("stock.picking.type", "read"),
+        ("stock.picking", "create"),
+        ("stock.picking", "write"),
+        ("stock.move", "create"),
+        ("stock.move", "write"),
+        ("stock.move.line", "create"),
+        ("stock.move.line", "write"),
+        ("stock.move.line", "unlink"),
+        ("stock.quant", "write"),
+        ("account.move", "read"),
+        ("account.move", "create"),
+        ("account.move", "write"),
+        ("account.move.line", "read"),
+        ("account.move.line", "create"),
+        ("account.move.line", "write"),
+    }
+)
+for _capability_id in ("stock.transfer.unreserve", "stock.transfer.cancel"):
+    _ACCESS[_capability_id].update(
+        {
+            ("stock.picking", "write"),
+            ("stock.move", "write"),
+            ("stock.move.line", "unlink"),
+            ("stock.quant", "write"),
+        }
+    )
+
 _MODELS["purchase.order.bill.create"] = {
     "res.company",
     "purchase.order",
@@ -1825,6 +2155,199 @@ for _capability_id in _JOURNAL_GROUP_CAPABILITIES:
     }
 _ACCESS["journal.group.create"].add(("account.journal.group", "create"))
 _ACCESS["journal.group.update"].add(("account.journal.group", "write"))
+
+_MODELS["currency.rate.record"] = {
+    "res.company",
+    "res.currency",
+    "res.currency.rate",
+}
+_ACCESS["currency.rate.record"] = {
+    ("res.company", "read"),
+    ("res.currency", "read"),
+    ("res.currency.rate", "read"),
+    ("res.currency.rate", "create"),
+}
+
+for _capability_id in _ACCOUNT_GROUP_WRITE_CAPABILITIES:
+    _MODELS[_capability_id] = {"res.company", "account.group"}
+    _ACCESS[_capability_id] = {
+        ("res.company", "read"),
+        ("account.group", "read"),
+    }
+_ACCESS["account.group.create"].add(("account.group", "create"))
+_ACCESS["account.group.update"].add(("account.group", "write"))
+
+_MODELS["tax.repartition_lines.replace"] = {
+    "res.company",
+    "account.tax",
+    "account.tax.repartition.line",
+    "account.account",
+    "account.account.tag",
+}
+_ACCESS["tax.repartition_lines.replace"] = {
+    ("res.company", "read"),
+    ("account.tax", "read"),
+    ("account.tax", "write"),
+    ("account.tax.repartition.line", "read"),
+    ("account.tax.repartition.line", "create"),
+    ("account.tax.repartition.line", "write"),
+    ("account.tax.repartition.line", "unlink"),
+    ("account.account", "read"),
+    ("account.account.tag", "read"),
+}
+
+_RECONCILIATION_MODEL_HEADER_MODELS = {
+    "res.company",
+    "res.partner",
+    "account.journal",
+    "account.reconcile.model",
+}
+_RECONCILIATION_MODEL_HEADER_ACCESS = {
+    ("res.company", "read"),
+    ("res.partner", "read"),
+    ("account.journal", "read"),
+    ("account.reconcile.model", "read"),
+}
+for _capability_id in (
+    "reconciliation.model.create",
+    "reconciliation.model.update",
+):
+    _MODELS[_capability_id] = set(_RECONCILIATION_MODEL_HEADER_MODELS)
+    _ACCESS[_capability_id] = set(_RECONCILIATION_MODEL_HEADER_ACCESS)
+_ACCESS["reconciliation.model.create"].add(("account.reconcile.model", "create"))
+_ACCESS["reconciliation.model.update"].add(("account.reconcile.model", "write"))
+
+_MODELS["reconciliation.model.lines.replace"] = {
+    "res.company",
+    "res.partner",
+    "account.account",
+    "account.tax",
+    "account.analytic.account",
+    "account.reconcile.model",
+    "account.reconcile.model.line",
+}
+_ACCESS["reconciliation.model.lines.replace"] = {
+    ("res.company", "read"),
+    ("res.partner", "read"),
+    ("account.account", "read"),
+    ("account.tax", "read"),
+    ("account.analytic.account", "read"),
+    ("account.reconcile.model", "read"),
+    ("account.reconcile.model", "write"),
+    ("account.reconcile.model.line", "read"),
+    ("account.reconcile.model.line", "create"),
+    ("account.reconcile.model.line", "write"),
+    ("account.reconcile.model.line", "unlink"),
+}
+for _capability_id in (
+    "reconciliation.model.archive",
+    "reconciliation.model.restore",
+):
+    _MODELS[_capability_id] = {"res.company", "account.reconcile.model"}
+    _ACCESS[_capability_id] = {
+        ("res.company", "read"),
+        ("account.reconcile.model", "read"),
+        ("account.reconcile.model", "write"),
+    }
+
+for _capability_id in (
+    "account.tag.create",
+    "account.tag.update",
+    "account.tag.archive",
+    "account.tag.restore",
+):
+    _MODELS[_capability_id] = {"res.company", "res.country", "account.account.tag"}
+    _ACCESS[_capability_id] = {
+        ("res.company", "read"),
+        ("res.country", "read"),
+        ("account.account.tag", "read"),
+    }
+_ACCESS["account.tag.create"].add(("account.account.tag", "create"))
+for _capability_id in ("account.tag.update", "account.tag.archive", "account.tag.restore"):
+    _ACCESS[_capability_id].add(("account.account.tag", "write"))
+
+for _capability_id in ("tax.group.create", "tax.group.update"):
+    _MODELS[_capability_id] = {"res.company", "res.country", "account.tax.group"}
+    _ACCESS[_capability_id] = {
+        ("res.company", "read"),
+        ("res.country", "read"),
+        ("account.tax.group", "read"),
+    }
+_ACCESS["tax.group.create"].add(("account.tax.group", "create"))
+_ACCESS["tax.group.update"].add(("account.tax.group", "write"))
+
+for _capability_id in ("cash_rounding.create", "cash_rounding.update"):
+    _MODELS[_capability_id] = {"res.company", "account.account", "account.cash.rounding"}
+    _ACCESS[_capability_id] = {
+        ("res.company", "read"),
+        ("account.account", "read"),
+        ("account.cash.rounding", "read"),
+    }
+_ACCESS["cash_rounding.create"].add(("account.cash.rounding", "create"))
+_ACCESS["cash_rounding.update"].add(("account.cash.rounding", "write"))
+
+for _capability_id in ("fiscal_year.create", "fiscal_year.update"):
+    _MODELS[_capability_id] = {"res.company", "account.fiscal.year"}
+    _ACCESS[_capability_id] = {
+        ("res.company", "read"),
+        ("account.fiscal.year", "read"),
+    }
+_ACCESS["fiscal_year.create"].add(("account.fiscal.year", "create"))
+_ACCESS["fiscal_year.update"].add(("account.fiscal.year", "write"))
+
+for _capability_id in (
+    "analytic.applicability.create",
+    "analytic.applicability.update",
+):
+    _MODELS[_capability_id] = {
+        "res.company",
+        "account.analytic.plan",
+        "product.category",
+        "account.analytic.applicability",
+    }
+    _ACCESS[_capability_id] = {
+        ("res.company", "read"),
+        ("account.analytic.plan", "read"),
+        ("product.category", "read"),
+        ("account.analytic.applicability", "read"),
+    }
+_ACCESS["analytic.applicability.create"].add(
+    ("account.analytic.applicability", "create")
+)
+_ACCESS["analytic.applicability.update"].add(
+    ("account.analytic.applicability", "write")
+)
+
+for _capability_id in (
+    "analytic.distribution_model.create",
+    "analytic.distribution_model.update",
+):
+    _MODELS[_capability_id] = {
+        "res.company",
+        "res.partner",
+        "res.partner.category",
+        "product.product",
+        "product.category",
+        "account.analytic.plan",
+        "account.analytic.account",
+        "account.analytic.distribution.model",
+    }
+    _ACCESS[_capability_id] = {
+        ("res.company", "read"),
+        ("res.partner", "read"),
+        ("res.partner.category", "read"),
+        ("product.product", "read"),
+        ("product.category", "read"),
+        ("account.analytic.plan", "read"),
+        ("account.analytic.account", "read"),
+        ("account.analytic.distribution.model", "read"),
+    }
+_ACCESS["analytic.distribution_model.create"].add(
+    ("account.analytic.distribution.model", "create")
+)
+_ACCESS["analytic.distribution_model.update"].add(
+    ("account.analytic.distribution.model", "write")
+)
 
 
 for _capability_id in ("customer_invoice.create", "vendor_bill.create"):
@@ -2768,6 +3291,62 @@ def _valid_order_update_parameters(
     )
 
 
+def _valid_stock_transfer_parameters(
+    capability_id: str, parameters: dict[str, Any]
+) -> bool:
+    if capability_id == _STOCK_TRANSFER_CREATE_CAPABILITY:
+        moves = parameters["moves"]
+        origin = parameters["origin"]
+        return bool(
+            _is_id(parameters["picking_type_id"])
+            and _is_id(parameters["location_id"])
+            and _is_id(parameters["location_dest_id"])
+            and parameters["location_id"] != parameters["location_dest_id"]
+            and (parameters["partner_id"] is None or _is_id(parameters["partner_id"]))
+            and (
+                parameters["scheduled_date"] is None
+                or _is_datetime(parameters["scheduled_date"])
+            )
+            and (origin is None or _is_text(origin, maximum=200))
+            and (origin is None or "ODACV4" not in origin)
+            and isinstance(moves, list)
+            and 1 <= len(moves) <= 200
+            and all(
+                isinstance(move, dict)
+                and set(move) == {"product_id", "name", "quantity", "uom_id"}
+                and _is_id(move["product_id"])
+                and _is_id(move["uom_id"])
+                and _is_text(move["name"])
+                and (quantity := _decimal(move["quantity"], positive=True)) is not None
+                and _canonical_decimal_text(quantity) == move["quantity"]
+                for move in moves
+            )
+        )
+    if capability_id == _STOCK_TRANSFER_QUANTITIES_CAPABILITY:
+        lines = parameters["lines"]
+        return bool(
+            _is_id(parameters["transfer_id"])
+            and isinstance(lines, list)
+            and 1 <= len(lines) <= 200
+            and all(
+                isinstance(line, dict)
+                and set(line) == {"move_id", "quantity"}
+                and _is_id(line["move_id"])
+                and (quantity := _decimal(line["quantity"])) is not None
+                and _canonical_decimal_text(quantity) == line["quantity"]
+                for line in lines
+            )
+            and [line["move_id"] for line in lines]
+            == sorted({line["move_id"] for line in lines})
+        )
+    if capability_id == _STOCK_TRANSFER_VALIDATE_CAPABILITY:
+        return _is_id(parameters["transfer_id"]) and parameters["backorder_policy"] in {
+            "create",
+            "cancel",
+        }
+    return _is_id(parameters["transfer_id"])
+
+
 def _valid_purchase_bill_parameters(
     capability_id: str, parameters: dict[str, Any]
 ) -> bool:
@@ -3034,6 +3613,477 @@ def _valid_configuration_parameters(
     )
 
 
+def _valid_account_group_values(values: Any, *, partial: bool) -> bool:
+    if (
+        not isinstance(values, dict)
+        or not values
+        or not set(values) <= _ACCOUNT_GROUP_FIELDS
+        or (not partial and set(values) != _ACCOUNT_GROUP_FIELDS)
+    ):
+        return False
+    if "name" in values and not _is_text(values["name"], maximum=256):
+        return False
+    if any(
+        field in values and not _is_text(values[field], maximum=64)
+        for field in ("code_prefix_start", "code_prefix_end")
+    ):
+        return False
+    start = values.get("code_prefix_start")
+    end = values.get("code_prefix_end")
+    return not (start is not None and end is not None) or (
+        len(start) == len(end) and start <= end
+    )
+
+
+def _valid_tax_repartition_line(line: Any) -> bool:
+    if not isinstance(line, dict) or set(line) != {
+        "sequence",
+        "repartition_type",
+        "factor_percent",
+        "account_id",
+        "tag_ids",
+        "use_in_tax_closing",
+    }:
+        return False
+    factor = _signed_decimal(line["factor_percent"])
+    return bool(
+        isinstance(line["sequence"], int)
+        and not isinstance(line["sequence"], bool)
+        and line["sequence"] >= 0
+        and line["repartition_type"] in {"base", "tax"}
+        and factor is not None
+        and _canonical_decimal_text(factor) == line["factor_percent"]
+        and (line["account_id"] is None or _is_id(line["account_id"]))
+        and _valid_id_list(line["tag_ids"])
+        and isinstance(line["use_in_tax_closing"], bool)
+        and (line["repartition_type"] != "base" or line["account_id"] is None)
+    )
+
+
+def _valid_tax_repartition_side(lines: Any) -> bool:
+    if not isinstance(lines, list) or not 2 <= len(lines) <= 100 or not all(
+        _valid_tax_repartition_line(line) for line in lines
+    ):
+        return False
+    base_lines = [line for line in lines if line["repartition_type"] == "base"]
+    tax_factors = [
+        Decimal(line["factor_percent"])
+        for line in lines
+        if line["repartition_type"] == "tax"
+    ]
+    positive = sum((factor for factor in tax_factors if factor > 0), Decimal(0))
+    negative = [factor for factor in tax_factors if factor < 0]
+    return bool(
+        len(base_lines) == 1
+        and tax_factors
+        and positive.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) == 100
+        and (
+            not negative
+            or sum(negative, Decimal(0)).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            == -100
+        )
+    )
+
+
+def _valid_match_amount(value: Any) -> bool:
+    if value is None:
+        return True
+    if not isinstance(value, dict) or set(value) != {
+        "operator",
+        "minimum",
+        "maximum",
+    }:
+        return False
+    operator = value["operator"]
+    if operator not in {"lower", "greater", "between"}:
+        return False
+    for field in ("minimum", "maximum"):
+        text = value[field]
+        if text is not None:
+            parsed = _decimal(text)
+            if parsed is None or _canonical_decimal_text(parsed) != text:
+                return False
+    if operator == "lower":
+        return value["minimum"] is None and value["maximum"] is not None
+    if operator == "greater":
+        return value["minimum"] is not None and value["maximum"] is None
+    return bool(
+        value["minimum"] is not None
+        and value["maximum"] is not None
+        and Decimal(value["minimum"]) <= Decimal(value["maximum"])
+    )
+
+
+def _valid_match_label(value: Any) -> bool:
+    if value is None:
+        return True
+    if not (
+        isinstance(value, dict)
+        and set(value) == {"operator", "value"}
+        and value["operator"] in {"contains", "not_contains", "match_regex"}
+        and _is_text(value["value"])
+    ):
+        return False
+    if value["operator"] == "match_regex":
+        try:
+            re.compile(value["value"])
+        except re.error:
+            return False
+    return True
+
+
+def _valid_reconciliation_model_values(values: Any, *, partial: bool) -> bool:
+    if (
+        not isinstance(values, dict)
+        or not values
+        or not set(values) <= _RECONCILIATION_MODEL_FIELDS
+        or (not partial and set(values) != _RECONCILIATION_MODEL_FIELDS)
+    ):
+        return False
+    return bool(
+        ("name" not in values or _is_text(values["name"], maximum=256))
+        and (
+            "sequence" not in values
+            or (
+                isinstance(values["sequence"], int)
+                and not isinstance(values["sequence"], bool)
+                and values["sequence"] >= 0
+            )
+        )
+        and (
+            "trigger" not in values
+            or values["trigger"] in {"manual", "auto_reconcile"}
+        )
+        and (
+            "match_journal_ids" not in values
+            or _valid_id_list(values["match_journal_ids"])
+        )
+        and (
+            "match_partner_ids" not in values
+            or _valid_id_list(values["match_partner_ids"])
+        )
+        and (
+            "match_amount" not in values
+            or _valid_match_amount(values["match_amount"])
+        )
+        and (
+            "match_label" not in values or _valid_match_label(values["match_label"])
+        )
+    )
+
+
+def _valid_reconciliation_analytic_distribution(value: Any) -> bool:
+    if not isinstance(value, list) or not 1 <= len(value) <= 16:
+        return False
+    seen_ids: set[int] = set()
+    for item in value:
+        if not isinstance(item, dict) or set(item) != {
+            "analytic_account_ids",
+            "percentage",
+        }:
+            return False
+        account_ids = item["analytic_account_ids"]
+        percentage = _decimal(item["percentage"], positive=True)
+        decimal_places = (
+            max(0, -percentage.as_tuple().exponent) if percentage is not None else 0
+        )
+        if (
+            not isinstance(account_ids, list)
+            or not 1 <= len(account_ids) <= 16
+            or not _valid_id_list(account_ids)
+            or seen_ids.intersection(account_ids)
+            or percentage is None
+            or _canonical_decimal_text(percentage) != item["percentage"]
+            or percentage > 100
+            or decimal_places > 4
+        ):
+            return False
+        seen_ids.update(account_ids)
+    return True
+
+
+def _valid_reconciliation_model_lines(lines: Any) -> bool:
+    required = {
+        "sequence",
+        "account_id",
+        "partner_id",
+        "label",
+        "amount_type",
+        "amount_string",
+        "tax_ids",
+    }
+    if not isinstance(lines, list) or len(lines) > 100:
+        return False
+    for line in lines:
+        if (
+            not isinstance(line, dict)
+            or not required <= set(line) <= required | {"analytic_distribution"}
+            or not isinstance(line["sequence"], int)
+            or isinstance(line["sequence"], bool)
+            or line["sequence"] < 0
+            or (line["account_id"] is not None and not _is_id(line["account_id"]))
+            or (line["partner_id"] is not None and not _is_id(line["partner_id"]))
+            or not (
+                line["label"] is None
+                or _is_text(line["label"], maximum=500)
+            )
+            or line["amount_type"]
+            not in {"fixed", "percentage", "percentage_st_line", "regex"}
+            or not isinstance(line["amount_string"], str)
+            or not _valid_id_list(line["tax_ids"])
+            or (
+                "analytic_distribution" in line
+                and not _valid_reconciliation_analytic_distribution(
+                    line["analytic_distribution"]
+                )
+            )
+        ):
+            return False
+        if line["amount_type"] == "regex":
+            if not _is_text(line["amount_string"], maximum=500):
+                return False
+            try:
+                re.compile(line["amount_string"])
+            except re.error:
+                return False
+            continue
+        amount = _signed_decimal(line["amount_string"])
+        if (
+            amount is None
+            or _canonical_decimal_text(amount) != line["amount_string"]
+            or amount == 0
+        ):
+            return False
+        if line["amount_type"] == "percentage" and not 0 < amount <= 100:
+            return False
+    return True
+
+
+def _valid_fiscal_year_values(values: Any, *, partial: bool) -> bool:
+    if not isinstance(values, dict) or (partial and not values):
+        return False
+    if (not partial and set(values) != _FISCAL_YEAR_FIELDS) or not set(
+        values
+    ) <= _FISCAL_YEAR_FIELDS:
+        return False
+    return bool(
+        ("name" not in values or _is_text(values["name"], maximum=256))
+        and ("date_from" not in values or _is_date(values["date_from"]))
+        and ("date_to" not in values or _is_date(values["date_to"]))
+    )
+
+
+def _valid_analytic_applicability_values(values: Any, *, partial: bool) -> bool:
+    if not isinstance(values, dict) or (partial and not values):
+        return False
+    if (not partial and set(values) != _ANALYTIC_APPLICABILITY_FIELDS) or not set(
+        values
+    ) <= _ANALYTIC_APPLICABILITY_FIELDS:
+        return False
+    return bool(
+        ("plan_id" not in values or _is_id(values["plan_id"]))
+        and (
+            "business_domain" not in values
+            or values["business_domain"] in {"general", "invoice", "bill"}
+        )
+        and (
+            "applicability" not in values
+            or values["applicability"]
+            in {"optional", "mandatory", "unavailable"}
+        )
+        and (
+            "account_prefix" not in values
+            or values["account_prefix"] is None
+            or _is_text(values["account_prefix"], maximum=64)
+        )
+        and (
+            "product_category_id" not in values
+            or values["product_category_id"] is None
+            or _is_id(values["product_category_id"])
+        )
+    )
+
+
+def _valid_analytic_distribution_model_values(
+    values: Any, *, partial: bool
+) -> bool:
+    if not isinstance(values, dict) or (partial and not values):
+        return False
+    if (
+        not partial and set(values) != _ANALYTIC_DISTRIBUTION_MODEL_FIELDS
+    ) or not set(values) <= _ANALYTIC_DISTRIBUTION_MODEL_FIELDS:
+        return False
+    if "sequence" in values and not (
+        isinstance(values["sequence"], int)
+        and not isinstance(values["sequence"], bool)
+        and values["sequence"] >= 0
+    ):
+        return False
+    if "account_prefix" in values and not (
+        values["account_prefix"] is None
+        or _is_text(values["account_prefix"], maximum=64)
+    ):
+        return False
+    if any(
+        values[field_name] is not None and not _is_id(values[field_name])
+        for field_name in (
+            "partner_id",
+            "partner_category_id",
+            "product_id",
+            "product_category_id",
+        )
+        if field_name in values
+    ):
+        return False
+    if "analytic_distribution" in values:
+        distribution = values["analytic_distribution"]
+        return bool(
+            (partial and distribution is None)
+            or distribution is not None
+            and _valid_analytic_distribution(distribution)
+        )
+    return partial
+
+
+def _valid_accounting_reference_write_parameters(
+    capability_id: str, parameters: dict[str, Any]
+) -> bool:
+    if capability_id == "fiscal_year.create":
+        return _valid_fiscal_year_values(parameters, partial=False)
+    if capability_id == "fiscal_year.update":
+        return _is_id(parameters["id"]) and _valid_fiscal_year_values(
+            parameters["changes"], partial=True
+        )
+    if capability_id == "analytic.applicability.create":
+        return _valid_analytic_applicability_values(parameters, partial=False)
+    if capability_id == "analytic.applicability.update":
+        return _is_id(parameters["id"]) and _valid_analytic_applicability_values(
+            parameters["changes"], partial=True
+        )
+    if capability_id == "analytic.distribution_model.create":
+        return _valid_analytic_distribution_model_values(parameters, partial=False)
+    if capability_id == "analytic.distribution_model.update":
+        return _is_id(
+            parameters["id"]
+        ) and _valid_analytic_distribution_model_values(
+            parameters["changes"], partial=True
+        )
+    if capability_id == "account.tag.create":
+        return _valid_account_tag_values(parameters, partial=False)
+    if capability_id == "account.tag.update":
+        return _is_id(parameters["account_tag_id"]) and _valid_account_tag_values(
+            parameters["changes"], partial=True
+        )
+    if capability_id in {"account.tag.archive", "account.tag.restore"}:
+        return _is_id(parameters["account_tag_id"])
+    if capability_id == "tax.group.create":
+        return _valid_tax_group_values(parameters, partial=False)
+    if capability_id == "tax.group.update":
+        return _is_id(parameters["tax_group_id"]) and _valid_tax_group_values(
+            parameters["changes"], partial=True
+        )
+    if capability_id == "cash_rounding.create":
+        return _valid_cash_rounding_values(parameters, partial=False)
+    if capability_id == "cash_rounding.update":
+        return _is_id(parameters["cash_rounding_id"]) and _valid_cash_rounding_values(
+            parameters["changes"], partial=True
+        )
+    if capability_id == "currency.rate.record":
+        rate = _decimal(parameters["company_units_per_foreign_unit"], positive=True)
+        return bool(
+            _is_id(parameters["currency_id"])
+            and _is_date(parameters["date"])
+            and rate is not None
+            and _canonical_decimal_text(rate)
+            == parameters["company_units_per_foreign_unit"]
+        )
+    if capability_id == "account.group.create":
+        return _valid_account_group_values(parameters, partial=False)
+    if capability_id == "account.group.update":
+        return _is_id(parameters["account_group_id"]) and _valid_account_group_values(
+            parameters["changes"], partial=True
+        )
+    if capability_id == "tax.repartition_lines.replace":
+        invoice_lines = parameters["invoice_lines"]
+        refund_lines = parameters["refund_lines"]
+        return bool(
+            _is_id(parameters["tax_id"])
+            and _valid_tax_repartition_side(invoice_lines)
+            and _valid_tax_repartition_side(refund_lines)
+            and len(invoice_lines) == len(refund_lines)
+            and all(
+                invoice["repartition_type"] == refund["repartition_type"]
+                and invoice["factor_percent"] == refund["factor_percent"]
+                for invoice, refund in zip(invoice_lines, refund_lines, strict=True)
+            )
+        )
+    if capability_id == "reconciliation.model.create":
+        return _valid_reconciliation_model_values(parameters, partial=False)
+    if capability_id == "reconciliation.model.update":
+        return _is_id(
+            parameters["reconciliation_model_id"]
+        ) and _valid_reconciliation_model_values(parameters["changes"], partial=True)
+    if capability_id == "reconciliation.model.lines.replace":
+        return _is_id(
+            parameters["reconciliation_model_id"]
+        ) and _valid_reconciliation_model_lines(parameters["lines"])
+    return _is_id(parameters["reconciliation_model_id"])
+
+
+def _valid_account_tag_values(values: Any, *, partial: bool) -> bool:
+    if not isinstance(values, dict) or (partial and not values):
+        return False
+    if (not partial and set(values) != _ACCOUNT_TAG_FIELDS) or not set(values) <= _ACCOUNT_TAG_FIELDS:
+        return False
+    return bool(
+        ("name" not in values or _is_text(values["name"], maximum=256))
+        and ("applicability" not in values or values["applicability"] in {"accounts", "taxes", "products"})
+        and ("color" not in values or isinstance(values["color"], int) and not isinstance(values["color"], bool) and values["color"] >= 0)
+        and ("country_id" not in values or values["country_id"] is None or _is_id(values["country_id"]))
+        and not (values.get("applicability") in {"accounts", "products"} and values.get("country_id") is not None)
+    )
+
+
+def _valid_tax_group_values(values: Any, *, partial: bool) -> bool:
+    if not isinstance(values, dict) or (partial and not values):
+        return False
+    if (not partial and set(values) != _TAX_GROUP_FIELDS) or not set(values) <= _TAX_GROUP_FIELDS:
+        return False
+    return bool(
+        ("name" not in values or _is_text(values["name"], maximum=256))
+        and ("sequence" not in values or isinstance(values["sequence"], int) and not isinstance(values["sequence"], bool) and values["sequence"] >= 0)
+        and ("preceding_subtotal" not in values or values["preceding_subtotal"] is None or _is_text(values["preceding_subtotal"], maximum=256))
+    )
+
+
+def _valid_cash_rounding_values(values: Any, *, partial: bool) -> bool:
+    if not isinstance(values, dict) or (partial and not values):
+        return False
+    if (not partial and set(values) != _CASH_ROUNDING_FIELDS) or not set(values) <= _CASH_ROUNDING_FIELDS:
+        return False
+    rounding = (
+        _decimal(values.get("rounding"), positive=True)
+        if "rounding" in values
+        else Decimal(1)
+    )
+    if "rounding" in values and (rounding is None or _canonical_decimal_text(rounding) != values["rounding"]):
+        return False
+    if not partial:
+        strategy = values["strategy"]
+        accounts_valid = ((strategy == "add_invoice_line" and values["profit_account_id"] is not None and values["loss_account_id"] is not None) or (strategy == "biggest_tax" and values["profit_account_id"] is None and values["loss_account_id"] is None))
+    else:
+        accounts_valid = True
+    return bool(
+        ("name" not in values or _is_text(values["name"], maximum=256))
+        and ("strategy" not in values or values["strategy"] in {"biggest_tax", "add_invoice_line"})
+        and ("rounding_method" not in values or values["rounding_method"] in {"UP", "DOWN", "HALF-UP"})
+        and all(values.get(field) is None or _is_id(values[field]) for field in ("profit_account_id", "loss_account_id") if field in values)
+        and accounts_valid
+    )
+
+
 def _valid_parameters(
     capability_id: str, parameters: Any, company_id: int | None = None
 ) -> bool:
@@ -3077,6 +4127,10 @@ def _valid_parameters(
         required_keys = frozenset({"name"})
     if not required_keys <= parameter_keys <= allowed_keys:
         return False
+    if capability_id == _SALE_ORDER_INVOICE_CAPABILITY:
+        return _is_id(parameters["order_id"])
+    if capability_id in _STOCK_TRANSFER_CAPABILITIES:
+        return _valid_stock_transfer_parameters(capability_id, parameters)
     if capability_id in _PURCHASE_BILL_CAPABILITIES:
         return _valid_purchase_bill_parameters(capability_id, parameters)
     if capability_id in _PAYMENT_TERM_CAPABILITIES:
@@ -3087,6 +4141,8 @@ def _valid_parameters(
         return _valid_accrual_parameters(parameters)
     if capability_id in _FISCAL_POSITION_CAPABILITIES | _JOURNAL_GROUP_CAPABILITIES:
         return _valid_configuration_parameters(capability_id, parameters)
+    if capability_id in _ACCOUNTING_REFERENCE_WRITE_CAPABILITIES:
+        return _valid_accounting_reference_write_parameters(capability_id, parameters)
     if capability_id in _ORDER_CREATE_CAPABILITIES:
         return _valid_order_create_parameters(capability_id, parameters)
     if capability_id in _ORDER_UPDATE_CAPABILITIES:
@@ -3435,6 +4491,112 @@ def _validated_payload(
 def _deterministic_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in {
+        "currency.rate.record",
+        "account.group.create",
+        "reconciliation.model.create",
+        "account.tag.create",
+        "tax.group.create",
+        "cash_rounding.create",
+        "fiscal_year.create",
+        "analytic.applicability.create",
+        "analytic.distribution_model.create",
+    }:
+        digest = hashlib.sha256(
+            json.dumps(
+                parameters,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()[:32]
+        return f"{capability_id}:{company_id}:{digest}"
+    if capability_id in {
+        "account.group.update",
+        "reconciliation.model.update",
+        "account.tag.update",
+        "tax.group.update",
+        "cash_rounding.update",
+        "fiscal_year.update",
+        "analytic.applicability.update",
+        "analytic.distribution_model.update",
+    }:
+        id_name = {
+            "account.group.update": "account_group_id",
+            "reconciliation.model.update": "reconciliation_model_id",
+            "account.tag.update": "account_tag_id",
+            "tax.group.update": "tax_group_id",
+            "cash_rounding.update": "cash_rounding_id",
+            "fiscal_year.update": "id",
+            "analytic.applicability.update": "id",
+            "analytic.distribution_model.update": "id",
+        }[capability_id]
+        digest = hashlib.sha256(
+            json.dumps(
+                parameters["changes"],
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()[:32]
+        return f"{capability_id}:{parameters[id_name]}:{digest}"
+    if capability_id == "tax.repartition_lines.replace":
+        content = {
+            "invoice_lines": parameters["invoice_lines"],
+            "refund_lines": parameters["refund_lines"],
+        }
+        digest = hashlib.sha256(
+            json.dumps(
+                content,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()[:32]
+        return f"{capability_id}:{parameters['tax_id']}:{digest}"
+    if capability_id == "reconciliation.model.lines.replace":
+        digest = hashlib.sha256(
+            json.dumps(
+                parameters["lines"],
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()[:32]
+        return (
+            f"{capability_id}:{parameters['reconciliation_model_id']}:{digest}"
+        )
+    if capability_id in {
+        "reconciliation.model.archive",
+        "reconciliation.model.restore",
+    }:
+        return f"{capability_id}:{parameters['reconciliation_model_id']}"
+    if capability_id in {"account.tag.archive", "account.tag.restore"}:
+        return f"{capability_id}:{parameters['account_tag_id']}"
+    if capability_id == _SALE_ORDER_INVOICE_CAPABILITY:
+        return f"{capability_id}:{parameters['order_id']}"
+    if capability_id == _STOCK_TRANSFER_CREATE_CAPABILITY:
+        return None
+    if capability_id == _STOCK_TRANSFER_QUANTITIES_CAPABILITY:
+        canonical = json.dumps(
+            parameters["lines"],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        return f"{capability_id}:{parameters['transfer_id']}:{digest}"
+    if capability_id == _STOCK_TRANSFER_VALIDATE_CAPABILITY:
+        return (
+            f"{capability_id}:{parameters['transfer_id']}:"
+            f"{parameters['backorder_policy']}"
+        )
+    if capability_id in _STOCK_TRANSFER_ACTION_CAPABILITIES:
+        return f"{capability_id}:{parameters['transfer_id']}"
     if capability_id == "purchase.order.bill.create":
         return f"purchase.order.bill.create:{parameters['order_id']}"
     if capability_id in {"purchase_bill.match", "purchase_bill.lines.unmatch"}:
@@ -5439,7 +6601,7 @@ def _config_result(record: Any, model: str, company_id: int) -> dict[str, Any]:
     result = {
         "model": model,
         "id": record.id,
-        "name": record.name or None,
+        "name": getattr(record, "name", False) or None,
         "state": "active" if getattr(record, "active", True) else "archived",
         "company_id": company_id,
         "move_type": None,
@@ -9615,6 +10777,476 @@ def _transition_order(
     return _order_result(order, company_id), False
 
 
+def _linked_sale_invoices(env: Any, order_id: int, company_id: int) -> Any:
+    return _scoped(env, "account.move", company_id).search(
+        [
+            ("company_id", "=", company_id),
+            ("move_type", "=", "out_invoice"),
+            ("invoice_line_ids.sale_line_ids.order_id", "=", order_id),
+        ],
+        order="id",
+        limit=2,
+    )
+
+
+def _sale_invoice_order_ids(invoice: Any) -> set[int]:
+    return {
+        order_id
+        for invoice_line in invoice.invoice_line_ids
+        for sale_line in invoice_line.sale_line_ids
+        if (order_id := _many2one_id(sale_line.order_id)) is not None
+    }
+
+
+def _create_sale_order_invoice(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    order = _search_one(
+        env,
+        "sale.order",
+        [("id", "=", parameters["order_id"]), ("company_id", "=", company_id)],
+        company_id,
+        failure_type,
+    )
+    linked = _linked_sale_invoices(env, order.id, company_id)
+    if linked:
+        if len(linked) == 1 and _sale_invoice_order_ids(linked) == {order.id}:
+            return _move_result(linked, company_id, source_id=order.id), True
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "The sales order already has a conflicting customer invoice.",
+            exit_code=5,
+        )
+    if order.state != "sale" or order.invoice_status != "to invoice":
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Only a confirmed sales order currently to invoice can create an invoice.",
+            exit_code=5,
+        )
+    created = order._create_invoices()
+    linked = _linked_sale_invoices(env, order.id, company_id)
+    if (
+        len(created) != 1
+        or len(linked) != 1
+        or created.id != linked.id
+        or linked.company_id.id != company_id
+        or linked.move_type != "out_invoice"
+        or linked.state != "draft"
+        or _sale_invoice_order_ids(linked) != {order.id}
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not create one sales-order-linked draft customer invoice.",
+            exit_code=6,
+        )
+    return _move_result(linked, company_id, source_id=order.id), False
+
+
+def _stock_transfer_result(picking: Any, company_id: int) -> dict[str, Any]:
+    result = {
+        "model": "stock.picking",
+        "id": picking.id,
+        "name": str(picking.name or picking.display_name),
+        "state": str(picking.state),
+        "company_id": company_id,
+        "move_type": None,
+        "source_id": _many2one_id(picking.picking_type_id),
+        "line_ids": _record_ids(picking.move_ids),
+        "partial_reconcile_ids": [],
+        "full_reconcile_id": None,
+        "reconciled": False,
+    }
+    assert set(result) == _RESULT_KEYS
+    return result
+
+
+def _stock_transfer(
+    env: Any,
+    transfer_id: int,
+    company_id: int,
+    failure_type: type[Exception],
+) -> Any:
+    picking = _search_one(
+        env,
+        "stock.picking",
+        [("id", "=", transfer_id), ("company_id", "=", company_id)],
+        company_id,
+        failure_type,
+    )
+    if not picking.move_ids:
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "The stock transfer has no stock moves.",
+            exit_code=5,
+        )
+    return picking
+
+
+def _stock_transfer_has_marker(picking: Any, marker: str) -> bool:
+    return marker in {
+        token.strip() for token in str(picking.origin or "").split(";") if token.strip()
+    }
+
+
+def _existing_stock_transfer_for_key(
+    env: Any,
+    company_id: int,
+    key: str,
+    marker: str,
+    failure_type: type[Exception],
+) -> Any | None:
+    key_marker = _idempotency_key_marker(
+        _STOCK_TRANSFER_CREATE_CAPABILITY, company_id, key
+    )
+    candidates = _scoped(env, "stock.picking", company_id).search(
+        [("company_id", "=", company_id), ("origin", "ilike", key_marker)],
+        limit=2,
+    )
+    candidates = candidates.filtered(
+        lambda picking: _stock_transfer_has_marker(picking, key_marker)
+    )
+    if not candidates:
+        return None
+    matching = candidates.filtered(
+        lambda picking: _stock_transfer_has_marker(picking, marker)
+    )
+    if len(candidates) != 1 or len(matching) != 1:
+        raise _fail(
+            failure_type,
+            "idempotency_conflict",
+            "The stock-transfer idempotency key was used with other parameters.",
+            exit_code=5,
+        )
+    return matching
+
+
+def _validate_stock_transfer_references(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> None:
+    _ensure_ids(
+        env,
+        "stock.picking.type",
+        {parameters["picking_type_id"]},
+        [("company_id", "=", company_id), ("active", "=", True)],
+        company_id,
+        failure_type,
+    )
+    _ensure_ids(
+        env,
+        "stock.location",
+        {parameters["location_id"], parameters["location_dest_id"]},
+        [
+            ("company_id", "in", [False, company_id]),
+            ("usage", "!=", "view"),
+            ("active", "=", True),
+        ],
+        company_id,
+        failure_type,
+    )
+    if parameters["partner_id"] is not None:
+        _ensure_ids(
+            env,
+            "res.partner",
+            {parameters["partner_id"]},
+            [("company_id", "in", [False, company_id])],
+            company_id,
+            failure_type,
+        )
+    products = _ensure_ids(
+        env,
+        "product.product",
+        {move["product_id"] for move in parameters["moves"]},
+        [
+            ("company_id", "in", [False, company_id]),
+            ("active", "=", True),
+            ("is_storable", "=", True),
+            ("tracking", "=", "none"),
+        ],
+        company_id,
+        failure_type,
+    )
+    uoms = _ensure_ids(
+        env,
+        "uom.uom",
+        {move["uom_id"] for move in parameters["moves"]},
+        [("active", "=", True)],
+        company_id,
+        failure_type,
+    )
+    product_by_id = {product.id: product for product in products}
+    uom_by_id = {uom.id: uom for uom in uoms}
+    if any(
+        not product_by_id[move["product_id"]].uom_id._has_common_reference(
+            uom_by_id[move["uom_id"]]
+        )
+        for move in parameters["moves"]
+    ):
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "A stock move unit of measure is incompatible with its product.",
+            exit_code=5,
+        )
+
+
+def _stock_move_values(
+    move: dict[str, Any], parameters: dict[str, Any], company_id: int
+) -> dict[str, Any]:
+    return {
+        "company_id": company_id,
+        "product_id": move["product_id"],
+        "description_picking": move["name"],
+        "product_uom_qty": Decimal(move["quantity"]),
+        "product_uom": move["uom_id"],
+        "location_id": parameters["location_id"],
+        "location_dest_id": parameters["location_dest_id"],
+    }
+
+
+def _normalized_stock_moves(moves: Any) -> list[dict[str, Any]]:
+    return [
+        {
+            "product_id": _many2one_id(move.product_id),
+            "name": str(move.description_picking),
+            "quantity": _canonical_decimal_text(move.product_uom_qty),
+            "uom_id": _many2one_id(move.product_uom),
+        }
+        for move in sorted(moves, key=lambda item: item.id)
+    ]
+
+
+def _create_stock_transfer(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    key: str,
+    marker: str,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    existing = _existing_stock_transfer_for_key(
+        env, company_id, key, marker, failure_type
+    )
+    if existing:
+        return _stock_transfer_result(existing, company_id), True
+    _validate_stock_transfer_references(env, parameters, company_id, failure_type)
+    key_marker = _idempotency_key_marker(
+        _STOCK_TRANSFER_CREATE_CAPABILITY, company_id, key
+    )
+    origin = ";".join(
+        token
+        for token in (parameters["origin"], key_marker, marker)
+        if token is not None
+    )
+    values = {
+        "company_id": company_id,
+        "picking_type_id": parameters["picking_type_id"],
+        "location_id": parameters["location_id"],
+        "location_dest_id": parameters["location_dest_id"],
+        "partner_id": parameters["partner_id"] or False,
+        "origin": origin,
+        "move_ids": [
+            (0, 0, _stock_move_values(move, parameters, company_id))
+            for move in parameters["moves"]
+        ],
+    }
+    if parameters["scheduled_date"] is not None:
+        values["scheduled_date"] = parameters["scheduled_date"]
+    picking = _scoped(env, "stock.picking", company_id).create(values)
+    expected_moves = [dict(move) for move in parameters["moves"]]
+    if (
+        picking.company_id.id != company_id
+        or picking.state != "draft"
+        or _many2one_id(picking.picking_type_id) != parameters["picking_type_id"]
+        or _many2one_id(picking.location_id) != parameters["location_id"]
+        or _many2one_id(picking.location_dest_id) != parameters["location_dest_id"]
+        or _many2one_id(picking.partner_id) != parameters["partner_id"]
+        or (
+            parameters["scheduled_date"] is not None
+            and _nullable_value(picking.scheduled_date) != parameters["scheduled_date"]
+        )
+        or str(picking.origin or "") != origin
+        or _normalized_stock_moves(picking.move_ids) != expected_moves
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not create the requested standalone draft stock transfer.",
+            exit_code=6,
+        )
+    return _stock_transfer_result(picking, company_id), False
+
+
+def _transition_stock_transfer(
+    env: Any,
+    capability_id: str,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    picking = _stock_transfer(env, parameters["transfer_id"], company_id, failure_type)
+    if capability_id == "stock.transfer.confirm":
+        replay_states = {"waiting", "confirmed", "assigned", "done"}
+        source_states = {"draft"}
+        target_states = {"waiting", "confirmed", "assigned"}
+        method = "action_confirm"
+    elif capability_id == "stock.transfer.assign":
+        replay_states = {"assigned", "done"}
+        source_states = {"draft", "waiting", "confirmed"}
+        target_states = {"waiting", "confirmed", "assigned"}
+        method = "action_assign"
+    elif capability_id == "stock.transfer.unreserve":
+        replay_states = {"waiting", "confirmed"}
+        source_states = {"assigned"}
+        target_states = replay_states
+        method = "do_unreserve"
+    else:
+        replay_states = {"cancel"}
+        source_states = {"draft", "waiting", "confirmed", "assigned"}
+        target_states = replay_states
+        method = "action_cancel"
+    if picking.state in replay_states:
+        return _stock_transfer_result(picking, company_id), True
+    if picking.state not in source_states:
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "The stock transfer is not in a state accepted by this action.",
+            exit_code=5,
+        )
+    getattr(picking, method)()
+    picking.invalidate_recordset(["state", "move_ids"])
+    if picking.state not in target_states:
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not complete the requested stock-transfer action.",
+            exit_code=6,
+        )
+    return _stock_transfer_result(picking, company_id), False
+
+
+def _set_stock_transfer_quantities(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    picking = _stock_transfer(env, parameters["transfer_id"], company_id, failure_type)
+    move_ids = {line["move_id"] for line in parameters["lines"]}
+    moves = _ensure_ids(
+        env,
+        "stock.move",
+        move_ids,
+        [("company_id", "=", company_id), ("picking_id", "=", picking.id)],
+        company_id,
+        failure_type,
+    )
+    move_by_id = {move.id: move for move in moves}
+    if any(move.has_tracking != "none" for move in moves):
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Tracked stock moves are outside the fixed quantity contract.",
+            exit_code=5,
+        )
+    if picking.state != "cancel" and all(
+        _same_decimal(move_by_id[line["move_id"]].quantity, line["quantity"])
+        for line in parameters["lines"]
+    ):
+        return _stock_transfer_result(picking, company_id), True
+    if picking.state not in {"draft", "waiting", "confirmed", "assigned"}:
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Completed or cancelled stock-transfer quantities cannot be changed.",
+            exit_code=5,
+        )
+    for line in parameters["lines"]:
+        move_by_id[line["move_id"]].write({"quantity": Decimal(line["quantity"])})
+    moves.invalidate_recordset(["quantity"])
+    if any(
+        not _same_decimal(move_by_id[line["move_id"]].quantity, line["quantity"])
+        for line in parameters["lines"]
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not persist the requested stock-move quantities.",
+            exit_code=6,
+        )
+    picking.invalidate_recordset(["state", "move_ids"])
+    return _stock_transfer_result(picking, company_id), False
+
+
+def _validate_stock_transfer(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    picking = _stock_transfer(env, parameters["transfer_id"], company_id, failure_type)
+    if picking.state == "done":
+        return _stock_transfer_result(picking, company_id), True
+    if picking.state not in {"waiting", "confirmed", "assigned"}:
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "The stock transfer is not ready for validation.",
+            exit_code=5,
+        )
+    if any(move.has_tracking != "none" for move in picking.move_ids):
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Tracked stock moves are outside the fixed validation contract.",
+            exit_code=5,
+        )
+    backorder_policy = parameters["backorder_policy"]
+    type_policy = picking.picking_type_id.create_backorder
+    if (backorder_policy == "create" and type_policy == "never") or (
+        backorder_policy == "cancel" and type_policy == "always"
+    ):
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "The picking type conflicts with the requested backorder policy.",
+            exit_code=5,
+        )
+    result = picking.with_context(
+        skip_backorder=True,
+        button_validate_picking_ids=[picking.id],
+        picking_ids_not_to_backorder=(
+            [picking.id] if backorder_policy == "cancel" else []
+        ),
+    ).button_validate()
+    picking.invalidate_recordset(["state", "move_ids"])
+    if picking.state == "done":
+        return _stock_transfer_result(picking, company_id), False
+    if result is not True:
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Odoo returned an unhandled stock-validation action.",
+            exit_code=5,
+        )
+    raise _fail(
+        failure_type,
+        "odoo_write_error",
+        "Odoo did not complete the stock transfer.",
+        exit_code=6,
+    )
+
+
 def _purchase_bill(
     env: Any,
     bill_id: int,
@@ -10534,6 +12166,1325 @@ def _write_journal_group(
     return _config_result(group, "account.journal.group", company_id), False
 
 
+def _root_company_id(
+    env: Any, company_id: int, failure_type: type[Exception]
+) -> int:
+    company = _search_one(
+        env,
+        "res.company",
+        [("id", "=", company_id)],
+        company_id,
+        failure_type,
+    )
+    return _many2one_id(getattr(company, "root_id", False)) or company.id
+
+
+def _currency_rate_result(rate: Any, company_id: int) -> dict[str, Any]:
+    result = _config_result(rate, "res.currency.rate", company_id)
+    result["name"] = str(rate.name) if rate.name else None
+    result["source_id"] = _many2one_id(rate.currency_id)
+    return result
+
+
+def _record_currency_rate(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    _ensure_ids(
+        env,
+        "res.currency",
+        {parameters["currency_id"]},
+        [("active", "=", True)],
+        company_id,
+        failure_type,
+    )
+    root_company_id = _root_company_id(env, company_id, failure_type)
+    model = _scoped(env, "res.currency.rate", company_id)
+    existing = model.search(
+        [
+            ("company_id", "=", root_company_id),
+            ("currency_id", "=", parameters["currency_id"]),
+            ("name", "=", parameters["date"]),
+        ],
+        limit=2,
+    )
+    if existing:
+        if len(existing) == 1 and _same_decimal(
+            existing.inverse_company_rate,
+            parameters["company_units_per_foreign_unit"],
+        ):
+            return _currency_rate_result(existing, company_id), True
+        raise _fail(
+            failure_type,
+            "idempotency_conflict",
+            "The currency rate already exists with a different value.",
+            exit_code=5,
+        )
+    rate = model.create(
+        {
+            "name": parameters["date"],
+            "currency_id": parameters["currency_id"],
+            "company_id": root_company_id,
+            "inverse_company_rate": Decimal(
+                parameters["company_units_per_foreign_unit"]
+            ),
+        }
+    )
+    if (
+        _many2one_id(rate.company_id) != root_company_id
+        or _many2one_id(rate.currency_id) != parameters["currency_id"]
+        or str(rate.name) != parameters["date"]
+        or not _same_decimal(
+            rate.inverse_company_rate,
+            parameters["company_units_per_foreign_unit"],
+        )
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not record the requested currency rate.",
+            exit_code=6,
+        )
+    return _currency_rate_result(rate, company_id), False
+
+
+def _account_group(
+    env: Any,
+    account_group_id: int,
+    company_id: int,
+    failure_type: type[Exception],
+) -> Any:
+    root_company_id = _root_company_id(env, company_id, failure_type)
+    return _search_one(
+        env,
+        "account.group",
+        [("id", "=", account_group_id), ("company_id", "=", root_company_id)],
+        company_id,
+        failure_type,
+    )
+
+
+def _account_group_matches(group: Any, values: dict[str, Any]) -> bool:
+    return all(getattr(group, field) == value for field, value in values.items())
+
+
+def _write_account_group(
+    env: Any,
+    capability_id: str,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    root_company_id = _root_company_id(env, company_id, failure_type)
+    if capability_id == "account.group.create":
+        existing = _scoped(env, "account.group", company_id).search(
+            [
+                ("company_id", "=", root_company_id),
+                ("code_prefix_start", "=", parameters["code_prefix_start"]),
+                ("code_prefix_end", "=", parameters["code_prefix_end"]),
+            ],
+            limit=2,
+        )
+        if existing:
+            if len(existing) == 1 and _account_group_matches(existing, parameters):
+                return _config_result(existing, "account.group", company_id), True
+            raise _fail(
+                failure_type,
+                "idempotency_conflict",
+                "The account-group prefix range already has other configuration.",
+                exit_code=5,
+            )
+        values = {**parameters, "company_id": root_company_id}
+        group = _scoped(env, "account.group", company_id).create(values)
+        if (
+            _many2one_id(group.company_id) != root_company_id
+            or not _account_group_matches(group, parameters)
+        ):
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not create the requested account group.",
+                exit_code=6,
+            )
+        return _config_result(group, "account.group", company_id), False
+
+    group = _account_group(
+        env, parameters["account_group_id"], company_id, failure_type
+    )
+    changes = parameters["changes"]
+    start = changes.get("code_prefix_start", group.code_prefix_start)
+    end = changes.get("code_prefix_end", group.code_prefix_end)
+    if len(start) != len(end) or start > end:
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "The updated account-group prefix range is invalid.",
+            exit_code=5,
+        )
+    if _account_group_matches(group, changes):
+        return _config_result(group, "account.group", company_id), True
+    group.write(changes)
+    group.invalidate_recordset(list(changes))
+    if not _account_group_matches(group, changes):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not update the requested account group.",
+            exit_code=6,
+        )
+    return _config_result(group, "account.group", company_id), False
+
+
+def _tax_repartition_line_values(
+    line: dict[str, Any], *, document_type: str
+) -> dict[str, Any]:
+    return {
+        "document_type": document_type,
+        "sequence": line["sequence"],
+        "repartition_type": line["repartition_type"],
+        "factor_percent": Decimal(line["factor_percent"]),
+        "account_id": line["account_id"] or False,
+        "tag_ids": [(6, 0, line["tag_ids"])],
+        "use_in_tax_closing": line["use_in_tax_closing"],
+    }
+
+
+def _tax_repartition_commands(
+    invoice_lines: list[dict[str, Any]], refund_lines: list[dict[str, Any]]
+) -> list[tuple[Any, ...]]:
+    return [
+        (5, 0, 0),
+        *[
+            (0, 0, _tax_repartition_line_values(line, document_type="invoice"))
+            for line in invoice_lines
+        ],
+        *[
+            (0, 0, _tax_repartition_line_values(line, document_type="refund"))
+            for line in refund_lines
+        ],
+    ]
+
+
+def _normalized_tax_repartition_line(line: Any) -> dict[str, Any]:
+    return {
+        "sequence": int(line.sequence),
+        "repartition_type": str(line.repartition_type),
+        "factor_percent": _canonical_decimal_text(line.factor_percent),
+        "account_id": _many2one_id(line.account_id),
+        "tag_ids": _record_ids(line.tag_ids),
+        "use_in_tax_closing": bool(line.use_in_tax_closing),
+    }
+
+
+def _tax_repartition_lines_match(
+    records: Any, expected: list[dict[str, Any]]
+) -> bool:
+    if len(records) != len(expected):
+        return False
+    current = [_normalized_tax_repartition_line(line) for line in records]
+    order_key = lambda item: (
+        item["sequence"],
+        item["repartition_type"],
+        item["factor_percent"],
+        item["account_id"] or 0,
+        item["tag_ids"],
+        item["use_in_tax_closing"],
+    )
+    return sorted(current, key=order_key) == sorted(expected, key=order_key)
+
+
+def _tax_repartition_result(tax: Any, company_id: int) -> dict[str, Any]:
+    result = _config_result(tax, "account.tax", company_id)
+    result["line_ids"] = sorted(
+        set(_record_ids(tax.invoice_repartition_line_ids))
+        | set(_record_ids(tax.refund_repartition_line_ids))
+    )
+    return result
+
+
+def _validate_tax_repartition_references(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> None:
+    lines = parameters["invoice_lines"] + parameters["refund_lines"]
+    _ensure_ids(
+        env,
+        "account.account",
+        {line["account_id"] for line in lines if line["account_id"] is not None},
+        [("company_ids", "in", [company_id]), ("active", "=", True)],
+        company_id,
+        failure_type,
+    )
+    _ensure_ids(
+        env,
+        "account.account.tag",
+        {tag_id for line in lines for tag_id in line["tag_ids"]},
+        [],
+        company_id,
+        failure_type,
+    )
+
+
+def _replace_tax_repartition_lines(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    tax = _tax_config_record(env, parameters["tax_id"], company_id, failure_type)
+    _validate_tax_repartition_references(env, parameters, company_id, failure_type)
+    invoice_lines = parameters["invoice_lines"]
+    refund_lines = parameters["refund_lines"]
+    if _tax_repartition_lines_match(
+        tax.invoice_repartition_line_ids, invoice_lines
+    ) and _tax_repartition_lines_match(tax.refund_repartition_line_ids, refund_lines):
+        return _tax_repartition_result(tax, company_id), True
+    tax.write(
+        {
+            "repartition_line_ids": _tax_repartition_commands(
+                invoice_lines, refund_lines
+            ),
+        }
+    )
+    tax.invalidate_recordset(
+        [
+            "repartition_line_ids",
+            "invoice_repartition_line_ids",
+            "refund_repartition_line_ids",
+        ]
+    )
+    if not _tax_repartition_lines_match(
+        tax.invoice_repartition_line_ids, invoice_lines
+    ) or not _tax_repartition_lines_match(tax.refund_repartition_line_ids, refund_lines):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not replace the requested tax repartition lines.",
+            exit_code=6,
+        )
+    return _tax_repartition_result(tax, company_id), False
+
+
+def _reconciliation_model(
+    env: Any,
+    reconciliation_model_id: int,
+    company_id: int,
+    failure_type: type[Exception],
+) -> Any:
+    return _search_one(
+        env,
+        "account.reconcile.model",
+        [
+            ("id", "=", reconciliation_model_id),
+            ("company_id", "=", company_id),
+        ],
+        company_id,
+        failure_type,
+    )
+
+
+def _normalized_match_amount(model: Any) -> dict[str, Any] | None:
+    if not model.match_amount:
+        return None
+    return {
+        "operator": model.match_amount,
+        "minimum": (
+            _canonical_decimal_text(model.match_amount_min)
+            if model.match_amount in {"greater", "between"}
+            else None
+        ),
+        "maximum": (
+            _canonical_decimal_text(model.match_amount_max)
+            if model.match_amount in {"lower", "between"}
+            else None
+        ),
+    }
+
+
+def _normalized_match_label(model: Any) -> dict[str, Any] | None:
+    if not model.match_label:
+        return None
+    return {"operator": model.match_label, "value": str(model.match_label_param)}
+
+
+def _reconciliation_model_matches(model: Any, expected: dict[str, Any]) -> bool:
+    current = {
+        "name": model.name,
+        "sequence": model.sequence,
+        "trigger": model.trigger,
+        "match_journal_ids": _record_ids(model.match_journal_ids),
+        "match_partner_ids": _record_ids(model.match_partner_ids),
+        "match_amount": _normalized_match_amount(model),
+        "match_label": _normalized_match_label(model),
+    }
+    return all(current[field] == value for field, value in expected.items())
+
+
+def _validate_reconciliation_model_references(
+    env: Any,
+    values: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> None:
+    _ensure_ids(
+        env,
+        "account.journal",
+        set(values.get("match_journal_ids", [])),
+        [("company_id", "=", company_id), ("type", "in", ["bank", "cash", "credit"])],
+        company_id,
+        failure_type,
+    )
+    _ensure_ids(
+        env,
+        "res.partner",
+        set(values.get("match_partner_ids", [])),
+        [("company_id", "in", [False, company_id])],
+        company_id,
+        failure_type,
+    )
+
+
+def _reconciliation_model_values(values: dict[str, Any]) -> dict[str, Any]:
+    result = {
+        field: value
+        for field, value in values.items()
+        if field not in {"match_amount", "match_label"}
+    }
+    for field in ("match_journal_ids", "match_partner_ids"):
+        if field in result:
+            result[field] = [(6, 0, result[field])]
+    if "match_amount" in values:
+        match_amount = values["match_amount"]
+        result.update(
+            {
+                "match_amount": match_amount["operator"] if match_amount else False,
+                "match_amount_min": (
+                    float(Decimal(match_amount["minimum"]))
+                    if match_amount and match_amount["minimum"] is not None
+                    else 0.0
+                ),
+                "match_amount_max": (
+                    float(Decimal(match_amount["maximum"]))
+                    if match_amount and match_amount["maximum"] is not None
+                    else 0.0
+                ),
+            }
+        )
+    if "match_label" in values:
+        match_label = values["match_label"]
+        result.update(
+            {
+                "match_label": match_label["operator"] if match_label else False,
+                "match_label_param": match_label["value"] if match_label else False,
+            }
+        )
+    return result
+
+
+def _reconciliation_model_result(model: Any, company_id: int) -> dict[str, Any]:
+    result = _config_result(model, "account.reconcile.model", company_id)
+    result["line_ids"] = _record_ids(model.line_ids)
+    return result
+
+
+def _write_reconciliation_model(
+    env: Any,
+    capability_id: str,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    create = capability_id == "reconciliation.model.create"
+    values = parameters if create else parameters["changes"]
+    _validate_reconciliation_model_references(env, values, company_id, failure_type)
+    if create:
+        existing = _scoped(env, "account.reconcile.model", company_id).search(
+            [("company_id", "=", company_id), ("name", "=", values["name"])],
+            limit=2,
+        )
+        if existing:
+            if len(existing) == 1 and _reconciliation_model_matches(existing, values):
+                return _reconciliation_model_result(existing, company_id), True
+            raise _fail(
+                failure_type,
+                "idempotency_conflict",
+                "The reconciliation-model name already has other configuration.",
+                exit_code=5,
+            )
+        create_values = _reconciliation_model_values(values)
+        create_values.update({"company_id": company_id, "active": True})
+        model = _scoped(env, "account.reconcile.model", company_id).create(
+            create_values
+        )
+        if (
+            _many2one_id(model.company_id) != company_id
+            or not _reconciliation_model_matches(model, values)
+        ):
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not create the requested reconciliation model.",
+                exit_code=6,
+            )
+        return _reconciliation_model_result(model, company_id), False
+
+    model = _reconciliation_model(
+        env, parameters["reconciliation_model_id"], company_id, failure_type
+    )
+    if _reconciliation_model_matches(model, values):
+        return _reconciliation_model_result(model, company_id), True
+    model.write(_reconciliation_model_values(values))
+    model.invalidate_recordset(
+        list(values)
+        + [
+            "match_amount_min",
+            "match_amount_max",
+            "match_label_param",
+        ]
+    )
+    if not _reconciliation_model_matches(model, values):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not update the requested reconciliation model.",
+            exit_code=6,
+        )
+    return _reconciliation_model_result(model, company_id), False
+
+
+def _reconciliation_analytic_distribution(
+    value: list[dict[str, Any]],
+) -> dict[str, float] | bool:
+    if not value:
+        return False
+    return {
+        ",".join(str(account_id) for account_id in item["analytic_account_ids"]): float(
+            Decimal(item["percentage"])
+        )
+        for item in value
+    }
+
+
+def _normalized_reconciliation_analytic_distribution(
+    value: Any,
+) -> list[dict[str, Any]]:
+    if not value:
+        return []
+    return sorted(
+        [
+            {
+                "analytic_account_ids": sorted(
+                    int(account_id) for account_id in str(key).split(",")
+                ),
+                "percentage": _canonical_decimal_text(percentage),
+            }
+            for key, percentage in value.items()
+        ],
+        key=lambda item: item["analytic_account_ids"],
+    )
+
+
+def _normalized_reconciliation_line(line: Any) -> dict[str, Any]:
+    result = {
+        "sequence": int(line.sequence),
+        "account_id": _many2one_id(line.account_id),
+        "partner_id": _many2one_id(line.partner_id),
+        "label": str(line.label) if line.label else None,
+        "amount_type": str(line.amount_type),
+        "amount_string": str(line.amount_string),
+        "tax_ids": _record_ids(line.tax_ids),
+    }
+    distribution = _normalized_reconciliation_analytic_distribution(
+        line.analytic_distribution
+    )
+    if distribution:
+        result["analytic_distribution"] = distribution
+    return result
+
+
+def _expected_reconciliation_line(line: dict[str, Any]) -> dict[str, Any]:
+    result = dict(line)
+    if line.get("analytic_distribution"):
+        result["analytic_distribution"] = sorted(
+            line["analytic_distribution"],
+            key=lambda item: item["analytic_account_ids"],
+        )
+    else:
+        result.pop("analytic_distribution", None)
+    return result
+
+
+def _reconciliation_lines_match(
+    records: Any, expected: list[dict[str, Any]]
+) -> bool:
+    if len(records) != len(expected):
+        return False
+    current = [_normalized_reconciliation_line(line) for line in records]
+    normalized_expected = [_expected_reconciliation_line(line) for line in expected]
+    order_key = lambda item: (
+        item["sequence"],
+        item["account_id"] or 0,
+        item["partner_id"] or 0,
+        item["label"] or "",
+        item["amount_type"],
+        item["amount_string"],
+        item["tax_ids"],
+    )
+    return sorted(current, key=order_key) == sorted(normalized_expected, key=order_key)
+
+
+def _validate_reconciliation_line_references(
+    env: Any,
+    lines: list[dict[str, Any]],
+    company_id: int,
+    failure_type: type[Exception],
+) -> None:
+    _ensure_ids(
+        env,
+        "account.account",
+        {line["account_id"] for line in lines if line["account_id"] is not None},
+        [
+            ("company_ids", "in", [company_id]),
+            ("account_type", "!=", "off_balance"),
+            ("active", "=", True),
+        ],
+        company_id,
+        failure_type,
+    )
+    _ensure_ids(
+        env,
+        "res.partner",
+        {line["partner_id"] for line in lines if line["partner_id"] is not None},
+        [("company_id", "in", [False, company_id])],
+        company_id,
+        failure_type,
+    )
+    _ensure_ids(
+        env,
+        "account.tax",
+        {tax_id for line in lines for tax_id in line["tax_ids"]},
+        [("company_id", "=", company_id), ("active", "=", True)],
+        company_id,
+        failure_type,
+    )
+    _ensure_ids(
+        env,
+        "account.analytic.account",
+        {
+            account_id
+            for line in lines
+            for item in line.get("analytic_distribution", [])
+            for account_id in item["analytic_account_ids"]
+        },
+        [("company_id", "in", [False, company_id])],
+        company_id,
+        failure_type,
+    )
+
+
+def _reconciliation_line_commands(
+    lines: list[dict[str, Any]],
+) -> list[tuple[Any, ...]]:
+    commands: list[tuple[Any, ...]] = [(5, 0, 0)]
+    for line in lines:
+        values = {
+            "sequence": line["sequence"],
+            "account_id": line["account_id"] or False,
+            "partner_id": line["partner_id"] or False,
+            "label": line["label"] if line["label"] is not None else False,
+            "amount_type": line["amount_type"],
+            "amount_string": line["amount_string"],
+            "tax_ids": [(6, 0, line["tax_ids"])],
+        }
+        if "analytic_distribution" in line:
+            values["analytic_distribution"] = _reconciliation_analytic_distribution(
+                line["analytic_distribution"]
+            )
+        commands.append((0, 0, values))
+    return commands
+
+
+def _replace_reconciliation_model_lines(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    model = _reconciliation_model(
+        env, parameters["reconciliation_model_id"], company_id, failure_type
+    )
+    lines = parameters["lines"]
+    _validate_reconciliation_line_references(
+        env, lines, company_id, failure_type
+    )
+    if _reconciliation_lines_match(model.line_ids, lines):
+        return _reconciliation_model_result(model, company_id), True
+    model.write({"line_ids": _reconciliation_line_commands(lines)})
+    model.invalidate_recordset(["line_ids"])
+    if not _reconciliation_lines_match(model.line_ids, lines):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not replace the reconciliation-model lines.",
+            exit_code=6,
+        )
+    return _reconciliation_model_result(model, company_id), False
+
+
+def _transition_reconciliation_model(
+    env: Any,
+    capability_id: str,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    model = _reconciliation_model(
+        env, parameters["reconciliation_model_id"], company_id, failure_type
+    )
+    target_active = capability_id == "reconciliation.model.restore"
+    if bool(model.active) == target_active:
+        return _reconciliation_model_result(model, company_id), True
+    model.write({"active": target_active})
+    model.invalidate_recordset(["active"])
+    if bool(model.active) != target_active:
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not change the reconciliation-model archive state.",
+            exit_code=6,
+        )
+    return _reconciliation_model_result(model, company_id), False
+
+
+def _reference_result(record: Any, model: str, company_id: int, *, active: bool = True) -> dict[str, Any]:
+    result = _config_result(record, model, company_id)
+    result["state"] = "active" if active else "archived"
+    return result
+
+
+def _account_tag_values(tag: Any) -> dict[str, Any]:
+    return {"name": tag.name, "applicability": tag.applicability, "color": tag.color, "country_id": _many2one_id(tag.country_id)}
+
+
+def _write_account_tag(env: Any, capability_id: str, parameters: dict[str, Any], company_id: int, failure_type: type[Exception]) -> tuple[dict[str, Any], bool]:
+    company = _search_one(env, "res.company", [("id", "=", company_id)], company_id, failure_type)
+    company_country = _many2one_id(getattr(company, "account_fiscal_country_id", False)) or _many2one_id(getattr(company, "country_id", False))
+    create = capability_id == "account.tag.create"
+    if create:
+        values = parameters
+        if values["applicability"] == "taxes" and values["country_id"] != company_country:
+            raise _fail(failure_type, "record_not_found", "The tax-tag country is unavailable in the company.", exit_code=4)
+        model = _scoped(env, "account.account.tag", company_id)
+        country = values["country_id"] or False
+        existing = model.search([("name", "=", values["name"]), ("applicability", "=", values["applicability"]), ("country_id", "=", country)], limit=2)
+        if existing:
+            if (
+                len(existing) == 1
+                and bool(existing.active)
+                and _account_tag_values(existing) == values
+            ):
+                return _reference_result(existing, "account.account.tag", company_id, active=bool(existing.active)), True
+            raise _fail(failure_type, "state_conflict", "A different account tag already uses this natural key.", exit_code=5)
+        tag = model.create({**values, "country_id": country, "active": True})
+        if _account_tag_values(tag) != values or not tag.active:
+            raise _fail(failure_type, "odoo_write_error", "Odoo did not create the requested account tag.", exit_code=6)
+        return _reference_result(tag, "account.account.tag", company_id), False
+    tag = _search_one(env, "account.account.tag", [("id", "=", parameters["account_tag_id"])], company_id, failure_type)
+    tag_country_id = _many2one_id(tag.country_id)
+    if (
+        tag.applicability == "taxes" and tag_country_id != company_country
+    ) or (tag.applicability != "taxes" and tag_country_id is not None):
+        raise _fail(failure_type, "record_not_found", "The account tag is unavailable in the company country.", exit_code=4)
+    if capability_id in {"account.tag.archive", "account.tag.restore"}:
+        target = capability_id.endswith("restore")
+        if bool(tag.active) == target:
+            return _reference_result(tag, "account.account.tag", company_id, active=target), True
+        tag.write({"active": target}); tag.invalidate_recordset(["active"])
+        if bool(tag.active) != target:
+            raise _fail(failure_type, "odoo_write_error", "Odoo did not change the account-tag archive state.", exit_code=6)
+        return _reference_result(tag, "account.account.tag", company_id, active=target), False
+    changes = parameters["changes"]
+    target = {**_account_tag_values(tag), **changes}
+    if target["applicability"] != "taxes" and target["country_id"] is not None:
+        raise _fail(failure_type, "state_conflict", "Only tax tags may have a country.", exit_code=5)
+    if target["applicability"] == "taxes" and target["country_id"] != company_country:
+        raise _fail(failure_type, "record_not_found", "The tax-tag country is unavailable in the company.", exit_code=4)
+    if _account_tag_values(tag) == target:
+        return _reference_result(tag, "account.account.tag", company_id, active=bool(tag.active)), True
+    write_values = {key: (False if value is None else value) for key, value in changes.items()}
+    tag.write(write_values); tag.invalidate_recordset(list(changes))
+    if _account_tag_values(tag) != target:
+        raise _fail(failure_type, "odoo_write_error", "Odoo did not update the account tag.", exit_code=6)
+    return _reference_result(tag, "account.account.tag", company_id, active=bool(tag.active)), False
+
+
+def _tax_group_values(group: Any) -> dict[str, Any]:
+    return {"name": group.name, "sequence": group.sequence, "preceding_subtotal": group.preceding_subtotal or None}
+
+
+def _write_tax_group(env: Any, capability_id: str, parameters: dict[str, Any], company_id: int, failure_type: type[Exception]) -> tuple[dict[str, Any], bool]:
+    create = capability_id == "tax.group.create"
+    values = parameters if create else parameters["changes"]
+    company = _search_one(env, "res.company", [("id", "=", company_id)], company_id, failure_type)
+    country_id = _many2one_id(getattr(company, "account_fiscal_country_id", False)) or _many2one_id(getattr(company, "country_id", False))
+    if create:
+        model = _scoped(env, "account.tax.group", company_id)
+        existing = model.search([("company_id", "=", company_id), ("name", "=", values["name"])], limit=2)
+        if existing:
+            if (
+                len(existing) == 1
+                and _many2one_id(existing.company_id) == company_id
+                and _many2one_id(existing.country_id) == country_id
+                and _tax_group_values(existing) == values
+            ):
+                return _reference_result(existing, "account.tax.group", company_id), True
+            raise _fail(failure_type, "state_conflict", "A different tax group already uses this company and name.", exit_code=5)
+        group = model.create({**values, "preceding_subtotal": values["preceding_subtotal"] or False, "company_id": company_id, "country_id": country_id or False})
+        if _many2one_id(group.company_id) != company_id or _many2one_id(group.country_id) != country_id or _tax_group_values(group) != values:
+            raise _fail(failure_type, "odoo_write_error", "Odoo did not create the requested tax group.", exit_code=6)
+        return _reference_result(group, "account.tax.group", company_id), False
+    group = _search_one(env, "account.tax.group", [("id", "=", parameters["tax_group_id"]), ("company_id", "=", company_id)], company_id, failure_type)
+    if _many2one_id(group.company_id) != company_id or _many2one_id(group.country_id) != country_id:
+        raise _fail(failure_type, "record_not_found", "The tax group is unavailable in the company country.", exit_code=4)
+    target = {**_tax_group_values(group), **values}
+    if _tax_group_values(group) == target:
+        return _reference_result(group, "account.tax.group", company_id), True
+    group.write({key: (False if value is None else value) for key, value in values.items()}); group.invalidate_recordset(list(values))
+    if _many2one_id(group.company_id) != company_id or _many2one_id(group.country_id) != country_id or _tax_group_values(group) != target:
+        raise _fail(failure_type, "odoo_write_error", "Odoo did not update the tax group.", exit_code=6)
+    return _reference_result(group, "account.tax.group", company_id), False
+
+
+def _cash_rounding_values(rounding: Any) -> dict[str, Any]:
+    return {"name": rounding.name, "rounding": _canonical_decimal_text(rounding.rounding), "strategy": rounding.strategy, "rounding_method": rounding.rounding_method, "profit_account_id": _many2one_id(rounding.profit_account_id), "loss_account_id": _many2one_id(rounding.loss_account_id)}
+
+
+def _validate_cash_rounding_accounts(env: Any, values: dict[str, Any], company_id: int, failure_type: type[Exception]) -> None:
+    if values["strategy"] == "add_invoice_line" and (values["profit_account_id"] is None or values["loss_account_id"] is None):
+        raise _fail(failure_type, "state_conflict", "Invoice-line cash rounding requires profit and loss accounts.", exit_code=5)
+    if values["strategy"] == "biggest_tax" and (values["profit_account_id"] is not None or values["loss_account_id"] is not None):
+        raise _fail(failure_type, "state_conflict", "Biggest-tax cash rounding cannot retain profit or loss accounts.", exit_code=5)
+    _ensure_ids(env, "account.account", {item for item in (values["profit_account_id"], values["loss_account_id"]) if item is not None}, [("company_ids", "in", [company_id]), ("account_type", "not in", ["asset_receivable", "liability_payable", "off_balance"]), ("active", "=", True)], company_id, failure_type)
+
+
+def _write_cash_rounding(env: Any, capability_id: str, parameters: dict[str, Any], company_id: int, failure_type: type[Exception]) -> tuple[dict[str, Any], bool]:
+    create = capability_id == "cash_rounding.create"
+    values = parameters if create else parameters["changes"]
+    model = _scoped(env, "account.cash.rounding", company_id)
+    if create:
+        _validate_cash_rounding_accounts(env, values, company_id, failure_type)
+        existing = model.search([("name", "=", values["name"])], limit=2)
+        if existing:
+            if len(existing) == 1 and _cash_rounding_values(existing) == values:
+                return _reference_result(existing, "account.cash.rounding", company_id), True
+            raise _fail(failure_type, "state_conflict", "A different cash-rounding configuration already uses this name.", exit_code=5)
+        write_values = {**values, "rounding": float(Decimal(values["rounding"])), "profit_account_id": values["profit_account_id"] or False, "loss_account_id": values["loss_account_id"] or False}
+        rounding = model.create(write_values)
+        if _cash_rounding_values(rounding) != values:
+            raise _fail(failure_type, "odoo_write_error", "Odoo did not create the cash-rounding configuration.", exit_code=6)
+        return _reference_result(rounding, "account.cash.rounding", company_id), False
+    rounding = _search_one(env, "account.cash.rounding", [("id", "=", parameters["cash_rounding_id"])], company_id, failure_type)
+    target = {**_cash_rounding_values(rounding), **values}
+    _validate_cash_rounding_accounts(env, target, company_id, failure_type)
+    if _cash_rounding_values(rounding) == target:
+        return _reference_result(rounding, "account.cash.rounding", company_id), True
+    write_values = {key: (float(Decimal(value)) if key == "rounding" else False if value is None else value) for key, value in values.items()}
+    rounding.write(write_values); rounding.invalidate_recordset(list(values))
+    if _cash_rounding_values(rounding) != target:
+        raise _fail(failure_type, "odoo_write_error", "Odoo did not update the cash-rounding configuration.", exit_code=6)
+    return _reference_result(rounding, "account.cash.rounding", company_id), False
+
+
+def _top_level_company(
+    env: Any, company_id: int, failure_type: type[Exception]
+) -> Any:
+    company = _search_one(
+        env,
+        "res.company",
+        [("id", "=", company_id)],
+        company_id,
+        failure_type,
+    )
+    if _many2one_id(getattr(company, "parent_id", False)) is not None:
+        raise _fail(
+            failure_type,
+            "company_unavailable",
+            "Fiscal years can only be configured on a top-level company.",
+            exit_code=3,
+        )
+    return company
+
+
+def _fiscal_year_values(fiscal_year: Any) -> dict[str, Any]:
+    return {
+        "name": fiscal_year.name,
+        "date_from": str(fiscal_year.date_from),
+        "date_to": str(fiscal_year.date_to),
+    }
+
+
+def _validate_fiscal_year_dates(
+    values: dict[str, Any], failure_type: type[Exception]
+) -> None:
+    if values["date_from"] > values["date_to"]:
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "The fiscal-year start date cannot be after its end date.",
+            exit_code=5,
+        )
+
+
+def _write_fiscal_year(
+    env: Any,
+    capability_id: str,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    _top_level_company(env, company_id, failure_type)
+    model = _scoped(env, "account.fiscal.year", company_id)
+    if capability_id == "fiscal_year.create":
+        _validate_fiscal_year_dates(parameters, failure_type)
+        existing = model.search(
+            [
+                ("company_id", "=", company_id),
+                ("date_from", "=", parameters["date_from"]),
+                ("date_to", "=", parameters["date_to"]),
+            ],
+            limit=2,
+        )
+        if existing:
+            if len(existing) == 1 and _fiscal_year_values(existing) == parameters:
+                return _config_result(existing, "account.fiscal.year", company_id), True
+            raise _fail(
+                failure_type,
+                "state_conflict",
+                "A different fiscal year already uses these dates.",
+                exit_code=5,
+            )
+        fiscal_year = model.create({**parameters, "company_id": company_id})
+        fiscal_year.invalidate_recordset(["name", "date_from", "date_to", "company_id"])
+        if (
+            _many2one_id(fiscal_year.company_id) != company_id
+            or _fiscal_year_values(fiscal_year) != parameters
+        ):
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not create the requested fiscal year.",
+                exit_code=6,
+            )
+        return _config_result(fiscal_year, "account.fiscal.year", company_id), False
+
+    fiscal_year = _search_one(
+        env,
+        "account.fiscal.year",
+        [("id", "=", parameters["id"]), ("company_id", "=", company_id)],
+        company_id,
+        failure_type,
+    )
+    actual = _fiscal_year_values(fiscal_year)
+    target = {**actual, **parameters["changes"]}
+    _validate_fiscal_year_dates(target, failure_type)
+    if actual == target:
+        return _config_result(fiscal_year, "account.fiscal.year", company_id), True
+    fiscal_year.write(parameters["changes"])
+    fiscal_year.invalidate_recordset([*parameters["changes"], "company_id"])
+    if (
+        _many2one_id(fiscal_year.company_id) != company_id
+        or _fiscal_year_values(fiscal_year) != target
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not update the requested fiscal year.",
+            exit_code=6,
+        )
+    return _config_result(fiscal_year, "account.fiscal.year", company_id), False
+
+
+def _analytic_applicability_values(rule: Any) -> dict[str, Any]:
+    return {
+        "plan_id": _many2one_id(rule.analytic_plan_id),
+        "business_domain": rule.business_domain,
+        "applicability": rule.applicability,
+        "account_prefix": rule.account_prefix or None,
+        "product_category_id": _many2one_id(rule.product_categ_id),
+    }
+
+
+def _validate_analytic_applicability_references(
+    env: Any,
+    values: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> None:
+    _ensure_ids(
+        env,
+        "account.analytic.plan",
+        {values["plan_id"]},
+        [("parent_id", "=", False)],
+        company_id,
+        failure_type,
+    )
+    category_id = values["product_category_id"]
+    _ensure_ids(
+        env,
+        "product.category",
+        {category_id} if category_id is not None else set(),
+        [],
+        company_id,
+        failure_type,
+    )
+
+
+def _analytic_applicability_write_values(values: dict[str, Any]) -> dict[str, Any]:
+    field_names = {
+        "plan_id": "analytic_plan_id",
+        "product_category_id": "product_categ_id",
+    }
+    return {
+        field_names.get(key, key): False if value is None else value
+        for key, value in values.items()
+    }
+
+
+def _write_analytic_applicability(
+    env: Any,
+    capability_id: str,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    model = _scoped(env, "account.analytic.applicability", company_id)
+    if capability_id == "analytic.applicability.create":
+        _validate_analytic_applicability_references(
+            env, parameters, company_id, failure_type
+        )
+        existing = model.search(
+            [
+                ("company_id", "=", company_id),
+                ("analytic_plan_id", "=", parameters["plan_id"]),
+                ("business_domain", "=", parameters["business_domain"]),
+                ("account_prefix", "=", parameters["account_prefix"] or False),
+                (
+                    "product_categ_id",
+                    "=",
+                    parameters["product_category_id"] or False,
+                ),
+            ],
+            limit=2,
+        )
+        if existing:
+            if (
+                len(existing) == 1
+                and _analytic_applicability_values(existing) == parameters
+            ):
+                return _config_result(
+                    existing, "account.analytic.applicability", company_id
+                ), True
+            raise _fail(
+                failure_type,
+                "state_conflict",
+                "A different applicability rule already uses this selector.",
+                exit_code=5,
+            )
+        rule = model.create(
+            {
+                **_analytic_applicability_write_values(parameters),
+                "company_id": company_id,
+            }
+        )
+        rule.invalidate_recordset(
+            [
+                "analytic_plan_id",
+                "business_domain",
+                "applicability",
+                "account_prefix",
+                "product_categ_id",
+                "company_id",
+            ]
+        )
+        if (
+            _many2one_id(rule.company_id) != company_id
+            or _analytic_applicability_values(rule) != parameters
+        ):
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not create the requested applicability rule.",
+                exit_code=6,
+            )
+        return _config_result(
+            rule, "account.analytic.applicability", company_id
+        ), False
+
+    rule = _search_one(
+        env,
+        "account.analytic.applicability",
+        [("id", "=", parameters["id"]), ("company_id", "=", company_id)],
+        company_id,
+        failure_type,
+    )
+    actual = _analytic_applicability_values(rule)
+    target = {**actual, **parameters["changes"]}
+    _validate_analytic_applicability_references(env, target, company_id, failure_type)
+    selector_conflict = model.search(
+        [
+            ("id", "!=", parameters["id"]),
+            ("company_id", "=", company_id),
+            ("analytic_plan_id", "=", target["plan_id"]),
+            ("business_domain", "=", target["business_domain"]),
+            ("account_prefix", "=", target["account_prefix"] or False),
+            ("product_categ_id", "=", target["product_category_id"] or False),
+        ],
+        limit=1,
+    )
+    if selector_conflict:
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Another applicability rule already uses the updated selector.",
+            exit_code=5,
+        )
+    if actual == target:
+        return _config_result(rule, "account.analytic.applicability", company_id), True
+    write_values = _analytic_applicability_write_values(parameters["changes"])
+    rule.write(write_values)
+    rule.invalidate_recordset([*write_values, "company_id"])
+    if (
+        _many2one_id(rule.company_id) != company_id
+        or _analytic_applicability_values(rule) != target
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not update the requested applicability rule.",
+            exit_code=6,
+        )
+    return _config_result(rule, "account.analytic.applicability", company_id), False
+
+
+def _analytic_distribution_model_values(model: Any) -> dict[str, Any]:
+    distribution = getattr(model, "analytic_distribution", False)
+    return {
+        "sequence": model.sequence,
+        "account_prefix": model.account_prefix or None,
+        "partner_id": _many2one_id(model.partner_id),
+        "partner_category_id": _many2one_id(model.partner_category_id),
+        "product_id": _many2one_id(model.product_id),
+        "product_category_id": _many2one_id(model.product_categ_id),
+        "analytic_distribution": (
+            _normalized_analytic_distribution(distribution)
+            if distribution
+            else None
+        ),
+    }
+
+
+def _distribution_analytic_account_ids(distribution: Any) -> set[int]:
+    return {
+        int(account_id)
+        for key in distribution or {}
+        for account_id in key.split(",")
+    }
+
+
+def _validate_analytic_distribution_model_references(
+    env: Any,
+    values: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> None:
+    for field_name, model_name, domain in (
+        ("partner_id", "res.partner", [("company_id", "in", [False, company_id])]),
+        ("partner_category_id", "res.partner.category", []),
+        ("product_id", "product.product", [("company_id", "in", [False, company_id])]),
+        ("product_category_id", "product.category", []),
+    ):
+        record_id = values[field_name]
+        _ensure_ids(
+            env,
+            model_name,
+            {record_id} if record_id is not None else set(),
+            domain,
+            company_id,
+            failure_type,
+        )
+
+    account_ids = _distribution_analytic_account_ids(
+        values["analytic_distribution"]
+    )
+    accounts = _ensure_ids(
+        env,
+        "account.analytic.account",
+        account_ids,
+        [("company_id", "in", [False, company_id])],
+        company_id,
+        failure_type,
+    )
+    plan_ids: set[int] = set()
+    root_plan_ids: set[int] = set()
+    for account in accounts:
+        plan_id = _many2one_id(getattr(account, "plan_id", False))
+        root_plan_id = _many2one_id(getattr(account, "root_plan_id", False))
+        if plan_id is None or root_plan_id is None:
+            raise _fail(
+                failure_type,
+                "record_not_found",
+                "An analytic account has no usable analytic plan.",
+                exit_code=4,
+            )
+        plan_ids.add(plan_id)
+        root_plan_ids.add(root_plan_id)
+    _ensure_ids(
+        env,
+        "account.analytic.plan",
+        plan_ids,
+        [],
+        company_id,
+        failure_type,
+    )
+    _ensure_ids(
+        env,
+        "account.analytic.plan",
+        root_plan_ids,
+        [("parent_id", "=", False)],
+        company_id,
+        failure_type,
+    )
+
+
+def _analytic_distribution_model_write_values(
+    values: dict[str, Any]
+) -> dict[str, Any]:
+    relation_fields = {
+        "partner_id",
+        "partner_category_id",
+        "product_id",
+        "product_category_id",
+    }
+    result: dict[str, Any] = {}
+    for key, value in values.items():
+        field_name = "product_categ_id" if key == "product_category_id" else key
+        if key == "analytic_distribution":
+            result[field_name] = _odoo_analytic_distribution(value)
+        elif key in relation_fields or key == "account_prefix":
+            result[field_name] = value or False
+        else:
+            result[field_name] = value
+    return result
+
+
+def _write_analytic_distribution_model(
+    env: Any,
+    capability_id: str,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    odoo_model = "account.analytic.distribution.model"
+    model = _scoped(env, odoo_model, company_id)
+    if capability_id == "analytic.distribution_model.create":
+        _validate_analytic_distribution_model_references(
+            env, parameters, company_id, failure_type
+        )
+        candidates = model.search(
+            [
+                ("company_id", "=", company_id),
+                ("account_prefix", "=", parameters["account_prefix"] or False),
+                ("partner_id", "=", parameters["partner_id"] or False),
+                (
+                    "partner_category_id",
+                    "=",
+                    parameters["partner_category_id"] or False,
+                ),
+                ("product_id", "=", parameters["product_id"] or False),
+                (
+                    "product_categ_id",
+                    "=",
+                    parameters["product_category_id"] or False,
+                ),
+            ],
+        )
+        exact_matches = candidates.filtered(
+            lambda candidate: _analytic_distribution_model_values(candidate)
+            == parameters
+        )
+        if len(exact_matches) == 1:
+            return _config_result(exact_matches, odoo_model, company_id), True
+        if len(exact_matches) > 1:
+            raise _fail(
+                failure_type,
+                "state_conflict",
+                "Multiple distribution models match the complete requested state.",
+                exit_code=5,
+            )
+        distribution_model = model.create(
+            {
+                **_analytic_distribution_model_write_values(parameters),
+                "company_id": company_id,
+            }
+        )
+        distribution_model.invalidate_recordset(
+            [
+                "sequence",
+                "account_prefix",
+                "partner_id",
+                "partner_category_id",
+                "product_id",
+                "product_categ_id",
+                "analytic_distribution",
+                "company_id",
+            ]
+        )
+        if (
+            _many2one_id(distribution_model.company_id) != company_id
+            or _analytic_distribution_model_values(distribution_model) != parameters
+        ):
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not create the requested analytic distribution model.",
+                exit_code=6,
+            )
+        return _config_result(distribution_model, odoo_model, company_id), False
+
+    distribution_model = _search_one(
+        env,
+        odoo_model,
+        [("id", "=", parameters["id"]), ("company_id", "=", company_id)],
+        company_id,
+        failure_type,
+    )
+    actual = _analytic_distribution_model_values(distribution_model)
+    target = {**actual, **parameters["changes"]}
+    _validate_analytic_distribution_model_references(
+        env, target, company_id, failure_type
+    )
+    if actual == target:
+        return _config_result(distribution_model, odoo_model, company_id), True
+    write_values = _analytic_distribution_model_write_values(parameters["changes"])
+    distribution_model.write(write_values)
+    distribution_model.invalidate_recordset([*write_values, "company_id"])
+    if (
+        _many2one_id(distribution_model.company_id) != company_id
+        or _analytic_distribution_model_values(distribution_model) != target
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not update the requested analytic distribution model.",
+            exit_code=6,
+        )
+    return _config_result(distribution_model, odoo_model, company_id), False
+
+
 def _dispatch_allowed(
     env: Any,
     capability_id: str,
@@ -10543,6 +13494,66 @@ def _dispatch_allowed(
     marker: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if capability_id.startswith("fiscal_year."):
+        return _write_fiscal_year(
+            env, capability_id, parameters, company_id, failure_type
+        )
+    if capability_id.startswith("analytic.applicability."):
+        return _write_analytic_applicability(
+            env, capability_id, parameters, company_id, failure_type
+        )
+    if capability_id.startswith("analytic.distribution_model."):
+        return _write_analytic_distribution_model(
+            env, capability_id, parameters, company_id, failure_type
+        )
+    if capability_id.startswith("account.tag."):
+        return _write_account_tag(env, capability_id, parameters, company_id, failure_type)
+    if capability_id.startswith("tax.group."):
+        return _write_tax_group(env, capability_id, parameters, company_id, failure_type)
+    if capability_id.startswith("cash_rounding."):
+        return _write_cash_rounding(env, capability_id, parameters, company_id, failure_type)
+    if capability_id == "currency.rate.record":
+        return _record_currency_rate(env, parameters, company_id, failure_type)
+    if capability_id in _ACCOUNT_GROUP_WRITE_CAPABILITIES:
+        return _write_account_group(
+            env, capability_id, parameters, company_id, failure_type
+        )
+    if capability_id == "tax.repartition_lines.replace":
+        return _replace_tax_repartition_lines(
+            env, parameters, company_id, failure_type
+        )
+    if capability_id in {
+        "reconciliation.model.create",
+        "reconciliation.model.update",
+    }:
+        return _write_reconciliation_model(
+            env, capability_id, parameters, company_id, failure_type
+        )
+    if capability_id == "reconciliation.model.lines.replace":
+        return _replace_reconciliation_model_lines(
+            env, parameters, company_id, failure_type
+        )
+    if capability_id in {
+        "reconciliation.model.archive",
+        "reconciliation.model.restore",
+    }:
+        return _transition_reconciliation_model(
+            env, capability_id, parameters, company_id, failure_type
+        )
+    if capability_id == _SALE_ORDER_INVOICE_CAPABILITY:
+        return _create_sale_order_invoice(env, parameters, company_id, failure_type)
+    if capability_id == _STOCK_TRANSFER_CREATE_CAPABILITY:
+        return _create_stock_transfer(
+            env, parameters, company_id, key, marker, failure_type
+        )
+    if capability_id in _STOCK_TRANSFER_ACTION_CAPABILITIES:
+        return _transition_stock_transfer(
+            env, capability_id, parameters, company_id, failure_type
+        )
+    if capability_id == _STOCK_TRANSFER_QUANTITIES_CAPABILITY:
+        return _set_stock_transfer_quantities(env, parameters, company_id, failure_type)
+    if capability_id == _STOCK_TRANSFER_VALIDATE_CAPABILITY:
+        return _validate_stock_transfer(env, parameters, company_id, failure_type)
     if capability_id == "purchase.order.bill.create":
         return _create_purchase_bill(env, parameters, company_id, failure_type)
     if capability_id == "purchase_bill.match":

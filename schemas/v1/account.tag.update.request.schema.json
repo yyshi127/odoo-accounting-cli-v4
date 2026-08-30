@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/account.tag.update.request.schema.json",
+  "title": "account.tag.update request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": "string", "format": "uuid"},
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["account_tag_id", "changes"],
+      "properties": {
+        "account_tag_id": {"type": "integer", "minimum": 1},
+        "changes": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "name": {"$ref": "#/$defs/text"},
+            "applicability": {"enum": ["accounts", "taxes", "products"]},
+            "color": {"type": "integer", "minimum": 0},
+            "country_id": {"type": ["integer", "null"], "minimum": 1}
+          },
+          "allOf": [{
+            "if": {"properties": {"applicability": {"enum": ["accounts", "products"]}}, "required": ["applicability"]},
+            "then": {"properties": {"country_id": {"type": "null"}}}
+          }]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "text": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"}
+  }
+}

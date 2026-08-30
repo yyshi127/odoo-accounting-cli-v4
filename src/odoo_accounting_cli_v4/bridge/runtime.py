@@ -48,6 +48,7 @@ _ACCOUNT_RETURN_ACTION = "accounting.account_return.read"
 _JOURNAL_ANALYSIS_ACTION = "accounting.journal_analysis.read"
 _LOCALIZATION_CONFIGURATION_ACTION = "accounting.localization_configuration.inspect"
 _FINANCIAL_REPORT_EXPORT_ACTION = "account.report.fixed_export"
+_DOCUMENT_EXPORT_ACTION = "ir.actions.report.fixed_document_export"
 _DECIMAL_TEXT_PATTERN = re.compile(r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 _CURRENCY_RATE_FIELDS = (
     "id",
@@ -708,6 +709,7 @@ _ACTIONS = {
     _JOURNAL_ANALYSIS_ACTION,
     _LOCALIZATION_CONFIGURATION_ACTION,
     _FINANCIAL_REPORT_EXPORT_ACTION,
+    _DOCUMENT_EXPORT_ACTION,
     "account.account.read_page",
     _CURRENCY_RATE_ACTION,
     _CURRENCY_CONVERT_ACTION,
@@ -6610,6 +6612,17 @@ def _dispatch(
     company_id: int,
     available_company_ids: tuple[int, ...] | None = None,
 ):
+    if action == _DOCUMENT_EXPORT_ACTION:
+        from odoo_accounting_cli_v4.bridge.document_exports_runtime import (
+            dispatch as dispatch_document_export,
+        )
+
+        return dispatch_document_export(
+            env,
+            payload,
+            company_id,
+            failure_type=RuntimeFailure,
+        )
     if action == _FINANCIAL_REPORT_EXPORT_ACTION:
         from odoo_accounting_cli_v4.bridge.financial_report_exports_runtime import (
             dispatch as dispatch_financial_report_export,

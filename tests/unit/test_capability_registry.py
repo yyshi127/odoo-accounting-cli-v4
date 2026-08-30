@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 272
-EXPECTED_ENABLED_CAPABILITY_COUNT = 255
-EXPECTED_IMPLEMENTED_READ_COUNT = 156
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 99
-EXPECTED_DISABLED_CAPABILITY_COUNT = 17
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 236
-EXPECTED_DEGRADED_CAPABILITY_COUNT = 19
-EXPECTED_SCHEMA_COUNT = 515
+EXPECTED_CAPABILITY_COUNT = 345
+EXPECTED_ENABLED_CAPABILITY_COUNT = 330
+EXPECTED_IMPLEMENTED_READ_COUNT = 200
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 130
+EXPECTED_DISABLED_CAPABILITY_COUNT = 15
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 297
+EXPECTED_DEGRADED_CAPABILITY_COUNT = 33
+EXPECTED_SCHEMA_COUNT = 665
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "b14c19b3fcc05787deb9c924f200166a5ce7139d4648a404f697aabee493ba64"
+    "79e2fb08cf06789c3689f536a1c447f5b936413810de63df7ef0d3a51b677c8c"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -56,6 +56,8 @@ EXPECTED_FIRST_CAPABILITY_SHA256 = (
 IMPLEMENTED_READS = {
     "account.account.get": "account_account_get",
     "account.account.list": "account_account_list",
+    "account.group.get": "account_group_get",
+    "account.group.list": "account_group_list",
     "account.return.check.get": "account_return_check_get",
     "account.return.check.list": "account_return_check_list",
     "account.return.get": "account_return_get",
@@ -74,7 +76,10 @@ IMPLEMENTED_READS = {
     "analytic.line.search": "analytic_line_search",
     "analytic.plan.get": "analytic_plan_get",
     "analytic.plan.list": "analytic_plan_list",
+    "bank.get": "bank_get",
+    "bank.list": "bank_list",
     "bank.statement.get": "bank_statement_get",
+    "bank.statement.pdf.export": "document_bank_statement_pdf_export",
     "bank.statement.search": "bank_statement_search",
     "bank.transaction.get": "bank_transaction_get",
     "bank.transaction.match_candidates.list": (
@@ -94,6 +99,7 @@ IMPLEMENTED_READS = {
     "currency.get": "currency_get",
     "journal.list": "journal_list",
     "journal.get": "journal_get",
+    "journal.configuration.inspect": "journal_configuration_inspect",
     "journal_item.get": "journal_item_get",
     "journal_item.search": "journal_item_search",
     "journal.accounting_date.resolve": "journal_accounting_date_resolve",
@@ -139,6 +145,7 @@ IMPLEMENTED_READS = {
     "payment_term.get": "payment_term_get",
     "invoice.search": "invoice_search",
     "invoice.get": "invoice_get",
+    "invoice.pdf.export": "document_invoice_pdf_export",
     "invoice.analysis.search": "invoice_analysis_search",
     "invoice.analysis.summary": "invoice_analysis_summary",
     "invoice.payment_status.inspect": "invoice_payment_status_inspect",
@@ -150,11 +157,14 @@ IMPLEMENTED_READS = {
     "payable.open_items.list": "payable_open_items_list",
     "payment.search": "payment_search",
     "payment.get": "payment_get",
+    "payment.receipt.pdf.export": "document_payment_receipt_pdf_export",
     "reconciliation.candidates.list": "reconciliation_candidates_list",
     "reconciliation.full.get": "reconciliation_full_get",
     "reconciliation.full.list": "reconciliation_full_list",
     "reconciliation.model.get": "reconciliation_model_get",
     "reconciliation.model.list": "reconciliation_model_list",
+    "reconciliation.model.line.get": "reconciliation_model_line_get",
+    "reconciliation.model.line.list": "reconciliation_model_line_list",
     "reconciliation.partial.get": "reconciliation_partial_get",
     "reconciliation.partial.list": "reconciliation_partial_list",
     "currency.rate.list": "currency_rate_list",
@@ -169,6 +179,9 @@ IMPLEMENTED_READS = {
     "report.aged_payable": "report_aged_payable",
     "report.aged_payable.export": "report_aged_payable_export",
     "report.journal": "report_journal",
+    "report.journal.export": "report_journal_export",
+    "report.catalog.get": "report_catalog_get",
+    "report.catalog.list": "report_catalog_list",
     "report.bank_reconciliation": "report_bank_reconciliation",
     "report.budget": "budget_report",
     "report.executive_summary": "report_executive_summary",
@@ -190,20 +203,37 @@ IMPLEMENTED_READS = {
     "stock.transfer.get": "stock_transfer_get",
     "stock.transfer.search": "stock_transfer_search",
     "tax.get": "tax_get",
+    "tax.repartition_line.get": "tax_repartition_line_get",
+    "tax.repartition_line.list": "tax_repartition_line_list",
     "asset.search": "asset_search",
     "asset.get": "asset_get",
     "asset.depreciation_schedule.get": "asset_depreciation_schedule_get",
     "report.asset": "report_asset",
+    "report.asset.export": "report_asset_export",
     "report.deferred_expense": "report_deferred_expense",
+    "report.deferred_expense.export": "report_deferred_expense_export",
     "report.deferred_revenue": "report_deferred_revenue",
+    "report.deferred_revenue.export": "report_deferred_revenue_export",
     "report.multicurrency_revaluation": "report_multicurrency_revaluation",
+    "report.multicurrency_revaluation.export": (
+        "report_multicurrency_revaluation_export"
+    ),
     "report.china.balance_sheet": "report_china_balance_sheet",
+    "report.china.balance_sheet.export": "report_china_balance_sheet_export",
     "report.china.profit_and_loss": "report_china_profit_and_loss",
+    "report.china.profit_and_loss.export": ("report_china_profit_and_loss_export"),
     "report.china.cash_flow": "report_china_cash_flow",
+    "report.china.cash_flow.export": "report_china_cash_flow_export",
     "report.singapore.gst": "report_singapore_gst",
+    "report.singapore.gst.export": "report_singapore_gst_export",
+    "localization.china.voucher.render": ("document_localization_china_voucher_render"),
     "fiscal_position.resolve": "fiscal_position_resolve",
     "fiscal_position.get": "fiscal_position_get",
     "fiscal_position.search": "fiscal_position_search",
+    "fiscal_position.account_mapping.list": (
+        "fiscal_position_account_mapping_list"
+    ),
+    "fiscal_position.tax_mapping.list": "fiscal_position_tax_mapping_list",
     "fiscal_year.get": "fiscal_year_get",
     "fiscal_year.search": "fiscal_year_search",
     "diagnostic.journal_integrity.inspect": ("diagnostic_journal_integrity_inspect"),
@@ -215,11 +245,31 @@ IMPLEMENTED_READS = {
     "purchase.order.analysis.summary": "purchase_order_analysis_summary",
     "purchase.order.get": "purchase_order_get",
     "purchase.order.line.search": "purchase_order_line_search",
+    "purchase.order.pdf.export": "document_purchase_order_pdf_export",
+    "purchase.rfq.pdf.export": "document_purchase_rfq_pdf_export",
     "purchase.order.search": "purchase_order_search",
     "sale.order.analysis.summary": "sale_order_analysis_summary",
     "sale.order.get": "sale_order_get",
     "sale.order.line.search": "sale_order_line_search",
+    "sale.order.pdf.export": "document_sale_order_pdf_export",
     "sale.order.search": "sale_order_search",
+    "stock.delivery_slip.pdf.export": "document_stock_delivery_slip_pdf_export",
+    "stock.picking_operations.pdf.export": (
+        "document_stock_picking_operations_pdf_export"
+    ),
+    "stock.return_slip.pdf.export": "document_stock_return_slip_pdf_export",
+    "invoice.duplicate_candidates.list": "invoice_duplicate_candidates_list",
+    "invoice.tax_breakdown.inspect": "invoice_tax_breakdown_inspect",
+    "recurring.journal_entry.search": "recurring_journal_entry_search",
+    "recurring.journal_entry.get": "recurring_journal_entry_get",
+    "account.transfer_model.search": "account_transfer_model_search",
+    "account.transfer_model.get": "account_transfer_model_get",
+    "partner.credit_exposure.inspect": "partner_credit_exposure_inspect",
+    "journal.sequence_irregularity.list": "journal_sequence_irregularity_list",
+    "account.lock_exception.search": "account_lock_exception_search",
+    "account.lock_exception.get": "account_lock_exception_get",
+    "report.external_value.search": "report_external_value_search",
+    "report.external_value.get": "report_external_value_get",
 }
 ORDER_DOCUMENT_WRITES = {
     "purchase.order.cancel",
@@ -247,6 +297,12 @@ PROCUREMENT_FOLLOWUP_WRITES = {
     "period.accrual.generate",
 }
 IMPLEMENTED_WRITES = {
+    "account.group.create",
+    "account.group.update",
+    "account.tag.archive",
+    "account.tag.create",
+    "account.tag.restore",
+    "account.tag.update",
     "account.account.archive",
     "account.account.create",
     "account.account.restore",
@@ -269,8 +325,11 @@ IMPLEMENTED_WRITES = {
     "budget.mark_done",
     "budget.reset_to_draft",
     "budget.update_draft",
+    "cash_rounding.create",
+    "cash_rounding.update",
     "customer_credit_note.create",
     "customer_invoice.create",
+    "currency.rate.record",
     "deferred_expense.generate_entries",
     "deferred_revenue.generate_entries",
     "invoice.cancel",
@@ -310,12 +369,28 @@ IMPLEMENTED_WRITES = {
     "receivable.payment.register",
     "reconciliation.apply",
     "reconciliation.automatic.run",
+    "reconciliation.model.archive",
+    "reconciliation.model.create",
+    "reconciliation.model.lines.replace",
+    "reconciliation.model.restore",
+    "reconciliation.model.update",
     "reconciliation.undo",
     "reconciliation.write_off",
     "tax.archive",
     "tax.create",
+    "tax.group.create",
+    "tax.group.update",
+    "tax.repartition_lines.replace",
     "tax.restore",
     "tax.update",
+    "sale.order.invoice.create",
+    "stock.transfer.assign",
+    "stock.transfer.cancel",
+    "stock.transfer.confirm",
+    "stock.transfer.create",
+    "stock.transfer.quantities.set",
+    "stock.transfer.unreserve",
+    "stock.transfer.validate",
     "vendor_bill.create",
     "vendor_refund.create",
     "purchase.order.bill.create",
@@ -332,6 +407,12 @@ IMPLEMENTED_WRITES = {
     "fiscal_position.account_mappings.replace",
     "fiscal_position.archive",
     "fiscal_position.restore",
+    "fiscal_year.create",
+    "fiscal_year.update",
+    "analytic.applicability.create",
+    "analytic.applicability.update",
+    "analytic.distribution_model.create",
+    "analytic.distribution_model.update",
     "journal.group.create",
     "journal.group.update",
 } | ORDER_DOCUMENT_WRITES
@@ -405,6 +486,39 @@ ACCOUNTING_CONFIG_WRITES = {
     "tax.restore",
     "tax.update",
 }
+ACCOUNTING_CONFIGURATION_EXPANSION_WRITES = {
+    "account.group.create",
+    "account.group.update",
+    "currency.rate.record",
+    "reconciliation.model.archive",
+    "reconciliation.model.create",
+    "reconciliation.model.lines.replace",
+    "reconciliation.model.restore",
+    "reconciliation.model.update",
+    "tax.repartition_lines.replace",
+}
+ACCOUNTING_MASTER_DATA_COMPLETION_WRITES = {
+    "account.tag.archive",
+    "account.tag.create",
+    "account.tag.restore",
+    "account.tag.update",
+    "cash_rounding.create",
+    "cash_rounding.update",
+    "tax.group.create",
+    "tax.group.update",
+}
+ACCOUNTING_RULES_FISCAL_YEAR_WRITES = {
+    "fiscal_year.create",
+    "fiscal_year.update",
+    "analytic.applicability.create",
+    "analytic.applicability.update",
+    "analytic.distribution_model.create",
+    "analytic.distribution_model.update",
+}
+ACCOUNTING_RULES_FISCAL_YEAR_READS = {
+    "fiscal_position.account_mapping.list",
+    "fiscal_position.tax_mapping.list",
+}
 FISCAL_POSITION_JOURNAL_GROUP_WRITES = {
     "fiscal_position.account_mappings.replace",
     "fiscal_position.archive",
@@ -446,6 +560,35 @@ TRANSFER_WRITES = {
 FAILED_LIVE_WRITES = {
     "asset.validate",
 }
+ACCOUNTING_REFERENCE_BATCH_LIVE_READS = {
+    "account.group.list",
+    "bank.get",
+    "bank.list",
+    "journal.configuration.inspect",
+    "reconciliation.model.line.get",
+    "reconciliation.model.line.list",
+    "report.catalog.get",
+    "report.catalog.list",
+    "tax.repartition_line.get",
+    "tax.repartition_line.list",
+}
+ACCOUNTING_CONFIGURATION_EXPANSION_LIVE_READS = {
+    "account.group.get",
+}
+ACCOUNTING_OPERATIONAL_READS = {
+    "invoice.duplicate_candidates.list",
+    "invoice.tax_breakdown.inspect",
+    "recurring.journal_entry.search",
+    "recurring.journal_entry.get",
+    "account.transfer_model.search",
+    "account.transfer_model.get",
+    "partner.credit_exposure.inspect",
+    "journal.sequence_irregularity.list",
+    "account.lock_exception.search",
+    "account.lock_exception.get",
+    "report.external_value.search",
+    "report.external_value.get",
+}
 PENDING_LIVE_READS = {
     "product.accounting_profile.get",
 }
@@ -460,6 +603,27 @@ FINANCIAL_REPORT_EXPORT_LIVE_READS = {
     "report.aged_receivable.export",
     "report.aged_payable.export",
     "report.executive_summary.export",
+    "report.journal.export",
+    "report.asset.export",
+    "report.deferred_expense.export",
+    "report.deferred_revenue.export",
+    "report.multicurrency_revaluation.export",
+    "report.china.balance_sheet.export",
+    "report.china.profit_and_loss.export",
+    "report.china.cash_flow.export",
+    "report.singapore.gst.export",
+}
+DOCUMENT_EXPORT_LIVE_READS = {
+    "invoice.pdf.export",
+    "payment.receipt.pdf.export",
+    "bank.statement.pdf.export",
+    "sale.order.pdf.export",
+    "purchase.order.pdf.export",
+    "purchase.rfq.pdf.export",
+    "stock.delivery_slip.pdf.export",
+    "stock.picking_operations.pdf.export",
+    "stock.return_slip.pdf.export",
+    "localization.china.voucher.render",
 }
 ASSET_LIVE_READS = {
     "asset.search",
@@ -518,6 +682,8 @@ RETURN_JOURNAL_ANALYSIS_LIVE_READS = {
 }
 CORE_OBJECT_READ_HANDLERS = {
     "account.account.get": "account_account_get",
+    "account.group.get": "account_group_get",
+    "account.group.list": "account_group_list",
     "account.tag.get": "account_tag_get",
     "account.tag.list": "account_tag_list",
     "analytic.account.get": "analytic_account_get",
@@ -533,6 +699,8 @@ CORE_OBJECT_READ_HANDLERS = {
     "bank.statement.get": "bank_statement_get",
     "bank.statement.search": "bank_statement_search",
     "bank.transaction.get": "bank_transaction_get",
+    "bank.get": "bank_get",
+    "bank.list": "bank_list",
     "budget.get": "budget_get",
     "budget.line.get": "budget_line_get",
     "budget.line.list": "budget_line_list",
@@ -543,6 +711,7 @@ CORE_OBJECT_READ_HANDLERS = {
     "incoterm.get": "incoterm_get",
     "incoterm.list": "incoterm_list",
     "journal.get": "journal_get",
+    "journal.configuration.inspect": "journal_configuration_inspect",
     "journal.group.get": "journal_group_get",
     "journal.group.list": "journal_group_list",
     "journal_item.get": "journal_item_get",
@@ -557,17 +726,39 @@ CORE_OBJECT_READ_HANDLERS = {
     "payment_term.get": "payment_term_get",
     "reconciliation.model.get": "reconciliation_model_get",
     "reconciliation.model.list": "reconciliation_model_list",
+    "reconciliation.model.line.get": "reconciliation_model_line_get",
+    "reconciliation.model.line.list": "reconciliation_model_line_list",
     "reconciliation.full.get": "reconciliation_full_get",
     "reconciliation.full.list": "reconciliation_full_list",
     "reconciliation.partial.get": "reconciliation_partial_get",
     "reconciliation.partial.list": "reconciliation_partial_list",
     "tax.get": "tax_get",
+    "tax.repartition_line.get": "tax_repartition_line_get",
+    "tax.repartition_line.list": "tax_repartition_line_list",
     "fiscal_position.get": "fiscal_position_get",
     "fiscal_position.search": "fiscal_position_search",
+    "fiscal_position.account_mapping.list": (
+        "fiscal_position_account_mapping_list"
+    ),
+    "fiscal_position.tax_mapping.list": "fiscal_position_tax_mapping_list",
     "product.get": "product_get",
     "product.search": "product_search",
     "tax.group.get": "tax_group_get",
     "tax.group.list": "tax_group_list",
+    "report.catalog.get": "report_catalog_get",
+    "report.catalog.list": "report_catalog_list",
+    "invoice.duplicate_candidates.list": "invoice_duplicate_candidates_list",
+    "invoice.tax_breakdown.inspect": "invoice_tax_breakdown_inspect",
+    "recurring.journal_entry.search": "recurring_journal_entry_search",
+    "recurring.journal_entry.get": "recurring_journal_entry_get",
+    "account.transfer_model.search": "account_transfer_model_search",
+    "account.transfer_model.get": "account_transfer_model_get",
+    "partner.credit_exposure.inspect": "partner_credit_exposure_inspect",
+    "journal.sequence_irregularity.list": "journal_sequence_irregularity_list",
+    "account.lock_exception.search": "account_lock_exception_search",
+    "account.lock_exception.get": "account_lock_exception_get",
+    "report.external_value.search": "report_external_value_search",
+    "report.external_value.get": "report_external_value_get",
 }
 REFERENCE_OBJECT_BATCH_LIVE_READS = {
     "account.tag.get",
@@ -626,6 +817,10 @@ CORE_OBJECT_BATCH_LIVE_READS = (
     - PAYMENT_RECONCILIATION_BATCH_LIVE_READS
     - ANALYTIC_BUDGET_BATCH_LIVE_READS
     - PARTNER_MASTER_DATA_READS
+    - ACCOUNTING_REFERENCE_BATCH_LIVE_READS
+    - ACCOUNTING_CONFIGURATION_EXPANSION_LIVE_READS
+    - ACCOUNTING_RULES_FISCAL_YEAR_READS
+    - ACCOUNTING_OPERATIONAL_READS
 )
 
 
@@ -781,12 +976,20 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
             ]
             continue
         assert descriptor["tests"]["unit"]["status"] == "implemented"
+        if capability_id in ACCOUNTING_OPERATIONAL_READS:
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == [
+                "tests/integration/test_accounting_operational_reads_live.py"
+            ]
+            continue
         if capability_id in PENDING_LIVE_READS:
             assert descriptor["tests"]["integration"]["status"] == "planned"
             assert descriptor["tests"]["integration"]["references"] == []
             continue
         assert descriptor["tests"]["integration"]["status"] == "implemented"
-        if capability_id in FINANCIAL_REPORT_EXPORT_LIVE_READS:
+        if capability_id in DOCUMENT_EXPORT_LIVE_READS:
+            expected_live_test = "tests/integration/test_document_export_batch_live.py"
+        elif capability_id in FINANCIAL_REPORT_EXPORT_LIVE_READS:
             expected_live_test = (
                 "tests/integration/test_financial_report_export_batch_live.py"
             )
@@ -815,6 +1018,18 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
         elif capability_id in PAYMENT_BANK_BATCH_READS:
             expected_live_test = (
                 "tests/integration/test_payment_bank_capability_batch_live.py"
+            )
+        elif capability_id in ACCOUNTING_REFERENCE_BATCH_LIVE_READS:
+            expected_live_test = (
+                "tests/integration/test_accounting_reference_read_batch_live.py"
+            )
+        elif capability_id in ACCOUNTING_CONFIGURATION_EXPANSION_LIVE_READS:
+            expected_live_test = (
+                "tests/integration/test_accounting_configuration_expansion_live.py"
+            )
+        elif capability_id in ACCOUNTING_RULES_FISCAL_YEAR_READS:
+            expected_live_test = (
+                "tests/integration/test_accounting_rules_fiscal_year_live.py"
             )
         elif capability_id in CORE_OBJECT_BATCH_LIVE_READS:
             expected_live_test = "tests/integration/test_core_object_read_batch_live.py"
@@ -935,13 +1150,20 @@ def test_core_object_reads_and_bank_report_match_the_fixed_runtime() -> None:
     for capability_id, handler_key in CORE_OBJECT_READ_HANDLERS.items():
         descriptor = registry.describe(capability_id)
         models = list(CORE_OBJECT_READ_MODELS[capability_id])
+        source_models = descriptor["source"]["models"]
 
         assert descriptor["handler_key"] == handler_key
-        assert descriptor["source"]["models"] == models
+        if capability_id in ACCOUNTING_OPERATIONAL_READS:
+            # These descriptors freeze full source/ACL provenance separately from
+            # the runtime bridge's smaller model-availability preflight.
+            assert models[0] == source_models[0] == "res.company"
+            assert models[1] in source_models
+        else:
+            assert source_models == models
         assert descriptor["source"]["wizards"] == []
         assert descriptor["source"]["report_handlers"] == []
         assert descriptor["requirements"]["acl"] == [
-            f"{model}:read" for model in models
+            f"{model}:read" for model in source_models
         ]
         assert descriptor["schemas"] == {
             "request": f"schemas/v1/{capability_id}.request.schema.json",
@@ -1967,6 +2189,22 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
         "tests/unit/test_order_document_write_cli.py",
         "tests/unit/test_order_document_write_schemas.py",
     }
+    stock_transfer_batch_writes = {
+        "sale.order.invoice.create",
+        "stock.transfer.create",
+        "stock.transfer.confirm",
+        "stock.transfer.assign",
+        "stock.transfer.quantities.set",
+        "stock.transfer.validate",
+        "stock.transfer.unreserve",
+        "stock.transfer.cancel",
+    }
+    stock_transfer_unit_tests = {
+        "tests/unit/test_stock_transfer_writes.py",
+        "tests/unit/test_stock_transfer_write_schemas.py",
+        "tests/unit/test_stock_transfer_writes_runtime.py",
+        "tests/unit/test_stock_transfer_write_cli.py",
+    }
     expected_wizards = {
         "customer_credit_note.create": {"account.move.reversal"},
         "journal_entry.reverse": {"account.move.reversal"},
@@ -2045,9 +2283,55 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
     )
     extended_modules.update(
         {
+            "currency.rate.record": ["account", "base"],
+            "account.group.create": ["account", "base"],
+            "account.group.update": ["account", "base"],
+            "tax.repartition_lines.replace": ["account", "base"],
+            "reconciliation.model.create": [
+                "account",
+                "account_accountant",
+                "base",
+            ],
+            "reconciliation.model.update": [
+                "account",
+                "account_accountant",
+                "base",
+            ],
+            "reconciliation.model.lines.replace": [
+                "account",
+                "account_accountant",
+                "analytic",
+                "base",
+            ],
+            "reconciliation.model.archive": [
+                "account",
+                "account_accountant",
+                "base",
+            ],
+            "reconciliation.model.restore": [
+                "account",
+                "account_accountant",
+                "base",
+            ],
+        }
+    )
+    extended_modules.update(
+        {
             capability_id: ["account", "base", "sale", "sale_stock", "stock"]
             for capability_id in ORDER_DOCUMENT_WRITES
             if capability_id.startswith("sale.order.")
+        }
+    )
+    extended_modules.update(
+        {
+            "sale.order.invoice.create": ["account", "base", "sale", "sale_stock"],
+            "stock.transfer.create": ["base", "stock"],
+            "stock.transfer.confirm": ["base", "stock"],
+            "stock.transfer.assign": ["base", "stock"],
+            "stock.transfer.quantities.set": ["base", "stock"],
+            "stock.transfer.validate": ["account", "base", "stock", "stock_account"],
+            "stock.transfer.unreserve": ["base", "stock"],
+            "stock.transfer.cancel": ["base", "stock"],
         }
     )
     runtime_support_models = {
@@ -2081,6 +2365,42 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             ]
             for capability_id in ORDER_DOCUMENT_WRITES
             if capability_id.startswith("purchase.order.")
+        }
+    )
+    extended_modules.update(
+        {
+            capability_id: ["account", "base"]
+            for capability_id in ACCOUNTING_MASTER_DATA_COMPLETION_WRITES
+        }
+    )
+    extended_modules.update(
+        {
+            "fiscal_year.create": ["account_accountant"],
+            "fiscal_year.update": ["account_accountant"],
+            "analytic.applicability.create": [
+                "account",
+                "analytic",
+                "base",
+                "product",
+            ],
+            "analytic.applicability.update": [
+                "account",
+                "analytic",
+                "base",
+                "product",
+            ],
+            "analytic.distribution_model.create": [
+                "account",
+                "analytic",
+                "base",
+                "product",
+            ],
+            "analytic.distribution_model.update": [
+                "account",
+                "analytic",
+                "base",
+                "product",
+            ],
         }
     )
 
@@ -2129,7 +2449,29 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             expected_acl.add("res.company:read")
         expected_acl -= runtime_support_acl.get(capability_id, set())
         assert set(descriptor["requirements"]["acl"]) == expected_acl
-        if capability_id in {"account.account.create", "tax.create"}:
+        if capability_id in {
+            "account.tag.archive",
+            "account.tag.create",
+            "account.tag.restore",
+            "account.tag.update",
+            "cash_rounding.create",
+            "cash_rounding.update",
+        }:
+            assert descriptor["status"]["value"] == "degraded"
+            assert (
+                descriptor["status"]["reason_code"]
+                == "database_global_record_scope"
+            )
+        elif capability_id in {
+            "account.account.create",
+            "account.group.create",
+            "reconciliation.model.create",
+            "tax.group.create",
+            "tax.create",
+            "fiscal_year.create",
+            "analytic.applicability.create",
+            "analytic.distribution_model.create",
+        }:
             assert descriptor["status"]["value"] == "degraded"
             assert descriptor["status"]["reason_code"] == "concurrent_idempotency_limit"
         elif capability_id == "analytic.account.create":
@@ -2167,6 +2509,18 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             assert (
                 descriptor["status"]["reason_code"]
                 == "odoo_asset_pause_date_not_persisted"
+            )
+        elif capability_id == "sale.order.invoice.create":
+            assert descriptor["status"]["value"] == "degraded"
+            assert (
+                descriptor["status"]["reason_code"]
+                == "odoo_linked_invoice_not_concurrency_unique"
+            )
+        elif capability_id == "stock.transfer.create":
+            assert descriptor["status"]["value"] == "degraded"
+            assert (
+                descriptor["status"]["reason_code"]
+                == "odoo_stock_transfer_marker_not_concurrency_unique"
             )
         elif capability_id in {"sale.order.create", "purchase.order.create"}:
             assert descriptor["status"]["value"] == "degraded"
@@ -2217,6 +2571,45 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
         else:
             assert descriptor["status"]["value"] == "unconfigured"
             assert descriptor["status"]["reason_code"] == "runtime_context_required"
+        if capability_id in ACCOUNTING_RULES_FISCAL_YEAR_WRITES:
+            assert descriptor["tests"]["unit"]["status"] == "implemented"
+            assert set(descriptor["tests"]["unit"]["references"]) == {
+                "tests/unit/test_core_writes.py",
+                "tests/unit/test_core_writes_runtime.py",
+                "tests/unit/test_accounting_rules_fiscal_year_contracts.py",
+                "tests/unit/test_accounting_rules_fiscal_year_registry.py",
+            }
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == [
+                "tests/integration/test_accounting_rules_fiscal_year_live.py"
+            ]
+            continue
+        if capability_id in ACCOUNTING_MASTER_DATA_COMPLETION_WRITES:
+            assert descriptor["tests"]["unit"]["status"] == "implemented"
+            assert set(descriptor["tests"]["unit"]["references"]) == {
+                "tests/unit/test_core_writes.py",
+                "tests/unit/test_core_writes_runtime.py",
+                "tests/unit/test_accounting_master_data_completion_contracts.py",
+                "tests/unit/test_accounting_master_data_completion_registry.py",
+            }
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == [
+                "tests/integration/test_accounting_master_data_completion_live.py"
+            ]
+            continue
+        if capability_id in ACCOUNTING_CONFIGURATION_EXPANSION_WRITES:
+            assert descriptor["tests"]["unit"]["status"] == "implemented"
+            assert set(descriptor["tests"]["unit"]["references"]) == {
+                "tests/unit/test_core_writes.py",
+                "tests/unit/test_core_writes_runtime.py",
+                "tests/unit/test_accounting_configuration_write_contracts.py",
+                "tests/unit/test_accounting_configuration_expansion_registry.py",
+            }
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == [
+                "tests/integration/test_accounting_configuration_expansion_live.py"
+            ]
+            continue
         if capability_id in FISCAL_POSITION_JOURNAL_GROUP_WRITES:
             assert descriptor["tests"]["unit"]["status"] == "implemented"
             assert set(descriptor["tests"]["unit"]["references"]) == {
@@ -2284,18 +2677,22 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             continue
         assert descriptor["tests"]["unit"]["status"] == "implemented"
         expected_unit_tests = (
-            set(order_document_unit_tests)
-            if capability_id in ORDER_DOCUMENT_WRITES
+            set(stock_transfer_unit_tests)
+            if capability_id in stock_transfer_batch_writes
             else (
-                set(analytic_budget_unit_tests)
-                if capability_id in ANALYTIC_BUDGET_WRITES
+                set(order_document_unit_tests)
+                if capability_id in ORDER_DOCUMENT_WRITES
                 else (
-                    set(payment_bank_unit_tests)
-                    if capability_id in PAYMENT_BANK_WRITES
+                    set(analytic_budget_unit_tests)
+                    if capability_id in ANALYTIC_BUDGET_WRITES
                     else (
-                        set(document_lifecycle_unit_tests)
-                        if capability_id in DOCUMENT_LIFECYCLE_WRITES
-                        else set(core_unit_tests)
+                        set(payment_bank_unit_tests)
+                        if capability_id in PAYMENT_BANK_WRITES
+                        else (
+                            set(document_lifecycle_unit_tests)
+                            if capability_id in DOCUMENT_LIFECYCLE_WRITES
+                            else set(core_unit_tests)
+                        )
                     )
                 )
             )
@@ -2303,7 +2700,12 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
         if capability_id in EXTENDED_WRITES:
             expected_unit_tests.add("tests/unit/test_extended_core_writes.py")
         assert set(descriptor["tests"]["unit"]["references"]) == expected_unit_tests
-        if capability_id in ORDER_DOCUMENT_WRITES:
+        if capability_id in stock_transfer_batch_writes:
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == [
+                "tests/integration/test_stock_transfer_write_batch_live.py"
+            ]
+        elif capability_id in ORDER_DOCUMENT_WRITES:
             assert descriptor["tests"]["integration"]["status"] == "implemented"
             assert descriptor["tests"]["integration"]["references"] == [
                 "tests/integration/test_order_document_write_batch_live.py"

@@ -1,4 +1,4 @@
-"""One shared read-only smoke for ten fixed financial-report exports."""
+"""One shared read-only smoke for fixed financial-report exports."""
 
 from __future__ import annotations
 
@@ -27,19 +27,28 @@ _DATABASES = {
     "v4-dev": "odoo_cli_v4_dev",
     "v4-e2e": "odoo_cli_v4_e2e",
 }
-_COMPANY_ID = 1
+_COMPANY_IDS = (1, 2)
 _USER_LOGIN = "odacv4_g5_accountant"
 _CAPABILITIES = {
-    "report.trial_balance.export": "range",
-    "report.balance_sheet.export": "single",
-    "report.profit_and_loss.export": "range",
-    "report.cash_flow.export": "range",
-    "report.tax.export": "range",
-    "report.general_ledger.export": "range",
-    "report.partner_ledger.export": "range",
-    "report.aged_receivable.export": "single",
-    "report.aged_payable.export": "single",
-    "report.executive_summary.export": "range",
+    "report.trial_balance.export": ("range", 1),
+    "report.balance_sheet.export": ("single", 1),
+    "report.profit_and_loss.export": ("range", 1),
+    "report.cash_flow.export": ("range", 1),
+    "report.tax.export": ("range", 1),
+    "report.general_ledger.export": ("range", 1),
+    "report.partner_ledger.export": ("range", 1),
+    "report.aged_receivable.export": ("single", 1),
+    "report.aged_payable.export": ("single", 1),
+    "report.executive_summary.export": ("range", 1),
+    "report.journal.export": ("range", 1),
+    "report.asset.export": ("range", 1),
+    "report.deferred_expense.export": ("range", 1),
+    "report.deferred_revenue.export": ("range", 1),
+    "report.multicurrency_revaluation.export": ("single", 1),
+    "report.china.balance_sheet.export": ("single", 1),
+    "report.china.profit_and_loss.export": ("range", 1),
+    "report.china.cash_flow.export": ("range", 1),
+    "report.singapore.gst.export": ("range", 2),
 }
 
 
@@ -61,8 +70,9 @@ def _enabled_runtime() -> tuple[Path, dict[str, Any]]:
     for alias, database in _DATABASES.items():
         entry = document.get("aliases", {}).get(alias)
         assert isinstance(entry, dict) and entry.get("database") == database
-        users = entry.get("companies", {}).get(str(_COMPANY_ID))
-        assert isinstance(users, list) and _USER_LOGIN in users
+        for company_id in _COMPANY_IDS:
+            users = entry.get("companies", {}).get(str(company_id))
+            assert isinstance(users, list) and _USER_LOGIN in users
     return path, document
 
 
@@ -128,7 +138,7 @@ def _run_worker(
     assert result == {
         "alias": alias,
         "capabilities": list(_CAPABILITIES),
-        "company_id": _COMPANY_ID,
+        "company_ids": list(_COMPANY_IDS),
         "database": _DATABASES[alias],
         "exports": len(_CAPABILITIES) * 2,
         "formats": ["pdf", "xlsx"],
@@ -166,13 +176,14 @@ def _worker_arguments(argv: list[str] | None) -> argparse.Namespace:
 
 
 class _DirectClient:
-    def __init__(self, env: Any) -> None:
+    def __init__(self, env: Any, company_id: int) -> None:
         self.env = env
+        self.company_id = company_id
 
     def invoke(self, action: str, payload: dict[str, Any]) -> dict[str, Any]:
         from odoo_accounting_cli_v4.bridge.runtime import _dispatch
 
-        return _dispatch(self.env, action, payload, _COMPANY_ID)
+        return _dispatch(self.env, action, payload, self.company_id)
 
 
 def _parameters(mode: str, export_format: str) -> dict[str, str]:
@@ -186,19 +197,23 @@ def _parameters(mode: str, export_format: str) -> dict[str, str]:
 
 
 def _request(
-    alias: str, capability_id: str, export_format: str, mode: str
+    alias: str,
+    company_id: int,
+    capability_id: str,
+    export_format: str,
+    mode: str,
 ) -> dict[str, Any]:
     return {
         "schema_version": "v1",
         "request_id": str(
             uuid.uuid5(
                 uuid.NAMESPACE_URL,
-                f"odacv4:{alias}:{capability_id}:{export_format}",
+                f"odacv4:{alias}:{company_id}:{capability_id}:{export_format}",
             )
         ),
         "context": {
             "database": alias,
-            "company_id": _COMPANY_ID,
+            "company_id": company_id,
             "user_login": _USER_LOGIN,
             "language": "en_US",
             "timezone": "Asia/Shanghai",
@@ -207,7 +222,7 @@ def _request(
     }
 
 
-def _exercise_batch(env: Any, alias: str) -> None:
+def _exercise_batch(env: Any, alias: str, company_id: int) -> None:
     from odoo_accounting_cli_v4.bridge.financial_reports import (
         OdooFinancialReportExportPort,
     )
@@ -215,14 +230,16 @@ def _exercise_batch(env: Any, alias: str) -> None:
         export_financial_report,
     )
 
-    client = _DirectClient(env)
-    for capability_id, mode in _CAPABILITIES.items():
+    client = _DirectClient(env, company_id)
+    for capability_id, (mode, mapped_company_id) in _CAPABILITIES.items():
+        if mapped_company_id != company_id:
+            continue
         for export_format in ("pdf", "xlsx"):
             port = OdooFinancialReportExportPort(client)
             data = export_financial_report(
                 capability_id,
                 port,
-                _request(alias, capability_id, export_format, mode),
+                _request(alias, company_id, capability_id, export_format, mode),
             )
             content = base64.b64decode(data["content_base64"], validate=True)
             expected_magic = b"%PDF-" if export_format == "pdf" else b"PK\x03\x04"
@@ -260,22 +277,33 @@ def _live_worker(argv: list[str] | None = None) -> int:
     try:
         cursor.execute("SET TRANSACTION READ ONLY")
         context = {
-            "allowed_company_ids": [_COMPANY_ID],
+            "allowed_company_ids": list(_COMPANY_IDS),
             "active_test": True,
             "lang": "en_US",
             "tz": "Asia/Shanghai",
         }
         root_env = api.Environment(cursor, SUPERUSER_ID, context)
-        company = root_env["res.company"].browse(_COMPANY_ID).exists()
+        companies = root_env["res.company"].browse(_COMPANY_IDS).exists()
         user = (
             root_env["res.users"]
             .with_context(active_test=False)
             .search([("login", "=", _USER_LOGIN)], limit=1)
         )
-        if not company or not user or not user.active or company not in user.company_ids:
-            raise RuntimeError("the configured company or user is unavailable")
+        if (
+            set(companies.ids) != set(_COMPANY_IDS)
+            or not user
+            or not user.active
+            or any(company not in user.company_ids for company in companies)
+        ):
+            raise RuntimeError("the configured companies or user are unavailable")
         user_id = user.id
-        _exercise_batch(api.Environment(cursor, user_id, context), args.alias)
+        for company_id in _COMPANY_IDS:
+            company_context = {**context, "allowed_company_ids": [company_id]}
+            _exercise_batch(
+                api.Environment(cursor, user_id, company_context),
+                args.alias,
+                company_id,
+            )
     finally:
         cursor.rollback()
         cursor.close()
@@ -285,7 +313,7 @@ def _live_worker(argv: list[str] | None = None) -> int:
             {
                 "alias": args.alias,
                 "capabilities": list(_CAPABILITIES),
-                "company_id": _COMPANY_ID,
+                "company_ids": list(_COMPANY_IDS),
                 "database": args.database,
                 "exports": len(_CAPABILITIES) * 2,
                 "formats": ["pdf", "xlsx"],

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/tax.group.update.request.schema.json",
+  "title": "tax.group.update request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": "string", "format": "uuid"},
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tax_group_id", "changes"],
+      "properties": {
+        "tax_group_id": {"type": "integer", "minimum": 1},
+        "changes": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "name": {"$ref": "#/$defs/text"},
+            "sequence": {"type": "integer", "minimum": 0},
+            "preceding_subtotal": {"type": ["string", "null"], "minLength": 1, "maxLength": 256, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"}
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "text": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"}
+  }
+}

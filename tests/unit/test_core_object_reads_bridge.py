@@ -63,6 +63,39 @@ EXPECTED_CAPABILITY_IDS = frozenset(
         "tax.get",
         "tax.group.get",
         "tax.group.list",
+        "account.group.list",
+        "account.group.get",
+        "journal.configuration.inspect",
+        "tax.repartition_line.list",
+        "tax.repartition_line.get",
+        "reconciliation.model.line.list",
+        "reconciliation.model.line.get",
+        "bank.list",
+        "bank.get",
+        "report.catalog.list",
+        "report.catalog.get",
+    }
+)
+FISCAL_POSITION_MAPPING_CAPABILITY_IDS = frozenset(
+    {
+        "fiscal_position.account_mapping.list",
+        "fiscal_position.tax_mapping.list",
+    }
+)
+ACCOUNTING_INSIGHT_CAPABILITY_IDS = frozenset(
+    {
+        "invoice.duplicate_candidates.list",
+        "invoice.tax_breakdown.inspect",
+        "recurring.journal_entry.search",
+        "recurring.journal_entry.get",
+        "account.transfer_model.search",
+        "account.transfer_model.get",
+        "partner.credit_exposure.inspect",
+        "journal.sequence_irregularity.list",
+        "account.lock_exception.search",
+        "account.lock_exception.get",
+        "report.external_value.search",
+        "report.external_value.get",
     }
 )
 
@@ -92,7 +125,71 @@ def _page(**overrides: Any) -> dict[str, Any]:
 
 def test_bridge_exports_only_the_fixed_core_object_read_contract() -> None:
     assert ACTION == "accounting.core_object.read"
-    assert CAPABILITY_IDS == EXPECTED_CAPABILITY_IDS
+    assert CAPABILITY_IDS == (
+        EXPECTED_CAPABILITY_IDS
+        | FISCAL_POSITION_MAPPING_CAPABILITY_IDS
+        | ACCOUNTING_INSIGHT_CAPABILITY_IDS
+    )
+
+
+@pytest.mark.parametrize("capability_id", sorted(ACCOUNTING_INSIGHT_CAPABILITY_IDS))
+def test_port_forwards_each_accounting_insight_capability(capability_id: str) -> None:
+    client = Client(_page())
+    port = OdooCoreObjectReadPort(client)
+
+    assert (
+        port.read(
+            capability_id=capability_id,
+            company_id=7,
+            parameters={"frozen": "parameters"},
+        )
+        == _page()
+    )
+    assert client.calls[0][1]["capability_id"] == capability_id
+
+
+@pytest.mark.parametrize(
+    "capability_id", sorted(FISCAL_POSITION_MAPPING_CAPABILITY_IDS)
+)
+def test_port_accepts_the_fixed_fiscal_position_mapping_pages(
+    capability_id: str,
+) -> None:
+    response = _page()
+    if capability_id == "fiscal_position.tax_mapping.list":
+        response["removes_all_taxes"] = False
+    port = OdooCoreObjectReadPort(Client(response))
+
+    assert (
+        port.read(
+            capability_id=capability_id,
+            company_id=7,
+            parameters={"fiscal_position_id": 31, "limit": 101, "after_id": None},
+        )
+        == response
+    )
+
+
+@pytest.mark.parametrize("value", [None, 0, "false"])
+def test_port_rejects_non_boolean_tax_removal_state(value: object) -> None:
+    port = OdooCoreObjectReadPort(Client(_page(removes_all_taxes=value)))
+
+    with pytest.raises(ValueError, match="invalid core-object page"):
+        port.read(
+            capability_id="fiscal_position.tax_mapping.list",
+            company_id=7,
+            parameters={"fiscal_position_id": 31, "limit": 101, "after_id": None},
+        )
+
+
+def test_port_rejects_items_when_fiscal_position_removes_all_taxes() -> None:
+    port = OdooCoreObjectReadPort(Client(_page(removes_all_taxes=True)))
+
+    with pytest.raises(ValueError, match="invalid core-object page"):
+        port.read(
+            capability_id="fiscal_position.tax_mapping.list",
+            company_id=7,
+            parameters={"fiscal_position_id": 31, "limit": 101, "after_id": None},
+        )
 
 
 @pytest.mark.parametrize("capability_id", sorted(EXPECTED_CAPABILITY_IDS))

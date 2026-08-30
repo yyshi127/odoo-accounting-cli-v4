@@ -4,6 +4,9 @@ import copy
 
 import pytest
 
+from odoo_accounting_cli_v4.bridge.financial_report_exports_runtime import (
+    CAPABILITY_SPECS,
+)
 from odoo_accounting_cli_v4.registry import (
     InstanceValidationError,
     load_registry,
@@ -20,6 +23,24 @@ EXPORTS = {
     "report.aged_receivable.export": ("report.aged_receivable", "single"),
     "report.aged_payable.export": ("report.aged_payable", "single"),
     "report.executive_summary.export": ("report.executive_summary", "range"),
+    "report.journal.export": ("report.journal", "range"),
+    "report.asset.export": ("report.asset", "range"),
+    "report.deferred_expense.export": ("report.deferred_expense", "range"),
+    "report.deferred_revenue.export": ("report.deferred_revenue", "range"),
+    "report.multicurrency_revaluation.export": (
+        "report.multicurrency_revaluation",
+        "single",
+    ),
+    "report.china.balance_sheet.export": (
+        "report.china.balance_sheet",
+        "single",
+    ),
+    "report.china.profit_and_loss.export": (
+        "report.china.profit_and_loss",
+        "range",
+    ),
+    "report.china.cash_flow.export": ("report.china.cash_flow", "range"),
+    "report.singapore.gst.export": ("report.singapore.gst", "range"),
 }
 REQUEST_ID = "123e4567-e89b-42d3-a456-426614174000"
 
@@ -95,10 +116,17 @@ def test_export_descriptors_reuse_the_fixed_report_sources_and_requirements(
         descriptor = registry.describe(capability_id)
         read_descriptor = registry.describe(read_id)
 
-        assert descriptor["domain"] == "financial_reports"
+        assert descriptor["domain"] == read_descriptor["domain"]
         assert descriptor["access"] == "read"
         assert descriptor["source"] == read_descriptor["source"]
         assert descriptor["requirements"] == read_descriptor["requirements"]
+        runtime_models = set(
+            CAPABILITY_SPECS[capability_id].get("models", ("account.report",))
+        )
+        assert runtime_models <= set(descriptor["source"]["models"])
+        assert {f"{model}:read" for model in runtime_models} <= set(
+            descriptor["requirements"]["acl"]
+        )
         assert descriptor["handler_key"] == capability_id.replace(".", "_")
         assert descriptor["status"]["value"] == "unconfigured"
         assert descriptor["status"]["reason_code"] == "runtime_context_required"
@@ -134,6 +162,7 @@ def test_export_schema_metadata_is_capability_specific(
         "content_base64",
     }
     assert set(data["properties"]) == set(data["required"])
+    assert data["properties"]["format"]["enum"] == ["pdf", "xlsx"]
 
 
 @pytest.mark.parametrize("capability_id,definition", EXPORTS.items())

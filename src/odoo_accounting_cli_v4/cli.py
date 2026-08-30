@@ -33,6 +33,7 @@ from odoo_accounting_cli_v4.bridge.currency_rates import (
     OdooCurrencyConvertPort,
     OdooCurrencyRateListPort,
 )
+from odoo_accounting_cli_v4.bridge.document_exports import OdooDocumentExportPort
 from odoo_accounting_cli_v4.bridge.environment_inspection import (
     OdooEnvironmentInspectionPort,
 )
@@ -127,6 +128,13 @@ from odoo_accounting_cli_v4.capabilities.currency_rates import (
     list_currency_rates,
     validate_currency_convert_request,
     validate_currency_rate_list_request,
+)
+from odoo_accounting_cli_v4.capabilities.document_exports import (
+    DOCUMENT_EXPORT_CAPABILITY_IDS,
+    DOCUMENT_EXPORT_SPECS,
+    DocumentExportError,
+    export_document,
+    validate_document_export_request,
 )
 from odoo_accounting_cli_v4.capabilities.environment_inspection import (
     read_environment_inspection,
@@ -287,6 +295,8 @@ _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
         port, "account.return.check.get", request
     ),
     "account_account_get": partial(read_core_object, "account.account.get"),
+    "account_group_list": partial(read_core_object, "account.group.list"),
+    "account_group_get": partial(read_core_object, "account.group.get"),
     "account_tag_get": partial(read_core_object, "account.tag.get"),
     "account_tag_list": partial(read_core_object, "account.tag.list"),
     "analytic_account_get": partial(read_core_object, "analytic.account.get"),
@@ -317,8 +327,23 @@ _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
     ),
     "journal_list": partial(read_master_data, "journal.list"),
     "journal_get": partial(read_core_object, "journal.get"),
+    "journal_configuration_inspect": partial(
+        read_core_object, "journal.configuration.inspect"
+    ),
     "tax_list": partial(read_master_data, "tax.list"),
     "tax_get": partial(read_core_object, "tax.get"),
+    "tax_repartition_line_list": partial(read_core_object, "tax.repartition_line.list"),
+    "tax_repartition_line_get": partial(read_core_object, "tax.repartition_line.get"),
+    "reconciliation_model_line_list": partial(
+        read_core_object, "reconciliation.model.line.list"
+    ),
+    "reconciliation_model_line_get": partial(
+        read_core_object, "reconciliation.model.line.get"
+    ),
+    "bank_list": partial(read_core_object, "bank.list"),
+    "bank_get": partial(read_core_object, "bank.get"),
+    "report_catalog_list": partial(read_core_object, "report.catalog.list"),
+    "report_catalog_get": partial(read_core_object, "report.catalog.get"),
     "payment_term_list": partial(read_master_data, "payment_term.list"),
     "payment_term_get": partial(read_core_object, "payment_term.get"),
     "currency_list": partial(read_master_data, "currency.list"),
@@ -360,6 +385,55 @@ _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
     ),
     "report_executive_summary_export": partial(
         export_financial_report, "report.executive_summary.export"
+    ),
+    "report_journal_export": partial(export_financial_report, "report.journal.export"),
+    "report_asset_export": partial(export_financial_report, "report.asset.export"),
+    "report_deferred_expense_export": partial(
+        export_financial_report, "report.deferred_expense.export"
+    ),
+    "report_deferred_revenue_export": partial(
+        export_financial_report, "report.deferred_revenue.export"
+    ),
+    "report_multicurrency_revaluation_export": partial(
+        export_financial_report, "report.multicurrency_revaluation.export"
+    ),
+    "report_china_balance_sheet_export": partial(
+        export_financial_report, "report.china.balance_sheet.export"
+    ),
+    "report_china_profit_and_loss_export": partial(
+        export_financial_report, "report.china.profit_and_loss.export"
+    ),
+    "report_china_cash_flow_export": partial(
+        export_financial_report, "report.china.cash_flow.export"
+    ),
+    "report_singapore_gst_export": partial(
+        export_financial_report, "report.singapore.gst.export"
+    ),
+    "document_invoice_pdf_export": partial(export_document, "invoice.pdf.export"),
+    "document_payment_receipt_pdf_export": partial(
+        export_document, "payment.receipt.pdf.export"
+    ),
+    "document_bank_statement_pdf_export": partial(
+        export_document, "bank.statement.pdf.export"
+    ),
+    "document_sale_order_pdf_export": partial(export_document, "sale.order.pdf.export"),
+    "document_purchase_order_pdf_export": partial(
+        export_document, "purchase.order.pdf.export"
+    ),
+    "document_purchase_rfq_pdf_export": partial(
+        export_document, "purchase.rfq.pdf.export"
+    ),
+    "document_stock_delivery_slip_pdf_export": partial(
+        export_document, "stock.delivery_slip.pdf.export"
+    ),
+    "document_stock_picking_operations_pdf_export": partial(
+        export_document, "stock.picking_operations.pdf.export"
+    ),
+    "document_stock_return_slip_pdf_export": partial(
+        export_document, "stock.return_slip.pdf.export"
+    ),
+    "document_localization_china_voucher_render": partial(
+        export_document, "localization.china.voucher.render"
     ),
     "report_customer_statement": partial(
         read_typed_financial_report, "report.customer_statement"
@@ -405,6 +479,46 @@ _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
     "fiscal_position_resolve": resolve_fiscal_position,
     "fiscal_position_get": partial(read_core_object, "fiscal_position.get"),
     "fiscal_position_search": partial(read_core_object, "fiscal_position.search"),
+    "fiscal_position_account_mapping_list": partial(
+        read_core_object, "fiscal_position.account_mapping.list"
+    ),
+    "fiscal_position_tax_mapping_list": partial(
+        read_core_object, "fiscal_position.tax_mapping.list"
+    ),
+    "invoice_duplicate_candidates_list": partial(
+        read_core_object, "invoice.duplicate_candidates.list"
+    ),
+    "invoice_tax_breakdown_inspect": partial(
+        read_core_object, "invoice.tax_breakdown.inspect"
+    ),
+    "recurring_journal_entry_search": partial(
+        read_core_object, "recurring.journal_entry.search"
+    ),
+    "recurring_journal_entry_get": partial(
+        read_core_object, "recurring.journal_entry.get"
+    ),
+    "account_transfer_model_search": partial(
+        read_core_object, "account.transfer_model.search"
+    ),
+    "account_transfer_model_get": partial(
+        read_core_object, "account.transfer_model.get"
+    ),
+    "partner_credit_exposure_inspect": partial(
+        read_core_object, "partner.credit_exposure.inspect"
+    ),
+    "journal_sequence_irregularity_list": partial(
+        read_core_object, "journal.sequence_irregularity.list"
+    ),
+    "account_lock_exception_search": partial(
+        read_core_object, "account.lock_exception.search"
+    ),
+    "account_lock_exception_get": partial(
+        read_core_object, "account.lock_exception.get"
+    ),
+    "report_external_value_search": partial(
+        read_core_object, "report.external_value.search"
+    ),
+    "report_external_value_get": partial(read_core_object, "report.external_value.get"),
     "diagnostic_journal_integrity_inspect": inspect_journal_integrity,
     "user_accounting_access_inspect": read_accounting_access,
     "company_accounting_configuration_inspect": partial(
@@ -585,6 +699,12 @@ _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "account_account_get": partial(
         validate_core_object_read_request, "account.account.get"
     ),
+    "account_group_list": partial(
+        validate_core_object_read_request, "account.group.list"
+    ),
+    "account_group_get": partial(
+        validate_core_object_read_request, "account.group.get"
+    ),
     "account_tag_get": partial(validate_core_object_read_request, "account.tag.get"),
     "account_tag_list": partial(validate_core_object_read_request, "account.tag.list"),
     "analytic_account_get": partial(
@@ -627,8 +747,31 @@ _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     ),
     "journal_list": partial(validate_master_data_request, "journal.list"),
     "journal_get": partial(validate_core_object_read_request, "journal.get"),
+    "journal_configuration_inspect": partial(
+        validate_core_object_read_request, "journal.configuration.inspect"
+    ),
     "tax_list": partial(validate_master_data_request, "tax.list"),
     "tax_get": partial(validate_core_object_read_request, "tax.get"),
+    "tax_repartition_line_list": partial(
+        validate_core_object_read_request, "tax.repartition_line.list"
+    ),
+    "tax_repartition_line_get": partial(
+        validate_core_object_read_request, "tax.repartition_line.get"
+    ),
+    "reconciliation_model_line_list": partial(
+        validate_core_object_read_request, "reconciliation.model.line.list"
+    ),
+    "reconciliation_model_line_get": partial(
+        validate_core_object_read_request, "reconciliation.model.line.get"
+    ),
+    "bank_list": partial(validate_core_object_read_request, "bank.list"),
+    "bank_get": partial(validate_core_object_read_request, "bank.get"),
+    "report_catalog_list": partial(
+        validate_core_object_read_request, "report.catalog.list"
+    ),
+    "report_catalog_get": partial(
+        validate_core_object_read_request, "report.catalog.get"
+    ),
     "payment_term_list": partial(validate_master_data_request, "payment_term.list"),
     "payment_term_get": partial(validate_core_object_read_request, "payment_term.get"),
     "currency_list": partial(validate_master_data_request, "currency.list"),
@@ -672,6 +815,65 @@ _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     ),
     "report_executive_summary_export": partial(
         validate_financial_report_export_request, "report.executive_summary.export"
+    ),
+    "report_journal_export": partial(
+        validate_financial_report_export_request, "report.journal.export"
+    ),
+    "report_asset_export": partial(
+        validate_financial_report_export_request, "report.asset.export"
+    ),
+    "report_deferred_expense_export": partial(
+        validate_financial_report_export_request, "report.deferred_expense.export"
+    ),
+    "report_deferred_revenue_export": partial(
+        validate_financial_report_export_request, "report.deferred_revenue.export"
+    ),
+    "report_multicurrency_revaluation_export": partial(
+        validate_financial_report_export_request,
+        "report.multicurrency_revaluation.export",
+    ),
+    "report_china_balance_sheet_export": partial(
+        validate_financial_report_export_request, "report.china.balance_sheet.export"
+    ),
+    "report_china_profit_and_loss_export": partial(
+        validate_financial_report_export_request,
+        "report.china.profit_and_loss.export",
+    ),
+    "report_china_cash_flow_export": partial(
+        validate_financial_report_export_request, "report.china.cash_flow.export"
+    ),
+    "report_singapore_gst_export": partial(
+        validate_financial_report_export_request, "report.singapore.gst.export"
+    ),
+    "document_invoice_pdf_export": partial(
+        validate_document_export_request, "invoice.pdf.export"
+    ),
+    "document_payment_receipt_pdf_export": partial(
+        validate_document_export_request, "payment.receipt.pdf.export"
+    ),
+    "document_bank_statement_pdf_export": partial(
+        validate_document_export_request, "bank.statement.pdf.export"
+    ),
+    "document_sale_order_pdf_export": partial(
+        validate_document_export_request, "sale.order.pdf.export"
+    ),
+    "document_purchase_order_pdf_export": partial(
+        validate_document_export_request, "purchase.order.pdf.export"
+    ),
+    "document_purchase_rfq_pdf_export": partial(
+        validate_document_export_request, "purchase.rfq.pdf.export"
+    ),
+    "document_stock_delivery_slip_pdf_export": partial(
+        validate_document_export_request, "stock.delivery_slip.pdf.export"
+    ),
+    "document_stock_picking_operations_pdf_export": partial(
+        validate_document_export_request, "stock.picking_operations.pdf.export"
+    ),
+    "document_stock_return_slip_pdf_export": partial(
+        validate_document_export_request, "stock.return_slip.pdf.export"
+    ),
+    "document_localization_china_voucher_render": partial(
+        validate_document_export_request, "localization.china.voucher.render"
     ),
     "report_customer_statement": partial(
         validate_typed_financial_report_request, "report.customer_statement"
@@ -726,6 +928,48 @@ _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     ),
     "fiscal_position_search": partial(
         validate_core_object_read_request, "fiscal_position.search"
+    ),
+    "fiscal_position_account_mapping_list": partial(
+        validate_core_object_read_request, "fiscal_position.account_mapping.list"
+    ),
+    "fiscal_position_tax_mapping_list": partial(
+        validate_core_object_read_request, "fiscal_position.tax_mapping.list"
+    ),
+    "invoice_duplicate_candidates_list": partial(
+        validate_core_object_read_request, "invoice.duplicate_candidates.list"
+    ),
+    "invoice_tax_breakdown_inspect": partial(
+        validate_core_object_read_request, "invoice.tax_breakdown.inspect"
+    ),
+    "recurring_journal_entry_search": partial(
+        validate_core_object_read_request, "recurring.journal_entry.search"
+    ),
+    "recurring_journal_entry_get": partial(
+        validate_core_object_read_request, "recurring.journal_entry.get"
+    ),
+    "account_transfer_model_search": partial(
+        validate_core_object_read_request, "account.transfer_model.search"
+    ),
+    "account_transfer_model_get": partial(
+        validate_core_object_read_request, "account.transfer_model.get"
+    ),
+    "partner_credit_exposure_inspect": partial(
+        validate_core_object_read_request, "partner.credit_exposure.inspect"
+    ),
+    "journal_sequence_irregularity_list": partial(
+        validate_core_object_read_request, "journal.sequence_irregularity.list"
+    ),
+    "account_lock_exception_search": partial(
+        validate_core_object_read_request, "account.lock_exception.search"
+    ),
+    "account_lock_exception_get": partial(
+        validate_core_object_read_request, "account.lock_exception.get"
+    ),
+    "report_external_value_search": partial(
+        validate_core_object_read_request, "report.external_value.search"
+    ),
+    "report_external_value_get": partial(
+        validate_core_object_read_request, "report.external_value.get"
     ),
     "diagnostic_journal_integrity_inspect": validate_journal_integrity_request,
     "user_accounting_access_inspect": validate_accounting_access_request,
@@ -926,12 +1170,20 @@ _CAPABILITY_MODELS = {
     "account.return.check.list": "account.return.check",
     "account.return.check.get": "account.return.check",
     "account.account.get": "account.account",
+    "account.group.list": "account.group",
+    "account.group.get": "account.group",
+    "account.group.create": "account.group",
+    "account.group.update": "account.group",
     "account.account.create": "account.account",
     "account.account.update": "account.account",
     "account.account.archive": "account.account",
     "account.account.restore": "account.account",
     "account.tag.get": "account.account.tag",
     "account.tag.list": "account.account.tag",
+    "account.tag.create": "account.account.tag",
+    "account.tag.update": "account.account.tag",
+    "account.tag.archive": "account.account.tag",
+    "account.tag.restore": "account.account.tag",
     "analytic.account.get": "account.analytic.account",
     "analytic.account.search": "account.analytic.account",
     "analytic.plan.get": "account.analytic.plan",
@@ -952,12 +1204,20 @@ _CAPABILITY_MODELS = {
     "company.lock_dates.inspect": "res.company",
     "journal.list": "account.journal",
     "journal.get": "account.journal",
+    "journal.configuration.inspect": "account.journal",
     "journal.create": "account.journal",
     "journal.update": "account.journal",
     "journal.archive": "account.journal",
     "journal.restore": "account.journal",
     "tax.list": "account.tax",
     "tax.get": "account.tax",
+    "tax.repartition_line.list": "account.tax.repartition.line",
+    "tax.repartition_line.get": "account.tax.repartition.line",
+    "tax.repartition_lines.replace": "account.tax",
+    "reconciliation.model.line.list": "account.reconcile.model.line",
+    "reconciliation.model.line.get": "account.reconcile.model.line",
+    "bank.list": "res.bank",
+    "bank.get": "res.bank",
     "tax.create": "account.tax",
     "tax.update": "account.tax",
     "tax.archive": "account.tax",
@@ -972,6 +1232,7 @@ _CAPABILITY_MODELS = {
     "currency.list": "res.currency",
     "currency.get": "res.currency",
     "currency.rate.list": "res.currency.rate",
+    "currency.rate.record": "res.currency.rate",
     "currency.convert": "res.currency",
     "journal_entry.search": "account.move",
     "journal_entry.get": "account.move",
@@ -981,6 +1242,8 @@ _CAPABILITY_MODELS = {
     "report.profit_and_loss": "account.report",
     "report.cash_flow": "account.report",
     "report.tax": "account.report",
+    "report.catalog.list": "account.report",
+    "report.catalog.get": "account.report",
     "report.trial_balance.export": "account.report",
     "report.balance_sheet.export": "account.report",
     "report.profit_and_loss.export": "account.report",
@@ -991,6 +1254,15 @@ _CAPABILITY_MODELS = {
     "report.aged_receivable.export": "account.report",
     "report.aged_payable.export": "account.report",
     "report.executive_summary.export": "account.report",
+    "report.journal.export": "account.report",
+    "report.asset.export": "account.report",
+    "report.deferred_expense.export": "account.report",
+    "report.deferred_revenue.export": "account.report",
+    "report.multicurrency_revaluation.export": "account.report",
+    "report.china.balance_sheet.export": "account.report",
+    "report.china.profit_and_loss.export": "account.report",
+    "report.china.cash_flow.export": "account.report",
+    "report.singapore.gst.export": "account.report",
     "report.customer_statement": "account.report",
     "report.followup": "account.report",
     "report.bank_reconciliation": "account.report",
@@ -1011,8 +1283,24 @@ _CAPABILITY_MODELS = {
     "fiscal_position.resolve": "account.fiscal.position",
     "fiscal_position.get": "account.fiscal.position",
     "fiscal_position.search": "account.fiscal.position",
+    "fiscal_position.account_mapping.list": "account.fiscal.position.account",
+    "fiscal_position.tax_mapping.list": "account.fiscal.position",
+    "invoice.duplicate_candidates.list": "account.move",
+    "invoice.tax_breakdown.inspect": "account.move",
+    "recurring.journal_entry.search": "account.move",
+    "recurring.journal_entry.get": "account.move",
+    "account.transfer_model.search": "account.transfer.model",
+    "account.transfer_model.get": "account.transfer.model",
+    "partner.credit_exposure.inspect": "res.partner",
+    "journal.sequence_irregularity.list": "account.move",
+    "account.lock_exception.search": "account.lock_exception",
+    "account.lock_exception.get": "account.lock_exception",
+    "report.external_value.search": "account.report.external.value",
+    "report.external_value.get": "account.report.external.value",
     "fiscal_year.get": "account.fiscal.year",
     "fiscal_year.search": "account.fiscal.year",
+    "fiscal_year.create": "account.fiscal.year",
+    "fiscal_year.update": "account.fiscal.year",
     "diagnostic.journal_integrity.inspect": "res.company",
     "user.accounting_access.inspect": "res.users",
     "company.accounting_configuration.inspect": "res.company",
@@ -1050,12 +1338,19 @@ _CAPABILITY_MODELS = {
     "payment.method.list": "account.payment.method.line",
     "reconciliation.model.get": "account.reconcile.model",
     "reconciliation.model.list": "account.reconcile.model",
+    "reconciliation.model.create": "account.reconcile.model",
+    "reconciliation.model.update": "account.reconcile.model",
+    "reconciliation.model.lines.replace": "account.reconcile.model",
+    "reconciliation.model.archive": "account.reconcile.model",
+    "reconciliation.model.restore": "account.reconcile.model",
     "reconciliation.partial.get": "account.partial.reconcile",
     "reconciliation.partial.list": "account.partial.reconcile",
     "reconciliation.full.get": "account.full.reconcile",
     "reconciliation.full.list": "account.full.reconcile",
     "cash_rounding.get": "account.cash.rounding",
     "cash_rounding.list": "account.cash.rounding",
+    "cash_rounding.create": "account.cash.rounding",
+    "cash_rounding.update": "account.cash.rounding",
     "journal.group.get": "account.journal.group",
     "journal.group.list": "account.journal.group",
     "incoterm.get": "account.incoterms",
@@ -1075,6 +1370,13 @@ _CAPABILITY_MODELS = {
     "stock.route.list": "stock.route",
     "stock.transfer.search": "stock.picking",
     "stock.transfer.get": "stock.picking",
+    "stock.transfer.create": "stock.picking",
+    "stock.transfer.confirm": "stock.picking",
+    "stock.transfer.assign": "stock.picking",
+    "stock.transfer.quantities.set": "stock.picking",
+    "stock.transfer.validate": "stock.picking",
+    "stock.transfer.unreserve": "stock.picking",
+    "stock.transfer.cancel": "stock.picking",
     "stock.move.search": "stock.move",
     "inventory.on_hand.summary": "stock.quant",
     "inventory.availability.inspect": "product.product",
@@ -1092,6 +1394,7 @@ _CAPABILITY_MODELS = {
     "sale.order.confirm": "sale.order",
     "sale.order.cancel": "sale.order",
     "sale.order.reset_to_draft": "sale.order",
+    "sale.order.invoice.create": "account.move",
     "purchase.order.create": "purchase.order",
     "purchase.order.update_draft": "purchase.order",
     "purchase.order.lines.replace": "purchase.order",
@@ -1111,6 +1414,12 @@ _CAPABILITY_MODELS = {
     "journal.group.update": "account.journal.group",
     "tax.group.get": "account.tax.group",
     "tax.group.list": "account.tax.group",
+    "tax.group.create": "account.tax.group",
+    "tax.group.update": "account.tax.group",
+    "analytic.applicability.create": "account.analytic.applicability",
+    "analytic.applicability.update": "account.analytic.applicability",
+    "analytic.distribution_model.create": "account.analytic.distribution.model",
+    "analytic.distribution_model.update": "account.analytic.distribution.model",
     "asset.search": "account.asset",
     "asset.get": "account.asset",
     "asset.depreciation_schedule.get": "account.asset",
@@ -1173,6 +1482,16 @@ _CAPABILITY_MODELS = {
     "partner.bank_account.update": "res.partner.bank",
     "partner.bank_account.archive": "res.partner.bank",
     "partner.bank_account.restore": "res.partner.bank",
+    "invoice.pdf.export": "account.move",
+    "payment.receipt.pdf.export": "account.payment",
+    "bank.statement.pdf.export": "account.bank.statement",
+    "sale.order.pdf.export": "sale.order",
+    "purchase.order.pdf.export": "purchase.order",
+    "purchase.rfq.pdf.export": "purchase.order",
+    "stock.delivery_slip.pdf.export": "stock.picking",
+    "stock.picking_operations.pdf.export": "stock.picking",
+    "stock.return_slip.pdf.export": "stock.picking",
+    "localization.china.voucher.render": "account.move",
 }
 
 
@@ -1573,6 +1892,7 @@ def _execute_read(
         MasterDataListError,
         JournalEntryError,
         FinancialReportError,
+        DocumentExportError,
         PartnerAccountingError,
         InvoiceError,
         OpenItemsError,
@@ -1615,6 +1935,7 @@ def _execute_read(
         MasterDataListError,
         JournalEntryError,
         FinancialReportError,
+        DocumentExportError,
         PartnerAccountingError,
         InvoiceError,
         OpenItemsError,
@@ -1707,98 +2028,127 @@ def _execute_read(
         user_id=getattr(port, "user_id", None),
         model=_CAPABILITY_MODELS[capability_id],
         record_ids=(
-            []
-            if capability_id.startswith("report.")
-            or capability_id
-            in {
-                "invoice.analysis.summary",
-                "account.return.summary",
-                "journal_item.analysis.summary",
-                "inventory.on_hand.summary",
-                "sale.order.analysis.summary",
-                "purchase.order.analysis.summary",
-            }
+            [
+                request["parameters"][
+                    DOCUMENT_EXPORT_SPECS[capability_id]["id_parameter"]
+                ]
+            ]
+            if capability_id in DOCUMENT_EXPORT_CAPABILITY_IDS
             else (
-                [data["journal"]["id"]]
-                if capability_id == "journal.accounting_date.resolve"
-                else (
-                    [data["company_id"]]
-                    if capability_id
-                    in {
-                        "diagnostic.journal_integrity.inspect",
-                        "company.fiscal_year.resolve",
-                        "company.lock_dates.inspect",
-                        "localization.china.configuration.inspect",
-                        "localization.singapore.configuration.inspect",
+                []
+                if (
+                    capability_id.startswith("report.")
+                    and capability_id
+                    not in {
+                        "report.catalog.list",
+                        "report.catalog.get",
+                        "report.external_value.search",
+                        "report.external_value.get",
                     }
+                )
+                or capability_id
+                in {
+                    "invoice.analysis.summary",
+                    "account.return.summary",
+                    "journal_item.analysis.summary",
+                    "inventory.on_hand.summary",
+                    "sale.order.analysis.summary",
+                    "purchase.order.analysis.summary",
+                }
+                else (
+                    [data["journal"]["id"]]
+                    if capability_id == "journal.accounting_date.resolve"
                     else (
-                        (
-                            [data["fiscal_position"]["id"]]
-                            if data["fiscal_position"] is not None
-                            else []
-                        )
-                        if capability_id == "fiscal_position.resolve"
+                        [data["company_id"]]
+                        if capability_id
+                        in {
+                            "diagnostic.journal_integrity.inspect",
+                            "company.fiscal_year.resolve",
+                            "company.lock_dates.inspect",
+                            "localization.china.configuration.inspect",
+                            "localization.singapore.configuration.inspect",
+                        }
                         else (
-                            [data["company"]["id"]]
-                            if capability_id
-                            == "company.accounting_configuration.inspect"
+                            (
+                                [data["fiscal_position"]["id"]]
+                                if data["fiscal_position"] is not None
+                                else []
+                            )
+                            if capability_id == "fiscal_position.resolve"
                             else (
-                                []
+                                [data["company"]["id"]]
                                 if capability_id
-                                == "diagnostic.accounting_environment.inspect"
+                                == "company.accounting_configuration.inspect"
                                 else (
-                                    [data["user"]["id"]]
-                                    if capability_id == "user.accounting_access.inspect"
+                                    []
+                                    if capability_id
+                                    == "diagnostic.accounting_environment.inspect"
                                     else (
-                                        [
-                                            data["from_currency"]["id"],
-                                            data["to_currency"]["id"],
-                                        ]
-                                        if capability_id == "currency.convert"
+                                        [data["user"]["id"]]
+                                        if capability_id
+                                        == "user.accounting_access.inspect"
                                         else (
-                                            [data["entry_id"]]
-                                            if capability_id
-                                            == "validation.journal_entry.check"
+                                            [
+                                                data["from_currency"]["id"],
+                                                data["to_currency"]["id"],
+                                            ]
+                                            if capability_id == "currency.convert"
                                             else (
-                                                [data["product"]["id"]]
+                                                [data["entry_id"]]
                                                 if capability_id
-                                                in {
-                                                    "product.accounting_profile.get",
-                                                    "inventory.availability.inspect",
-                                                }
+                                                == "validation.journal_entry.check"
                                                 else (
-                                                    [data["transaction"]["id"]]
+                                                    [data["product"]["id"]]
                                                     if capability_id
-                                                    == "bank.transaction.reconciliation.get"
+                                                    in {
+                                                        "product.accounting_profile.get",
+                                                        "inventory.availability.inspect",
+                                                    }
                                                     else (
-                                                        [data["id"]]
+                                                        [data["transaction"]["id"]]
                                                         if capability_id
-                                                        in {
-                                                            "journal_entry.get",
-                                                            "invoice.get",
-                                                            "invoice.payment_status.inspect",
-                                                            "fiscal_year.get",
-                                                            "payment.get",
-                                                            "account.return.get",
-                                                            "account.return.check.get",
-                                                            "purchase_bill.matching.inspect",
-                                                            "sale_invoice.stock_link.inspect",
-                                                            "asset.get",
-                                                            "stock.transfer.get",
-                                                            "sale.order.get",
-                                                            "purchase.order.get",
-                                                            *CORE_OBJECT_GET_CAPABILITY_IDS,
-                                                        }
+                                                        == "bank.transaction.reconciliation.get"
                                                         else (
-                                                            [data["asset"]["id"]]
+                                                            [data["id"]]
                                                             if capability_id
-                                                            == "asset.depreciation_schedule.get"
-                                                            else [
-                                                                item["id"]
-                                                                for item in data[
-                                                                    "items"
-                                                                ]
-                                                            ]
+                                                            in {
+                                                                "journal_entry.get",
+                                                                "invoice.get",
+                                                                "invoice.payment_status.inspect",
+                                                                "fiscal_year.get",
+                                                                "payment.get",
+                                                                "account.return.get",
+                                                                "account.return.check.get",
+                                                                "purchase_bill.matching.inspect",
+                                                                "sale_invoice.stock_link.inspect",
+                                                                "asset.get",
+                                                                "stock.transfer.get",
+                                                                "sale.order.get",
+                                                                "purchase.order.get",
+                                                                *CORE_OBJECT_GET_CAPABILITY_IDS,
+                                                            }
+                                                            else (
+                                                                [data["asset"]["id"]]
+                                                                if capability_id
+                                                                == "asset.depreciation_schedule.get"
+                                                                else (
+                                                                    [
+                                                                        request[
+                                                                            "parameters"
+                                                                        ][
+                                                                            "fiscal_position_id"
+                                                                        ]
+                                                                    ]
+                                                                    if capability_id
+                                                                    == "fiscal_position.tax_mapping.list"
+                                                                    else [
+                                                                        item["id"]
+                                                                        for item in data[
+                                                                            "items"
+                                                                        ]
+                                                                    ]
+                                                                )
+                                                            )
                                                         )
                                                     )
                                                 )
@@ -2191,6 +2541,8 @@ def _configured_port_factory(capability_id: str, request: dict[str, Any]) -> obj
         return OdooEnvironmentInspectionPort(client, capability_id)
     if capability_id in LOCALIZATION_CONFIGURATION_CAPABILITY_IDS:
         return OdooLocalizationConfigurationPort(client)
+    if capability_id in DOCUMENT_EXPORT_CAPABILITY_IDS:
+        return OdooDocumentExportPort(client)
     if capability_id in FINANCIAL_REPORT_EXPORT_CAPABILITY_IDS:
         return OdooFinancialReportExportPort(client)
     if capability_id in {

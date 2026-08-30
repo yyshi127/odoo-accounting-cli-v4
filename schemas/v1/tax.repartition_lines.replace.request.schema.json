@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/tax.repartition_lines.replace.request.schema.json",
+  "title": "tax.repartition_lines.replace request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": "string", "format": "uuid"},
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tax_id", "invoice_lines", "refund_lines"],
+      "properties": {
+        "tax_id": {"type": "integer", "minimum": 1},
+        "invoice_lines": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 100,
+          "items": {"$ref": "#/$defs/repartition_line"}
+        },
+        "refund_lines": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 100,
+          "items": {"$ref": "#/$defs/repartition_line"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "signed_decimal": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^(?:0|-?[1-9][0-9]*|-?(?:0|[1-9][0-9]*)\\.[0-9]*[1-9])$"
+    },
+    "repartition_line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sequence",
+        "repartition_type",
+        "factor_percent",
+        "account_id",
+        "tag_ids",
+        "use_in_tax_closing"
+      ],
+      "properties": {
+        "sequence": {"type": "integer", "minimum": 0},
+        "repartition_type": {"enum": ["base", "tax"]},
+        "factor_percent": {"$ref": "#/$defs/signed_decimal"},
+        "account_id": {"type": ["integer", "null"], "minimum": 1},
+        "tag_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 1}
+        },
+        "use_in_tax_closing": {"type": "boolean"}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"repartition_type": {"const": "base"}},
+            "required": ["repartition_type"]
+          },
+          "then": {"properties": {"account_id": {"type": "null"}}}
+        }
+      ]
+    }
+  }
+}

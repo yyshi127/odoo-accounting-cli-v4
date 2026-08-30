@@ -54,6 +54,36 @@ FINANCIAL_REPORT_EXPORTS = {
         "key": "executive_summary",
         "mode": "range",
     },
+    "report.journal.export": {"key": "journal", "mode": "range"},
+    "report.asset.export": {"key": "asset", "mode": "range"},
+    "report.deferred_expense.export": {
+        "key": "deferred_expense",
+        "mode": "range",
+    },
+    "report.deferred_revenue.export": {
+        "key": "deferred_revenue",
+        "mode": "range",
+    },
+    "report.multicurrency_revaluation.export": {
+        "key": "multicurrency_revaluation",
+        "mode": "single",
+    },
+    "report.china.balance_sheet.export": {
+        "key": "china_balance_sheet",
+        "mode": "single",
+    },
+    "report.china.profit_and_loss.export": {
+        "key": "china_profit_and_loss",
+        "mode": "range",
+    },
+    "report.china.cash_flow.export": {
+        "key": "china_cash_flow",
+        "mode": "range",
+    },
+    "report.singapore.gst.export": {
+        "key": "singapore_gst",
+        "mode": "range",
+    },
 }
 FINANCIAL_REPORT_EXPORT_CAPABILITY_IDS = frozenset(FINANCIAL_REPORT_EXPORTS)
 DEFAULT_LIMIT = 100

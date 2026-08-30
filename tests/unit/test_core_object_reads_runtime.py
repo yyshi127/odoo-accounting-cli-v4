@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import date
 from decimal import Decimal
 from types import ModuleType, SimpleNamespace
 from typing import Any
@@ -8,6 +9,10 @@ from typing import Any
 import pytest
 
 from odoo_accounting_cli_v4.bridge import core_object_reads_runtime as core
+from odoo_accounting_cli_v4.capabilities.core_object_reads import (
+    CoreObjectReadError,
+    read_core_object,
+)
 
 EXPECTED_CAPABILITY_IDS = frozenset(
     {
@@ -62,6 +67,39 @@ EXPECTED_CAPABILITY_IDS = frozenset(
         "budget.get",
         "budget.line.list",
         "budget.line.get",
+        "account.group.list",
+        "account.group.get",
+        "journal.configuration.inspect",
+        "tax.repartition_line.list",
+        "tax.repartition_line.get",
+        "reconciliation.model.line.list",
+        "reconciliation.model.line.get",
+        "bank.list",
+        "bank.get",
+        "report.catalog.list",
+        "report.catalog.get",
+    }
+)
+FISCAL_POSITION_MAPPING_CAPABILITY_IDS = frozenset(
+    {
+        "fiscal_position.account_mapping.list",
+        "fiscal_position.tax_mapping.list",
+    }
+)
+ACCOUNTING_INSIGHT_CAPABILITY_IDS = frozenset(
+    {
+        "invoice.duplicate_candidates.list",
+        "invoice.tax_breakdown.inspect",
+        "recurring.journal_entry.search",
+        "recurring.journal_entry.get",
+        "account.transfer_model.search",
+        "account.transfer_model.get",
+        "partner.credit_exposure.inspect",
+        "journal.sequence_irregularity.list",
+        "account.lock_exception.search",
+        "account.lock_exception.get",
+        "report.external_value.search",
+        "report.external_value.get",
     }
 )
 
@@ -94,6 +132,7 @@ GET_ID_FIELDS = {
     "analytic.applicability.get": "applicability_id",
     "budget.get": "budget_id",
     "budget.line.get": "budget_line_id",
+    "account.group.get": "account_group_id",
 }
 
 PRIMARY_MODELS = {
@@ -148,6 +187,17 @@ PRIMARY_MODELS = {
     "budget.get": "budget.analytic",
     "budget.line.list": "budget.line",
     "budget.line.get": "budget.line",
+    "account.group.list": "account.group",
+    "account.group.get": "account.group",
+    "journal.configuration.inspect": "account.journal",
+    "tax.repartition_line.list": "account.tax.repartition.line",
+    "tax.repartition_line.get": "account.tax.repartition.line",
+    "reconciliation.model.line.list": "account.reconcile.model.line",
+    "reconciliation.model.line.get": "account.reconcile.model.line",
+    "bank.list": "res.bank",
+    "bank.get": "res.bank",
+    "report.catalog.list": "account.report",
+    "report.catalog.get": "account.report",
 }
 
 GET_OBJECT_IDS = {
@@ -179,6 +229,7 @@ GET_OBJECT_IDS = {
     "analytic.applicability.get": 31,
     "budget.get": 31,
     "budget.line.get": 31,
+    "account.group.get": 41,
 }
 
 REFERENCE_PAGE_CAPABILITIES = (
@@ -256,6 +307,9 @@ def _fake_odoo_expression(monkeypatch: pytest.MonkeyPatch) -> None:
 
     odoo = ModuleType("odoo")
     odoo.__path__ = []  # type: ignore[attr-defined]
+    odoo.fields = SimpleNamespace(  # type: ignore[attr-defined]
+        Date=SimpleNamespace(context_today=lambda _model: date(2026, 8, 31))
+    )
     osv = ModuleType("odoo.osv")
     osv.expression = SimpleNamespace(AND=and_domains)  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "odoo", odoo)
@@ -329,13 +383,37 @@ def _term_matches(record: Record, term: tuple[Any, Any, Any]) -> bool:
     expected = _scalar(expected)
     if operator == "child_of":
         related: Any = record
-        for name in field.split("."):
-            related = getattr(related, name)
-        while isinstance(related, Record):
-            if related.id == expected:
-                return True
-            related = getattr(related, "parent_id", False)
+        if field != "id":
+            for name in field.split("."):
+                related = getattr(related, name)
+        expected_ids = set(expected if isinstance(expected, list) else [expected])
+        related_values = related if isinstance(related, (list, Records)) else [related]
+        for value in related_values:
+            while isinstance(value, Record):
+                if value.id in expected_ids:
+                    return True
+                value = getattr(value, "parent_id", False)
         return False
+    if operator == "parent_of":
+        related: Any = record
+        if field != "id":
+            for name in field.split("."):
+                related = getattr(related, name)
+        expected_ids = set(expected if isinstance(expected, list) else [expected])
+        related_values = related if isinstance(related, (list, Records)) else [related]
+
+        def descendant_ids(value: Any, seen: set[int]) -> set[int]:
+            if not isinstance(value, Record) or value.id in seen:
+                return set()
+            seen.add(value.id)
+            result = {value.id}
+            for child in getattr(value, "child_ids", Records()):
+                result.update(descendant_ids(child, seen))
+            return result
+
+        return any(
+            expected_ids & descendant_ids(value, set()) for value in related_values
+        )
     if operator == "=":
         if isinstance(actual, list) and not isinstance(expected, list):
             return any(_equal(item, expected) for item in actual)
@@ -1189,6 +1267,22 @@ def _fixture() -> tuple[Env, dict[str, Any]]:
             company_id=other_company,
         ),
     ]
+    root_account_group = _record(
+        40,
+        name="Assets",
+        code_prefix_start="1",
+        code_prefix_end="1",
+        parent_id=False,
+        company_id=company,
+    )
+    account_group = _record(
+        41,
+        name="Current Assets",
+        code_prefix_start="10",
+        code_prefix_end="19",
+        parent_id=root_account_group,
+        company_id=company,
+    )
     models = {
         "res.company": Model("res.company", [company, other_company]),
         "res.currency": Model("res.currency", [cny]),
@@ -1256,6 +1350,11 @@ def _fixture() -> tuple[Env, dict[str, Any]]:
         "res.country": Model("res.country", [china, japan]),
         "res.country.group": Model("res.country.group", [asia]),
         "res.country.state": Model("res.country.state", [beijing, shanghai]),
+        "account.group": Model("account.group", [root_account_group, account_group]),
+        "account.tax.repartition.line": Model("account.tax.repartition.line"),
+        "account.reconcile.model.line": Model("account.reconcile.model.line"),
+        "account.report": Model("account.report"),
+        "account.report.column": Model("account.report.column"),
     }
     return Env(models), {
         "company": company,
@@ -1309,6 +1408,54 @@ def _parameters(capability_id: str) -> dict[str, Any]:
             "company_type": None,
             "customer": None,
             "supplier": None,
+            "after_id": None,
+            "limit": 1,
+        }
+    if capability_id == "journal.configuration.inspect":
+        return {"journal_id": 9}
+    if capability_id == "tax.repartition_line.get":
+        return {"tax_repartition_line_id": 31}
+    if capability_id == "reconciliation.model.line.get":
+        return {"reconciliation_model_line_id": 31}
+    if capability_id == "bank.get":
+        return {"bank_id": 4}
+    if capability_id == "report.catalog.get":
+        return {"report_id": 31}
+    if capability_id == "account.group.list":
+        return {"query": None, "parent_id": None, "after_id": None, "limit": 1}
+    if capability_id == "tax.repartition_line.list":
+        return {
+            "tax_id": None,
+            "document_types": None,
+            "repartition_types": None,
+            "account_id": None,
+            "use_in_tax_closing": None,
+            "after_id": None,
+            "limit": 1,
+        }
+    if capability_id == "reconciliation.model.line.list":
+        return {
+            "reconciliation_model_id": None,
+            "account_id": None,
+            "partner_id": None,
+            "amount_types": None,
+            "after_id": None,
+            "limit": 1,
+        }
+    if capability_id == "bank.list":
+        return {
+            "query": None,
+            "country_id": None,
+            "active": None,
+            "after_id": None,
+            "limit": 1,
+        }
+    if capability_id == "report.catalog.list":
+        return {
+            "country_id": None,
+            "root_report_id": None,
+            "availability_conditions": None,
+            "active": None,
             "after_id": None,
             "limit": 1,
         }
@@ -1849,6 +1996,15 @@ def _expected_item(capability_id: str, record_id: int = 31) -> dict[str, Any]:
             "company_id": 7,
             "analytic_accounts": [{"id": 31, "name": "Project Alpha"}],
         }
+    if capability_id == "account.group.get":
+        return {
+            "id": record_id,
+            "name": "Current Assets",
+            "code_prefix_start": "10",
+            "code_prefix_end": "19",
+            "parent": {"id": 40, "name": "Assets"},
+            "company_id": 7,
+        }
     raise AssertionError(capability_id)
 
 
@@ -1858,7 +2014,11 @@ def _search_call(model: Model) -> tuple[Any, ...]:
 
 def test_runtime_exports_only_the_fixed_core_object_action_and_capabilities() -> None:
     assert core.ACTION == "accounting.core_object.read"
-    assert core.CAPABILITY_IDS == EXPECTED_CAPABILITY_IDS
+    assert core.CAPABILITY_IDS == (
+        EXPECTED_CAPABILITY_IDS
+        | FISCAL_POSITION_MAPPING_CAPABILITY_IDS
+        | ACCOUNTING_INSIGHT_CAPABILITY_IDS
+    )
 
 
 @pytest.mark.parametrize(("capability_id", "id_field"), GET_ID_FIELDS.items())
@@ -2976,6 +3136,512 @@ def test_partial_reconcile_does_not_read_the_full_reconcile_model() -> None:
     assert page["items"] == [_expected_item("reconciliation.partial.get")]
 
 
+def test_accounting_metadata_reads_use_fixed_scopes_and_normalized_shapes() -> None:
+    env, _ = _fixture()
+    company = env.models["res.company"].rows[0]
+    china = env.models["res.country"].rows[0]
+    japan = env.models["res.country"].rows[1]
+    state = env.models["res.country.state"].rows[0]
+    state.country_id = china
+    journal = env.models["account.journal"].rows[0]
+    account = next(row for row in env.models["account.account"].rows if row.id == 101)
+    bank_account = env.models["res.partner.bank"].rows[0]
+    methods = env.models["account.payment.method.line"].rows
+    journal.default_account_id = account
+    journal.suspense_account_id = account
+    journal.profit_account_id = False
+    journal.loss_account_id = False
+    journal.bank_account_id = bank_account
+    journal.inbound_payment_method_line_ids = Records([methods[1], methods[0]])
+    journal.outbound_payment_method_line_ids = Records()
+    journal.invoice_reference_type = "invoice"
+    journal.invoice_reference_model = "odoo"
+    journal.restrict_mode_hash_table = False
+
+    bank = env.models["res.bank"].rows[0]
+    bank.active = True
+    bank.street = "1 Finance Road"
+    bank.street2 = False
+    bank.zip = "100000"
+    bank.city = "Beijing"
+    bank.state = state
+    bank.country = china
+    bank.email = "bank@example.test"
+    bank.phone = False
+
+    root_group = _record(
+        40,
+        name="Assets",
+        code_prefix_start="1",
+        code_prefix_end="1",
+        parent_id=False,
+        company_id=company,
+    )
+    child_group = _record(
+        41,
+        name="Child Assets",
+        code_prefix_start="10",
+        code_prefix_end="19",
+        parent_id=root_group,
+        company_id=company,
+    )
+    env.models["account.group"] = Model("account.group", [root_group, child_group])
+    env.registry.models["account.group"] = env.models["account.group"]
+
+    tax = env.models["account.tax"].rows[0]
+    tags = env.models["account.account.tag"].rows
+    repartition_line = _record(
+        42,
+        sequence=10,
+        company_id=company,
+        tax_id=tax,
+        document_type="invoice",
+        repartition_type="tax",
+        factor_percent=Decimal("100.00"),
+        factor=Decimal("1.00"),
+        account_id=account,
+        tag_ids=Records([tags[1], tags[0]]),
+        use_in_tax_closing=True,
+    )
+    env.models["account.tax.repartition.line"] = Model(
+        "account.tax.repartition.line", [repartition_line]
+    )
+    env.registry.models["account.tax.repartition.line"] = env.models[
+        "account.tax.repartition.line"
+    ]
+
+    reconciliation_line = _record(
+        43,
+        sequence=20,
+        company_id=company,
+        model_id=env.models["account.reconcile.model"].rows[0],
+        account_id=account,
+        partner_id=env.models["res.partner"].rows[0],
+        label="Bank fee",
+        amount_type="fixed",
+        amount=Decimal("15.00"),
+        amount_string="15",
+        tax_ids=Records([tax]),
+        analytic_distribution={"31": 100},
+    )
+    env.models["account.reconcile.model.line"] = Model(
+        "account.reconcile.model.line", [reconciliation_line]
+    )
+    env.registry.models["account.reconcile.model.line"] = env.models[
+        "account.reconcile.model.line"
+    ]
+
+    root_report = _record(
+        50,
+        name="Root Report",
+        active=True,
+        root_report_id=False,
+        country_id=False,
+        availability_condition="always",
+    )
+    variant_report = _record(
+        51,
+        name="China Variant",
+        active=True,
+        root_report_id=False,
+        country_id=china,
+        availability_condition="country",
+    )
+    foreign_variant = _record(
+        54,
+        name="Japan Variant",
+        active=True,
+        root_report_id=False,
+        country_id=japan,
+        availability_condition="country",
+    )
+    section_report = _record(
+        52,
+        name="Assets Section",
+        active=True,
+        root_report_id=False,
+        country_id=False,
+        availability_condition="always",
+    )
+    report = _record(
+        53,
+        name="Balance Sheet",
+        active=True,
+        root_report_id=root_report,
+        country_id=china,
+        availability_condition="country",
+        variant_report_ids=Records([variant_report, foreign_variant]),
+        section_report_ids=Records([section_report]),
+        column_ids=Records(),
+        filter_multi_company="selector",
+        filter_date_range=True,
+        filter_show_draft=False,
+        filter_unreconciled=False,
+        filter_unfold_all=True,
+        filter_journals=True,
+        filter_analytic=True,
+        filter_partner=False,
+    )
+    later_column = _record(
+        500,
+        name="Balance",
+        expression_label="balance",
+        sequence=20,
+        figure_type="monetary",
+        sortable=True,
+        blank_if_zero=False,
+        report_id=report,
+    )
+    earlier_column = _record(
+        501,
+        name="Current",
+        expression_label="current",
+        sequence=10,
+        figure_type="monetary",
+        sortable=False,
+        blank_if_zero=True,
+        report_id=report,
+    )
+    report.column_ids = Records([later_column, earlier_column])
+    env.models["account.report"] = Model(
+        "account.report",
+        [root_report, variant_report, foreign_variant, section_report, report],
+    )
+    env.registry.models["account.report"] = env.models["account.report"]
+    env.models["account.report.column"] = Model(
+        "account.report.column", [later_column, earlier_column]
+    )
+    env.registry.models["account.report.column"] = env.models["account.report.column"]
+
+    group_page = _dispatch(
+        env,
+        "account.group.list",
+        {"query": "Child", "parent_id": 40, "after_id": None, "limit": 10},
+    )
+    journal_page = _dispatch(
+        env, "journal.configuration.inspect", {"journal_id": journal.id}
+    )
+    tax_parameters = {
+        "tax_id": tax.id,
+        "document_types": ["invoice"],
+        "repartition_types": ["tax"],
+        "account_id": account.id,
+        "use_in_tax_closing": True,
+        "after_id": None,
+        "limit": 10,
+    }
+    tax_list_page = _dispatch(env, "tax.repartition_line.list", tax_parameters)
+    tax_get_page = _dispatch(
+        env,
+        "tax.repartition_line.get",
+        {"tax_repartition_line_id": repartition_line.id},
+    )
+    reconciliation_parameters = {
+        "reconciliation_model_id": reconciliation_line.model_id.id,
+        "account_id": account.id,
+        "partner_id": reconciliation_line.partner_id.id,
+        "amount_types": ["fixed"],
+        "after_id": None,
+        "limit": 10,
+    }
+    reconciliation_list_page = _dispatch(
+        env, "reconciliation.model.line.list", reconciliation_parameters
+    )
+    reconciliation_get_page = _dispatch(
+        env,
+        "reconciliation.model.line.get",
+        {"reconciliation_model_line_id": reconciliation_line.id},
+    )
+    bank_list_page = _dispatch(
+        env,
+        "bank.list",
+        {
+            "query": "Fixture",
+            "country_id": china.id,
+            "active": True,
+            "after_id": None,
+            "limit": 10,
+        },
+    )
+    bank_get_page = _dispatch(env, "bank.get", {"bank_id": bank.id})
+    report_list_page = _dispatch(
+        env,
+        "report.catalog.list",
+        {
+            "country_id": china.id,
+            "root_report_id": root_report.id,
+            "availability_conditions": ["country"],
+            "active": True,
+            "after_id": None,
+            "limit": 10,
+        },
+    )
+    report_get_page = _dispatch(env, "report.catalog.get", {"report_id": report.id})
+
+    assert group_page["items"] == [
+        {
+            "id": 41,
+            "name": "Child Assets",
+            "code_prefix_start": "10",
+            "code_prefix_end": "19",
+            "parent": {"id": 40, "name": "Assets"},
+            "company_id": 7,
+        }
+    ]
+    assert [item["id"] for item in tax_list_page["items"]] == [42]
+    assert tax_get_page["items"] == tax_list_page["items"]
+    assert tax_get_page["items"][0]["tags"] == [
+        {"id": 31, "name": "Operating"},
+        {"id": 32, "name": "Shared"},
+    ]
+    assert [item["id"] for item in reconciliation_list_page["items"]] == [43]
+    assert reconciliation_get_page["items"] == reconciliation_list_page["items"]
+    assert reconciliation_get_page["items"][0]["analytic_distribution"] == [
+        {
+            "analytic_accounts": [{"id": 31, "name": "Project Alpha"}],
+            "percentage": "100",
+        }
+    ]
+    assert journal_page["items"][0]["inbound_payment_methods"] == [
+        {"id": 31, "name": "Manual"},
+        {"id": 32, "name": "Manual"},
+    ]
+    assert bank_get_page["items"] == bank_list_page["items"]
+    assert bank_get_page["items"][0]["country"] == {"id": 156, "name": "China"}
+    assert report_get_page["items"] == report_list_page["items"]
+    assert report_get_page["items"][0]["variants"] == [
+        {"id": 51, "name": "China Variant"}
+    ]
+    assert [column["id"] for column in report_get_page["items"][0]["columns"]] == [
+        501,
+        500,
+    ]
+
+
+def test_odoo_false_analytic_distribution_is_normalized_as_empty() -> None:
+    assert core._parsed_distribution(False) == []
+
+
+def test_parent_company_accounting_metadata_is_visible_to_branch_only() -> None:
+    env, fixture = _fixture()
+    branch = fixture["company"]
+    unrelated_company = fixture["other_company"]
+    parent = _record(
+        70,
+        name="Parent Company",
+        currency_id=branch.currency_id,
+        account_fiscal_country_id=branch.account_fiscal_country_id,
+        parent_id=False,
+        child_ids=Records([branch]),
+    )
+    branch.parent_id = parent
+    branch.child_ids = Records()
+    unrelated_company.parent_id = False
+    unrelated_company.child_ids = Records()
+    env.models["res.company"].rows.append(parent)
+
+    account = next(row for row in env.models["account.account"].rows if row.id == 101)
+    account.company_ids = Records([parent])
+    partner = env.models["res.partner"].rows[0]
+    partner.company_id = parent
+    analytic_account = fixture["analytic_accounts"][1]
+    analytic_account.company_id = parent
+
+    journal = next(row for row in env.models["account.journal"].rows if row.id == 9)
+    journal.company_id = parent
+    journal.default_account_id = account
+    journal.suspense_account_id = account
+    journal.profit_account_id = False
+    journal.loss_account_id = False
+    journal.bank_account_id = fixture["partner_banks"][0]
+    journal.bank_account_id.company_id = parent
+    journal.inbound_payment_method_line_ids = Records(fixture["payment_method_lines"])
+    journal.outbound_payment_method_line_ids = Records()
+    journal.invoice_reference_type = "invoice"
+    journal.invoice_reference_model = "odoo"
+    journal.restrict_mode_hash_table = False
+    for method in fixture["payment_method_lines"]:
+        method.company_id = parent
+        method.journal_id = journal
+
+    group = _record(
+        60,
+        name="Parent Assets",
+        code_prefix_start="1",
+        code_prefix_end="1",
+        parent_id=False,
+        company_id=parent,
+    )
+    unrelated_group = _record(
+        61,
+        name="Unrelated Assets",
+        code_prefix_start="2",
+        code_prefix_end="2",
+        parent_id=False,
+        company_id=unrelated_company,
+    )
+    env.models["account.group"].rows = Records([group, unrelated_group])
+
+    tax = env.models["account.tax"].rows[0]
+    tax.company_id = parent
+    unrelated_tax = _record(99, name="Unrelated Tax", company_id=unrelated_company)
+    parent_repartition = _record(
+        62,
+        sequence=10,
+        company_id=parent,
+        tax_id=tax,
+        document_type="invoice",
+        repartition_type="tax",
+        factor_percent=Decimal(100),
+        factor=Decimal(1),
+        account_id=account,
+        tag_ids=Records(),
+        use_in_tax_closing=True,
+    )
+    unrelated_repartition = _record(
+        63,
+        sequence=10,
+        company_id=unrelated_company,
+        tax_id=unrelated_tax,
+        document_type="invoice",
+        repartition_type="tax",
+        factor_percent=Decimal(100),
+        factor=Decimal(1),
+        account_id=False,
+        tag_ids=Records(),
+        use_in_tax_closing=False,
+    )
+    env.models["account.tax.repartition.line"].rows = Records(
+        [parent_repartition, unrelated_repartition]
+    )
+
+    reconcile_model = fixture["reconcile_models"][0]
+    reconcile_model.company_id = parent
+    unrelated_model = fixture["reconcile_models"][1]
+    unrelated_model.company_id = unrelated_company
+    parent_reconciliation_line = _record(
+        64,
+        sequence=10,
+        company_id=parent,
+        model_id=reconcile_model,
+        account_id=account,
+        partner_id=partner,
+        label="Parent fee",
+        amount_type="fixed",
+        amount=Decimal(5),
+        amount_string="5",
+        tax_ids=Records([tax]),
+        analytic_distribution={str(analytic_account.id): 100},
+    )
+    unrelated_reconciliation_line = _record(
+        65,
+        sequence=10,
+        company_id=unrelated_company,
+        model_id=unrelated_model,
+        account_id=False,
+        partner_id=False,
+        label="Unrelated fee",
+        amount_type="fixed",
+        amount=Decimal(7),
+        amount_string="7",
+        tax_ids=Records(),
+        analytic_distribution={},
+    )
+    env.models["account.reconcile.model.line"].rows = Records(
+        [parent_reconciliation_line, unrelated_reconciliation_line]
+    )
+
+    group_page = _dispatch(
+        env,
+        "account.group.list",
+        {"query": None, "parent_id": None, "after_id": None, "limit": 10},
+    )
+    group_get_page = _dispatch(env, "account.group.get", {"account_group_id": group.id})
+    unrelated_group_page = _dispatch(
+        env, "account.group.get", {"account_group_id": unrelated_group.id}
+    )
+    journal_page = _dispatch(
+        env, "journal.configuration.inspect", {"journal_id": journal.id}
+    )
+    unrelated_journal_page = _dispatch(
+        env, "journal.configuration.inspect", {"journal_id": 19}
+    )
+    tax_page = _dispatch(
+        env,
+        "tax.repartition_line.list",
+        {
+            "tax_id": None,
+            "document_types": None,
+            "repartition_types": None,
+            "account_id": None,
+            "use_in_tax_closing": None,
+            "after_id": None,
+            "limit": 10,
+        },
+    )
+    tax_get_page = _dispatch(
+        env,
+        "tax.repartition_line.get",
+        {"tax_repartition_line_id": parent_repartition.id},
+    )
+    unrelated_tax_page = _dispatch(
+        env,
+        "tax.repartition_line.get",
+        {"tax_repartition_line_id": unrelated_repartition.id},
+    )
+    reconciliation_page = _dispatch(
+        env,
+        "reconciliation.model.line.list",
+        {
+            "reconciliation_model_id": None,
+            "account_id": None,
+            "partner_id": None,
+            "amount_types": None,
+            "after_id": None,
+            "limit": 10,
+        },
+    )
+    reconciliation_get_page = _dispatch(
+        env,
+        "reconciliation.model.line.get",
+        {"reconciliation_model_line_id": parent_reconciliation_line.id},
+    )
+    unrelated_reconciliation_page = _dispatch(
+        env,
+        "reconciliation.model.line.get",
+        {"reconciliation_model_line_id": unrelated_reconciliation_line.id},
+    )
+
+    assert [item["id"] for item in group_page["items"]] == [group.id]
+    assert group_get_page["items"] == group_page["items"]
+    assert [item["id"] for item in tax_page["items"]] == [parent_repartition.id]
+    assert tax_get_page["items"] == tax_page["items"]
+    assert [item["id"] for item in reconciliation_page["items"]] == [
+        parent_reconciliation_line.id
+    ]
+    assert reconciliation_get_page["items"] == reconciliation_page["items"]
+    for page in (
+        group_page,
+        journal_page,
+        tax_page,
+        reconciliation_page,
+    ):
+        assert page["items"][0]["company_id"] == parent.id
+    assert unrelated_journal_page["items"] == []
+    assert unrelated_group_page["items"] == []
+    assert unrelated_tax_page["items"] == []
+    assert unrelated_reconciliation_page["items"] == []
+    for model_name in (
+        "account.group",
+        "account.journal",
+        "account.tax.repartition.line",
+        "account.reconcile.model.line",
+    ):
+        assert ("company_id", "parent_of", [branch.id]) in _search_call(
+            env.models[model_name]
+        )[1]
+
+
 @pytest.mark.parametrize("capability_id", sorted(EXPECTED_CAPABILITY_IDS))
 def test_each_capability_gates_its_primary_model_and_read_acl(
     capability_id: str,
@@ -2994,3 +3660,704 @@ def test_each_capability_gates_its_primary_model_and_read_acl(
     assert denied_acl["module_installed"] is True
     assert denied_acl["access_allowed"] is False
     assert denied_acl["items"] == []
+
+
+class CreditAggregateModel(Model):
+    def _read_group(
+        self,
+        domain: list[Any],
+        *,
+        groupby: list[str],
+        aggregates: list[str],
+    ) -> list[tuple[Decimal]]:
+        self.calls.append(("_read_group", domain, groupby, aggregates))
+        assert ("company_id", "=", 7) in domain
+        assert groupby == []
+        assert aggregates == ["amount_residual:sum"]
+        account_type = next(
+            term[2]
+            for term in domain
+            if isinstance(term, tuple) and term[0] == "account_id.account_type"
+        )
+        return [
+            (
+                Decimal("125.50")
+                if account_type == "asset_receivable"
+                else Decimal("-45.00"),
+            )
+        ]
+
+
+class MoveAggregateModel(Model):
+    def _read_group(
+        self,
+        domain: list[Any],
+        *,
+        groupby: list[str],
+        aggregates: list[str],
+    ) -> list[tuple[str, Decimal]]:
+        self.calls.append(("_read_group", domain, groupby, aggregates))
+        assert ("company_id", "=", 7) in domain
+        assert ("commercial_partner_id", "=", 31) in domain
+        assert ("state", "not in", ["draft", "cancel"]) in domain
+        assert (
+            "move_type",
+            "in",
+            ["out_invoice", "out_refund", "out_receipt"],
+        ) in domain
+        assert groupby == []
+        assert aggregates == ["invoice_date:min", "amount_total_signed:sum"]
+        return [("2026-08-01", Decimal("250.00"))]
+
+
+def _accounting_insight_fixture() -> tuple[
+    Env, dict[str, dict[str, Any]], dict[str, dict[str, Any]]
+]:
+    env, values = _fixture()
+    company = values["company"]
+    cny = env.models["res.currency"].rows[0]
+    partner = env.models["res.partner"].rows[0]
+    partner.credit_to_invoice = Decimal("20.00")
+    partner.credit_limit = Decimal("500.00")
+    partner.use_partner_credit_limit = True
+    partner.total_invoiced = Decimal("1000.00")
+    partner.commercial_partner_id = partner
+    journal = next(row for row in env.models["account.journal"].rows if row.id == 4)
+    origin_account = next(
+        row for row in env.models["account.account"].rows if row.id == 31
+    )
+    destination_account = next(
+        row for row in env.models["account.account"].rows if row.id == 121
+    )
+
+    tax_totals = {
+        "has_tax_groups": True,
+        "subtotals": [
+            {
+                "name": "Untaxed Amount",
+                "base_amount_currency": Decimal("100.00"),
+                "tax_amount_currency": Decimal("13.00"),
+                "tax_groups": [
+                    {
+                        "id": 5,
+                        "group_name": "VAT",
+                        "base_amount_currency": Decimal("100.00"),
+                        "tax_amount_currency": Decimal("13.00"),
+                    }
+                ],
+            }
+        ],
+    }
+    invoice = _record(
+        401,
+        company_id=company,
+        name="INV/2026/0401",
+        move_type="out_invoice",
+        state="posted",
+        date="2026-08-01",
+        invoice_date="2026-08-01",
+        ref="CUSTOMER-REF",
+        partner_id=partner,
+        currency_id=cny,
+        amount_untaxed=Decimal("100.00"),
+        amount_tax=Decimal("13.00"),
+        amount_total=Decimal("113.00"),
+        tax_totals=tax_totals,
+        journal_id=journal,
+        auto_post="no",
+        auto_post_until=False,
+        auto_post_origin_id=False,
+        made_sequence_gap=False,
+        sequence_prefix="INV/2026/",
+        sequence_number=401,
+    )
+    duplicate = _record(
+        402,
+        company_id=company,
+        name="INV/2026/0402",
+        move_type="out_invoice",
+        state="draft",
+        date="2026-08-01",
+        invoice_date="2026-08-01",
+        ref=False,
+        partner_id=partner,
+        currency_id=cny,
+        amount_untaxed=Decimal("100.00"),
+        amount_tax=Decimal("13.00"),
+        amount_total=Decimal("113.00"),
+        tax_totals=tax_totals,
+        journal_id=journal,
+        auto_post="no",
+        auto_post_until=False,
+        auto_post_origin_id=False,
+        made_sequence_gap=False,
+        sequence_prefix=False,
+        sequence_number=0,
+        duplicated_ref_ids=Records([invoice]),
+    )
+    invoice.duplicated_ref_ids = Records([duplicate])
+    sequence_marker = _record(
+        403,
+        company_id=company,
+        name="MISC/2026/0403",
+        move_type="entry",
+        state="posted",
+        date="2026-08-02",
+        invoice_date=False,
+        ref=False,
+        partner_id=False,
+        currency_id=cny,
+        amount_untaxed=Decimal(0),
+        amount_tax=Decimal(0),
+        amount_total=Decimal(0),
+        tax_totals=False,
+        journal_id=journal,
+        auto_post="no",
+        auto_post_until=False,
+        auto_post_origin_id=False,
+        made_sequence_gap=True,
+        sequence_prefix="MISC/2026/",
+        sequence_number=403,
+        duplicated_ref_ids=Records(),
+    )
+    recurring = _record(
+        404,
+        company_id=company,
+        name="MISC/2026/0404",
+        move_type="entry",
+        state="draft",
+        date="2026-08-03",
+        invoice_date=False,
+        ref="MONTHLY ACCRUAL",
+        partner_id=False,
+        currency_id=cny,
+        amount_untaxed=Decimal(0),
+        amount_tax=Decimal(0),
+        amount_total=Decimal(0),
+        tax_totals=False,
+        journal_id=journal,
+        auto_post="monthly",
+        auto_post_until="2026-12-31",
+        auto_post_origin_id=False,
+        made_sequence_gap=False,
+        sequence_prefix=False,
+        sequence_number=0,
+        duplicated_ref_ids=Records(),
+    )
+    env.models["account.move"] = MoveAggregateModel(
+        "account.move", [invoice, duplicate, sequence_marker, recurring]
+    )
+    env.registry.models["account.move"] = env.models["account.move"]
+
+    transfer_model = _record(
+        501,
+        name="Monthly Allocation",
+        active=True,
+        state="in_progress",
+        journal_id=journal,
+        company_id=company,
+        date_start="2026-01-01",
+        date_stop=False,
+        frequency="month",
+        account_ids=Records([origin_account]),
+        line_ids=Records(),
+        move_ids_count=2,
+        has_draft_moves=True,
+        total_percent=Decimal("100.00"),
+    )
+    transfer_line = _record(
+        502,
+        transfer_model_id=transfer_model,
+        sequence=10,
+        account_id=destination_account,
+        percent=Decimal("100.00"),
+    )
+    transfer_model.line_ids = Records([transfer_line])
+    env.models["account.transfer.model"] = Model(
+        "account.transfer.model", [transfer_model]
+    )
+    env.models["account.transfer.model.line"] = Model(
+        "account.transfer.model.line", [transfer_line]
+    )
+
+    lock_exception = _record(
+        701,
+        active=True,
+        state="active",
+        company_id=company,
+        user_id=env.models["res.users"].rows[0],
+        reason="Year-end correction",
+        end_datetime="2026-09-01 08:30:00",
+        lock_date_field="fiscalyear_lock_date",
+        lock_date="2026-07-31",
+        company_lock_date="2026-08-31",
+    )
+    env.models["account.lock_exception"] = Model(
+        "account.lock_exception", [lock_exception]
+    )
+
+    report = _record(601, name="Balance Sheet")
+    report_line = _record(602, name="Retained Earnings", code="RE", report_id=report)
+    carryover_line = _record(604, name="Opening Balance", code=False, report_id=report)
+    expression = _record(603, label="balance", report_line_id=report_line)
+    external_value = _record(
+        605,
+        name="Manual adjustment",
+        value=Decimal("12.500"),
+        text_value=False,
+        date="2026-08-31",
+        target_report_expression_id=expression,
+        target_report_line_id=report_line,
+        target_report_expression_label="balance",
+        company_id=company,
+        carryover_origin_expression_label="opening_balance",
+        carryover_origin_report_line_id=carryover_line,
+    )
+    env.models["account.report"] = Model("account.report", [report])
+    env.models["account.report.line"] = Model(
+        "account.report.line", [report_line, carryover_line]
+    )
+    env.models["account.report.expression"] = Model(
+        "account.report.expression", [expression]
+    )
+    env.models["account.report.external.value"] = Model(
+        "account.report.external.value", [external_value]
+    )
+    env.models["account.invoice.report"] = Model("account.invoice.report")
+    env.models["account.move.line"] = CreditAggregateModel("account.move.line")
+    env.registry.models = env.models
+
+    parameters = {
+        "invoice.duplicate_candidates.list": {
+            "invoice_id": 401,
+            "after_id": None,
+            "limit": 10,
+        },
+        "invoice.tax_breakdown.inspect": {"invoice_id": 401},
+        "recurring.journal_entry.search": {
+            "states": None,
+            "auto_post_types": None,
+            "date_from": None,
+            "date_to": None,
+            "after_id": None,
+            "limit": 10,
+        },
+        "recurring.journal_entry.get": {"entry_id": 404},
+        "account.transfer_model.search": {
+            "query": None,
+            "active": None,
+            "after_id": None,
+            "limit": 10,
+        },
+        "account.transfer_model.get": {"transfer_model_id": 501},
+        "partner.credit_exposure.inspect": {"partner_id": 31},
+        "journal.sequence_irregularity.list": {
+            "journal_id": None,
+            "date_from": None,
+            "date_to": None,
+            "after_id": None,
+            "limit": 10,
+        },
+        "account.lock_exception.search": {
+            "states": None,
+            "user_id": None,
+            "lock_date_fields": None,
+            "after_id": None,
+            "limit": 10,
+        },
+        "account.lock_exception.get": {"lock_exception_id": 701},
+        "report.external_value.search": {
+            "report_id": None,
+            "expression_id": None,
+            "date_from": None,
+            "date_to": None,
+            "after_id": None,
+            "limit": 10,
+        },
+        "report.external_value.get": {"external_value_id": 605},
+    }
+
+    recurring_item = {
+        "id": 404,
+        "company_id": 7,
+        "name": "MISC/2026/0404",
+        "date": "2026-08-03",
+        "state": "draft",
+        "journal": {"id": 4, "code": "MISC", "name": "Miscellaneous Operations"},
+        "reference": "MONTHLY ACCRUAL",
+        "auto_post": "monthly",
+        "auto_post_until": "2026-12-31",
+        "auto_post_origin": None,
+    }
+    transfer_item = {
+        "id": 501,
+        "name": "Monthly Allocation",
+        "active": True,
+        "state": "in_progress",
+        "company_id": 7,
+        "journal": {"id": 4, "code": "MISC", "name": "Miscellaneous Operations"},
+        "date_start": "2026-01-01",
+        "date_stop": None,
+        "frequency": "month",
+        "origin_accounts": [{"id": 31, "code": "1000", "name": "Cash"}],
+        "destination_lines": [
+            {
+                "id": 502,
+                "sequence": 10,
+                "account": {
+                    "id": 121,
+                    "code": "112200",
+                    "name": "Accounts Receivable",
+                },
+                "percentage": "100",
+            }
+        ],
+        "move_ids_count": 2,
+        "has_draft_moves": True,
+        "total_percent": "100",
+    }
+    lock_item = {
+        "id": 701,
+        "company_id": 7,
+        "user": {"id": 5, "name": "V4 Accountant"},
+        "reason": "Year-end correction",
+        "end_datetime": "2026-09-01T08:30:00Z",
+        "state": "active",
+        "active": True,
+        "lock_date_field": "fiscalyear_lock_date",
+        "lock_date": "2026-07-31",
+        "company_lock_date": "2026-08-31",
+    }
+    external_item = {
+        "id": 605,
+        "company_id": 7,
+        "name": "Manual adjustment",
+        "date": "2026-08-31",
+        "value": "12.5",
+        "text_value": None,
+        "report": {"id": 601, "name": "Balance Sheet"},
+        "report_line": {"id": 602, "name": "Retained Earnings", "code": "RE"},
+        "expression": {"id": 603, "label": "balance"},
+        "carryover_origin_line": {
+            "id": 604,
+            "name": "Opening Balance",
+        },
+        "carryover_origin_expression_label": "opening_balance",
+    }
+    expected = {
+        "invoice.duplicate_candidates.list": {
+            "id": 402,
+            "company_id": 7,
+            "name": "INV/2026/0402",
+            "move_type": "out_invoice",
+            "state": "draft",
+            "invoice_date": "2026-08-01",
+            "reference": None,
+            "partner": {"id": 31, "name": "Fixture Partner"},
+            "currency": {"id": 6, "code": "CNY"},
+            "amount_total": "113",
+        },
+        "invoice.tax_breakdown.inspect": {
+            "id": 401,
+            "invoice": {
+                "id": 401,
+                "name": "INV/2026/0401",
+                "move_type": "out_invoice",
+                "state": "posted",
+            },
+            "company_id": 7,
+            "currency": {"id": 6, "code": "CNY"},
+            "amount_untaxed": "100",
+            "amount_tax": "13",
+            "amount_total": "113",
+            "has_tax_groups": True,
+            "subtotals": [
+                {
+                    "name": "Untaxed Amount",
+                    "base_amount": "100",
+                    "tax_amount": "13",
+                    "tax_groups": [
+                        {
+                            "id": 5,
+                            "name": "VAT",
+                            "base_amount": "100",
+                            "tax_amount": "13",
+                        }
+                    ],
+                }
+            ],
+        },
+        "recurring.journal_entry.search": recurring_item,
+        "recurring.journal_entry.get": recurring_item,
+        "account.transfer_model.search": transfer_item,
+        "account.transfer_model.get": transfer_item,
+        "partner.credit_exposure.inspect": {
+            "id": 31,
+            "partner": {"id": 31, "name": "Fixture Partner"},
+            "company_id": 7,
+            "company_currency": {"id": 6, "code": "CNY"},
+            "credit": "125.5",
+            "debit": "45",
+            "credit_to_invoice": "20",
+            "credit_limit": "500",
+            "use_partner_credit_limit": True,
+            "days_sales_outstanding": "15.06",
+            "total_invoiced": "1000",
+        },
+        "journal.sequence_irregularity.list": {
+            "id": 403,
+            "company_id": 7,
+            "name": "MISC/2026/0403",
+            "date": "2026-08-02",
+            "state": "posted",
+            "move_type": "entry",
+            "journal": {
+                "id": 4,
+                "code": "MISC",
+                "name": "Miscellaneous Operations",
+            },
+            "sequence_prefix": "MISC/2026/",
+            "sequence_number": 403,
+            "made_sequence_gap": True,
+        },
+        "account.lock_exception.search": lock_item,
+        "account.lock_exception.get": lock_item,
+        "report.external_value.search": external_item,
+        "report.external_value.get": external_item,
+    }
+    return env, parameters, expected
+
+
+@pytest.mark.parametrize("capability_id", sorted(ACCOUNTING_INSIGHT_CAPABILITY_IDS))
+def test_accounting_insight_capabilities_return_frozen_normalized_items(
+    capability_id: str,
+) -> None:
+    env, parameters, expected = _accounting_insight_fixture()
+
+    page = _dispatch(env, capability_id, parameters[capability_id])
+
+    assert page == {
+        "user_id": 5,
+        "company_visible": True,
+        "module_installed": True,
+        "access_allowed": True,
+        "cursor_found": True,
+        "items": [expected[capability_id]],
+    }
+
+
+def test_tax_breakdown_runtime_item_passes_public_read_validator() -> None:
+    env, _, expected = _accounting_insight_fixture()
+
+    class RuntimePort:
+        user_id = 5
+
+        def read(
+            self,
+            *,
+            capability_id: str,
+            company_id: int,
+            parameters: dict[str, Any],
+        ) -> dict[str, Any]:
+            return core.dispatch(
+                env,
+                {
+                    "capability_id": capability_id,
+                    "company_id": company_id,
+                    "parameters": parameters,
+                },
+                company_id,
+                failure_type=Failure,
+            )
+
+    result = read_core_object(
+        "invoice.tax_breakdown.inspect",
+        RuntimePort(),
+        {
+            "schema_version": "v1",
+            "request_id": "7bc39413-0d69-4092-9319-795d33f3167c",
+            "context": {
+                "database": "odoo_cli_v4_dev",
+                "company_id": 7,
+                "user_login": "v4-agent",
+                "language": "zh_CN",
+                "timezone": "Asia/Shanghai",
+            },
+            "parameters": {"invoice_id": 401},
+        },
+    )
+
+    assert result == expected["invoice.tax_breakdown.inspect"]
+
+
+def test_credit_exposure_uses_exact_company_acl_aggregates() -> None:
+    env, parameters, _ = _accounting_insight_fixture()
+
+    _dispatch(
+        env,
+        "partner.credit_exposure.inspect",
+        parameters["partner.credit_exposure.inspect"],
+    )
+
+    aggregate_calls = [
+        call
+        for call in env.models["account.move.line"].calls
+        if call[0] == "_read_group"
+    ]
+    assert len(aggregate_calls) == 2
+    assert all(("company_id", "=", 7) in call[1] for call in aggregate_calls)
+    assert all(
+        not any(term == ("company_id", "child_of", 7) for term in call[1])
+        for call in aggregate_calls
+    )
+    dso_calls = [
+        call for call in env.models["account.move"].calls if call[0] == "_read_group"
+    ]
+    assert len(dso_calls) == 1
+    assert ("company_id", "=", 7) in dso_calls[0][1]
+    assert ("commercial_partner_id", "=", 31) in dso_calls[0][1]
+    assert dso_calls[0][3] == ["invoice_date:min", "amount_total_signed:sum"]
+    assert (
+        "with_context",
+        {"active_test": False, "allowed_company_ids": [7]},
+    ) in env.models["account.move"].calls
+    partner_fields = next(
+        call[4]
+        for call in env.models["res.partner"].calls
+        if call[0] == "search_read" and "credit_limit" in call[4]
+    )
+    assert "days_sales_outstanding" not in partner_fields
+
+
+def test_credit_exposure_preflights_account_move_model_and_read_acl() -> None:
+    env, parameters, _ = _accounting_insight_fixture()
+    env.registry.models.pop("account.move")
+
+    missing = _dispatch(
+        env,
+        "partner.credit_exposure.inspect",
+        parameters["partner.credit_exposure.inspect"],
+    )
+
+    assert missing["module_installed"] is False
+    assert missing["access_allowed"] is False
+    assert missing["items"] == []
+
+    env, parameters, _ = _accounting_insight_fixture()
+    env.models["account.move"].access = False
+    denied = _dispatch(
+        env,
+        "partner.credit_exposure.inspect",
+        parameters["partner.credit_exposure.inspect"],
+    )
+    assert denied["module_installed"] is True
+    assert denied["access_allowed"] is False
+    assert denied["items"] == []
+
+
+def test_missing_duplicate_source_invoice_is_runtime_record_not_found() -> None:
+    env, parameters, _ = _accounting_insight_fixture()
+    parameters["invoice.duplicate_candidates.list"]["invoice_id"] = 999
+
+    with pytest.raises(Failure) as caught:
+        _dispatch(
+            env,
+            "invoice.duplicate_candidates.list",
+            parameters["invoice.duplicate_candidates.list"],
+        )
+
+    assert caught.value.code == "record_not_found"
+    assert caught.value.exit_code == 4
+
+
+def test_missing_duplicate_source_invoice_reaches_public_record_not_found() -> None:
+    env, _, _ = _accounting_insight_fixture()
+
+    class RuntimePort:
+        user_id = 5
+
+        def read(
+            self,
+            *,
+            capability_id: str,
+            company_id: int,
+            parameters: dict[str, Any],
+        ) -> dict[str, Any]:
+            return core.dispatch(
+                env,
+                {
+                    "capability_id": capability_id,
+                    "company_id": company_id,
+                    "parameters": parameters,
+                },
+                company_id,
+                failure_type=CoreObjectReadError,
+            )
+
+    with pytest.raises(CoreObjectReadError) as caught:
+        read_core_object(
+            "invoice.duplicate_candidates.list",
+            RuntimePort(),
+            {
+                "schema_version": "v1",
+                "request_id": "7bc39413-0d69-4092-9319-795d33f3167c",
+                "context": {
+                    "database": "odoo_cli_v4_dev",
+                    "company_id": 7,
+                    "user_login": "v4-agent",
+                    "language": "zh_CN",
+                    "timezone": "Asia/Shanghai",
+                },
+                "parameters": {"invoice_id": 999, "limit": 10, "cursor": None},
+            },
+        )
+
+    assert caught.value.code == "record_not_found"
+    assert caught.value.exit_code == 4
+
+
+def test_sequence_gap_uses_only_stored_marker_and_rejects_unknown_cursor() -> None:
+    env, parameters, _ = _accounting_insight_fixture()
+    parameters["journal.sequence_irregularity.list"]["after_id"] = 999
+
+    page = _dispatch(
+        env,
+        "journal.sequence_irregularity.list",
+        parameters["journal.sequence_irregularity.list"],
+    )
+
+    assert page["cursor_found"] is False
+    calls = env.models["account.move"].calls
+    boundary = next(call[1] for call in calls if call[0] == "search_count")
+    assert ("company_id", "=", 7) in boundary
+    assert ("made_sequence_gap", "=", True) in boundary
+
+
+def test_lock_exception_reads_disable_active_filter_and_transfer_requires_module() -> (
+    None
+):
+    env, parameters, _ = _accounting_insight_fixture()
+
+    _dispatch(
+        env,
+        "account.lock_exception.search",
+        parameters["account.lock_exception.search"],
+    )
+
+    contexts = [
+        call[1]
+        for call in env.models["account.lock_exception"].calls
+        if call[0] == "with_context"
+    ]
+    assert {"active_test": False, "allowed_company_ids": [7]} in contexts
+
+    env, parameters, _ = _accounting_insight_fixture()
+    env.registry.models.pop("account.transfer.model")
+    page = _dispatch(
+        env,
+        "account.transfer_model.search",
+        parameters["account.transfer_model.search"],
+    )
+    assert page["module_installed"] is False
+    assert page["access_allowed"] is False
+    assert page["items"] == []

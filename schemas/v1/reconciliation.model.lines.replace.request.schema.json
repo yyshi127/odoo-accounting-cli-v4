@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/reconciliation.model.lines.replace.request.schema.json",
+  "title": "reconciliation.model.lines.replace request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": "string", "format": "uuid"},
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reconciliation_model_id", "lines"],
+      "properties": {
+        "reconciliation_model_id": {"type": "integer", "minimum": 1},
+        "lines": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {"$ref": "#/$defs/line"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "nonzero_signed_decimal": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^-?(?:[1-9][0-9]*|(?:0|[1-9][0-9]*)\\.[0-9]*[1-9])$"
+    },
+    "balance_percentage": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^(?:100|[1-9][0-9]?|(?:0|[1-9][0-9])\\.[0-9]*[1-9])$"
+    },
+    "analytic_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["analytic_account_ids", "percentage"],
+      "properties": {
+        "analytic_account_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 1}
+        },
+        "percentage": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^(?:100|[1-9][0-9]?|(?:0|[1-9][0-9])\\.[0-9]{0,3}[1-9])$"
+        }
+      }
+    },
+    "line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sequence",
+        "account_id",
+        "partner_id",
+        "label",
+        "amount_type",
+        "amount_string",
+        "tax_ids"
+      ],
+      "properties": {
+        "sequence": {"type": "integer", "minimum": 0},
+        "account_id": {"type": ["integer", "null"], "minimum": 1},
+        "partner_id": {"type": ["integer", "null"], "minimum": 1},
+        "label": {"type": ["string", "null"], "minLength": 1, "maxLength": 500},
+        "amount_type": {
+          "enum": ["fixed", "percentage", "percentage_st_line", "regex"]
+        },
+        "amount_string": {"type": "string", "minLength": 1, "maxLength": 500},
+        "tax_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 1}
+        },
+        "analytic_distribution": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {"$ref": "#/$defs/analytic_entry"}
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"amount_type": {"const": "percentage"}},
+            "required": ["amount_type"]
+          },
+          "then": {
+            "properties": {"amount_string": {"$ref": "#/$defs/balance_percentage"}}
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "amount_type": {"enum": ["fixed", "percentage_st_line"]}
+            },
+            "required": ["amount_type"]
+          },
+          "then": {
+            "properties": {"amount_string": {"$ref": "#/$defs/nonzero_signed_decimal"}}
+          }
+        }
+      ]
+    }
+  }
+}

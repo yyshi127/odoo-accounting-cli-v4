@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/cash_rounding.create.request.schema.json",
+  "title": "cash_rounding.create request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": "string", "format": "uuid"},
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "rounding", "strategy", "rounding_method", "profit_account_id", "loss_account_id"],
+      "properties": {
+        "name": {"$ref": "#/$defs/text"},
+        "rounding": {"$ref": "#/$defs/positiveDecimal"},
+        "strategy": {"enum": ["biggest_tax", "add_invoice_line"]},
+        "rounding_method": {"enum": ["UP", "DOWN", "HALF-UP"]},
+        "profit_account_id": {"type": ["integer", "null"], "minimum": 1},
+        "loss_account_id": {"type": ["integer", "null"], "minimum": 1}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"strategy": {"const": "biggest_tax"}}, "required": ["strategy"]},
+          "then": {"properties": {"profit_account_id": {"type": "null"}, "loss_account_id": {"type": "null"}}}
+        },
+        {
+          "if": {"properties": {"strategy": {"const": "add_invoice_line"}}, "required": ["strategy"]},
+          "then": {"properties": {"profit_account_id": {"type": "integer", "minimum": 1}, "loss_account_id": {"type": "integer", "minimum": 1}}}
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "text": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"},
+    "positiveDecimal": {"type": "string", "maxLength": 256, "pattern": "^(?:[1-9][0-9]*(?:\\.[0-9]*[1-9])?|0\\.[0-9]*[1-9])$"}
+  }
+}

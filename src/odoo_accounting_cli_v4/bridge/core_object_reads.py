@@ -48,6 +48,8 @@ CAPABILITY_IDS = frozenset(
         "bank.statement.get",
         "fiscal_position.search",
         "fiscal_position.get",
+        "fiscal_position.account_mapping.list",
+        "fiscal_position.tax_mapping.list",
         "partner.bank_account.search",
         "partner.bank_account.get",
         "account.tag.list",
@@ -58,6 +60,29 @@ CAPABILITY_IDS = frozenset(
         "reconciliation.full.get",
         "tax.group.list",
         "tax.group.get",
+        "account.group.list",
+        "account.group.get",
+        "journal.configuration.inspect",
+        "tax.repartition_line.list",
+        "tax.repartition_line.get",
+        "reconciliation.model.line.list",
+        "reconciliation.model.line.get",
+        "bank.list",
+        "bank.get",
+        "report.catalog.list",
+        "report.catalog.get",
+        "invoice.duplicate_candidates.list",
+        "invoice.tax_breakdown.inspect",
+        "recurring.journal_entry.search",
+        "recurring.journal_entry.get",
+        "account.transfer_model.search",
+        "account.transfer_model.get",
+        "partner.credit_exposure.inspect",
+        "journal.sequence_irregularity.list",
+        "account.lock_exception.search",
+        "account.lock_exception.get",
+        "report.external_value.search",
+        "report.external_value.get",
     }
 )
 
@@ -95,24 +120,39 @@ class OdooCoreObjectReadPort:
                 "parameters": parameters,
             },
         )
-        if not _valid_page(page):
+        if not _valid_page(page, capability_id):
             raise ValueError("The Odoo bridge returned an invalid core-object page.")
         self._user_id = page["user_id"]
         return page
 
 
-def _valid_page(page: Any) -> bool:
-    return bool(
-        isinstance(page, dict)
-        and set(page)
-        == {
-            "user_id",
+def _valid_page(page: Any, capability_id: str) -> bool:
+    if not isinstance(page, dict):
+        return False
+    base_keys = {
+        "user_id",
+        "company_visible",
+        "module_installed",
+        "access_allowed",
+        "cursor_found",
+        "items",
+    }
+    successful = all(
+        page.get(key) is True
+        for key in (
             "company_visible",
             "module_installed",
             "access_allowed",
             "cursor_found",
-            "items",
-        }
+        )
+    )
+    expected_keys = (
+        base_keys | {"removes_all_taxes"}
+        if capability_id == "fiscal_position.tax_mapping.list" and successful
+        else base_keys
+    )
+    return bool(
+        set(page) == expected_keys
         and isinstance(page["user_id"], int)
         and not isinstance(page["user_id"], bool)
         and page["user_id"] > 0
@@ -127,4 +167,12 @@ def _valid_page(page: Any) -> bool:
         )
         and isinstance(page["items"], list)
         and all(isinstance(item, dict) for item in page["items"])
+        and (
+            capability_id != "fiscal_position.tax_mapping.list"
+            or not successful
+            or (
+                isinstance(page["removes_all_taxes"], bool)
+                and (not page["removes_all_taxes"] or not page["items"])
+            )
+        )
     )

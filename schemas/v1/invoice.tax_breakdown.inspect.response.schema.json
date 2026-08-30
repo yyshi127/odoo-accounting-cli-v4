@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/invoice.tax_breakdown.inspect.response.schema.json",
+  "title": "invoice.tax_breakdown.inspect response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "invoice.tax_breakdown.inspect"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/item"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{"if": {"properties": {"success": {"const": true}}, "required": ["success"]}, "then": {"properties": {"request_id": {"type": "string", "format": "uuid"}, "status": {"const": "verified"}, "data": {"$ref": "#/$defs/item"}, "error": {"type": "null"}}}, "else": {"properties": {"data": {"type": "null"}, "error": {"$ref": "response.schema.json#/$defs/error"}}}}],
+  "$defs": {
+    "item": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "invoice", "company_id", "currency", "amount_untaxed", "amount_tax", "amount_total", "has_tax_groups", "subtotals"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "invoice": {"$ref": "#/$defs/invoice"},
+        "company_id": {"type": "integer", "minimum": 1},
+        "currency": {"$ref": "#/$defs/currency"},
+        "amount_untaxed": {"$ref": "#/$defs/decimal"},
+        "amount_tax": {"$ref": "#/$defs/decimal"},
+        "amount_total": {"$ref": "#/$defs/decimal"},
+        "has_tax_groups": {"type": "boolean"},
+        "subtotals": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/subtotal"}}
+      }
+    },
+    "invoice": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "name", "move_type", "state"],
+      "properties": {"id": {"type": "integer", "minimum": 1}, "name": {"type": "string", "minLength": 1}, "move_type": {"enum": ["out_invoice", "out_refund", "in_invoice", "in_refund"]}, "state": {"enum": ["draft", "posted", "cancel"]}}
+    },
+    "subtotal": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "base_amount", "tax_amount", "tax_groups"],
+      "properties": {"name": {"type": "string", "minLength": 1}, "base_amount": {"$ref": "#/$defs/decimal"}, "tax_amount": {"$ref": "#/$defs/decimal"}, "tax_groups": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/tax_group"}}}
+    },
+    "tax_group": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "name", "base_amount", "tax_amount"],
+      "properties": {"id": {"type": ["integer", "null"], "minimum": 1}, "name": {"type": "string", "minLength": 1}, "base_amount": {"$ref": "#/$defs/decimal"}, "tax_amount": {"$ref": "#/$defs/decimal"}}
+    },
+    "currency": {"type": "object", "additionalProperties": false, "required": ["id", "code"], "properties": {"id": {"type": "integer", "minimum": 1}, "code": {"type": "string", "minLength": 1, "maxLength": 3}}},
+    "decimal": {"type": "string", "maxLength": 256, "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"}
+  }
+}
