@@ -47,6 +47,11 @@
               "type": "string",
               "format": "date"
             },
+            "date": {
+              "type": "string",
+              "format": "date",
+              "description": "Accounting date for a draft invoice, bill, or refund. Native Odoo posting and lock-date rules still apply."
+            },
             "invoice_date_due": {
               "type": [
                 "string",

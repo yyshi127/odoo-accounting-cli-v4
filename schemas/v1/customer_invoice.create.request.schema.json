@@ -45,6 +45,11 @@
           "type": "string",
           "format": "date"
         },
+        "date": {
+          "type": "string",
+          "format": "date",
+          "description": "Optional accounting date. Native Odoo posting and lock-date rules still apply."
+        },
         "invoice_date_due": {
           "type": [
             "string",

@@ -177,6 +177,7 @@ _DOCUMENT_TYPES = ("out_invoice", "in_invoice", "out_refund", "in_refund")
 _INVOICE_UPDATE_KEYS = frozenset(
     {
         "partner_id",
+        "date",
         "invoice_date",
         "invoice_date_due",
         "payment_term_id",
@@ -515,6 +516,7 @@ _DOCUMENT_CREATE_REQUIRED_KEYS = frozenset(
 )
 _DOCUMENT_CREATE_OPTIONAL_KEYS = frozenset(
     {
+        "date",
         "invoice_date_due",
         "payment_term_id",
         "reference",
@@ -541,6 +543,7 @@ _PARAMETER_KEYS = {
     "customer_invoice.create": {
         "partner_id",
         "journal_id",
+        "date",
         "invoice_date",
         "currency_id",
         "lines",
@@ -552,6 +555,7 @@ _PARAMETER_KEYS = {
     "vendor_bill.create": {
         "partner_id",
         "journal_id",
+        "date",
         "invoice_date",
         "currency_id",
         "lines",
@@ -2698,7 +2702,7 @@ def _valid_invoice_changes(value: Any) -> bool:
     for field_name, field_value in value.items():
         if field_name == "partner_id" and not _is_id(field_value):
             return False
-        if field_name == "invoice_date" and not _is_date(field_value):
+        if field_name in {"date", "invoice_date"} and not _is_date(field_value):
             return False
         if field_name == "invoice_date_due" and not (
             field_value is None or _is_date(field_value)
@@ -4189,6 +4193,7 @@ def _valid_parameters(
             _is_id(parameters["partner_id"])
             and _is_id(parameters["journal_id"])
             and _is_date(parameters["invoice_date"])
+            and ("date" not in parameters or _is_date(parameters["date"]))
             and _is_id(parameters["currency_id"])
             and _valid_document_lines(parameters["lines"])
             and (
@@ -7755,6 +7760,7 @@ def _create_document(
         ],
     }
     header_map = {
+        "date": "date",
         "invoice_date_due": "invoice_date_due",
         "payment_term_id": "invoice_payment_term_id",
         "reference": "ref",
@@ -8056,6 +8062,7 @@ def _update_move(
     field_map = (
         {
             "partner_id": "partner_id",
+            "date": "date",
             "invoice_date": "invoice_date",
             "invoice_date_due": "invoice_date_due",
             "payment_term_id": "invoice_payment_term_id",

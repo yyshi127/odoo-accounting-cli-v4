@@ -1898,3 +1898,88 @@ isolated validation/deployment scope before rerunning this full smoke.
 The separate bank-matching configuration correction also remains unauthorized
 and was not attempted. Both real-workflow blockers remain open; the new input and
 readback implementation is not a claim that accounting-core acceptance is done.
+
+## 2026-08-31 independent invoice and bill accounting dates
+
+This batch extends three existing commands; it adds no capability IDs or schema
+files. The registry remains at 355 IDs (including historical non-accounting
+extensions), 340 enabled handlers, and 685 schema files. Registry SHA-256 is still
+`21b6a57b0bd3b7f17432663de5c82c25b0d63a38c8c9ed6bad2e58732c75572e`.
+Picking and stock-return operations remain outside accounting-core development
+and must not be counted as accounting-core completion.
+
+`customer_invoice.create` and `vendor_bill.create` now accept optional header
+`date`, independently of `invoice_date`. `invoice.update` accepts `changes.date`
+on draft invoices, bills, and refunds. The field must be a canonical YYYY-MM-DD
+string, not null. Omitting it does not inject a default or change old request
+fingerprints. Creation fingerprints include an explicitly supplied date; changing
+an update's date changes its existing content-derived idempotency key. The native
+date is forwarded in the existing create/write call, with no new handler, generic
+ORM endpoint, permission gate, or configuration change. Existing posted-state
+protection and no-write replay behavior remain intact. `invoice.get` already
+returns both dates and needed no production change in this batch.
+
+Read-only inspection of the installed Odoo 19 source confirmed that
+`addons/account/models/account_move.py:121-127` defines date as required, stored,
+editable, computed, and precomputed. Explicit create values are protected by
+`odoo/orm/models.py:4682,4809-4843`; draft writes protect explicit computed values
+at `account_move.py:3789,3880`. A later invoice_date-only write can recompute date
+(`:838-852`), while posting can adjust a date that violates native locks
+(`:5502-5506`). The CLI does not bypass those rules or promise that a requested
+date remains unchanged after posting. Both isolated databases have l10n_pl and
+l10n_cz uninstalled; those are the additional date-algorithm overrides found in
+the community source. Usage and the recomputation boundary are in README.
+
+Local evidence: 233 distinct relevant runtime, contract/schema, bridge, CLI, and
+shared-helper tests passed across the focused runs. The disabled live test skipped
+as intended and is not a live pass. After deployment, the focused server selection
+passed 153 tests in 147.06 seconds. The earlier broader unit run was deliberately
+stopped before completion because it included unrelated historical modules; its
+partial log and exit status remain in `unit-tests.{log,exit}` and are not counted
+as a complete pass. The successful selection is in `unit-focused.{log,exit}`.
+
+The existing `tests/integration/test_document_lifecycle_write_batch_live.py` now
+reuses the established in-process CLI/real-ORM helper instead of its former direct
+capability port. It exercises 13 existing write IDs plus invoice.get, preserving
+the original customer invoice, supplier bill, and adjustment-entry lifecycles and
+immediate replay checks. For both invoice and bill it verifies independent dates
+on create, a draft accounting-date edit, a simultaneous date/invoice_date edit,
+and readback after posting. It also checks that replaying the original bill-create
+request does not undo a later date update. No bank scenario or deferred-generation
+scenario is invoked merely by importing the shared helper.
+
+The worker uses uid 5/company 1 in each isolated alias, rolls back on success or
+failure, and performs the existing fresh-cursor tracked-record/run-marker audit.
+This proves in-process CLI/real-ORM behavior, not external bridge transport or
+durable commit/replay. It never writes to a business database, changes an installed
+add-on or company configuration, promotes the business user, or restarts services.
+
+Deployment and recovery evidence:
+
+- Baseline: every existing target matched the local pre-batch commit bd2c145.
+- Uploaded 11-file archive SHA-256: `d880a5612270d9b2791fd71f2f76204dffef1e80550ae42fb3ef4ff29cff3ed8`.
+- Backup of the 12 original targets, including this handoff: `/opt/odoo-accounting-cli-v4/.tooling/accounting-dates-20260831-96b33845/overwritten-files.tgz`.
+- Backup SHA-256: `18d97c830f1971889f04254afdcd60f441e61bdf90bda49569a4ad68f513ac6b`.
+- Original target ownership and modes were restored from the backup metadata after extraction.
+- Live artifacts: `/opt/odoo-accounting-cli-v4/.tooling/accounting-dates-20260831-96b33845/live-smoke.{log,exit,pid}`.
+- Launcher PID/process group: 2654824; run UUID: `2befb92c-e7d1-4d04-b38d-4a0387f0f2cc`.
+
+The shared live test passed on both v4-dev and v4-e2e: `1 passed in 789.41s`,
+exit 0. Both per-alias results confirm independent accounting dates, all 14
+expected existing CLI capabilities, marker/replay checks, and successful
+fresh-cursor rollback verification. The launcher and its process group have
+finished; no live worker was left running. Live log SHA-256 is
+`4e76544d7992d4f45e5eb4a37de1c005e72048a65652b435ce4d622d2275ce41`;
+focused unit log SHA-256 is
+`6cd8edc1aa3c309b1db77b98c39a7240e8c6a2ef47f19786d101c4cec3d36b50`.
+The deliberately stopped broad unit run has exit 143, not a completed pass.
+
+Final read-only audit confirmed Odoo19 remained active/running with
+MainPID=1678372, NRestarts=2, and the unchanged 2026-08-30 10:25:07 CST activation
+timestamp. The installed exchange_currency_rate file and both earlier failed
+workflow logs retain their previously recorded SHA-256 values.
+
+The separate bank-account-role conflict and exchange_currency_rate singleton
+failure described above remain unresolved. Neither configuration nor add-on
+repair was authorized or attempted during this accounting-date batch. Passing
+this narrower lifecycle test does not turn those failed full workflows into passes.

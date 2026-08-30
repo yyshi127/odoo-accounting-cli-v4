@@ -2071,6 +2071,7 @@ def test_invoice_create_accepts_the_frozen_optional_header_and_line_fields(
 ) -> None:
     request = _request(capability_id)
     request["parameters"].update(
+        date="2026-08-25",
         invoice_date_due=None,
         payment_term_id=12,
         reference=None,
@@ -2088,6 +2089,30 @@ def test_invoice_create_accepts_the_frozen_optional_header_and_line_fields(
     load_registry().validate_instance(
         f"schemas/v1/{capability_id}.request.schema.json", request
     )
+    port = FakePort(capability_id)
+    execute_core_write(port, capability_id, request, _key(capability_id), capability_id)
+    assert port.calls[0]["parameters"] == normalized
+
+
+def test_invoice_accounting_date_rejects_null_and_noncanonical_values() -> None:
+    registry = load_registry()
+    for capability_id in (
+        "customer_invoice.create", "vendor_bill.create", "invoice.update"
+    ):
+        for value in (None, "2026-02-30", "20260825", "2026-08-25T00:00:00", False):
+            request = _request(capability_id)
+            target = request["parameters"]
+            if capability_id == "invoice.update":
+                target = target["changes"]
+            target["date"] = value
+
+            with pytest.raises(CoreWriteError) as caught:
+                validate_core_write_request(capability_id, request)
+            assert caught.value.code == "invalid_request"
+            with pytest.raises(InstanceValidationError):
+                registry.validate_instance(
+                    f"schemas/v1/{capability_id}.request.schema.json", request
+                )
 
 
 @pytest.mark.parametrize(

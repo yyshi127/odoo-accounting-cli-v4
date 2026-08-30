@@ -1556,11 +1556,15 @@ def test_asset_validate_normalizes_third_party_singleton_failure() -> None:
 @pytest.mark.parametrize(
     "capability_id", ["customer_invoice.create", "vendor_bill.create"]
 )
+@pytest.mark.parametrize("accounting_date", [None, "2025-03-01"])
 def test_document_create_uses_business_orm_and_replays_exact_key(
     capability_id: str,
+    accounting_date: str | None,
 ) -> None:
     env = Env()
     parameters = _document_parameters(env, capability_id)
+    if accounting_date is not None:
+        parameters["date"] = accounting_date
     payload = _payload(capability_id, parameters, key=f"key-{capability_id}")
 
     first = writes.dispatch(env, payload, 7, Failure)
@@ -1575,6 +1579,9 @@ def test_document_create_uses_business_orm_and_replays_exact_key(
     assert len(creates) == 1
     values = creates[0][2]
     assert "ref" not in values
+    assert values.get("date") == accounting_date
+    assert ("date" in values) == (accounting_date is not None)
+    assert values["invoice_date"] == "2025-02-01"
     marker_tokens = values["invoice_origin"].split(";")
     assert marker_tokens[0] == writes._idempotency_key_marker(
         capability_id, 7, f"key-{capability_id}"
@@ -1589,6 +1596,71 @@ def test_document_create_uses_business_orm_and_replays_exact_key(
     with pytest.raises(Failure) as caught:
         writes.dispatch(env, changed, 7, Failure)
     assert caught.value.code == "idempotency_conflict"
+
+    changed_date = copy.deepcopy(payload)
+    changed_date["parameters"]["date"] = "2025-03-02"
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(env, changed_date, 7, Failure)
+    assert caught.value.code == "idempotency_conflict"
+
+
+@pytest.mark.parametrize(
+    "capability_id", ["customer_invoice.create", "vendor_bill.create", "invoice.update"]
+)
+@pytest.mark.parametrize("invalid_date", [None, False, "2025-02-29", "20250301"])
+def test_invoice_accounting_date_is_validated_at_the_runtime_boundary(
+    capability_id: str, invalid_date: Any
+) -> None:
+    parameters = (
+        {"move_id": 610, "changes": {"date": invalid_date}}
+        if capability_id == "invoice.update"
+        else {**_document_parameters(Env(), capability_id), "date": invalid_date}
+    )
+    assert not writes._valid_parameters(capability_id, parameters)
+
+
+@pytest.mark.parametrize(
+    "move_type", ["out_invoice", "in_invoice", "out_refund", "in_refund"]
+)
+@pytest.mark.parametrize("change_invoice_date", [False, True])
+def test_invoice_update_passes_accounting_dates_to_drafts_and_replays(
+    move_type: str, change_invoice_date: bool
+) -> None:
+    env = Env()
+    invoice = env.existing_move(610, move_type=move_type, state="draft")
+    invoice.date = date(2025, 2, 1)
+    invoice.invoice_date = date(2025, 2, 1)
+    changes = {"date": "2025-03-01"}
+    if change_invoice_date:
+        changes["invoice_date"] = "2025-02-28"
+    parameters = {"move_id": invoice.id, "changes": changes}
+    key = writes._deterministic_key("invoice.update", parameters, 7)
+    payload = _payload("invoice.update", parameters, key=key)
+
+    assert not writes.dispatch(env, payload, 7, Failure)["idempotent_replay"]
+    assert str(invoice.date) == changes["date"]
+    assert str(invoice.invoice_date) == changes.get("invoice_date", "2025-02-01")
+    assert writes.dispatch(env, payload, 7, Failure)["idempotent_replay"]
+    assert [call[3] for call in env.calls if call[:2] == ("write", "account.move")] == [
+        changes
+    ]
+
+    invoice.state = "posted"
+    assert writes.dispatch(env, payload, 7, Failure)["idempotent_replay"]
+    changed = {"move_id": invoice.id, "changes": {"date": "2025-03-02"}}
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(
+            env,
+            _payload(
+                "invoice.update",
+                changed,
+                key=writes._deterministic_key("invoice.update", changed, 7),
+            ),
+            7,
+            Failure,
+        )
+    assert caught.value.code == "state_conflict"
+    assert invoice.date == "2025-03-01"
 
 
 def test_document_create_writes_optional_headers_lines_and_scopes_references() -> None:

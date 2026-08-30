@@ -16,6 +16,30 @@ python3 -m venv .venv
 
 The private Odoo source snapshot, raw generation transcripts, environment evidence, credentials, databases, logs, runtime state, and installed release directories are intentionally excluded from Git and release artifacts.
 
+## Invoice and bill accounting dates
+
+`customer_invoice.create` and `vendor_bill.create` accept an optional `date`
+(accounting date), independently of `invoice_date` (document date). For example,
+these are header fields within `parameters`, not a complete request:
+
+```json
+{
+  "invoice_date": "2026-08-27",
+  "date": "2026-08-31"
+}
+```
+
+`invoice.update` also accepts `date` inside `changes` for draft invoices, bills,
+and refunds. Use a `YYYY-MM-DD` string, not `null`. Omitting `date` retains the
+existing behavior and request fingerprint. `invoice.get` already returns both
+dates; read it after updating or posting to see the actual accounting date.
+
+Odoo's native date computation, posting, sequence, and lock-date rules still
+apply. A later update to `invoice_date` alone may recompute the accounting date;
+include both fields in the same update when both are intentional. Posting can
+adjust the date or reject the operation under native rules. This does not bypass
+a closed accounting period or allow editing a posted document.
+
 ## Deferred invoice and bill lines
 
 The existing `customer_invoice.create`, `vendor_bill.create`,

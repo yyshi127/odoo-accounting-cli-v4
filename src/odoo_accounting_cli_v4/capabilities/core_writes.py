@@ -671,6 +671,7 @@ def _validate_deferred_line_dates(line: dict[str, Any]) -> None:
 def _validate_invoice_parameters(parameters: Any) -> dict[str, Any]:
     required = {"partner_id", "journal_id", "invoice_date", "currency_id", "lines"}
     allowed = required | {
+        "date",
         "invoice_date_due",
         "payment_term_id",
         "reference",
@@ -683,6 +684,8 @@ def _validate_invoice_parameters(parameters: Any) -> dict[str, Any]:
             raise _invalid(f"parameters.{key} must be a positive integer.")
     if not _is_date(parameters["invoice_date"]):
         raise _invalid("parameters.invoice_date must be a YYYY-MM-DD date.")
+    if "date" in parameters and not _is_date(parameters["date"]):
+        raise _invalid("parameters.date must be a YYYY-MM-DD date.")
     if "invoice_date_due" in parameters and not (
         parameters["invoice_date_due"] is None
         or _is_date(parameters["invoice_date_due"])
@@ -883,6 +886,7 @@ def _validate_invoice_update_parameters(parameters: Any) -> dict[str, Any]:
     changes = parameters["changes"]
     allowed = {
         "partner_id",
+        "date",
         "invoice_date",
         "invoice_date_due",
         "payment_term_id",
@@ -893,8 +897,9 @@ def _validate_invoice_update_parameters(parameters: Any) -> dict[str, Any]:
         raise _invalid("parameters.changes contains no supported invoice update.")
     if "partner_id" in changes and not _valid_id(changes["partner_id"]):
         raise _invalid("changes.partner_id must be a positive integer.")
-    if "invoice_date" in changes and not _is_date(changes["invoice_date"]):
-        raise _invalid("changes.invoice_date must be a YYYY-MM-DD date.")
+    for field in ("date", "invoice_date"):
+        if field in changes and not _is_date(changes[field]):
+            raise _invalid(f"changes.{field} must be a YYYY-MM-DD date.")
     if "invoice_date_due" in changes and not (
         changes["invoice_date_due"] is None or _is_date(changes["invoice_date_due"])
     ):

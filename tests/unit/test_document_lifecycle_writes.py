@@ -35,6 +35,7 @@ _PARAMETERS = {
         "changes": {
             "partner_id": 21,
             "invoice_date": "2026-08-26",
+            "date": "2026-08-27",
             "payment_term_id": None,
             "reference": "发票参考",
             "payment_reference": None,
@@ -224,6 +225,35 @@ def test_content_key_uses_the_normalized_unicode_target_only() -> None:
             expected,
             "invoice.update",
         )
+
+
+def test_invoice_accounting_date_is_forwarded_and_changes_the_update_key() -> None:
+    first = {"move_id": 101, "changes": {"date": "2026-08-27"}}
+    second = {"move_id": 101, "changes": {"date": "2026-08-28"}}
+    assert _key("invoice.update", first) != _key("invoice.update", second)
+
+    for parameters in (first, second):
+        port = _Port("invoice.update")
+        execute_core_write(
+            port,
+            "invoice.update",
+            _request("invoice.update", parameters),
+            _key("invoice.update", parameters),
+            "invoice.update",
+        )
+        assert port.calls[0]["parameters"] == parameters
+
+    port = _Port("invoice.update")
+    with pytest.raises(CoreWriteError) as caught:
+        execute_core_write(
+            port,
+            "invoice.update",
+            _request("invoice.update", second),
+            _key("invoice.update", first),
+            "invoice.update",
+        )
+    assert caught.value.code == "invalid_idempotency_key"
+    assert port.calls == []
 
 
 @pytest.mark.parametrize(

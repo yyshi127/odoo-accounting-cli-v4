@@ -73,6 +73,8 @@ def _request(parameters: dict[str, Any]) -> dict[str, Any]:
 
 
 def _key(capability_id: str, parameters: dict[str, Any]) -> str:
+    if capability_id in {"customer_invoice.create", "vendor_bill.create"}:
+        return f"smoke:{capability_id}:0001"
     move_id = parameters["move_id"]
     target = parameters.get("changes", parameters.get("lines"))
     if target is None:
@@ -95,7 +97,9 @@ class _Port:
 
     def execute(self, **payload: Any) -> dict[str, Any]:
         self.calls.append(payload)
-        is_invoice = self.capability_id.startswith("invoice.")
+        is_invoice = self.capability_id.startswith("invoice.") or self.capability_id in {
+            "customer_invoice.create", "vendor_bill.create"
+        }
         is_cancel = self.capability_id.endswith(".cancel")
         return {
             "user_id": self.user_id,
@@ -105,11 +109,14 @@ class _Port:
             "idempotent_replay": False,
             "result": {
                 "model": "account.move",
-                "id": payload["parameters"]["move_id"],
+                "id": payload["parameters"].get("move_id", 91),
                 "name": "INV/2026/0091" if is_invoice else "MISC/2026/0092",
                 "state": "cancel" if is_cancel else "draft",
                 "company_id": payload["company_id"],
-                "move_type": "out_invoice" if is_invoice else "entry",
+                "move_type": (
+                    "in_invoice" if self.capability_id == "vendor_bill.create"
+                    else "out_invoice" if is_invoice else "entry"
+                ),
                 "source_id": None,
                 "line_ids": [901, 902],
                 "partial_reconcile_ids": [],
@@ -119,11 +126,31 @@ class _Port:
         }
 
 
-@pytest.mark.parametrize("capability_id", tuple(_CASES))
+@pytest.mark.parametrize(
+    ("capability_id", "parameters"),
+    [
+        *_CASES.items(),
+        ("invoice.update", {"move_id": 91, "changes": {"date": "2026-08-27"}}),
+        *(
+            (
+                capability_id,
+                {
+                    "partner_id": 21,
+                    "journal_id": 4,
+                    "invoice_date": "2026-08-24",
+                    "date": "2026-08-27",
+                    "currency_id": 6,
+                    "lines": _CASES["invoice.lines.replace"]["lines"],
+                },
+            )
+            for capability_id in ("customer_invoice.create", "vendor_bill.create")
+        ),
+    ],
+)
 def test_document_lifecycle_write_uses_the_existing_minimal_cli_path(
     capability_id: str,
+    parameters: dict[str, Any],
 ) -> None:
-    parameters = _CASES[capability_id]
     idempotency_key = _key(capability_id, parameters)
     port = _Port(capability_id)
     stdout = io.StringIO()
@@ -168,5 +195,5 @@ def test_document_lifecycle_write_uses_the_existing_minimal_cli_path(
         "company_id": 7,
         "user_id": 42,
         "model": "account.move",
-        "record_ids": [parameters["move_id"]],
+        "record_ids": [parameters.get("move_id", 91)],
     }

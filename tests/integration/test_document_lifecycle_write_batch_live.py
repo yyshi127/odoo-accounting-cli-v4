@@ -1,8 +1,9 @@
 """Transactional dual-database smoke for document lifecycle writes.
 
-The worker uses the ordinary configured accountant, creates all prerequisites through
-the public fixed write path, exercises every new capability twice, and rolls the
-whole transaction back.  It never commits fixture or accounting data.
+The worker uses the ordinary configured accountant and public CLI commands backed
+by one real Odoo transaction. It verifies independent invoice/accounting dates,
+retains the three document lifecycles and immediate replay, and rolls everything
+back. This is in-process CLI/real-ORM coverage, not cross-process transport.
 """
 
 from __future__ import annotations
@@ -13,9 +14,13 @@ import json
 import os
 import subprocess
 import sys
+import sysconfig
 import uuid
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
+
+import test_payment_bank_capability_batch_live as core
 
 try:
     import pytest
@@ -49,13 +54,13 @@ _NEW_CAPABILITIES = (
     "journal_entry.cancel",
     "journal_entry.reset_to_draft",
 )
-_PAGE_KEYS = {
-    "user_id",
-    "company_visible",
-    "module_installed",
-    "access_allowed",
-    "idempotent_replay",
-    "result",
+_CAPABILITIES = set(_NEW_CAPABILITIES) | {
+    "customer_invoice.create",
+    "vendor_bill.create",
+    "invoice.post",
+    "invoice.get",
+    "journal_entry.create",
+    "journal_entry.post",
 }
 _RESULT_KEYS = {
     "model",
@@ -150,7 +155,13 @@ def _run_worker(
     environment = os.environ.copy()
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
     environment["PYTHONPATH"] = os.pathsep.join(
-        part for part in (str(_root() / "src"), environment.get("PYTHONPATH")) if part
+        part
+        for part in (
+            str(_root() / "src"),
+            sysconfig.get_path("purelib"),
+            environment.get("PYTHONPATH"),
+        )
+        if part
     )
     completed = subprocess.run(
         command,
@@ -159,19 +170,23 @@ def _run_worker(
         text=True,
         capture_output=True,
         check=False,
-        timeout=timeout,
+        timeout=max(timeout, 900),
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert completed.stderr == ""
     assert len(completed.stdout.splitlines()) == 1
     assert json.loads(completed.stdout) == {
+        "accounting_dates_verified": True,
         "alias": alias,
-        "capabilities": list(_NEW_CAPABILITIES),
+        "capabilities": sorted(_CAPABILITIES),
         "company_id": _COMPANY_ID,
         "database": _DATABASES[alias],
+        "execution": "in_process_cli_real_orm",
         "marker_migration_verified": True,
         "rollback_verified": True,
         "user_id": _USER_ID,
     }
+    print(completed.stdout.strip(), flush=True)
 
 
 if pytest is not None:
@@ -229,102 +244,44 @@ def _key(capability_id: str, parameters: dict[str, Any], explicit: str | None) -
     return f"{capability_id}:{move_id}:{_canonical_digest(target)[:32]}"
 
 
-def _assert_page(page: dict[str, Any], *, replay: bool) -> None:
-    assert set(page) == _PAGE_KEYS
-    assert page["user_id"] == _USER_ID
-    assert page["company_visible"] is True
-    assert page["module_installed"] is True
-    assert page["access_allowed"] is True
-    assert page["idempotent_replay"] is replay
-    result = page["result"]
-    assert isinstance(result, dict) and set(result) == _RESULT_KEYS
-    assert result["company_id"] == _COMPANY_ID
-    assert result["model"] == "account.move"
-
-
-class _RuntimePort:
-    def __init__(self, env: Any) -> None:
-        self.env = env
-        self.pages: list[dict[str, Any]] = []
-
-    @property
-    def user_id(self) -> int:
-        return self.env.uid
-
-    def execute(self, **payload: Any) -> dict[str, Any]:
-        from odoo_accounting_cli_v4.bridge.core_writes_runtime import dispatch
-        from odoo_accounting_cli_v4.bridge.runtime import RuntimeFailure
-
-        page = dispatch(self.env, payload, payload["company_id"], RuntimeFailure)
-        self.pages.append(page)
-        return page
-
-
 def _dispatch_twice(
-    env: Any,
+    client: core._RuntimeClient,
     alias: str,
+    run_id: uuid.UUID,
     capability_id: str,
     parameters: dict[str, Any],
     *,
     explicit_key: str | None = None,
 ) -> dict[str, Any]:
-    from odoo_accounting_cli_v4.capabilities.core_writes import execute_core_write
-
-    request = {
-        "schema_version": "v1",
-        "request_id": "7c5ea1f2-f402-48f6-9622-1f8808ff45eb",
-        "context": {
-            "database": alias,
-            "company_id": _COMPANY_ID,
-            "user_login": _USER_LOGIN,
-            "language": "en_US",
-            "timezone": "Asia/Shanghai",
-        },
-        "parameters": parameters,
-    }
     idempotency_key = _key(capability_id, parameters, explicit_key)
-    port = _RuntimePort(env)
-    first = execute_core_write(
-        port, capability_id, request, idempotency_key, capability_id
+    first = core._cli(
+        client, alias, run_id, capability_id, parameters, key=idempotency_key
     )
-    second = execute_core_write(
-        port, capability_id, request, idempotency_key, capability_id
+    second = core._cli(
+        client, alias, run_id, capability_id, parameters, key=idempotency_key
     )
-    assert len(port.pages) == 2
-    _assert_page(port.pages[0], replay=False)
-    _assert_page(port.pages[1], replay=True)
     assert first["idempotent_replay"] is False
     assert second["idempotent_replay"] is True
     assert first["result"] == second["result"]
+    assert set(first["result"]) == _RESULT_KEYS
+    assert first["result"]["company_id"] == _COMPANY_ID
+    assert first["result"]["model"] == "account.move"
     return first["result"]
 
 
 def _replay_existing_create(
-    env: Any,
+    client: core._RuntimeClient,
     alias: str,
+    run_id: uuid.UUID,
     capability_id: str,
     parameters: dict[str, Any],
     key: str,
 ) -> dict[str, Any]:
-    from odoo_accounting_cli_v4.capabilities.core_writes import execute_core_write
-
-    request = {
-        "schema_version": "v1",
-        "request_id": "66a361b7-8cec-45f5-b13e-b5e088f06b09",
-        "context": {
-            "database": alias,
-            "company_id": _COMPANY_ID,
-            "user_login": _USER_LOGIN,
-            "language": "en_US",
-            "timezone": "Asia/Shanghai",
-        },
-        "parameters": parameters,
-    }
-    port = _RuntimePort(env)
-    replay = execute_core_write(port, capability_id, request, key, capability_id)
-    assert len(port.pages) == 1
-    _assert_page(port.pages[0], replay=True)
+    replay = core._cli(client, alias, run_id, capability_id, parameters, key=key)
     assert replay["idempotent_replay"] is True
+    assert set(replay["result"]) == _RESULT_KEYS
+    assert replay["result"]["company_id"] == _COMPANY_ID
+    assert replay["result"]["model"] == "account.move"
     return replay["result"]
 
 
@@ -332,6 +289,23 @@ def _marker(capability_id: str, company_id: int, key: str, parameters: Any) -> s
     key_raw = f"{capability_id}\0{company_id}\0{key}".encode()
     key_marker = f"ODACV4K:{hashlib.sha256(key_raw).hexdigest()}"
     return f"{key_marker};ODACV4:{_canonical_digest(parameters)}"
+
+
+def _assert_invoice_dates(
+    client: core._RuntimeClient,
+    alias: str,
+    run_id: uuid.UUID,
+    invoice_id: int,
+    accounting_date: str,
+    invoice_date: str,
+    state: str = "draft",
+) -> None:
+    data = core._cli(client, alias, run_id, "invoice.get", {"invoice_id": invoice_id})
+    assert data["id"] == invoice_id
+    assert data["date"] == accounting_date
+    assert data["invoice_date"] == invoice_date
+    assert data["state"] == state
+    assert data["date"] != data["invoice_date"]
 
 
 def _fixture_ids(env: Any, alias: str) -> dict[str, int]:
@@ -385,18 +359,23 @@ def _fixture_ids(env: Any, alias: str) -> dict[str, int]:
     }
 
 
-def _run_chain(env: Any, alias: str, run_id: uuid.UUID) -> set[int]:
+def _run_chain(client: core._RuntimeClient, alias: str, run_id: uuid.UUID) -> None:
     from odoo import fields
 
+    env = client.env
     ids = _fixture_ids(env, alias)
     run_token = f"{run_id.hex}-{alias}"
-    today = fields.Date.to_string(fields.Date.context_today(env.user))
-    created: set[int] = set()
+    today_date = fields.Date.context_today(env.user)
+    today = fields.Date.to_string(today_date)
+    yesterday = fields.Date.to_string(today_date - timedelta(days=1))
+    original_invoice_date = fields.Date.to_string(today_date - timedelta(days=3))
+    updated_invoice_date = fields.Date.to_string(today_date - timedelta(days=2))
 
     invoice_parameters = {
         "partner_id": ids["customer"],
         "journal_id": ids["sale_journal"],
-        "invoice_date": today,
+        "date": today,
+        "invoice_date": original_invoice_date,
         "currency_id": ids["currency"],
         "lines": [
             {
@@ -410,19 +389,45 @@ def _run_chain(env: Any, alias: str, run_id: uuid.UUID) -> set[int]:
     }
     invoice_key = f"document-lifecycle-invoice-{run_id.hex}"
     invoice_result = _dispatch_twice(
-        env,
+        client,
         alias,
+        run_id,
         "customer_invoice.create",
         invoice_parameters,
         explicit_key=invoice_key,
     )
     invoice_id = invoice_result["id"]
     assert isinstance(invoice_id, int)
-    created.add(invoice_id)
     invoice = env["account.move"].browse(invoice_id)
     assert not invoice.ref
     assert invoice.invoice_origin == _marker(
         "customer_invoice.create", _COMPANY_ID, invoice_key, invoice_parameters
+    )
+    _assert_invoice_dates(
+        client, alias, run_id, invoice_id, today, original_invoice_date
+    )
+    _dispatch_twice(
+        client,
+        alias,
+        run_id,
+        "invoice.update",
+        {"move_id": invoice_id, "changes": {"date": yesterday}},
+    )
+    _assert_invoice_dates(
+        client, alias, run_id, invoice_id, yesterday, original_invoice_date
+    )
+    _dispatch_twice(
+        client,
+        alias,
+        run_id,
+        "invoice.update",
+        {
+            "move_id": invoice_id,
+            "changes": {"date": today, "invoice_date": updated_invoice_date},
+        },
+    )
+    _assert_invoice_dates(
+        client, alias, run_id, invoice_id, today, updated_invoice_date
     )
 
     replace_invoice = {
@@ -439,17 +444,21 @@ def _run_chain(env: Any, alias: str, run_id: uuid.UUID) -> set[int]:
             }
         ],
     }
-    _dispatch_twice(env, alias, "invoice.lines.replace", replace_invoice)
-    _dispatch_twice(env, alias, "invoice.post", {"move_id": invoice_id})
+    _dispatch_twice(client, alias, run_id, "invoice.lines.replace", replace_invoice)
+    _dispatch_twice(client, alias, run_id, "invoice.post", {"move_id": invoice_id})
+    _assert_invoice_dates(
+        client, alias, run_id, invoice_id, today, updated_invoice_date, "posted"
+    )
     canceled_invoice = _dispatch_twice(
-        env, alias, "invoice.cancel", {"move_id": invoice_id}
+        client, alias, run_id, "invoice.cancel", {"move_id": invoice_id}
     )
     assert canceled_invoice["state"] == "cancel"
 
     bill_parameters = {
         "partner_id": ids["supplier"],
         "journal_id": ids["purchase_journal"],
-        "invoice_date": today,
+        "date": today,
+        "invoice_date": original_invoice_date,
         "currency_id": ids["currency"],
         "lines": [
             {
@@ -463,38 +472,63 @@ def _run_chain(env: Any, alias: str, run_id: uuid.UUID) -> set[int]:
     }
     bill_key = f"document-lifecycle-bill-{run_id.hex}"
     bill_result = _dispatch_twice(
-        env,
+        client,
         alias,
+        run_id,
         "vendor_bill.create",
         bill_parameters,
         explicit_key=bill_key,
     )
     bill_id = bill_result["id"]
     assert isinstance(bill_id, int)
-    created.add(bill_id)
     bill = env["account.move"].browse(bill_id)
     assert not bill.ref
     assert bill.invoice_origin == _marker(
         "vendor_bill.create", _COMPANY_ID, bill_key, bill_parameters
     )
+    _assert_invoice_dates(client, alias, run_id, bill_id, today, original_invoice_date)
     bill_reference = f"BILL-{run_id.hex[:16]}"
     _dispatch_twice(
-        env,
+        client,
         alias,
+        run_id,
         "invoice.update",
-        {"move_id": bill_id, "changes": {"reference": bill_reference}},
+        {
+            "move_id": bill_id,
+            "changes": {"reference": bill_reference, "date": yesterday},
+        },
+    )
+    _assert_invoice_dates(
+        client, alias, run_id, bill_id, yesterday, original_invoice_date
     )
     bill.invalidate_recordset(["ref"])
     assert bill.ref == bill_reference
     assert (
         _replay_existing_create(
-            env, alias, "vendor_bill.create", bill_parameters, bill_key
+            client, alias, run_id, "vendor_bill.create", bill_parameters, bill_key
         )["id"]
         == bill_id
     )
-    _dispatch_twice(env, alias, "invoice.post", {"move_id": bill_id})
+    _assert_invoice_dates(
+        client, alias, run_id, bill_id, yesterday, original_invoice_date
+    )
+    _dispatch_twice(
+        client,
+        alias,
+        run_id,
+        "invoice.update",
+        {
+            "move_id": bill_id,
+            "changes": {"date": today, "invoice_date": updated_invoice_date},
+        },
+    )
+    _assert_invoice_dates(client, alias, run_id, bill_id, today, updated_invoice_date)
+    _dispatch_twice(client, alias, run_id, "invoice.post", {"move_id": bill_id})
+    _assert_invoice_dates(
+        client, alias, run_id, bill_id, today, updated_invoice_date, "posted"
+    )
     reset_bill = _dispatch_twice(
-        env, alias, "invoice.reset_to_draft", {"move_id": bill_id}
+        client, alias, run_id, "invoice.reset_to_draft", {"move_id": bill_id}
     )
     assert reset_bill["state"] == "draft"
 
@@ -520,15 +554,15 @@ def _run_chain(env: Any, alias: str, run_id: uuid.UUID) -> set[int]:
     }
     entry_key = f"document-lifecycle-entry-{run_id.hex}"
     entry_result = _dispatch_twice(
-        env,
+        client,
         alias,
+        run_id,
         "journal_entry.create",
         entry_parameters,
         explicit_key=entry_key,
     )
     entry_id = entry_result["id"]
     assert isinstance(entry_id, int)
-    created.add(entry_id)
     entry = env["account.move"].browse(entry_id)
     assert not entry.ref
     assert entry.invoice_origin == _marker(
@@ -536,8 +570,9 @@ def _run_chain(env: Any, alias: str, run_id: uuid.UUID) -> set[int]:
     )
     entry_reference = f"ENTRY-{run_id.hex[:16]}"
     _dispatch_twice(
-        env,
+        client,
         alias,
+        run_id,
         "journal_entry.update",
         {"move_id": entry_id, "changes": {"reference": entry_reference}},
     )
@@ -545,13 +580,14 @@ def _run_chain(env: Any, alias: str, run_id: uuid.UUID) -> set[int]:
     assert entry.ref == entry_reference
     assert (
         _replay_existing_create(
-            env, alias, "journal_entry.create", entry_parameters, entry_key
+            client, alias, run_id, "journal_entry.create", entry_parameters, entry_key
         )["id"]
         == entry_id
     )
     _dispatch_twice(
-        env,
+        client,
         alias,
+        run_id,
         "journal_entry.lines.replace",
         {
             "move_id": entry_id,
@@ -573,31 +609,16 @@ def _run_chain(env: Any, alias: str, run_id: uuid.UUID) -> set[int]:
             ],
         },
     )
-    _dispatch_twice(env, alias, "journal_entry.post", {"move_id": entry_id})
+    _dispatch_twice(client, alias, run_id, "journal_entry.post", {"move_id": entry_id})
     reset_entry = _dispatch_twice(
-        env, alias, "journal_entry.reset_to_draft", {"move_id": entry_id}
+        client, alias, run_id, "journal_entry.reset_to_draft", {"move_id": entry_id}
     )
     assert reset_entry["state"] == "draft"
     canceled_entry = _dispatch_twice(
-        env, alias, "journal_entry.cancel", {"move_id": entry_id}
+        client, alias, run_id, "journal_entry.cancel", {"move_id": entry_id}
     )
     assert canceled_entry["state"] == "cancel"
-    return created
-
-
-def _verify_rollback(registry: Any, created_ids: set[int]) -> None:
-    from odoo import SUPERUSER_ID, api
-
-    cursor = registry.cursor()
-    try:
-        env = api.Environment(
-            cursor, SUPERUSER_ID, {"allowed_company_ids": [_COMPANY_ID]}
-        )
-        if env["account.move"].search_count([("id", "in", sorted(created_ids))]):
-            raise RuntimeError("rollback left lifecycle fixture moves behind")
-    finally:
-        cursor.rollback()
-        cursor.close()
+    assert client.tracked["account.move"] == {invoice_id, bill_id, entry_id}
 
 
 def _live_worker(argv: list[str] | None = None) -> int:
@@ -616,11 +637,14 @@ def _live_worker(argv: list[str] | None = None) -> int:
             "--database",
             args.database,
             "--no-http",
+            "--logfile=/dev/null",
         ]
     )
     registry = Registry(args.database)
     cursor = registry.cursor()
-    created_ids: set[int] = set()
+    tracked: dict[str, set[int]] = {model: set() for model in core._BUSINESS_MODELS}
+    env = client = None
+    failure: BaseException | None = None
     try:
         env = api.Environment(
             cursor,
@@ -632,6 +656,8 @@ def _live_worker(argv: list[str] | None = None) -> int:
                 "tz": "Asia/Shanghai",
             },
         )
+        client = core._RuntimeClient(env)
+        client.tracked = tracked
         user = env.user
         if (
             env.uid != _USER_ID
@@ -641,19 +667,41 @@ def _live_worker(argv: list[str] | None = None) -> int:
             or _COMPANY_ID not in user.company_ids.ids
         ):
             raise RuntimeError("the fixed business user is unavailable")
-        created_ids = _run_chain(env, args.alias, args.run_id)
+        _run_chain(client, args.alias, args.run_id)
+        assert client.capabilities == _CAPABILITIES
+    except BaseException as exc:  # noqa: BLE001 - re-raised after rollback verification
+        failure = exc
     finally:
-        cursor.rollback()
-        cursor.close()
+        try:
+            if env is not None:
+                core._collect_marked(env, tracked, args.run_id.hex)
+        except Exception as exc:  # noqa: BLE001 - collection must not prevent rollback
+            if failure is None:
+                failure = exc
+            else:
+                failure.add_note(f"rollback ID collection also failed: {exc}")
+        finally:
+            try:
+                cursor.rollback()
+            finally:
+                cursor.close()
 
-    _verify_rollback(registry, created_ids)
+    try:
+        core._verify_rollback(registry, tracked=tracked, marker=args.run_id.hex)
+    except Exception as exc:
+        raise exc from failure
+    if failure is not None:
+        raise failure
+    assert client is not None
     sys.stdout.write(
         json.dumps(
             {
+                "accounting_dates_verified": True,
                 "alias": args.alias,
-                "capabilities": list(_NEW_CAPABILITIES),
+                "capabilities": sorted(client.capabilities),
                 "company_id": _COMPANY_ID,
                 "database": args.database,
+                "execution": "in_process_cli_real_orm",
                 "marker_migration_verified": True,
                 "rollback_verified": True,
                 "user_id": _USER_ID,
