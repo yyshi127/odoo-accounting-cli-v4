@@ -427,6 +427,7 @@ _INVOICE_HEADER_FIELDS = (
     "amount_residual",
     "payment_state",
 )
+_INVOICE_FINANCIAL_REFERENCE_FIELDS = ("partner_bank_id", "fiscal_position_id")
 _INVOICE_STATUS_MOVE_FIELDS = (
     "id",
     "name",
@@ -2771,8 +2772,9 @@ def _dispatch_invoice_get(
                 ("company_id", "=", company_id),
                 ("move_type", "in", list(_INVOICE_DOCUMENT_TYPES)),
             ],
-            fields=list(_INVOICE_HEADER_FIELDS),
+            fields=[*_INVOICE_HEADER_FIELDS, *_INVOICE_FINANCIAL_REFERENCE_FIELDS],
             limit=1,
+            load=None,
         )
     )
     if not moves:
@@ -2783,6 +2785,17 @@ def _dispatch_invoice_get(
             access_allowed=access_allowed,
             result_key="invoice",
         )
+    move = dict(moves[0])
+    if set(move) != set(_INVOICE_HEADER_FIELDS) | set(
+        _INVOICE_FINANCIAL_REFERENCE_FIELDS
+    ):
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    financial_references = {
+        field: _reference_id(move.pop(field))
+        for field in _INVOICE_FINANCIAL_REFERENCE_FIELDS
+    }
     line_model = env["account.move.line"].with_context(
         active_test=False, allowed_company_ids=[company_id]
     )
@@ -2824,7 +2837,8 @@ def _dispatch_invoice_get(
         env, "product.product", product_ids, ("display_name",), company_id
     )
     related = _invoice_header_related(env, moves, company_id)
-    invoice = _invoice_header(moves[0], related, company_id)
+    invoice = _invoice_header(move, related, company_id)
+    invoice.update(financial_references)
     normalized_lines: list[dict[str, Any]] = []
     for raw in lines:
         if set(raw) != set(line_fields):

@@ -47,6 +47,10 @@ the Odoo source/add-on tree while building CLI capabilities.
   and the corrected shared dual-alias workflow passed (1 passed in 921.11s), with
   rollback verified. The original test-helper failure and its separate correction
   are retained in the final checkpoint; no worker remains.
+- Invoice/bill partner_bank_id and fiscal_position_id inputs and invoice.get
+  ID/null readback are implemented and deployed. The shared advance-payment
+  workflow passed both aliases in 709.21s after 622 server regressions; its checkpoint
+  below distinguishes null readback from the unavailable nonempty fixtures.
 - These totals include historical inventory, sales, and purchase extensions.
   They are neither a count of pure-accounting commands nor a completion
   percentage for the accounting module. Picking, delivery, and stock-return
@@ -2837,7 +2841,10 @@ tree. This batch has not restarted services or changed business databases,
 installed source, dependencies or accounting setup. Prior journal-switch fixture,
 bank-account-role and installed-addon limitations remain unresolved.
 
-### Next accounting candidate (not implemented)
+### Prior financial-header finding
+
+This is the source/fixture finding that led to the implementation below; its
+nonempty-fixture limitation remains unresolved.
 
 Read-only contract/source review identified missing per-document
 fiscal_position_id input in customer_invoice.create, vendor_bill.create and
@@ -2850,12 +2857,101 @@ closed. A positive selection/switch therefore has no existing acceptance fixture
 do not label clearing an empty value as a successful real selection, or create
 configuration without authorization.
 
-If implementing this next, reuse the three existing inputs and native write.
+The implementation reuses the three existing inputs and native write.
 Distinguish omission from explicit null and validate the referenced company and
 ordinary-user access. Creation already submits explicit account_id/tax_ids on
 lines: do not silently map those inputs again. Changing or clearing the header
 does not mean reapplying the position to every existing line. The separate native
 action_update_fpos_values also recomputes unit prices, so do not invoke it
 implicitly. Preserve native country/tax consistency and posted-state refusal.
-This is a candidate operation gap, not a new command, implemented feature or
-verified workflow; no configuration/source repair is authorized by this finding.
+This finding does not add a command or authorize configuration/source repair.
+
+## Financial invoice headers and advance payments — 2026-08-31
+
+The batch adds partner_bank_id/fiscal_position_id to the two invoice/bill create
+inputs and invoice.update.changes, and reads both IDs/null through invoice.get.
+No IDs or schema files are added: 355 mixed-domain IDs, 340 enabled handlers
+(210 read/130 write), 685 schemas; statuses remain 307 unconfigured, 33 degraded,
+15 disabled. Registry changes only describe the new reference dependencies and
+test files. Its current raw SHA-256 is
+4cd4a7e99d28ab683b292fc3daae82c099c262a42bdfb24313a325e851b328da.
+
+Strict nullable IDs, omitted-field preservation, create-key conflicts, draft
+updates, current-state replay and native write readback reuse existing paths.
+Selected banks must be active, visible to the configured user and shared/current
+company. Do not add a UI-only recipient-owner rule: native
+account_move._compute_partner_bank_id prefers a payment method's journal bank
+before the usual recipient-bank selection. Currency and allow_out_payment are
+native sorting preferences, not hard bank-selection constraints. This field
+selection does not verify or execute a bank-payment instruction.
+
+Fiscal-position scope uses company_id parent_of [selected_company], matching
+the installed model's company rule and relation checks. Explicit input does not
+invoke action_update_fpos_values or independently remap caller-supplied accounts,
+taxes or prices. Native dependencies and country/tax constraints still apply.
+The get-only load=None read avoids fetching display names for bank/fiscal-position
+relations; invoice.search and its public contract are unchanged.
+
+Necessary local checks pass: 263 new contract/runtime/read cases, 62 selected
+existing create/update cases and the registry consistency case. The original
+combined local selection had one outdated exact test-reference expectation;
+the registry test was updated for these three commands and passed separately.
+This is a test-metadata correction, not an Odoo business-operation failure.
+
+Server focused regression passed 622 cases and one authorization skip in 172.91s,
+exit 0. The separately authorized shared real case passed both aliases: 1 passed
+in 709.21s, exit 0. Each alias verified 48 CLI calls / 12 existing capabilities /
+14 immediate replays, customer advance 120 and supplier advance 90 before later
+invoicing/posting, zero residual after reconciliation, eight posted journal items
+and trial-balance debit/credit delta 420/420. This is untaxed company-currency
+in-process CLI/real-ORM evidence, not external bridge, durable replay, concurrent
+execution, FX, tax or bank-matching acceptance.
+Business execution is uid 5/su=False/company 1 in only odoo_cli_v4_dev
+and odoo_cli_v4_e2e, with unconditional rollback and a fresh-cursor superuser
+read-only residual audit. It does not run bank.transaction.match or change bank,
+tax, journal, fiscal-position or access configuration. Existing eligible bank
+accounts and fiscal positions are absent; actual nonempty selection/clearing
+therefore remains unverified despite the passing null/omission workflow. A final
+superuser read-only SQL count independently found zero rows in res_partner_bank
+and account_fiscal_position in each of the two synthetic databases; each count
+transaction explicitly rolled back. This absence check is not a business-user
+write test or permission expansion.
+
+Baseline local/GitHub commit: 47b3e13f214a48f4ed3b8ca5765a9951faac9cf5.
+Private artifact directory, on both local workspace and server:
+.tooling/accounting-financial-headers-20260831-fc900013.
+
+- before-code.tgz contains fourteen existing files matching baseline Git blobs;
+  the four new test paths were absent. SHA-256:
+  576e64d9845f32c8b4754995dd813e72a77c4db230dce94f804d17d0f7f9bda2.
+- code.tgz contains eighteen code/test/schema/registry files. SHA-256:
+  73d763e56ff5fd8266a06a140256cf877be58d8399b2596ffa24ba7121d54908.
+- code.sha256 verified every deployed file. Existing ownership and modes were
+  restored after extraction; new test files use mode 644 and the runtime owner.
+  The pre-change archive and metadata are also downloaded locally and hash-checked.
+- Runner/process group 3065111 is finished and empty. focused.exit and
+  live-smoke.exit are both 0. The shared run UUID is
+  c580091b-a20a-4a4c-9005-fd0c4b6aaddd. Preserve the completed logs and archives.
+- focused.log SHA-256:
+  10c266df6c3ab1e63ce7fb12ef3cddf8d9ac0d894f6b7b03c87bdd1bfd718ed1.
+- before-docs.tgz contains the three baseline documents, SHA-256:
+  798f218f7710db4899735ba601556edcdcfd242c5c5f0230513a18a496e6b400.
+- live-smoke.log SHA-256:
+  6f27a4bc50d51d58dccc14615ea4985b949861ef2058f8851bd7b6d6e9d7833c.
+- Before and after this run, Odoo19 remained PID 2855713 / NRestarts 3 / active-running;
+  Nginx and PostgreSQL were active, and the protected exchange-rate addon matched
+  724ae3b4eb753b00b273d96641ce7639473a6f37740b6ce3aeba5ca669ee54e9.
+
+The earlier bank and deferred failure logs still match their retained hashes:
+dbd3480e6bf7cd4bdf5a55a481cc2266c5ab6f41fd3bd6b1b2bcfc31b8f56685 and
+0b5a18470dbb10de1100693f3eb67778e2915ad3c011589dba87bb5bee440fbe.
+Their blockers, the actual journal-switch fixture gap and nonempty financial
+reference selection remain unresolved; none is turned into a passing workflow.
+
+The completed logs/exits and both pre-change archives are retained locally and
+on the server in the same private artifact directory. final.sha256 covers the
+eighteen code/test/schema/registry files and the three updated public documents.
+
+The server Git HEAD remains 2e190bcdd70313c0a10dcc479e1a2834db240a50. Its accumulated
+working tree is intentional; never reset or pull over it. No service restart,
+installed-source edit, dependency change or business-database write is authorized.

@@ -6148,6 +6148,8 @@
         "models": [
           "res.company",
           "res.partner",
+          "res.partner.bank",
+          "account.fiscal.position",
           "res.currency",
           "account.journal",
           "account.account",
@@ -6163,6 +6165,8 @@
         "locations": [
           "_references/base/models/res_company.py",
           "_references/base/models/res_partner.py",
+          "_references/base/models/res_bank.py",
+          "account/models/partner.py",
           "_references/base/models/res_currency.py",
           "account/models/account_journal.py",
           "account/models/account_account.py",
@@ -6190,6 +6194,8 @@
         ],
         "acl": [
           "res.partner:read",
+          "res.partner.bank:read",
+          "account.fiscal.position:read",
           "res.currency:read",
           "account.journal:read",
           "account.account:read",
@@ -6214,6 +6220,8 @@
             "tests/unit/test_core_writes.py",
             "tests/unit/test_core_writes_bridge.py",
             "tests/unit/test_core_writes_runtime.py",
+            "tests/unit/test_invoice_financial_headers.py",
+            "tests/unit/test_invoice_financial_headers_runtime.py",
             "tests/unit/test_core_write_cli.py"
           ],
           "reason": "Unit tests cover the closed request, exact confirmation, fixed bridge action, Odoo-side execution, idempotent replay, and CLI response contract."
@@ -6222,7 +6230,8 @@
           "status": "implemented",
           "references": [
             "tests/integration/test_core_write_batch_live.py",
-            "tests/integration/test_accounting_depth_batch_live.py"
+            "tests/integration/test_accounting_depth_batch_live.py",
+            "tests/integration/test_invoice_financial_headers_prepayment_batch_live.py"
           ],
           "reason": "The shared dual-database rollback smoke covers rich invoice fields and replay."
         },
@@ -8502,6 +8511,8 @@
         "models": [
           "res.company",
           "res.partner",
+          "res.partner.bank",
+          "account.fiscal.position",
           "account.payment.term",
           "account.journal",
           "res.currency",
@@ -8512,6 +8523,8 @@
         "locations": [
           "_references/base/models/res_company.py",
           "_references/base/models/res_partner.py",
+          "_references/base/models/res_bank.py",
+          "account/models/partner.py",
           "account/models/account_payment_term.py",
           "account/models/account_journal.py",
           "_references/base/models/res_currency.py",
@@ -8537,6 +8550,8 @@
         ],
         "acl": [
           "res.partner:read",
+          "res.partner.bank:read",
+          "account.fiscal.position:read",
           "account.payment.term:read",
           "account.journal:read",
           "res.currency:read",
@@ -8557,6 +8572,8 @@
           "references": [
             "tests/unit/test_document_lifecycle_writes.py",
             "tests/unit/test_document_lifecycle_writes_runtime.py",
+            "tests/unit/test_invoice_financial_headers.py",
+            "tests/unit/test_invoice_financial_headers_runtime.py",
             "tests/unit/test_core_writes_bridge.py",
             "tests/unit/test_core_write_cli.py",
             "tests/unit/test_document_lifecycle_write_cli.py"
@@ -8566,7 +8583,8 @@
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_document_lifecycle_write_batch_live.py"
+            "tests/integration/test_document_lifecycle_write_batch_live.py",
+            "tests/integration/test_invoice_financial_headers_prepayment_batch_live.py"
           ],
           "reason": "The guarded shared live smoke verifies native draft header updates and target-payload replay against both isolated database aliases."
         },
@@ -20083,6 +20101,8 @@
         "models": [
           "res.company",
           "res.partner",
+          "res.partner.bank",
+          "account.fiscal.position",
           "res.currency",
           "account.journal",
           "account.account",
@@ -20098,6 +20118,8 @@
         "locations": [
           "_references/base/models/res_company.py",
           "_references/base/models/res_partner.py",
+          "_references/base/models/res_bank.py",
+          "account/models/partner.py",
           "_references/base/models/res_currency.py",
           "account/models/account_journal.py",
           "account/models/account_account.py",
@@ -20125,6 +20147,8 @@
         ],
         "acl": [
           "res.partner:read",
+          "res.partner.bank:read",
+          "account.fiscal.position:read",
           "res.currency:read",
           "account.journal:read",
           "account.account:read",
@@ -20149,6 +20173,8 @@
             "tests/unit/test_core_writes.py",
             "tests/unit/test_core_writes_bridge.py",
             "tests/unit/test_core_writes_runtime.py",
+            "tests/unit/test_invoice_financial_headers.py",
+            "tests/unit/test_invoice_financial_headers_runtime.py",
             "tests/unit/test_core_write_cli.py"
           ],
           "reason": "Unit tests cover the closed request, exact confirmation, fixed bridge action, Odoo-side execution, idempotent replay, and CLI response contract."
@@ -20157,7 +20183,8 @@
           "status": "implemented",
           "references": [
             "tests/integration/test_core_write_batch_live.py",
-            "tests/integration/test_accounting_depth_batch_live.py"
+            "tests/integration/test_accounting_depth_batch_live.py",
+            "tests/integration/test_invoice_financial_headers_prepayment_batch_live.py"
           ],
           "reason": "The shared dual-database rollback smoke covers rich invoice fields and replay."
         },

@@ -766,9 +766,13 @@ def _validate_invoice(row: Any, *, company_id: int, invoice_id: int) -> dict[str
     if (
         not isinstance(row, dict)
         or not _valid_header(
-            row, company_id=company_id, fields=_HEADER_FIELDS | {"lines"}
+            row,
+            company_id=company_id,
+            fields=_HEADER_FIELDS | {"partner_bank_id", "fiscal_position_id", "lines"},
         )
         or row["id"] != invoice_id
+        or not _valid_optional_id(row["partner_bank_id"])
+        or not _valid_optional_id(row["fiscal_position_id"])
         or not isinstance(row["lines"], list)
     ):
         raise _failed("Odoo returned an invalid or out-of-scope invoice.")

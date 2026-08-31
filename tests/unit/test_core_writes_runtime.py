@@ -313,7 +313,7 @@ def _relation_value(value: Any) -> Any:
     return value
 
 
-def _matches(record: Record, domain: list[Any]) -> bool:
+def _matches(record: Record, domain: list[Any], env: Env | None = None) -> bool:
     for term in domain:
         if not isinstance(term, tuple):
             continue
@@ -331,6 +331,16 @@ def _matches(record: Record, domain: list[Any]) -> bool:
                 if not set(actual).intersection(expected_values):
                     return False
             elif actual not in expected_values:
+                return False
+        elif operator == "parent_of":
+            assert field == "company_id" and env is not None
+            ancestors = set()
+            for company in env.models["res.company"].browse(expected):
+                while company:
+                    ancestors.add(company.id)
+                    company = getattr(company, "parent_id", False)
+            actual_ids = set(actual) if isinstance(actual, list) else {actual}
+            if not actual_ids.intersection(ancestors):
                 return False
         elif operator == "not in":
             expected_values = set(expected)
@@ -395,7 +405,9 @@ class Model:
             ("search", self.name, copy.deepcopy(domain), limit, order)
         )
         rows = [
-            record for record in self.env.data[self.name] if _matches(record, domain)
+            record
+            for record in self.env.data[self.name]
+            if _matches(record, domain, self.env)
         ]
         if order == "id":
             rows.sort(key=lambda record: record.id)

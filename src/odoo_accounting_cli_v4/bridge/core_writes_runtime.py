@@ -183,6 +183,8 @@ _INVOICE_UPDATE_KEYS = frozenset(
         "invoice_date",
         "invoice_date_due",
         "payment_term_id",
+        "partner_bank_id",
+        "fiscal_position_id",
         "reference",
         "payment_reference",
     }
@@ -521,6 +523,8 @@ _DOCUMENT_CREATE_OPTIONAL_KEYS = frozenset(
         "date",
         "invoice_date_due",
         "payment_term_id",
+        "partner_bank_id",
+        "fiscal_position_id",
         "reference",
         "payment_reference",
     }
@@ -551,6 +555,8 @@ _PARAMETER_KEYS = {
         "lines",
         "invoice_date_due",
         "payment_term_id",
+        "partner_bank_id",
+        "fiscal_position_id",
         "reference",
         "payment_reference",
     },
@@ -563,6 +569,8 @@ _PARAMETER_KEYS = {
         "lines",
         "invoice_date_due",
         "payment_term_id",
+        "partner_bank_id",
+        "fiscal_position_id",
         "reference",
         "payment_reference",
     },
@@ -2376,6 +2384,16 @@ for _capability_id in ("customer_invoice.create", "vendor_bill.create"):
         {"product.product", "account.payment.term", "account.analytic.account"}
     )
 
+for _capability_id in (
+    "customer_invoice.create",
+    "vendor_bill.create",
+    "invoice.update",
+):
+    _MODELS[_capability_id].update({"res.partner.bank", "account.fiscal.position"})
+    _ACCESS[_capability_id].update(
+        {("res.partner.bank", "read"), ("account.fiscal.position", "read")}
+    )
+
 _MODELS["invoice.lines.replace"].add("account.analytic.account")
 
 for _capability_id in ("journal_entry.create", "journal_entry.lines.replace"):
@@ -2731,9 +2749,9 @@ def _valid_invoice_changes(value: Any) -> bool:
             field_value is None or _is_date(field_value)
         ):
             return False
-        if field_name == "payment_term_id" and not (
-            field_value is None or _is_id(field_value)
-        ):
+        if field_name in {
+            "payment_term_id", "partner_bank_id", "fiscal_position_id"
+        } and not (field_value is None or _is_id(field_value)):
             return False
         if field_name in {"reference", "payment_reference"} and not (
             _valid_nullable_text(field_value)
@@ -4240,10 +4258,11 @@ def _valid_parameters(
                 or parameters["invoice_date_due"] is None
                 or _is_date(parameters["invoice_date_due"])
             )
-            and (
-                "payment_term_id" not in parameters
-                or parameters["payment_term_id"] is None
-                or _is_id(parameters["payment_term_id"])
+            and all(
+                field not in parameters
+                or parameters[field] is None
+                or _is_id(parameters[field])
+                for field in ("payment_term_id", "partner_bank_id", "fiscal_position_id")
             )
             and not (
                 parameters.get("invoice_date_due") is not None
@@ -7682,6 +7701,39 @@ def _existing_move_for_key(
     return record
 
 
+def _validate_invoice_financial_references(
+    env: Any,
+    values: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> None:
+    bank_id = values.get("partner_bank_id")
+    if bank_id is not None:
+        # Native payment methods can select a journal bank rather than the
+        # standard recipient's bank; do not turn the UI owner domain into a lock.
+        _ensure_ids(
+            env,
+            "res.partner.bank",
+            {bank_id},
+            [
+                ("company_id", "in", [False, company_id]),
+                ("active", "=", True),
+            ],
+            company_id,
+            failure_type,
+        )
+    position_id = values.get("fiscal_position_id")
+    if position_id is not None:
+        _ensure_ids(
+            env,
+            "account.fiscal.position",
+            {position_id},
+            [("company_id", "parent_of", [company_id]), ("active", "=", True)],
+            company_id,
+            failure_type,
+        )
+
+
 def _create_document(
     env: Any,
     capability_id: str,
@@ -7733,6 +7785,9 @@ def _create_document(
         [("company_id", "in", [False, company_id])],
         company_id,
         failure_type,
+    )
+    _validate_invoice_financial_references(
+        env, parameters, company_id, failure_type
     )
     _ensure_ids(
         env,
@@ -7820,6 +7875,8 @@ def _create_document(
         "date": "date",
         "invoice_date_due": "invoice_date_due",
         "payment_term_id": "invoice_payment_term_id",
+        "partner_bank_id": "partner_bank_id",
+        "fiscal_position_id": "fiscal_position_id",
         "reference": "ref",
         "payment_reference": "payment_reference",
     }
@@ -8068,6 +8125,7 @@ def _validate_invoice_update_references(
             company_id,
             failure_type,
         )
+    _validate_invoice_financial_references(env, changes, company_id, failure_type)
 
 
 def _validate_journal_update_references(
@@ -8090,7 +8148,13 @@ def _validate_journal_update_references(
 def _current_invoice_changes(move: Any, requested_fields: set[str]) -> dict[str, Any]:
     values: dict[str, Any] = {}
     for field_name in requested_fields:
-        if field_name in {"partner_id", "journal_id", "currency_id"}:
+        if field_name in {
+            "partner_id",
+            "journal_id",
+            "currency_id",
+            "partner_bank_id",
+            "fiscal_position_id",
+        }:
             values[field_name] = _many2one_id(getattr(move, field_name))
         elif field_name == "payment_term_id":
             values[field_name] = _many2one_id(move.invoice_payment_term_id)
@@ -8152,6 +8216,8 @@ def _update_move(
             "invoice_date": "invoice_date",
             "invoice_date_due": "invoice_date_due",
             "payment_term_id": "invoice_payment_term_id",
+            "partner_bank_id": "partner_bank_id",
+            "fiscal_position_id": "fiscal_position_id",
             "reference": "ref",
             "payment_reference": "payment_reference",
         }

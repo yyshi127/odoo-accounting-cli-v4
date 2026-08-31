@@ -92,6 +92,15 @@ def _line() -> dict:
     }
 
 
+def _invoice() -> dict:
+    return {
+        **_header(),
+        "partner_bank_id": 12,
+        "fiscal_position_id": None,
+        "lines": [_line()],
+    }
+
+
 @pytest.mark.parametrize(
     ("capability_id", "parameters", "expected_data"),
     (
@@ -100,7 +109,7 @@ def _line() -> dict:
             {"limit": 1},
             {"items": [_header()], "has_more": False, "next_cursor": None},
         ),
-        ("invoice.get", {"invoice_id": 30}, {**_header(), "lines": [_line()]}),
+        ("invoice.get", {"invoice_id": 30}, _invoice()),
         (
             "invoice.payment_status.inspect",
             {"invoice_id": 30},
@@ -133,7 +142,7 @@ def test_cli_dispatches_fixed_invoice_reads(
                 "company_visible": True,
                 "module_installed": True,
                 "access_allowed": True,
-                "invoice": {**_header(), "lines": [_line()]},
+                "invoice": _invoice(),
             }
 
         def inspect_payment_status(self, **kwargs):

@@ -14,9 +14,55 @@ not 355 accounting operations, a coverage percentage, or proof that all workflow
 pass for the configured user. There are 16 `stock.*` IDs, but other historical
 sales/purchase extensions also remain; subtracting 16 does not establish a
 pure-accounting count or a coverage denominator. Registry SHA-256:
-`90162a226b7bb79da51b14446472309152a2990093c49d0ab9136132a5d4c8b3`.
+`4cd4a7e99d28ab683b292fc3daae82c099c262a42bdfb24313a325e851b328da`.
 
-The current manual-entry batch adds optional date_maturity (YYYY-MM-DD or null)
+The current financial-header batch extends customer_invoice.create,
+vendor_bill.create and invoice.update with optional partner_bank_id and
+fiscal_position_id (strict positive integer or null). Invoice.get reads both as
+IDs/null without loading the related bank/fiscal-position display names. Omission
+does not inject a default; null writes False. Bank validation uses native-user
+ACLs, active state and shared/selected-company scope, without a UI-only owner,
+currency or trust lock. Fiscal positions retain Odoo's parent-company scope.
+No implicit full-line fiscal remapping or configuration write is added.
+
+Eighteen code/test/schema/registry files are deployed and hash-verified after
+backing up fourteen existing targets; four test paths are new. Necessary local
+checks pass: 263 new contract/runtime/read cases, 62 existing create/update cases,
+and the registry-alignment case. Server focused regression passed 622 cases with
+one authorization skip in 172.91s, exit 0. The separately authorized shared
+prepayment workflow passed both aliases: 1 passed in 709.21s, exit 0. Each alias
+verified 48 CLI calls / 12 existing capabilities / 14 immediate replays, customer
+advance 120 and supplier advance 90, later invoicing, zero residual, eight posted
+journal items and trial-balance debit/credit delta 420/420. Test records rolled
+back, followed by the fresh-cursor read-only residual audit. No worker remains;
+Odoo19 PID 2855713 / restart-count 3 and protected file hashes stayed unchanged.
+This is untaxed company-currency in-process CLI/real-ORM evidence, not external
+bridge, durable replay, concurrent execution or bank-matching acceptance.
+Both isolated databases
+lack eligible bank/fiscal-position fixtures for nonempty selection: null-to-null
+readback is not a real selection or nonempty clearing test. No command IDs,
+bank matching, configuration changes or second-stage controls are added.
+
+### Accounting workstreams (not a completion denominator)
+
+These are progress-tracking workstreams, not a newly approved complete scope or
+equally weighted percentage. Passing a bounded scenario does not prove every
+tax, currency or configuration variant.
+
+| Workstream | Current evidence and remaining boundary |
+| --- | --- |
+| Queries and reports | Selected report/filter/export and aging workflows passed; this is not all reports or tax regimes. |
+| Invoices, bills and financial credits | Several customer/vendor lifecycle, credit, currency and adjustment workflows passed; taxed flows and actual journal/financial-reference switches are not fully accepted. |
+| Manual entries | Maturity, posting, aging, reconciliation/undo and trial-balance workflow passed; do not count unexecuted later steps from the blocked bank batch. |
+| Payments and reconciliation | Payment-difference, credit-settlement and advance-payment workflows passed in their stated scenarios; FX/early-payment variants remain outside that evidence. |
+| Bank matching | Implementations exist, but the combined receipt/matching workflow remains blocked by suspense/outstanding account configuration. |
+| Assets and deferrals | Limited earlier scenarios do not prove real depreciation/disposal amounts; the installed multi-move singleton defect blocks the newer deferral workflow. |
+
+Approvals, consolidated audit/release controls and inventory logistics do not
+belong in this first-phase progress denominator. The known configuration/add-on
+blockers remain required follow-up items, not exclusions used to inflate progress.
+
+The preceding manual-entry batch adds optional date_maturity (YYYY-MM-DD or null)
 to journal_entry.create and journal_entry.lines.replace. Explicit null clears
 the date; omission preserves old request fingerprints and unchanged replays.
 An actual full replacement still rebuilds the submitted lines, so dates to keep

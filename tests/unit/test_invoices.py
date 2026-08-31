@@ -172,7 +172,12 @@ def _line() -> dict:
 
 
 def _invoice() -> dict:
-    return {**_header(), "lines": [_line()]}
+    return {
+        **_header(),
+        "partner_bank_id": None,
+        "fiscal_position_id": None,
+        "lines": [_line()],
+    }
 
 
 def _status() -> dict:

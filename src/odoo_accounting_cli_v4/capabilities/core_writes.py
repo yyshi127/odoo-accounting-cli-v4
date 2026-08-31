@@ -674,6 +674,8 @@ def _validate_invoice_parameters(parameters: Any) -> dict[str, Any]:
         "date",
         "invoice_date_due",
         "payment_term_id",
+        "partner_bank_id",
+        "fiscal_position_id",
         "reference",
         "payment_reference",
     }
@@ -695,6 +697,9 @@ def _validate_invoice_parameters(parameters: Any) -> dict[str, Any]:
         parameters["payment_term_id"]
     ):
         raise _invalid("parameters.payment_term_id must be null or a positive integer.")
+    for field in ("partner_bank_id", "fiscal_position_id"):
+        if field in parameters and not _valid_optional_id(parameters[field]):
+            raise _invalid(f"parameters.{field} must be null or a positive integer.")
     if (
         parameters.get("invoice_date_due") is not None
         and parameters.get("payment_term_id") is not None
@@ -897,6 +902,8 @@ def _validate_invoice_update_parameters(parameters: Any) -> dict[str, Any]:
         "invoice_date",
         "invoice_date_due",
         "payment_term_id",
+        "partner_bank_id",
+        "fiscal_position_id",
         "reference",
         "payment_reference",
     }
@@ -916,6 +923,9 @@ def _validate_invoice_update_parameters(parameters: Any) -> dict[str, Any]:
         changes["payment_term_id"]
     ):
         raise _invalid("changes.payment_term_id must be null or a positive integer.")
+    for field in ("partner_bank_id", "fiscal_position_id"):
+        if field in changes and not _valid_optional_id(changes[field]):
+            raise _invalid(f"changes.{field} must be null or a positive integer.")
     for field in ("reference", "payment_reference"):
         if field in changes and not _is_optional_bounded_string(changes[field], 200):
             raise _invalid(f"changes.{field} must be null or a 1-200 character string.")

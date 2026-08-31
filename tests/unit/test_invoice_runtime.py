@@ -240,8 +240,11 @@ class _Model:
         fields: list[str],
         limit: int | None = None,
         order: str | None = None,
+        **read_kwargs: Any,
     ) -> list[dict[str, Any]]:
         self.calls.append(("search", self.name, domain, fields, limit, order))
+        if read_kwargs:
+            self.calls.append(("read_options", self.name, read_kwargs))
         if not self.responses:
             raise AssertionError(f"unexpected extra read of {self.name}: {domain!r}")
         return copy.deepcopy(self.responses.pop(0))
@@ -361,6 +364,9 @@ def _responses(
                 base[model] = []
         return base
     if mode == "get":
+        base["account.move"][0][0].update(
+            partner_bank_id=False, fiscal_position_id=False
+        )
         base["account.move.line"] = [
             [
                 {
@@ -741,7 +747,12 @@ def test_get_reads_only_invoice_line_subset_and_exact_related_records() -> None:
         "company_visible": True,
         "module_installed": True,
         "access_allowed": True,
-        "invoice": {**_header(), "lines": [expected_line]},
+        "invoice": {
+            **_header(),
+            "partner_bank_id": None,
+            "fiscal_position_id": None,
+            "lines": [expected_line],
+        },
     }
     move_call = _search_calls(env, "account.move")[0]
     assert move_call[2] == [
@@ -749,8 +760,9 @@ def test_get_reads_only_invoice_line_subset_and_exact_related_records() -> None:
         ("company_id", "=", 7),
         ("move_type", "in", DOCUMENT_TYPES),
     ]
-    assert move_call[3] == HEADER_FIELDS
+    assert move_call[3] == [*HEADER_FIELDS, "partner_bank_id", "fiscal_position_id"]
     assert move_call[4] == 1
+    assert ("read_options", "account.move", {"load": None}) in env.calls
     line_call = _search_calls(env, "account.move.line")[0]
     assert line_call[2] == [
         ("move_id", "=", 99),

@@ -172,6 +172,63 @@ previously posted/numbered documents and installed exchange-rate customizations
 can impose further native restrictions. Read `invoice.get` and journal items
 after the update; the CLI does not bypass those rules or edit posted documents.
 
+## Invoice bank accounts and fiscal positions
+
+`customer_invoice.create` and `vendor_bill.create` accept optional
+`partner_bank_id` and `fiscal_position_id` in `parameters`. `invoice.update`
+accepts the same fields in `changes`, including on draft financial credit notes
+and refunds. Each value is a positive integer ID or `null`; for example:
+
+```json
+{
+  "move_id": 101,
+  "changes": {"partner_bank_id": null, "fiscal_position_id": null}
+}
+```
+
+This is a parameter excerpt, not a complete request. Explicit `null` writes an
+unset relation; omission does not send that field to Odoo or alter an old create
+request fingerprint. Other native dependencies, such as a partner or currency
+change, can still recompute omitted fields. Read `invoice.get` afterward: it now
+returns both fields as IDs or `null`, without bank-account numbers or relation
+display names. The existing confirmation, replay and draft-edit rules apply.
+
+An explicitly selected bank must be active, readable by the configured user,
+and shared or in the selected company. The CLI does not add bank-owner, currency
+or trust-state locks: native payment methods may select a journal's bank rather
+than the standard recipient's bank. Selecting this invoice-header reference is
+not validation or execution of a bank-payment instruction. Fiscal positions
+must be active and accessible in the selected company or its native parent-company
+scope. Neither command creates or changes these configuration records.
+
+Setting a fiscal-position header is not a request to remap every invoice line.
+Create still submits the caller's explicit account and tax IDs. The CLI does not
+call `action_update_fpos_values`, which also recomputes unit prices. Native
+computations, country/tax consistency and posting restrictions remain in force.
+
+## Advance payments followed by invoicing
+
+Use `payment.create` and `payment.post` to record an advance before the invoice
+exists: inbound/customer for a customer receipt, outbound/supplier for a supplier
+payment. Choose an existing permitted journal/payment-method line and a distinct
+creation key for each intended payment. An immediate creation replay must occur
+while the payment is still draft; do not recreate an already-posted payment.
+
+Create the later document with `customer_invoice.create` or `vendor_bill.create`
+and post it with `invoice.post`. Read `payment.get` for the payment's `move_id`,
+then `invoice.payment_status.inspect` for the invoice's outstanding items. Match
+that move ID and pass its `line_id` to `reconciliation.apply` as
+`outstanding_line_id`, together with `invoice_id`. Read the invoice/payment and
+journal items again to verify the linked documents and remaining balance.
+
+Zero invoice residual does not necessarily mean `payment_state=paid`; native
+payments can remain `in_process` and invoices `in_payment` until bank matching.
+This workflow does not create or match a bank statement. The shared two-database
+case verifies untaxed company-currency advances of 120/90, subsequent customer/
+supplier invoicing, full settlement, immediate replay and transaction rollback.
+It does not establish taxed, foreign-currency or nonempty financial-reference
+selection coverage.
+
 ## Invoice and bill accounting dates
 
 `customer_invoice.create` and `vendor_bill.create` accept an optional `date`

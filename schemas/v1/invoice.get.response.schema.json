@@ -97,7 +97,7 @@
     "data": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "move_type", "state", "date", "invoice_date", "invoice_date_due", "ref", "payment_reference", "invoice_origin", "journal", "company_id", "currency", "partner", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "lines"],
+      "required": ["id", "name", "move_type", "state", "date", "invoice_date", "invoice_date_due", "ref", "payment_reference", "invoice_origin", "journal", "company_id", "currency", "partner", "partner_bank_id", "fiscal_position_id", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "lines"],
       "properties": {
         "id": {"$ref": "invoice.search.response.schema.json#/$defs/item/properties/id"},
         "name": {"$ref": "invoice.search.response.schema.json#/$defs/item/properties/name"},
@@ -113,6 +113,8 @@
         "company_id": {"$ref": "invoice.search.response.schema.json#/$defs/item/properties/company_id"},
         "currency": {"$ref": "invoice.search.response.schema.json#/$defs/currency"},
         "partner": {"oneOf": [{"type": "null"}, {"$ref": "invoice.search.response.schema.json#/$defs/partner"}]},
+        "partner_bank_id": {"type": ["integer", "null"], "minimum": 1},
+        "fiscal_position_id": {"type": ["integer", "null"], "minimum": 1},
         "amount_untaxed": {"$ref": "invoice.search.response.schema.json#/$defs/money"},
         "amount_tax": {"$ref": "invoice.search.response.schema.json#/$defs/money"},
         "amount_total": {"$ref": "invoice.search.response.schema.json#/$defs/money"},

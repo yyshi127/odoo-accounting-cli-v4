@@ -57,6 +57,14 @@
           ],
           "format": "date"
         },
+        "partner_bank_id": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "fiscal_position_id": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
         "payment_term_id": {
           "type": [
             "integer",

@@ -2740,8 +2740,27 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
         )
         if capability_id in EXTENDED_WRITES:
             expected_unit_tests.add("tests/unit/test_extended_core_writes.py")
+        if capability_id in {"customer_invoice.create", "vendor_bill.create", "invoice.update"}:
+            expected_unit_tests.update({
+                "tests/unit/test_invoice_financial_headers.py",
+                "tests/unit/test_invoice_financial_headers_runtime.py",
+            })
         assert set(descriptor["tests"]["unit"]["references"]) == expected_unit_tests
-        if capability_id in stock_transfer_batch_writes:
+        if capability_id in {"customer_invoice.create", "vendor_bill.create", "invoice.update"}:
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            prior_tests = (
+                ["tests/integration/test_document_lifecycle_write_batch_live.py"]
+                if capability_id == "invoice.update"
+                else [
+                    "tests/integration/test_core_write_batch_live.py",
+                    "tests/integration/test_accounting_depth_batch_live.py",
+                ]
+            )
+            assert descriptor["tests"]["integration"]["references"] == [
+                *prior_tests,
+                "tests/integration/test_invoice_financial_headers_prepayment_batch_live.py",
+            ]
+        elif capability_id in stock_transfer_batch_writes:
             assert descriptor["tests"]["integration"]["status"] == "implemented"
             assert descriptor["tests"]["integration"]["references"] == [
                 "tests/integration/test_stock_transfer_write_batch_live.py"
