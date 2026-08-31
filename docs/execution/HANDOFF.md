@@ -2236,3 +2236,129 @@ writable but absent from invoice/journal-item readback, obstructing lossless lin
 editing. These are independent of the unresolved bank-account-role conflict and
 installed add-on singleton defect. Do not keep repeating those blocked workflows,
 change configuration/add-ons without authority, or expand inventory command counts.
+
+## 2026-08-31 payment-difference settlement (passed)
+
+This batch extends receivable.payment.register and payable.payment.register;
+it adds no command IDs, handlers or schema files. The intended shared workflow
+uses eight existing accounting interfaces, not inventory operations. The old
+355-ID/340-handler/685-schema totals remain mixed-domain implementation counts.
+
+Optional payment_difference_handling accepts open or reconcile. Reconcile
+requires an explicit positive amount and an active, accessible writeoff_account_id
+in the selected company; writeoff_label is optional trimmed text of 1-200
+characters, defaulting to the native wizard label. The amount must not exceed
+the source residual. Write-off fields without reconcile are invalid. The source
+must be a posted customer invoice or vendor bill with a positive residual.
+Existing requests omitting the new fields retain their native defaults, including
+early-payment-discount behavior when amount is omitted; explicit amount alone
+still leaves the unpaid difference open.
+
+The native single-document wizard uses full installments and grouped payment
+for explicit reconcile, allowing one payment and one balanced payment move to
+settle the entire source residual. Both explicit modes require payment currency
+to equal source-document currency. Explicit reconcile rejects native early-payment
+discount, exchange-account, noneditable or inconsistent installment routes before
+payment creation when they cannot honor the selected account. These are explicit
+boundaries, not claims that all currencies, discounts or installments were tested.
+Native source account_payment_register.py:811-836,1000-1040 explains these paths.
+
+The existing operation-marker helper fingerprints the full explicit request.
+The standard default_invoice_origin context writes it during native payment-move
+creation, avoiding an additional write to a posted move. Native source confirmed
+context propagation through account_payment_register.py:1112, account_payment.py:
+845,998,1002 and account_move.py:3798. Runtime requires marker readback and rejects
+same-key changes to mode/account/label, including removal of explicit mode. Legacy
+unmarked payments retain the original source/date/journal/amount replay behavior.
+Successful reconcile also requires source residual zero and the exact requested
+write-off account, label, currency and signed amount in the resulting move.
+
+Local selections passed: 96 new public-contract cases; 29 new runtime cases plus
+120 existing runtime cases; 10 existing public full/partial-payment cases; and
+2 registry matrix/runtime-metadata cases. These are distinct selections, not
+cumulative rerun totals. Changed Python lint and git diff --check pass. Independent
+source review found no definite defect; native account.group_account_invoice
+already grants account.account read, so the added read requirement does not
+change normal native-group access or grant any new rights.
+
+The shared live case is test_payment_differences_settle_and_roll_back_per_alias
+in tests/integration/test_document_lifecycle_write_batch_live.py, enabled only
+with ODACV4_ALLOW_PAYMENT_DIFFERENCE_SMOKE=1. The original lifecycle and refund
+cases retain separate authorizations. Successful acceptance per alias used uid 5/
+company 1 for 22 in-process CLI calls: create/post/replay two 100-unit documents,
+register/replay two 99-unit payments, reject two changed-key-payload attempts,
+read the payment and three-line journal entry, and inspect residuals of zero.
+It verified unchanged bank configuration and finally rolled back, then audited
+tracked IDs and run markers using a fresh cursor. No durable write, external
+bridge transport or bank-statement matching claim follows from this test.
+
+Artifacts are under
+/opt/odoo-accounting-cli-v4/.tooling/accounting-payment-differences-20260831-15dc8a7d/.
+All nine existing targets matched pre-batch commit 41614de; two new test paths
+were absent. overwritten-files.tgz retains contents/ownership/modes, SHA-256
+`e6a180b3a10384e19904d38f5d01d770f466e9550f974cc1732bce4c1f163543`.
+The initial eight-file code.tgz has SHA-256
+`c8a6852a2f2e40bf16d2f72ee96f77064cbc93a4a0e9d5e7793984b8c1bd36b7`.
+All eight deployed hashes match local files; existing modes/owners were restored,
+and the two new test files use mode 644, uid 999, gid 1003. Server Git HEAD remains
+2e190bc; accumulated working-tree changes were preserved, not reset or pulled.
+The registry digest is now
+`aa86c26d53290343c1b8ce105aa7945f4f2f93575c99be2e77a6185fbb7acc96`.
+
+Server focused tests passed: 267 passed and 3 authorization skips in 88.42s,
+exit 0. SSH disconnected before the client received completion; reconnecting
+confirmed the saved exit file and full test log, rather than rerunning or treating
+the transport failure as a test failure. Focused log SHA-256:
+`4d6313692e63a46cdb655383a76848eb636dfeae1c99eab808ef54dc99335b4f`.
+The shared live case passed both v4-dev and v4-e2e: 1 passed in 330.64s, exit 0.
+Each alias returned two successful 99-unit payments, source residuals 100 to 0
+for both customer and supplier, six immediate replays and two idempotency
+conflicts. Customer payment balances were +99 outstanding, -100 receivable and
++1 write-off; supplier balances were -99 outstanding, +100 payable and -1
+write-off. Exact write-off account/label/currency, balanced debit/credit totals
+of 100, and source-line reconciliation were verified. Payment state may still be
+in_payment: no bank-statement match was attempted. This acceptance uses untaxed
+company-currency documents and does not establish foreign-currency, EPD, split
+installment or durable-commit/replay behavior.
+
+Per alias, rollback tracked 2 account.payment, 4 account.move, 10 account.move.line,
+2 account.partial.reconcile and 2 account.full.reconcile records, with no bank
+statement line. A fresh cursor confirmed all tracked records/run markers absent.
+The separate live-smoke.log, live-smoke.exit and live-smoke.pid retain the outcome;
+launcher/process group 2798478 has finished with no remaining worker. Live log
+SHA-256:
+`2c4f9f62900d65032b365d067f153f751d9815870014a65e3e52f1bd528523e9`.
+
+Preflight confirmed Odoo19 active/running, MainPID 1678372, NRestarts 2 and unchanged
+activation time 2026-08-30 10:25:07 CST. The exchange-rate add-on digest remains
+`724ae3b4eb753b00b273d96641ce7639473a6f37740b6ce3aeba5ca669ee54e9`.
+The separate bank-account-role and native add-on singleton blockers are unchanged;
+no service, installed source, account/journal configuration or business database
+modification is authorized by this batch.
+
+The post-run audit confirmed all eight code/test files still matched their frozen
+local hashes, the backup/code archives and current test logs retained their
+digests, and the earlier failed bank/deferred logs and installed add-on digest
+were unchanged. Odoo19 retained the same PID, restart count, activation timestamp
+and active/running state; Nginx and PostgreSQL remained active. The remaining
+three changed files are README.md and this batch's STATUS/HANDOFF updates.
+
+### Next accounting work
+
+Read-only code review confirmed analytic_distribution is writable but absent
+from invoice.get lines, journal_entry.get lines and journal_item.search/get items.
+These four existing interfaces are the next coherent completion batch, not four
+new IDs. Three public read validators, two runtime modules and three response
+schemas need coordinated changes; journal_item.get already reuses the search
+item definition, and the bridge ports already pass nested data through. Header-
+only invoice.search and journal_entry.search are not part of this line-data gap.
+
+Prefer a lossless mapping compatible with existing write snapshots, including
+combined analytic-account keys and decimal percentages. Do not assume the CLI's
+restricted write-input limits describe all valid native stored distributions.
+Verify the native field/access rules first. Reuse the existing document lifecycle
+smoke for create/edit/clear/post/readback, check shared validation.journal_entry.check
+compatibility, and include generated account.analytic.line records in rollback
+auditing. Select existing visible analytic accounts if possible; do not change
+analytic configuration, elevate the business user or add an unrelated framework.
+No analytic readback change or live acceptance is claimed by this payment batch.

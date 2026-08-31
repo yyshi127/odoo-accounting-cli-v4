@@ -14,7 +14,32 @@ not 355 accounting operations, a coverage percentage, or proof that all workflow
 pass for the configured user. There are 16 `stock.*` IDs, but other historical
 sales/purchase extensions also remain; subtracting 16 does not establish a
 pure-accounting count or a coverage denominator. Registry SHA-256:
-`21b6a57b0bd3b7f17432663de5c82c25b0d63a38c8c9ed6bad2e58732c75572e`.
+`aa86c26d53290343c1b8ce105aa7945f4f2f93575c99be2e77a6185fbb7acc96`.
+
+Payment-difference settlement is the latest completed batch. The two existing
+receivable/payable payment.register commands now accept explicit open/reconcile handling,
+an active company-scoped write-off account and an optional label. Reconcile
+requires an explicit amount and closes the remaining document difference through
+the native payment wizard. Omitted new fields retain the old behavior. No IDs,
+handlers or schema files are added. Local contract and runtime regressions pass;
+eight code/test files are deployed and hash-verified after a nine-file backup.
+Server focused tests passed: 267 passed and 3 authorization skips in 88.42s,
+exit 0. The separately authorized shared live case passed both isolated aliases:
+1 passed in 330.64s, exit 0. Each alias used 22 CLI calls across 8 existing IDs to
+settle customer and supplier residuals of 100 with payments of 99 and signed
+write-offs of 1/-1. Source balances reached zero; exact accounts/labels/amounts,
+balanced entries, six immediate replays, two changed-payload conflicts, unchanged
+bank configuration and fresh-cursor rollback audit passed. This is in-process
+CLI/real-ORM evidence for untaxed company-currency documents, not external bridge
+transport, durable replay, early-payment discounts, foreign currency or bank
+matching. No worker remains, and Odoo19 state and the installed add-on digest
+remain unchanged. See HANDOFF.md for retained logs and recovery files.
+
+The next verified gap is analytic-distribution readback in the existing
+invoice.get, journal_entry.get and journal_item.search/get interfaces. Distribution
+is already writable but missing from these detail responses. Complete the read/
+edit/read workflow without inventing more command IDs; native data boundaries
+and analytic-line rollback tracking still need verification for that next batch.
 
 Independent accounting dates extend three existing invoice/bill commands.
 Their 14-capability CLI/ORM lifecycle smoke passed
@@ -27,7 +52,7 @@ in 1293.65s with exit 0; this is in-process CLI/real-ORM evidence, not a
 cross-process bridge or durable commit/replay test. See
 [HANDOFF.md](HANDOFF.md) for exact batch evidence and recovery artifacts.
 
-The current implementation adds optional `journal_ids` to eight existing report
+The preceding report batch added optional `journal_ids` to eight existing report
 interfaces: trial balance, general ledger, balance sheet and profit and loss,
 each with JSON reads and PDF/XLSX export. It adds no command IDs or schema files.
 The configured native partner ledger does not support journal selection and is

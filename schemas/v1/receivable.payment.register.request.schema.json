@@ -45,6 +45,34 @@
         },
         "amount": {
           "$ref": "#/$defs/positive_canonical_decimal"
+        },
+        "payment_difference_handling": {
+          "enum": ["open", "reconcile"]
+        },
+        "writeoff_account_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "writeoff_label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"
+        }
+      },
+      "if": {
+        "required": ["payment_difference_handling"],
+        "properties": {
+          "payment_difference_handling": {"const": "reconcile"}
+        }
+      },
+      "then": {
+        "required": ["amount", "writeoff_account_id"]
+      },
+      "else": {
+        "properties": {
+          "writeoff_account_id": false,
+          "writeoff_label": false
         }
       }
     }

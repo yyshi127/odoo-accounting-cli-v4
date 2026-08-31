@@ -581,12 +581,18 @@ _PARAMETER_KEYS = {
         "journal_id",
         "payment_date",
         "amount",
+        "payment_difference_handling",
+        "writeoff_account_id",
+        "writeoff_label",
     },
     "payable.payment.register": {
         "move_id",
         "journal_id",
         "payment_date",
         "amount",
+        "payment_difference_handling",
+        "writeoff_account_id",
+        "writeoff_label",
     },
     "reconciliation.apply": {"line_ids", "invoice_id", "outstanding_line_id"},
     "payment.cancel": {"payment_id"},
@@ -1012,6 +1018,7 @@ _MODELS = {
     },
     "receivable.payment.register": {
         "res.company",
+        "account.account",
         "account.journal",
         "account.move",
         "account.move.line",
@@ -1020,6 +1027,7 @@ _MODELS = {
     },
     "payable.payment.register": {
         "res.company",
+        "account.account",
         "account.journal",
         "account.move",
         "account.move.line",
@@ -1399,6 +1407,7 @@ _ACCESS = {
         ("account.move.reversal", "create"),
     },
     "receivable.payment.register": {
+        ("account.account", "read"),
         ("account.journal", "read"),
         ("account.move", "read"),
         ("account.move.line", "read"),
@@ -1407,6 +1416,7 @@ _ACCESS = {
         ("account.payment.register", "create"),
     },
     "payable.payment.register": {
+        ("account.account", "read"),
         ("account.journal", "read"),
         ("account.move", "read"),
         ("account.move.line", "read"),
@@ -4268,6 +4278,24 @@ def _valid_parameters(
         "receivable.payment.register",
         "payable.payment.register",
     }:
+        handling = parameters.get("payment_difference_handling")
+        if "payment_difference_handling" in parameters and handling not in (
+            "open",
+            "reconcile",
+        ):
+            return False
+        if handling == "reconcile":
+            if (
+                "amount" not in parameters
+                or not _is_id(parameters.get("writeoff_account_id"))
+                or (
+                    "writeoff_label" in parameters
+                    and not _is_text(parameters["writeoff_label"], maximum=200)
+                )
+            ):
+                return False
+        elif {"writeoff_account_id", "writeoff_label"} & parameter_keys:
+            return False
         return (
             _is_id(parameters["move_id"])
             and _is_id(parameters["journal_id"])
@@ -8718,6 +8746,8 @@ def _register_payment(
         if "amount" in parameters
         else None
     )
+    handling = parameters.get("payment_difference_handling")
+    operation_marker = _operation_marker(capability_id, key, parameters)
     residual = Decimal(str(source.amount_residual))
     candidates = _scoped(env, "account.payment", company_id).search(
         [("company_id", "=", company_id), ("memo", "=", key)], limit=2
@@ -8726,6 +8756,7 @@ def _register_payment(
         matching = candidates.filtered(
             lambda payment: source.id in _payment_sources(payment)
         )
+        stored_marker = matching.move_id.invoice_origin if len(matching) == 1 else False
         if (
             len(candidates) != 1
             or len(matching) != 1
@@ -8736,6 +8767,16 @@ def _register_payment(
                 requested_amount is not None
                 and _rounded_currency_amount(source.currency_id, str(matching.amount))
                 != requested_amount
+            )
+            or (
+                (
+                    handling is not None
+                    or (
+                        isinstance(stored_marker, str)
+                        and stored_marker.startswith("ODACV4:")
+                    )
+                )
+                and stored_marker != operation_marker
             )
         ):
             raise _fail(
@@ -8779,11 +8820,59 @@ def _register_payment(
                 "payment_difference_handling": "open",
             }
         )
+    if handling is not None:
+        wizard_values["payment_difference_handling"] = handling
+    if handling == "reconcile":
+        _ensure_ids(
+            env,
+            "account.account",
+            {parameters["writeoff_account_id"]},
+            [("company_ids", "in", [company_id]), ("active", "=", True)],
+            company_id,
+            failure_type,
+        )
+        wizard_values.update(
+            writeoff_account_id=parameters["writeoff_account_id"],
+            installments_mode="full",
+            group_payment=True,
+        )
+        if "writeoff_label" in parameters:
+            wizard_values["writeoff_label"] = parameters["writeoff_label"]
+    wizard_context = {"active_model": "account.move", "active_ids": [source.id]}
+    if handling is not None:
+        # Native move creation consumes this standard default; no posted write.
+        wizard_context["default_invoice_origin"] = operation_marker
     wizard = (
         _scoped(env, "account.payment.register", company_id)
-        .with_context(active_model="account.move", active_ids=[source.id])
+        .with_context(**wizard_context)
         .create(wizard_values)
     )
+    if handling is not None and wizard.currency_id.id != source.currency_id.id:
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "The native payment currency differs from the document amount currency.",
+            exit_code=5,
+        )
+    difference = None
+    if handling == "reconcile":
+        difference = (
+            _rounded_currency_amount(source.currency_id, str(residual)) - requested_amount
+        )
+        if (
+            wizard.early_payment_discount_mode
+            or wizard.writeoff_is_exchange_account
+            or not wizard.can_edit_wizard
+            or not wizard.group_payment
+            or _rounded_currency_amount(source.currency_id, str(wizard.payment_difference))
+            != difference
+        ):
+            raise _fail(
+                failure_type,
+                "state_conflict",
+                "The native discount, exchange, or installment route cannot honor the explicit write-off.",
+                exit_code=5,
+            )
     action = wizard.action_create_payments()
     payment_id = action.get("res_id") if isinstance(action, dict) else None
     if _is_id(payment_id):
@@ -8810,6 +8899,7 @@ def _register_payment(
             and _rounded_currency_amount(source.currency_id, str(payment.amount))
             != requested_amount
         )
+        or (handling is not None and payment.move_id.invoice_origin != operation_marker)
     ):
         raise _fail(
             failure_type,
@@ -8817,6 +8907,25 @@ def _register_payment(
             "Odoo returned an invalid registered payment.",
             exit_code=6,
         )
+    if handling == "reconcile":
+        signed_difference = difference if move_type == "out_invoice" else -difference
+        writeoff_lines = payment.move_id.line_ids.filtered(
+            lambda line: line.account_id.id == parameters["writeoff_account_id"]
+            and line.name == wizard.writeoff_label
+            and line.currency_id.id == source.currency_id.id
+            and _rounded_currency_amount(source.currency_id, str(line.amount_currency))
+            == signed_difference
+        )
+        if (
+            _rounded_currency_amount(source.currency_id, str(source.amount_residual)) != 0
+            or (difference != 0 and len(writeoff_lines) != 1)
+        ):
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not close the document with the requested write-off account and label.",
+                exit_code=6,
+            )
     return _payment_result(payment, company_id, source_id=source.id), False
 
 

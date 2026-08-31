@@ -12119,6 +12119,7 @@
         ],
         "models": [
           "res.company",
+          "account.account",
           "account.journal",
           "account.move",
           "account.move.line",
@@ -12133,6 +12134,7 @@
         "report_handlers": [],
         "locations": [
           "_references/base/models/res_company.py",
+          "account/models/account_account.py",
           "account/models/account_journal.py",
           "account/models/account_move.py",
           "account/models/account_move_line.py",
@@ -12158,6 +12160,7 @@
           "account.group_account_invoice"
         ],
         "acl": [
+          "account.account:read",
           "account.journal:read",
           "account.move:read",
           "account.move.line:read",
@@ -14497,6 +14500,7 @@
         ],
         "models": [
           "res.company",
+          "account.account",
           "account.journal",
           "account.move",
           "account.move.line",
@@ -14511,6 +14515,7 @@
         "report_handlers": [],
         "locations": [
           "_references/base/models/res_company.py",
+          "account/models/account_account.py",
           "account/models/account_journal.py",
           "account/models/account_move.py",
           "account/models/account_move_line.py",
@@ -14536,6 +14541,7 @@
           "account.group_account_invoice"
         ],
         "acl": [
+          "account.account:read",
           "account.journal:read",
           "account.move:read",
           "account.move.line:read",

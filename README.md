@@ -73,6 +73,45 @@ debit/credit values; preserve those signs when comparing journal items and
 reports. This settlement workflow is distinct from recording an actual cash
 refund, which requires the appropriate payment/bank workflow.
 
+`receivable.payment.register` and `payable.payment.register` accept optional
+`payment_difference_handling` (`open` or `reconcile`). For a document with a
+remaining balance of `100`, this parameter excerpt records `99` and writes off
+the remaining `1` to the selected account:
+
+```json
+{
+  "amount": "99",
+  "payment_difference_handling": "reconcile",
+  "writeoff_account_id": 31,
+  "writeoff_label": "Payment difference"
+}
+```
+
+The existing `move_id`, `journal_id`, and `payment_date` remain required.
+`reconcile` requires an explicit positive canonical decimal `amount` and a
+positive integer `writeoff_account_id` for an active account accessible in the
+selected company; the example ID is not universal. It settles the entire remaining
+document difference, including remaining installments. `writeoff_label` is
+optional trimmed text of 1-200 characters; omit it to use the native wizard's
+default label. Write-off fields are rejected unless the mode is `reconcile`.
+
+Omitting the mode preserves the existing behavior: an explicit `amount` leaves
+the unpaid difference open, while omitting `amount` retains the native wizard's
+defaults, including early-payment-discount behavior. Explicit `open` may be
+used with or without `amount`. Use a distinct operation key for each intended
+payment with an explicit amount; reuse that key only for the same request.
+
+Both explicit modes currently require the wizard's payment currency to match
+the source document currency. `reconcile` returns `state_conflict` when native
+early-payment discounts, special exchange-difference handling, or installment
+processing cannot honor the selected write-off account. Read the source balance
+and payment journal items to verify settlement; it does not perform bank-statement
+matching or guarantee `payment_state=paid`. This explicit write-off extension is
+live-verified for untaxed, company-currency customer/vendor documents in both
+isolated databases: `100` residual, `99` payment, signed `1` write-off and zero
+remaining balance, with immediate replay and rollback checks. This is not a claim
+of foreign-currency, early-payment-discount or bank-matching acceptance.
+
 ## Invoice and bill accounting dates
 
 `customer_invoice.create` and `vendor_bill.create` accept an optional `date`

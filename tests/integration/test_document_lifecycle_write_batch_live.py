@@ -7,12 +7,15 @@ back. This is in-process CLI/real-ORM coverage, not cross-process transport.
 The separately enabled refund-only case closes customer and supplier financial
 credits through native automatic reconciliation, targeted undo and manual
 reapplication, without invoking the original lifecycle, bank or deferred workflows.
+The payment-difference-only case settles two 100-unit documents with 99-unit
+payments and explicit one-unit write-offs, without bank matching or setup changes.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 import subprocess
@@ -37,6 +40,7 @@ except ModuleNotFoundError:
 _CONFIG_ENV = "ODOO_ACCOUNTING_CLI_V4_CONFIG"
 _ALLOW_ENV = "ODACV4_ALLOW_DOCUMENT_LIFECYCLE_WRITE_SMOKE"
 _REFUND_ALLOW_ENV = "ODACV4_ALLOW_FINANCIAL_REFUND_SMOKE"
+_PAYMENT_DIFFERENCE_ALLOW_ENV = "ODACV4_ALLOW_PAYMENT_DIFFERENCE_SMOKE"
 _ALIASES = ("v4-dev", "v4-e2e")
 _DATABASES = {
     "v4-dev": "odoo_cli_v4_dev",
@@ -79,6 +83,16 @@ _REFUND_CAPABILITIES = {
     "reconciliation.undo",
     "journal_item.search",
     "report.trial_balance",
+}
+_PAYMENT_DIFFERENCE_CAPABILITIES = {
+    "customer_invoice.create",
+    "vendor_bill.create",
+    "invoice.post",
+    "receivable.payment.register",
+    "payable.payment.register",
+    "payment.get",
+    "journal_entry.get",
+    "invoice.payment_status.inspect",
 }
 _RESULT_KEYS = {
     "model",
@@ -170,10 +184,14 @@ def _run_worker(
     runtime: dict[str, Any],
     *,
     refund_only: bool = False,
+    payment_difference_only: bool = False,
 ) -> None:
+    assert not (refund_only and payment_difference_only)
     command, timeout = _worker_command(alias, run_id, config_path, runtime)
     if refund_only:
         command.append("--refund-only")
+    elif payment_difference_only:
+        command.append("--payment-difference-only")
     environment = os.environ.copy()
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
     environment["PYTHONPATH"] = os.pathsep.join(
@@ -197,9 +215,12 @@ def _run_worker(
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert completed.stderr == ""
     assert len(completed.stdout.splitlines()) == 1
+    capabilities = _REFUND_CAPABILITIES if refund_only else _CAPABILITIES
+    if payment_difference_only:
+        capabilities = _PAYMENT_DIFFERENCE_CAPABILITIES
     expected = {
         "alias": alias,
-        "capabilities": sorted(_REFUND_CAPABILITIES if refund_only else _CAPABILITIES),
+        "capabilities": sorted(capabilities),
         "company_id": _COMPANY_ID,
         "database": _DATABASES[alias],
         "execution": "in_process_cli_real_orm",
@@ -229,6 +250,31 @@ def _run_worker(
                 "tracked_reconciliations": {"partial": 8, "full": 4},
             }
         )
+    elif payment_difference_only:
+        expected.update(
+            {
+                "source_documents": 2,
+                "registered_payments": 2,
+                "cli_calls": 22,
+                "immediate_replays": 6,
+                "idempotency_conflicts": 2,
+                "payment_amounts": {"customer": "99", "supplier": "99"},
+                "writeoff_balances": {"customer": "1", "supplier": "-1"},
+                "source_residuals": {
+                    "customer": ["100", "0"],
+                    "supplier": ["100", "0"],
+                },
+                "bank_configuration_unchanged": True,
+                "tracked_records": {
+                    "account.payment": 2,
+                    "account.move": 4,
+                    "account.move.line": 10,
+                    "account.bank.statement.line": 0,
+                    "account.partial.reconcile": 2,
+                    "account.full.reconcile": 2,
+                },
+            }
+        )
     else:
         expected.update(
             {"accounting_dates_verified": True, "marker_migration_verified": True}
@@ -253,6 +299,15 @@ if pytest is not None:
         for alias in _ALIASES:
             _run_worker(alias, run_id, config_path, runtime, refund_only=True)
 
+    @pytest.mark.integration
+    def test_payment_differences_settle_and_roll_back_per_alias() -> None:
+        config_path, runtime = _enabled_runtime(_PAYMENT_DIFFERENCE_ALLOW_ENV)
+        run_id = uuid.uuid4()
+        for alias in _ALIASES:
+            _run_worker(
+                alias, run_id, config_path, runtime, payment_difference_only=True
+            )
+
 
 def _arguments(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -262,7 +317,9 @@ def _arguments(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--alias", choices=_ALIASES, required=True)
     parser.add_argument("--database", choices=tuple(_DATABASES.values()), required=True)
     parser.add_argument("--run-id", type=uuid.UUID, required=True)
-    parser.add_argument("--refund-only", action="store_true")
+    cases = parser.add_mutually_exclusive_group()
+    cases.add_argument("--refund-only", action="store_true")
+    cases.add_argument("--payment-difference-only", action="store_true")
     args = parser.parse_args(argv)
     if args.database != _DATABASES[args.alias]:
         parser.error("alias and physical database do not match")
@@ -1081,6 +1138,260 @@ def _run_refund_chain(
     }
 
 
+def _payment_difference_conflict(
+    client: core._RuntimeClient,
+    alias: str,
+    run_id: uuid.UUID,
+    capability_id: str,
+    parameters: dict[str, Any],
+    key: str,
+) -> None:
+    from odoo_accounting_cli_v4 import cli
+    from odoo_accounting_cli_v4.bridge.core_writes import OdooCoreWritePort
+
+    request = core._request(alias, run_id, capability_id, parameters)
+    stdout, stderr = io.StringIO(), io.StringIO()
+    client.last_runtime_failure = None
+    exit_code = cli.main(
+        [
+            "write",
+            "run",
+            capability_id,
+            "--request",
+            "-",
+            "--idempotency-key",
+            key,
+            "--confirm",
+            capability_id,
+        ],
+        stdin=io.StringIO(json.dumps(request)),
+        stdout=stdout,
+        stderr=stderr,
+        port_factory=lambda _capability, _request: OdooCoreWritePort(client),
+    )
+    assert stderr.getvalue() == "" and len(stdout.getvalue().splitlines()) == 1
+    response = json.loads(stdout.getvalue())
+    assert exit_code == 5 and response["success"] is False, response
+    assert response["schema_version"] == "v1"
+    assert response["request_id"] == request["request_id"]
+    assert response["capability"] == capability_id and response["data"] is None
+    assert response["error"]["code"] == "idempotency_conflict"
+    assert getattr(client.last_runtime_failure, "code", None) == "idempotency_conflict"
+
+
+def _run_payment_difference_chain(
+    client: core._RuntimeClient, alias: str, run_id: uuid.UUID
+) -> dict[str, Any]:
+    from odoo import fields
+
+    env = client.env
+    assert env.uid == _USER_ID and env.su is False
+    assert env.context["allowed_company_ids"] == [_COMPANY_ID]
+    ids = _fixture_ids(env, alias)
+    bank = _one(
+        env["account.journal"].search(
+            [("id", "=", 14), ("company_id", "=", _COMPANY_ID), ("type", "=", "bank")]
+        ),
+        "payment-difference bank journal",
+    )
+    methods, term_accounts = {}, {}
+    for side, direction in (("customer", "inbound"), ("supplier", "outbound")):
+        methods[side] = _one(
+            env["account.payment.method.line"].search(
+                [
+                    ("journal_id", "=", bank.id),
+                    ("payment_type", "=", direction),
+                    ("payment_method_id.code", "=", "manual"),
+                ]
+            ),
+            f"{direction} manual payment method",
+        )
+        outstanding = methods[side].payment_account_id
+        assert outstanding and _COMPANY_ID in outstanding.company_ids.ids
+        partner = env["res.partner"].browse(ids[side])
+        term = (
+            partner.property_account_payable_id
+            if side == "supplier"
+            else partner.property_account_receivable_id
+        )
+        assert term and _COMPANY_ID in term.company_ids.ids
+        term_accounts[side] = term.id
+        assert outstanding.id != term.id
+    assert {ids["income"], ids["expense"]}.isdisjoint(
+        {
+            *term_accounts.values(),
+            *(method.payment_account_id.id for method in methods.values()),
+        }
+    )
+    # The existing suspense/outstanding overlap is not a bank-match precondition here.
+    bank_before = (bank.default_account_id.id, bank.suspense_account_id.id)
+    method_accounts = {
+        side: method.payment_account_id.id for side, method in methods.items()
+    }
+    assert bank.suspense_account_id.id == 153
+    assert method_accounts["customer"] == 153
+    today = fields.Date.to_string(fields.Date.context_today(env.user))
+    calls: list[str] = []
+    original_invoke = client.invoke
+
+    def counted_invoke(action: str, payload: dict[str, Any]) -> dict[str, Any]:
+        calls.append(action)
+        return original_invoke(action, payload)
+
+    client.invoke = counted_invoke
+    payment_amounts, writeoff_balances, residuals = {}, {}, {}
+    for supplier in (False, True):
+        side = "supplier" if supplier else "customer"
+        marker = f"ODACV4-{run_id.hex}-{alias}-{side}-payment-difference"
+        invoice_id = core._create_posted_invoice(
+            client, alias, run_id, ids, today, marker, "100", supplier=supplier
+        )
+        capability_id = (
+            "payable.payment.register" if supplier else "receivable.payment.register"
+        )
+        key = f"payment-difference:{alias}:{run_id.hex}:{side}"
+        account_id = ids["income"] if supplier else ids["expense"]
+        parameters = {
+            "move_id": invoice_id,
+            "journal_id": bank.id,
+            "payment_date": today,
+            "amount": "99",
+            "payment_difference_handling": "reconcile",
+            "writeoff_account_id": account_id,
+            "writeoff_label": marker,
+        }
+        result = core._write(
+            client, alias, run_id, capability_id, parameters, explicit_key=key
+        )
+        assert (
+            result["model"] == "account.payment" and result["source_id"] == invoice_id
+        )
+        assert result["company_id"] == _COMPANY_ID and len(result["line_ids"]) == 3
+        changed = {**parameters}
+        if supplier:
+            changed["writeoff_label"] = marker + "-changed"
+        else:
+            changed["writeoff_account_id"] = ids["income"]
+        _payment_difference_conflict(client, alias, run_id, capability_id, changed, key)
+
+        payment = core._cli(
+            client, alias, run_id, "payment.get", {"payment_id": result["id"]}
+        )
+        assert payment["id"] == result["id"] and payment["memo"] == key
+        assert payment["company_id"] == _COMPANY_ID and payment["date"] == today
+        assert payment["journal"]["id"] == bank.id
+        assert payment["payment_method_line"]["id"] == methods[side].id
+        assert (payment["payment_type"], payment["partner_type"]) == (
+            "outbound" if supplier else "inbound",
+            side,
+        )
+        assert Decimal(payment["amount"]) == 99
+        assert (
+            payment["currency"]["id"]
+            == payment["company_currency"]["id"]
+            == ids["currency"]
+        )
+        assert payment["move_id"] == payment["journal_entry"]["id"]
+        documents = payment["reconciled_bills" if supplier else "reconciled_invoices"]
+        assert {item["id"] for item in documents} == {invoice_id}
+        entry = core._cli(
+            client, alias, run_id, "journal_entry.get", {"entry_id": payment["move_id"]}
+        )
+        assert entry["state"] == "posted" and entry["date"] == today
+        assert entry["company_id"] == _COMPANY_ID and entry["journal"]["id"] == bank.id
+        assert len(entry["lines"]) == 3
+        assert {line["id"] for line in entry["lines"]} == set(result["line_ids"])
+        by_account = {line["account"]["id"]: line for line in entry["lines"]}
+        sign = Decimal(-1 if supplier else 1)
+        expected = {
+            method_accounts[side]: sign * 99,
+            term_accounts[side]: sign * -100,
+            account_id: sign,
+        }
+        assert set(by_account) == set(expected)
+        for line_account, balance in expected.items():
+            line = by_account[line_account]
+            assert Decimal(line["balance"]) == balance
+            assert Decimal(line["debit"]) - Decimal(line["credit"]) == balance
+            assert Decimal(line["amount_currency"]) == balance
+        assert by_account[account_id]["name"] == marker
+        assert by_account[term_accounts[side]]["reconciled"] is True
+        assert (
+            Decimal(entry["totals"]["debit"])
+            == Decimal(entry["totals"]["credit"])
+            == 100
+        )
+        assert Decimal(entry["totals"]["balance"]) == 0
+        state = core._cli(
+            client,
+            alias,
+            run_id,
+            "invoice.payment_status.inspect",
+            {"invoice_id": invoice_id},
+        )
+        assert state["state"] == "posted" and Decimal(state["amount_total"]) == 100
+        assert Decimal(state["amount_residual"]) == 0
+        assert state["payment_state"] in {"in_payment", "paid"}
+        assert {item["id"] for item in state["payments"]} == {payment["id"]}
+        assert (
+            len(state["receivable_payable_lines"]) == len(state["reconciliations"]) == 1
+        )
+        term_line = state["receivable_payable_lines"][0]
+        assert (
+            term_line["account"]["id"] == term_accounts[side]
+            and term_line["reconciled"] is True
+        )
+        assert (
+            Decimal(term_line["amount_residual"])
+            == Decimal(term_line["amount_residual_currency"])
+            == 0
+        )
+        match = state["reconciliations"][0]
+        assert (
+            match["payment_id"] == payment["id"] and match["exchange_move_id"] is None
+        )
+        assert match["counterpart_line_id"] == by_account[term_accounts[side]]["id"]
+        assert Decimal(match["company_amount"]) == Decimal(match["amount"]) == 100
+        assert match["id"] in client.tracked["account.partial.reconcile"]
+        payment_amounts[side] = format(Decimal(payment["amount"]).normalize(), "f")
+        writeoff_balances[side] = format(
+            Decimal(by_account[account_id]["balance"]).normalize(), "f"
+        )
+        residuals[side] = [
+            "100",
+            format(Decimal(state["amount_residual"]).normalize(), "f"),
+        ]
+
+    assert len(calls) == 22
+    core._collect_marked(env, client.tracked, run_id.hex)
+    counts = {model: len(records) for model, records in client.tracked.items()}
+    assert counts == {
+        "account.payment": 2,
+        "account.move": 4,
+        "account.move.line": 10,
+        "account.bank.statement.line": 0,
+        "account.partial.reconcile": 2,
+        "account.full.reconcile": 2,
+    }
+    env.invalidate_all()
+    assert (bank.default_account_id.id, bank.suspense_account_id.id) == bank_before
+    assert {
+        side: method.payment_account_id.id for side, method in methods.items()
+    } == method_accounts
+    return {
+        "source_documents": 2,
+        "registered_payments": counts["account.payment"],
+        "cli_calls": len(calls),
+        "immediate_replays": 6,
+        "idempotency_conflicts": 2,
+        "payment_amounts": payment_amounts,
+        "writeoff_balances": writeoff_balances,
+        "source_residuals": residuals,
+        "bank_configuration_unchanged": True,
+        "tracked_records": counts,
+    }
+
+
 def _live_worker(argv: list[str] | None = None) -> int:
     args = _arguments(argv)
     sys.path.insert(0, str(args.odoo_source.resolve(strict=True)))
@@ -1131,6 +1442,9 @@ def _live_worker(argv: list[str] | None = None) -> int:
         if args.refund_only:
             details = _run_refund_chain(client, args.alias, args.run_id)
             assert client.capabilities == _REFUND_CAPABILITIES
+        elif args.payment_difference_only:
+            details = _run_payment_difference_chain(client, args.alias, args.run_id)
+            assert client.capabilities == _PAYMENT_DIFFERENCE_CAPABILITIES
         else:
             _run_chain(client, args.alias, args.run_id)
             assert client.capabilities == _CAPABILITIES

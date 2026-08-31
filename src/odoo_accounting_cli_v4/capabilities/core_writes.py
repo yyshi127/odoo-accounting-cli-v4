@@ -1066,7 +1066,12 @@ def _validate_refund_parameters(parameters: Any) -> dict[str, Any]:
 
 def _validate_payment_register_parameters(parameters: Any) -> dict[str, Any]:
     required = {"move_id", "journal_id", "payment_date"}
-    allowed = required | {"amount"}
+    allowed = required | {
+        "amount",
+        "payment_difference_handling",
+        "writeoff_account_id",
+        "writeoff_label",
+    }
     if not isinstance(parameters, dict) or not required <= set(parameters) <= allowed:
         raise _invalid(
             "Payment registration parameters do not match the fixed contract."
@@ -1082,6 +1087,27 @@ def _validate_payment_register_parameters(parameters: Any) -> dict[str, Any]:
             raise _invalid(
                 "parameters.amount must be a positive canonical decimal string."
             )
+    handling = parameters.get("payment_difference_handling")
+    if "payment_difference_handling" in parameters and handling not in (
+        "open",
+        "reconcile",
+    ):
+        raise _invalid("payment_difference_handling must be 'open' or 'reconcile'.")
+    if handling == "reconcile":
+        if "amount" not in parameters or not _valid_id(
+            parameters.get("writeoff_account_id")
+        ):
+            raise _invalid(
+                "Reconcile requires amount and a positive writeoff_account_id."
+            )
+        if "writeoff_label" in parameters and not _is_bounded_text(
+            parameters["writeoff_label"], 200
+        ):
+            raise _invalid("writeoff_label must be a trimmed 1-200 character string.")
+    elif {"writeoff_account_id", "writeoff_label"} & parameters.keys():
+        raise _invalid(
+            "Write-off fields require payment_difference_handling='reconcile'."
+        )
     return dict(parameters)
 
 
