@@ -2370,7 +2370,7 @@ auditing. Select existing visible analytic accounts if possible; do not change
 analytic configuration, elevate the business user or add an unrelated framework.
 No analytic readback change or live acceptance is claimed by this payment batch.
 
-## 2026-08-31 analytic-distribution readback checkpoint (latest completed batch)
+## 2026-08-31 analytic-distribution readback checkpoint (completed batch)
 
 This accounting-only batch completes existing line-data responses, not new command
 IDs: `invoice.get` lines, `journal_entry.get` lines, and `journal_item.search/get`
@@ -2509,3 +2509,111 @@ and journal fixed-currency constraints without changing configuration. Neither
 follow-up is implemented or accepted by this readback batch. The separate bank
 configuration and installed-addon singleton blockers remain unresolved; this
 batch does not authorize their repair or establish full accounting coverage.
+
+## 2026-08-31 negative-price creation checkpoint (latest completed batch)
+
+This batch extends two existing accounting interfaces, customer_invoice.create
+and vendor_bill.create. Only their price_unit validation changes to the existing
+signed decimal behavior at schema, public-validation and runtime layers. Quantity
+remains positive, discount remains 0-100, all other line/header fields and replay
+fingerprints remain unchanged. No IDs, handlers, bridge actions, schema files or
+control framework are added; the registry remains 355 mixed-domain IDs, not 355
+accounting operations. Stock/picking/physical-return work remains outside scope.
+
+Native source inspection confirms signed line prices are valid. A negative-total
+draft remains possible, but account_move.py's native posting check rejects a
+negative normal invoice/bill using currency rounding; the CLI adds no new total
+policy or automatic conversion to a credit note. Both isolated company-1 fixtures
+use storno accounting. The shared case therefore checks the negative customer
+line as debit 0 / credit -10 and supplier line as debit -10 / credit 0, not only
+an equivalent balance with incorrectly flipped debit/credit sides.
+
+Local validation passed 40 public/schema signed-price cases, 134 runtime cases,
+78 existing bridge/lifecycle cases and 19 selected existing-create cases. The
+reviewed test requests for both aliases passed full registry schema validation;
+missing product_id or discount in replacement lines was rejected. Ruff and
+git diff --check passed. Server selections passed 252 tests / 4 authorization
+skips in 74.55s, followed by 19 existing-create cases in 34.15s; both exits are 0.
+
+The existing analytic-readback shared case is extended, not a new smoke framework
+or authorization flag. Each alias retains 30 CLI calls / 11 capabilities / eight
+immediate replays. It adds a -10 line to the customer invoice (100 + 20 - 10 = 110)
+and supplier bill (100 - 10 = 90), retains distribution replacement/clearing, and
+checks create/read/post totals, residuals, line prices and signed journal items.
+It verified nine current posted journal items and three analytic lines, with
+one temporary analytic account and three documents, all rolled back. Nine is
+not the count of all historically tracked/deleted replacement-line IDs.
+Business execution stays uid 5, su=False, company 1; the existing fresh-cursor
+residual audit is a superuser read-only check, not an elevated business write.
+
+The dual-alias shared run passed: 1 passed in 443.49s, exit 0. Runner/process
+group 2862642 is empty; run ID is 0da7f926-5798-41b8-8687-519b7248962d. Both
+odoo_cli_v4_dev and odoo_cli_v4_e2e returned rollback_verified=true. Preserve
+live-smoke.log and live-smoke.exit; no failed live attempt occurred in this batch.
+Acceptance is untaxed company-currency in-process CLI with real ORM, not external
+bridge transport, durable commit/replay, concurrent execution, foreign currency,
+taxed negative lines or a real cash refund. Negative-total posting refusal was
+checked in native source, not an extra business-write test in this shared run.
+
+Server artifact directory:
+`/opt/odoo-accounting-cli-v4/.tooling/accounting-negative-prices-20260831-1a49a5f6`
+
+- before-code.tgz: seven existing targets, SHA-256
+  `2eecb04d9bbb203fe75ca7f50af0b72e19d327bff767fe079b5286d96127e638`.
+- code.tgz: eight current code/test/schema files, SHA-256
+  `906e78edb62c5f72b3b21341c8c1b94fe23c6714f801af976880b27fee452b0b`.
+- before-docs.tgz: README, STATUS and HANDOFF, SHA-256
+  `a00f52da8acb02492897aca1b9e0a731d12a0a91059c541bae82c110670cfa81`.
+- focused.log: SHA-256
+  `87f13adaa11d29ba968c4db68512f70121790987672b44b27abbf12093d4704d`.
+- existing-create.log: SHA-256
+  `7a235a60853c6c4c027d45f6696b463a5ea4be8b5bd06e07359cc4066fe356b8`.
+- live-smoke.log: SHA-256
+  `e3aa8da8c035b74b87e19c60a3bfef07b2d9eb44afead93e529896f1ef841124`.
+
+code.sha256 identifies the eight deployed code/test/schema files; final.sha256
+adds README, STATUS and HANDOFF for the complete eleven-file checkpoint.
+
+All existing targets matched baseline commit d817a3bca2d16f8907fa253d06077ee0577f9ef1
+before backup; the new unit-test path was absent. Existing owners/modes were
+preserved. The server Git HEAD remains 2e190bcdd70313c0a10dcc479e1a2834db240a50;
+do not reset or pull over its accumulated working-tree changes.
+
+Pre-deployment inspection found an intervening service event: systemd records
+the prior Odoo19 process exiting with a missing-passlib import error at 10:24:11
+CST, then an automatic restart at 10:24:22. This preceded this batch's deployment
+and tests. Current baseline is MainPID 2855713 / NRestarts 3 / active-running;
+the chosen test interpreter imports passlib successfully. No service, dependency,
+installed-source or configuration change/restart was issued by this batch.
+The previous batch's PID 1678372 / restart-count 2 is historical, not this run's
+baseline. The separate bank-account-role and installed-addon blockers remain
+unresolved; their repair and real-business database writes are not authorized.
+
+The post-run audit verified all eight frozen code/test/schema hashes, retained
+archives/logs, the unchanged registry, the installed exchange-rate add-on digest,
+and both earlier bank/deferred failure logs. Odoo19 retained the new baseline
+PID, restart count and activation timestamp; Nginx and PostgreSQL remained active.
+
+### Next accounting work
+
+The remaining compact contract gap is draft invoice.update.changes lacking
+journal_id/currency_id. Read-only inspection of the installed Odoo19 source found:
+
+- Ordinary ORM write invokes the fields' registered inverses; do not simulate UI
+  onchange calls or manually rebuild journal items. Native write handles dynamic
+  lines, numbering and previously-posted protections.
+- Retain the CLI's exact selected-company and invoice-type journal checks.
+  Native journal changes can also change the inferred company, so native branch-
+  company compatibility alone is not sufficient isolation.
+- A journal's currency is a default, not an immutable invoice-currency lock.
+  Native test_account_move_out_invoice.py:3899-3935 explicitly permits a currency-
+  only change to differ from that default; journal-only changes adopt its default
+  at :3954-3975. Existing accounts' forced currencies can still reject the change.
+- Currency changes recompute line currencies, base-currency balances and tax/
+  payment-term lines, not a conversion of the entered unit prices. The installed
+  exchange-rate add-on can select a manual-rate path; do not assume system rates.
+
+These findings are for the next batch only: no header-write implementation or
+live acceptance is claimed here. Reuse the existing update/fingerprint/ORM path
+and verify both ordinary journal/currency edits and native refusal cases without
+changing account/journal configuration, services or installed source.

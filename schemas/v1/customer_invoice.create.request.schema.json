@@ -187,7 +187,7 @@
     "decimal": {
       "type": "string",
       "maxLength": 256,
-      "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
+      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
     },
     "positive_decimal": {
       "type": "string",

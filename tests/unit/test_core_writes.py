@@ -1744,7 +1744,7 @@ def test_decimal_fields_reject_json_numbers_and_noncanonical_text(value) -> None
 
 @pytest.mark.parametrize(
     ("field", "value"),
-    [("quantity", "0"), ("quantity", "-1"), ("price_unit", "-0.01")],
+    [("quantity", "0"), ("quantity", "-1"), ("price_unit", "-01")],
 )
 def test_invoice_amount_signs_match_the_fixed_runtime_contract(
     field: str, value: str

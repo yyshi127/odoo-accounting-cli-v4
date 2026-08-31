@@ -16,7 +16,24 @@ sales/purchase extensions also remain; subtracting 16 does not establish a
 pure-accounting count or a coverage denominator. Registry SHA-256:
 `aa86c26d53290343c1b8ce105aa7945f4f2f93575c99be2e77a6185fbb7acc96`.
 
-The latest completed batch adds analytic-distribution readback to the four existing
+The latest completed batch allows negative unit-price adjustment lines through
+the existing customer_invoice.create and vendor_bill.create interfaces. It reuses
+the signed decimal validators without changing quantities, discounts, native
+posting, access checks or command counts. Eight code/test/schema files are
+deployed and hash-verified after a seven-file backup. Server focused tests passed:
+252 passed and 4 authorization skips in 74.55s; the separate existing-create
+selection passed 19 tests in 34.15s. The shared dual-alias real-ORM case passed:
+1 passed in 443.49s, exit 0. Each alias verified 30 CLI calls / 11 existing
+capabilities / eight immediate replays, customer total 110 and supplier total 90,
+the two negative adjustment lines' native storno debit/credit signs, nine current
+posted journal items, and rollback of all three documents, three analytic lines
+and one temporary analytic account. No worker remains. This covers untaxed,
+company-currency in-process CLI/ORM execution, not external bridge transport,
+durable replay or tax/foreign-currency acceptance. A pre-deployment Odoo automatic
+restart is recorded in HANDOFF; the resulting PID 2855713 / restart-count 3
+remained stable throughout this batch. No service or dependency was modified.
+
+The preceding completed batch adds analytic-distribution readback to the four existing
 invoice.get, journal_entry.get and journal_item.search/get interfaces. Native keys and finite
 signed percentages are preserved; empty distributions read as objects, and no
 new account lookups, write-input expansion, IDs or schema files are introduced.
@@ -54,12 +71,11 @@ transport, durable replay, early-payment discounts, foreign currency or bank
 matching. No worker remains, and Odoo19 state and the installed add-on digest
 remain unchanged. See HANDOFF.md for retained logs and recovery files.
 
-Subsequent read-only review found two concrete accounting gaps: draft invoice.update
-does not expose journal_id/currency_id, and customer_invoice.create/vendor_bill.create
-reject negative unit-price adjustment lines although invoice.lines.replace already
-accepts signed prices. Neither gap has been implemented or live-verified by this
-readback batch. Continue with a coherent existing-command workflow rather than
-adding inventory IDs or treating mixed-domain command totals as completion.
+The negative-price creation gap is completed above; signed line replacement
+already existed and is not a new command. The separate draft invoice.update gap
+still lacks journal_id/currency_id and has not been implemented. Continue with
+coherent existing-command workflows rather than adding inventory IDs or treating
+mixed-domain command totals as completion.
 
 Independent accounting dates extend three existing invoice/bill commands.
 Their 14-capability CLI/ORM lifecycle smoke passed

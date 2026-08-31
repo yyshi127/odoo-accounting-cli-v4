@@ -304,7 +304,10 @@ def _run_worker(
                 "immediate_replays": 8,
                 "modified_lines": 1,
                 "cleared_lines": 1,
-                "posted_journal_items": 7,
+                "posted_journal_items": 9,
+                "negative_price_lines": 2,
+                "customer_total": "110",
+                "vendor_total": "90",
                 "analytic_accounts": 1,
                 "analytic_lines": 3,
                 "analytic_distributions_verified": True,
@@ -1445,6 +1448,7 @@ def _run_analytic_readback_chain(
     env = client.env
     assert env.uid == _USER_ID and env.su is False
     assert env.context["allowed_company_ids"] == [_COMPANY_ID]
+    assert env.company.account_storno is True
     ids = _fixture_ids(env, alias)
     plan = _one(
         env["account.analytic.plan"].search(
@@ -1513,6 +1517,15 @@ def _run_analytic_readback_chain(
             "price_unit": "20",
         }
     )
+    for kind in ("customer", "supplier"):
+        parameters[kind]["lines"].append(
+            {
+                **parameters[kind]["lines"][0],
+                "name": marker + "-" + kind + "-adjustment",
+                "price_unit": "-10",
+                "analytic_distribution": None,
+            }
+        )
     parameters["entry"] = {
         "journal_id": ids["general_journal"],
         "date": today,
@@ -1561,6 +1574,26 @@ def _run_analytic_readback_chain(
         assert {
             line["name"]: line["analytic_distribution"] for line in document["lines"]
         } == expected[kind]
+        if not entry:
+            prices = {
+                line["name"]: Decimal(line["price_unit"])
+                for line in parameters[kind]["lines"]
+            }
+            for line in document["lines"]:
+                assert Decimal(line["quantity"]) == 1
+                assert Decimal(line["discount"]) == 0 and line["taxes"] == []
+                assert all(
+                    Decimal(line[field]) == prices[line["name"]]
+                    for field in ("price_unit", "price_subtotal", "price_total")
+                )
+            total = Decimal("110" if kind == "customer" else "90")
+            assert (
+                sum(prices.values()) == total and Decimal(document["amount_tax"]) == 0
+            )
+            assert all(
+                Decimal(document[field]) == total
+                for field in ("amount_untaxed", "amount_total", "amount_residual")
+            )
         return document
 
     for kind, capability_id in (
@@ -1598,6 +1631,8 @@ def _run_analytic_readback_chain(
 
     posted_ids: set[int] = set()
     analytic_source_ids: set[int] = set()
+    negative_price_ids: set[int] = set()
+    document_totals: dict[str, str] = {}
     for kind, move_id in moves.items():
         posted = _dispatch_twice(
             client,
@@ -1617,19 +1652,53 @@ def _run_analytic_readback_chain(
         )
         assert page["has_more"] is False and page["next_cursor"] is None
         items = {item["id"]: item for item in page["items"]}
-        assert len(items) == len(page["items"]) == (3 if kind == "customer" else 2)
+        assert (
+            len(items)
+            == len(page["items"])
+            == {"customer": 4, "supplier": 3, "entry": 2}[kind]
+        )
         assert set(items) == set(posted["line_ids"])
         posted_ids.update(items)
         expected_by_id = {
             line["id"]: line["analytic_distribution"] for line in document["lines"]
         }
         assert set(expected_by_id) <= set(items)
+        sources = {line["name"]: line for line in parameters[kind]["lines"]}
+        balances = {}
+        for line in document["lines"]:
+            source = sources[line["name"]]
+            assert items[line["id"]]["account"]["id"] == source["account_id"]
+            balances[line["id"]] = (
+                Decimal(source["debit"]) - Decimal(source["credit"])
+                if kind == "entry"
+                else Decimal(source["price_unit"]) * (-1 if kind == "customer" else 1)
+            )
+        if kind != "entry":
+            term_ids = set(items) - set(balances)
+            assert len(term_ids) == 1
+            balances[term_ids.pop()] = -sum(balances.values())
+            negative_price_ids.update(
+                line["id"]
+                for line in document["lines"]
+                if Decimal(line["price_unit"]) < 0
+            )
+            document_totals[kind] = format(
+                Decimal(document["amount_total"]).normalize(), "f"
+            )
+        assert set(balances) == set(items)
         for line_id, item in items.items():
             assert item["company_id"] == _COMPANY_ID and item["date"] == today
             assert item["move"]["id"] == move_id and item["move"]["state"] == "posted"
             assert item["analytic_distribution"] == expected_by_id.get(line_id, {})
+            assert Decimal(item["balance"]) == balances[line_id]
+            assert Decimal(item["debit"]) - Decimal(item["credit"]) == balances[line_id]
+            if line_id in negative_price_ids:
+                assert (Decimal(item["debit"]), Decimal(item["credit"])) == (
+                    (0, -10) if kind == "customer" else (-10, 0)
+                )
             if item["analytic_distribution"]:
                 analytic_source_ids.add(line_id)
+        assert sum(Decimal(item["balance"]) for item in items.values()) == 0
         selected = [
             line
             for line in document["lines"]
@@ -1642,7 +1711,8 @@ def _run_analytic_readback_chain(
             )
             assert item == items[line["id"]]
 
-    assert len(calls) == 30 and len(posted_ids) == 7
+    assert len(calls) == 30 and len(posted_ids) == 9
+    assert len(negative_price_ids) == 2
     assert len(analytic_source_ids) == 3
     core._collect_marked(env, client.tracked, run_id.hex)
     analytic_lines = (
@@ -1673,6 +1743,9 @@ def _run_analytic_readback_chain(
         "modified_lines": 1,
         "cleared_lines": 1,
         "posted_journal_items": len(posted_ids),
+        "negative_price_lines": len(negative_price_ids),
+        "customer_total": document_totals["customer"],
+        "vendor_total": document_totals["supplier"],
         "analytic_accounts": len(client.tracked["account.analytic.account"]),
         "analytic_lines": len(analytic_lines),
         "analytic_distributions_verified": True,

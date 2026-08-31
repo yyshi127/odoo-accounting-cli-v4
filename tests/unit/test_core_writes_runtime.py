@@ -1605,6 +1605,68 @@ def test_document_create_uses_business_orm_and_replays_exact_key(
 
 
 @pytest.mark.parametrize(
+    "capability_id", ["customer_invoice.create", "vendor_bill.create"]
+)
+@pytest.mark.parametrize("prices", [("100", "-10"), ("-10.00",)])
+def test_document_create_preserves_signed_prices_and_replays(
+    capability_id: str, prices: tuple[str, ...]
+) -> None:
+    env = Env()
+    parameters = _document_parameters(env, capability_id)
+    template = parameters["lines"][0]
+    parameters["lines"] = [
+        {**template, "name": f"Line {index}", "quantity": "1", "price_unit": price}
+        for index, price in enumerate(prices)
+    ]
+    payload = _payload(capability_id, parameters)
+
+    first = writes.dispatch(env, payload, 7, Failure)
+    replay = writes.dispatch(env, payload, 7, Failure)
+
+    assert first["idempotent_replay"] is False
+    assert replay["idempotent_replay"] is True
+    assert first["result"] == replay["result"]
+    creates = [call for call in env.calls if call[:2] == ("create", "account.move")]
+    assert len(creates) == 1
+    assert [line[2]["price_unit"] for line in creates[0][2]["invoice_line_ids"]] == [
+        Decimal(price) for price in prices
+    ]
+    assert all(call[0] != "sudo" for call in env.calls)
+
+    changed = copy.deepcopy(payload)
+    changed["parameters"]["lines"][-1]["price_unit"] = "-11"
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(env, changed, 7, Failure)
+    assert caught.value.code == "idempotency_conflict"
+    assert sum(call[:2] == ("create", "account.move") for call in env.calls) == 1
+
+
+@pytest.mark.parametrize(
+    "capability_id", ["customer_invoice.create", "vendor_bill.create"]
+)
+@pytest.mark.parametrize(
+    "invalid_line",
+    [
+        {"price_unit": "-01"},
+        {"price_unit": -10},
+        {"price_unit": "NaN"},
+        {"quantity": "-1"},
+        {"discount": "101"},
+    ],
+)
+def test_document_create_signed_prices_keep_other_input_boundaries(
+    capability_id: str, invalid_line: dict[str, Any]
+) -> None:
+    env = Env()
+    parameters = _document_parameters(env, capability_id)
+    parameters["lines"][0].update({"price_unit": "-10", **invalid_line})
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(env, _payload(capability_id, parameters), 7, Failure)
+    assert caught.value.code == "bridge_protocol_error"
+    assert env.calls == []
+
+
+@pytest.mark.parametrize(
     "capability_id", ["customer_invoice.create", "vendor_bill.create", "invoice.update"]
 )
 @pytest.mark.parametrize("invalid_date", [None, False, "2025-02-29", "20250301"])

@@ -131,6 +131,20 @@ representation, not a newly accepted write input. `invoice.lines.replace`
 replaces the entire invoice line set, so retain the other lines and fields you
 intend to keep.
 
+## Negative unit-price invoice adjustments
+
+`customer_invoice.create` and `vendor_bill.create` accept signed decimal strings
+for line `price_unit`, matching the existing `invoice.lines.replace` behavior.
+For example, untaxed lines with quantity `"1"` and prices `"100"` and `"-10"`
+produce a total of `90`. Quantities must still be positive, discounts remain
+between 0 and 100, and amounts must be strings rather than JSON numbers.
+
+Odoo still computes taxes, totals and journal items. A negative-total draft is
+not automatically converted into a credit note; native posting rejects a normal
+invoice or bill with a negative total under its currency-rounding rules. Use the
+appropriate financial credit-note/refund workflow instead. In storno companies,
+negative adjustment lines retain native negative debit/credit signs on readback.
+
 ## Invoice and bill accounting dates
 
 `customer_invoice.create` and `vendor_bill.create` accept an optional `date`

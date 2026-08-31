@@ -2629,7 +2629,7 @@ def _valid_document_lines(value: Any) -> bool:
             not _is_text(line["name"])
             or not _is_id(line["account_id"])
             or _decimal(line["quantity"], positive=True) is None
-            or _decimal(line["price_unit"]) is None
+            or _signed_decimal(line["price_unit"]) is None
             or (
                 "product_id" in line
                 and line["product_id"] is not None

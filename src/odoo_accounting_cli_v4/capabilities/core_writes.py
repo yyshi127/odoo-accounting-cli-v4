@@ -741,10 +741,8 @@ def _validate_invoice_parameters(parameters: Any) -> dict[str, Any]:
         quantity = _decimal(line["quantity"], signed=False)
         if quantity is None or quantity <= 0:
             raise _invalid("Invoice line quantity must be a positive decimal string.")
-        if _decimal(line["price_unit"], signed=False) is None:
-            raise _invalid(
-                "Invoice line price_unit must be a nonnegative decimal string."
-            )
+        if _decimal(line["price_unit"], signed=True) is None:
+            raise _invalid("Invoice line price_unit must be a signed decimal string.")
         if "product_id" in line and not _valid_optional_id(line["product_id"]):
             raise _invalid(
                 "Invoice line product_id must be null or a positive integer."
