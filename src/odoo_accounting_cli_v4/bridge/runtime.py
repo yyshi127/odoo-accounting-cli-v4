@@ -12,6 +12,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, TextIO
 
+from odoo_accounting_cli_v4.bridge import financial_report_journals
 from odoo_accounting_cli_v4.config import ConfigError, load_runtime_config
 
 _MAX_REQUEST_CHARS = 1024 * 1024
@@ -5728,6 +5729,12 @@ def _dispatch_financial_report(
         required_keys.add("journal_id")
     if spec.get("partner_parameter") is True:
         required_keys.add("partner_id")
+    journal_ids = None
+    if "journal_ids" in payload and spec["key"] in financial_report_journals.REPORT_KEYS:
+        required_keys.add("journal_ids")
+        journal_ids = financial_report_journals.validate_journal_ids(
+            payload["journal_ids"], RuntimeFailure
+        )
     _require_keys(payload, required_keys)
     limit = payload["limit"]
     after_line_id = payload["after_line_id"]
@@ -5786,6 +5793,8 @@ def _dispatch_financial_report(
     required_models = spec.get(
         "models", ("account.report", "account.move.line", "res.currency")
     )
+    if journal_ids is not None:
+        required_models = (*required_models, "account.journal")
     models_installed = all(
         env.registry.get(model_name) is not None for model_name in required_models
     )
@@ -5842,6 +5851,10 @@ def _dispatch_financial_report(
             "filter": "custom",
         },
     }
+    if journal_ids is not None:
+        previous_options["journals"] = financial_report_journals.journal_options(
+            env, company_id, journal_ids, RuntimeFailure
+        )
     if spec.get("journal_parameter") is True:
         journal_available = bool(
             env["account.journal"]
@@ -5986,6 +5999,10 @@ def _dispatch_financial_report(
     ):
         raise RuntimeFailure(
             "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
+    if journal_ids is not None:
+        financial_report_journals.verify_journal_options(
+            effective_report, options, journal_ids, RuntimeFailure
         )
     information = (
         effective_report.get_report_information_readonly(options)

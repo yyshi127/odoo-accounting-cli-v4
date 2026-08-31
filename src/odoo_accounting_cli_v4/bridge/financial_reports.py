@@ -29,6 +29,14 @@ _ACTIONS = {
     "report.followup": "account.report.followup.read_page",
 }
 _EXPORT_ACTION = "account.report.fixed_export"
+_JOURNAL_FILTER_REPORTS = frozenset(
+    {
+        "report.trial_balance",
+        "report.balance_sheet",
+        "report.profit_and_loss",
+        "report.general_ledger",
+    }
+)
 _EXPORT_CAPABILITY_IDS = frozenset(
     {
         "report.trial_balance.export",
@@ -58,6 +66,22 @@ class BridgeClient(Protocol):
     def invoke(self, action: str, payload: dict[str, Any]) -> dict[str, Any]: ...
 
 
+def _journal_ids(capability_id: str, value: Any) -> list[int]:
+    if capability_id.removesuffix(".export") not in _JOURNAL_FILTER_REPORTS:
+        raise ValueError("journal_ids is unsupported for this financial report.")
+    if (
+        not isinstance(value, list)
+        or not 1 <= len(value) <= 1000
+        or any(
+            not isinstance(item, int) or isinstance(item, bool) or item <= 0
+            for item in value
+        )
+        or len(value) != len(set(value))
+    ):
+        raise ValueError("journal_ids must contain 1-1000 unique positive integer IDs.")
+    return sorted(value)
+
+
 class OdooFinancialReportPort:
     def __init__(
         self, client: BridgeClient, capability_id: str = "report.trial_balance"
@@ -68,6 +92,7 @@ class OdooFinancialReportPort:
             raise ValueError("Unsupported financial-report capability.") from exc
         self._client = client
         self._action = action
+        self._capability_id = capability_id
         self._requires_journal_id = capability_id == "report.bank_reconciliation"
         self._requires_partner_id = capability_id in {
             "report.customer_statement",
@@ -91,6 +116,7 @@ class OdooFinancialReportPort:
         limit: int,
         journal_id: int | None = None,
         partner_id: int | None = None,
+        journal_ids: list[int] | None = None,
     ) -> dict[str, Any]:
         self._user_id = None
         if self._requires_journal_id:
@@ -122,6 +148,8 @@ class OdooFinancialReportPort:
             payload["journal_id"] = journal_id
         if partner_id is not None:
             payload["partner_id"] = partner_id
+        if journal_ids is not None:
+            payload["journal_ids"] = _journal_ids(self._capability_id, journal_ids)
         page = self._client.invoke(
             self._action,
             payload,
@@ -187,6 +215,7 @@ class OdooFinancialReportExportPort:
         date_from: str | None,
         date_to: str,
         format: str,
+        journal_ids: list[int] | None = None,
     ) -> dict[str, Any]:
         self._user_id = None
         if (
@@ -194,16 +223,16 @@ class OdooFinancialReportExportPort:
             or capability_id not in _EXPORT_CAPABILITY_IDS
         ):
             raise ValueError("Unsupported financial-report export capability.")
-        page = self._client.invoke(
-            _EXPORT_ACTION,
-            {
-                "capability_id": capability_id,
-                "company_id": company_id,
-                "date_from": date_from,
-                "date_to": date_to,
-                "format": format,
-            },
-        )
+        payload = {
+            "capability_id": capability_id,
+            "company_id": company_id,
+            "date_from": date_from,
+            "date_to": date_to,
+            "format": format,
+        }
+        if journal_ids is not None:
+            payload["journal_ids"] = _journal_ids(capability_id, journal_ids)
+        page = self._client.invoke(_EXPORT_ACTION, payload)
         expected = {
             "user_id",
             "company_visible",

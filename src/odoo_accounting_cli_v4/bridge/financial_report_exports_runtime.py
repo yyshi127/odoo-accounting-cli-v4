@@ -7,6 +7,8 @@ import hashlib
 from datetime import date
 from typing import Any
 
+from odoo_accounting_cli_v4.bridge import financial_report_journals
+
 ACTION = "account.report.fixed_export"
 MAX_FILE_BYTES = 64 * 1024 * 1024
 CAPABILITY_SPECS = {
@@ -213,7 +215,9 @@ def _reference_id(value: Any, failure_type: Any) -> int | None:
 def _validated_payload(
     payload: Any, company_id: int, failure_type: Any
 ) -> tuple[dict[str, Any], str, str | None, str, str]:
-    if not isinstance(payload, dict) or set(payload) != _PAYLOAD_KEYS:
+    if not isinstance(payload, dict) or not (
+        _PAYLOAD_KEYS <= set(payload) <= _PAYLOAD_KEYS | {"journal_ids"}
+    ):
         raise _protocol_failure(failure_type)
 
     capability_id = payload["capability_id"]
@@ -239,6 +243,12 @@ def _validated_payload(
             "The company is unavailable.",
             3,
         )
+    if "journal_ids" in payload:
+        if capability_id not in {
+            f"report.{key}.export" for key in financial_report_journals.REPORT_KEYS
+        }:
+            raise _protocol_failure(failure_type)
+        financial_report_journals.validate_journal_ids(payload["journal_ids"], failure_type)
 
     spec = CAPABILITY_SPECS[capability_id]
     if (
@@ -298,11 +308,14 @@ def dispatch(
     spec, _capability_id, date_from, date_to, file_format = _validated_payload(
         payload, company_id, failure_type
     )
+    journal_ids = sorted(payload["journal_ids"]) if "journal_ids" in payload else None
     company_model = env["res.company"]
     company_visible = bool(
         company_model.search_count([("id", "=", company_id)], limit=1)
     )
     required_models = spec.get("models", ("account.report",))
+    if journal_ids is not None:
+        required_models = (*required_models, "account.journal")
     models_installed = all(
         env.registry.get(model_name) is not None for model_name in required_models
     )
@@ -360,6 +373,10 @@ def dispatch(
             "filter": "custom",
         },
     }
+    if journal_ids is not None:
+        previous_options["journals"] = financial_report_journals.journal_options(
+            env, company_id, journal_ids, failure_type
+        )
     scoped_root_report = root_report.with_context(allowed_company_ids=[company_id])
     options = scoped_root_report.get_options(previous_options)
     report_id = options.get("report_id") if isinstance(options, dict) else None
@@ -373,6 +390,10 @@ def dispatch(
     report_model = env["account.report"]
     scoped_report_model = report_model.with_context(allowed_company_ids=[company_id])
     effective_report = scoped_report_model.browse(report_id)
+    if journal_ids is not None:
+        financial_report_journals.verify_journal_options(
+            effective_report, options, journal_ids, failure_type
+        )
     export_action = f"export_to_{file_format}"
     if spec.get("dispatch_export") is True:
         native = effective_report.dispatch_report_action(options, export_action)

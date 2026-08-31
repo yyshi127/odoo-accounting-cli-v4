@@ -25,9 +25,12 @@ the Odoo source/add-on tree while building CLI capabilities.
   near the end of this document.
 - The subsequent independent-accounting-date implementation is checkpoint
   `63b5288`; its 14-capability lifecycle passed on both isolated aliases. The
-  current financial credit-note auto/undo/apply acceptance is recorded at the
+  financial credit-note auto/undo/apply acceptance is recorded near the
   end of this document: all 11 existing capabilities passed on both aliases,
   with rollback verification and no new production interfaces.
+- The current eight-interface financial-report journal-filter extension is
+  implemented, with local and focused server tests passing. Its shared dual-alias
+  read-only acceptance passed in 465.22s; see the newest checkpoint at the end.
 - These totals include historical inventory, sales, and purchase extensions.
   They are neither a count of pure-accounting commands nor a completion
   percentage for the accounting module. Picking, delivery, and stock-return
@@ -2103,3 +2106,133 @@ refund alias has 87 CLI calls across 11 IDs, including 40 write invocations with
 replays. The profiler's extra runtime is not a normal-operation timing, and the
 server's exact cost distribution was not measured. No production caching or
 validation bypass was introduced while this live test was running.
+
+## 2026-08-31 financial-report journal filtering (passed)
+
+This batch extends eight existing interfaces without adding IDs, handlers or
+schema files: report.trial_balance, report.general_ledger, report.balance_sheet,
+report.profit_and_loss and their four .export counterparts. It does not add
+logistics commands. The registry remains 355 IDs/340 enabled handlers/685 schemas;
+these historical mixed-domain totals are not pure-accounting coverage.
+
+The optional parameters.journal_ids accepts 1-1000 distinct positive integers.
+IDs are sorted without mutating the request. Omission preserves existing
+unfiltered behavior, validator tuples, bridge payloads and cursor structure.
+Filtered cursors contain the SHA-256 of the canonical ID set, keeping them within
+the existing size limit even with 1000 IDs. Changing the set, or switching between
+filtered and unfiltered requests, requires starting a new page sequence.
+
+The native source and both isolated databases confirmed filter_journals=true for
+the four selected reports, but false for partner_ledger. The latter is explicitly
+excluded; no report settings or installed source were changed. Runtime checks
+account.journal read access and exact company-scoped visibility, builds native
+journal options, and verifies the final effective report retained the exact
+selection. Native all-selected normalization is checked via
+_get_options_journals, not by assuming individual selected flags stay true.
+Missing, inaccessible, foreign-company or unsupported selections fail explicitly
+instead of broadening the report. Posted-entry basis is unchanged.
+
+Relevant local selections passed: 164 public journal-filter tests, 120 existing
+public report/bridge/CLI tests (8 runtime cases deselected there), and 114 runtime
+tests including the 36 new cases. These are distinct selections, not cumulative
+rerun totals. Ruff and git diff --check pass. The server focused run passed
+266 tests in 8.18s, with 2 authorization skips and the 12 already-tested public
+CLI cases deselected. Skips are not live acceptance evidence. Focused log SHA-256:
+`6494e0bd77e6aef513ecdcced28e47e87d1c065ac4b8a208d304c6eb7033a909`.
+
+The existing financial-report-export live test now has a separate
+ODACV4_ALLOW_FINANCIAL_REPORT_JOURNAL_FILTER_SMOKE=1 case. The original 19-report
+export case and its own authorization remain intact. The new case uses uid 5,
+company 1 and existing posted sale/purchase fixtures in each exact isolated
+database, with SET TRANSACTION READ ONLY and finally rollback/close. It makes
+30 real in-process CLI calls per alias across the eight interfaces: 16 exports,
+single/multiple/all journal selection, the unfiltered baseline and pagination.
+One deliberate invalid-cursor call must stop before the bridge, leaving 29
+runtime calls. Trial-balance period debit/credit vectors are checked against
+native posted journal items. Eight XLSX files per alias had
+their complete nonzero numeric rows checked: the six trial-balance/balance-sheet/
+profit-and-loss files against JSON with native folding, and the two general-ledger
+files against independently requested native print-mode lines, including expanded
+detail. PDF checks cover structure, byte count and hash, not extracted numeric
+content. This is not external bridge transport, business-data writes or durable
+commit/replay proof.
+
+The first run failed in v4-dev after 76.53s, exit 1. Trial-balance sale/purchase
+JSON and both export formats had passed their checks; the general-ledger sale
+XLSX comparison then expected each account vector once but observed it twice.
+Installed account_general_ledger.py:26-27 forces unfold_all when export_mode is
+print and no explicit unfolded_lines are given. The XLSX exporter sets that mode
+before get_options (account_report.py:6104,6112), then obtains the expanded lines
+(6256-6257). Each fixture account has one journal item, so its summary and detail
+naturally have the same amount. A folded JSON Counter was the wrong expectation;
+this does not call for changing production export behavior or weakening amount
+checks. The original failed log is preserved with SHA-256
+`c917a984400741fe3ec1e3d718e40eed66bdf84cf6859eb8a706def4d886eb3b`.
+The worker's finally block rolled back/closed; launcher/process group 2750449
+has finished. The corrected second shared run passed: `1 passed in 465.22s
+(0:07:45)`, exit 0, with both v4-dev and v4-e2e successful. Only the GL test oracle
+changed, not production code. Launcher/process group 2758410 has finished as well.
+Its artifacts use live-smoke-attempt2.{log,exit,pid}, preserving the original
+failure separately. Each worker returned its summary after rollback/close:
+30 CLI calls, 16 exports, 8 XLSX amount checks, combined/all journal selection,
+unfiltered baseline and pagination. Sale and purchase period debit/credit totals
+are each 113 in both aliases; their per-account vectors differ, which is the
+meaningful filter check. Corrected live log SHA-256:
+`0ee1df510bb9297fe7b1177665868ce6406fa7b8cbc8f32f3c3ea22a6007755b`.
+Artifacts are under
+`/opt/odoo-accounting-cli-v4/.tooling/accounting-report-journals-20260831-8e673c1a/`:
+
+- live-smoke.log, live-smoke.exit and live-smoke.pid retain the original failed
+  attempt; live-smoke-attempt2.* records the corrected successful shared run.
+- All 16 existing target files matched pre-batch commit 5281dcf before overwrite;
+  the three new source/test paths were absent. Their backup is
+  overwritten-files.tgz, SHA-256
+  `80eccf36e80df6fc22fd89c880b438202f67f6bc77765164be303d566e98dd97`.
+- The initial 17-file code/README upload is code.tgz, SHA-256
+  `4d4095e0cbdf7dbeaafe8597d63c2a664ca448d66a1dd5dcdcf9e60a20322f4b`.
+  All deployed file hashes were verified, original modes/owners restored, and
+  the three new files use mode 644/uid 999/gid 1003. The final handoff/status
+  updates are the other two files in this 19-file checkpoint.
+- The corrected one-file test upload is attempt2-test.tgz, SHA-256
+  `fc727470341fcebf9e02c039d3ab5378856ef9f5a03c283b0e66eeed7ba86e4d`.
+  Corrected test SHA-256:
+  `1aabe541290a0cdbd9aca8fc93b100f77800f31382e3fe1c136948ac140fc30f`.
+- Before the run, Odoo19 remained active/running with MainPID 1678372,
+  NRestarts 2 and activation timestamp 2026-08-30 10:25:07 CST. The registry and
+  installed exchange-rate add-on digests were unchanged. No service control,
+  database configuration or installed add-on modification was issued.
+
+The post-run read-only audit verified all 17 deployed code/README/test files
+still matched their frozen local versions. Both process groups have finished.
+Odoo19 retained the same active/running status, MainPID, restart count and
+activation timestamp. Registry, installed exchange-rate add-on, the original
+failed report-filter log/backup, and the earlier failed bank/deferred workflow
+logs retained their recorded digests. The server Git checkout still has its
+older HEAD 2e190bc; accumulated working-tree changes were preserved, not reset
+or pulled over. This batch does not repair the separate bank or add-on blockers.
+
+### Next verified accounting gaps (not implemented by this batch)
+
+Prioritize explicit payment-difference settlement on the existing receivable/
+payable payment.register interfaces: for example, settle a 100-unit invoice with
+99 cash and a caller-selected 1-unit write-off account. Current explicit-amount
+registration forces payment_difference_handling=open; the native payment wizard
+supports reconciliation/write-off fields. The existing reconciliation.write_off
+command requires a bank transaction and does not fill this payment-wizard gap.
+Native early-payment-discount behavior may already apply in other paths, so this
+is not a claim that every kind of write-off is unavailable. The proposed narrow
+single-invoice, base-currency path still needs implementation and live evidence;
+source/ACL inspection alone is not proof that it passes. Preserve the current
+omitted-amount behavior, including native early-payment discounts, rather than
+globally forcing open. Existing payment replay validation compares source,
+amount, date and journal; the extension must also reject same-key changes to
+write-off mode/account/label. Reuse the existing schemas, public validator and
+runtime; the generic parameter bridge and response need no new framework.
+
+Other bounded existing-interface gaps: invoice.update cannot change journal_id
+or currency_id although create accepts them; create does not accept a negative
+adjustment price although line replacement does; analytic_distribution is
+writable but absent from invoice/journal-item readback, obstructing lossless line
+editing. These are independent of the unresolved bank-account-role conflict and
+installed add-on singleton defect. Do not keep repeating those blocked workflows,
+change configuration/add-ons without authority, or expand inventory command counts.

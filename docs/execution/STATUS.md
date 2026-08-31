@@ -16,8 +16,8 @@ sales/purchase extensions also remain; subtracting 16 does not establish a
 pure-accounting count or a coverage denominator. Registry SHA-256:
 `21b6a57b0bd3b7f17432663de5c82c25b0d63a38c8c9ed6bad2e58732c75572e`.
 
-The latest completed implementation adds independent accounting dates to three
-existing invoice/bill commands. Its 14-capability CLI/ORM lifecycle smoke passed
+Independent accounting dates extend three existing invoice/bill commands.
+Their 14-capability CLI/ORM lifecycle smoke passed
 on both isolated aliases with rollback verification. The subsequent financial
 credit-note settlement acceptance passed on both aliases: 11 existing commands,
 zero new production interfaces, and customer/supplier residuals of 120, 80, then
@@ -26,6 +26,25 @@ trial balance and fresh-cursor rollback were verified. The shared smoke passed
 in 1293.65s with exit 0; this is in-process CLI/real-ORM evidence, not a
 cross-process bridge or durable commit/replay test. See
 [HANDOFF.md](HANDOFF.md) for exact batch evidence and recovery artifacts.
+
+The current implementation adds optional `journal_ids` to eight existing report
+interfaces: trial balance, general ledger, balance sheet and profit and loss,
+each with JSON reads and PDF/XLSX export. It adds no command IDs or schema files.
+The configured native partner ledger does not support journal selection and is
+not included. Existing unfiltered requests remain compatible; pagination binds
+the selected journal set, and unavailable selections cannot silently become an
+all-journal report. Local relevant tests passed, followed by 266 focused server
+tests (2 authorization skips and 12 already-tested CLI cases deselected).
+The first shared read-only live run failed in v4-dev at the general-ledger XLSX
+comparison: native print export unfolds journal-item detail, unlike the ordinary
+JSON result. The test expectation has been corrected against independently
+requested native print-mode lines; production filtering did not change for this
+test correction. The separate corrected shared run passed both v4-dev and v4-e2e:
+`1 passed in 465.22s`, exit 0. Each alias verified all 8 interfaces, 30 CLI calls,
+16 exports, combined/all journal selection, the unfiltered baseline and pagination.
+Trial-balance amounts matched posted journal items; all 8 XLSX amount comparisons
+per alias passed. PDF checks cover structure and hash, not extracted amounts.
+Both transactions were read-only and rolled back/closed, and no worker remains.
 
 Two separate real-workflow blockers remain unresolved: the isolated bank journal
 uses the same account for suspense and outstanding payments, and the installed

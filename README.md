@@ -16,6 +16,36 @@ python3 -m venv .venv
 
 The private Odoo source snapshot, raw generation transcripts, environment evidence, credentials, databases, logs, runtime state, and installed release directories are intentionally excluded from Git and release artifacts.
 
+## Financial reports by journal
+
+`report.trial_balance`, `report.general_ledger`, `report.balance_sheet`, and
+`report.profit_and_loss`, plus their `.export` commands, accept optional
+`journal_ids` inside `parameters`. For example, a range-report parameter excerpt:
+
+```json
+{
+  "date_from": "2025-01-01",
+  "date_to": "2025-12-31",
+  "journal_ids": [9, 10]
+}
+```
+
+Use IDs returned by `journal.list` for the selected company; the example IDs
+are not universal. Balance sheet uses `as_of` instead of a date range. File
+exports also require `format` (`pdf` or `xlsx`). The filter uses Odoo's native
+journal selection and retains the existing posted-entry report basis.
+
+Supply 1-1000 distinct positive integer IDs. Omit `journal_ids` for the existing
+unfiltered behavior; `null` and an empty list are not accepted. Missing,
+inaccessible or other-company journals cannot silently become an all-journal
+report. If the effective native report does not support the selection, the
+command fails rather than returning an unfiltered result.
+
+Pagination cursors bind the selected journal set. Reordering the same IDs is
+allowed, but changing the set or switching between filtered and unfiltered
+requests requires a new first page. Other reports, including the currently
+configured partner ledger, do not accept this optional parameter.
+
 ## Financial credit notes and settlement
 
 `customer_credit_note.create` and `vendor_refund.create` create draft financial

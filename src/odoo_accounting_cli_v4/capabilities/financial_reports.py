@@ -86,6 +86,14 @@ FINANCIAL_REPORT_EXPORTS = {
     },
 }
 FINANCIAL_REPORT_EXPORT_CAPABILITY_IDS = frozenset(FINANCIAL_REPORT_EXPORTS)
+_JOURNAL_FILTER_REPORTS = frozenset(
+    {
+        TRIAL_BALANCE_CAPABILITY_ID,
+        BALANCE_SHEET_CAPABILITY_ID,
+        PROFIT_AND_LOSS_CAPABILITY_ID,
+        GENERAL_LEDGER_CAPABILITY_ID,
+    }
+)
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 1000
 _CURSOR_VERSION = 1
@@ -165,6 +173,7 @@ class FinancialReportPort(Protocol):
         limit: int,
         journal_id: int | None = None,
         partner_id: int | None = None,
+        journal_ids: list[int] | None = None,
     ) -> dict[str, Any]: ...
 
 
@@ -180,6 +189,7 @@ class FinancialReportExportPort(Protocol):
         date_from: str | None,
         date_to: str,
         format: str,
+        journal_ids: list[int] | None = None,
     ) -> dict[str, Any]: ...
 
 
@@ -214,6 +224,25 @@ def _is_integer(value: Any) -> bool:
 
 def _valid_id(value: Any) -> bool:
     return _is_integer(value) and value > 0
+
+
+def _journal_ids(parameters: dict[str, Any]) -> list[int] | None:
+    if "journal_ids" not in parameters:
+        return None
+    value = parameters["journal_ids"]
+    if (
+        not isinstance(value, list)
+        or not 1 <= len(value) <= MAX_LIMIT
+        or not all(_valid_id(item) for item in value)
+        or len(value) != len(set(value))
+    ):
+        raise _invalid("journal_ids must contain 1-1000 unique positive integer IDs.")
+    return sorted(value)
+
+
+def _journal_ids_digest(journal_ids: list[int]) -> str:
+    payload = json.dumps(journal_ids, separators=(",", ":")).encode("ascii")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _nonempty_string(value: Any) -> bool:
@@ -299,8 +328,15 @@ def validate_trial_balance_request(
     request: Any,
 ) -> tuple[dict[str, Any], str, str, int, str | None]:
     context, parameters = _validate_envelope(request)
-    if not set(parameters) <= {"date_from", "date_to", "limit", "cursor"}:
+    if not set(parameters) <= {
+        "date_from",
+        "date_to",
+        "limit",
+        "cursor",
+        "journal_ids",
+    }:
         raise _invalid("report.trial_balance contains an unsupported parameter.")
+    _journal_ids(parameters)
     if not {"date_from", "date_to"} <= set(parameters):
         raise _invalid("date_from and date_to are required.")
     date_from = parameters["date_from"]
@@ -324,8 +360,9 @@ def validate_balance_sheet_request(
     request: Any,
 ) -> tuple[dict[str, Any], None, str, int, str | None]:
     context, parameters = _validate_envelope(request)
-    if not set(parameters) <= {"as_of", "limit", "cursor"}:
+    if not set(parameters) <= {"as_of", "limit", "cursor", "journal_ids"}:
         raise _invalid("report.balance_sheet contains an unsupported parameter.")
+    _journal_ids(parameters)
     if "as_of" not in parameters or not _canonical_date(parameters["as_of"]):
         raise _invalid("as_of must be a YYYY-MM-DD date.")
     limit = parameters.get("limit", DEFAULT_LIMIT)
@@ -343,8 +380,15 @@ def validate_profit_and_loss_request(
     request: Any,
 ) -> tuple[dict[str, Any], str, str, int, str | None]:
     context, parameters = _validate_envelope(request)
-    if not set(parameters) <= {"date_from", "date_to", "limit", "cursor"}:
+    if not set(parameters) <= {
+        "date_from",
+        "date_to",
+        "limit",
+        "cursor",
+        "journal_ids",
+    }:
         raise _invalid("report.profit_and_loss contains an unsupported parameter.")
+    _journal_ids(parameters)
     if not {"date_from", "date_to"} <= set(parameters):
         raise _invalid("date_from and date_to are required.")
     date_from = parameters["date_from"]
@@ -432,8 +476,11 @@ def validate_typed_financial_report_request(
         allowed.add("journal_id")
     if spec.get("requires_partner_id"):
         allowed.add("partner_id")
+    if capability_id in _JOURNAL_FILTER_REPORTS:
+        allowed.add("journal_ids")
     if not set(parameters) <= allowed:
         raise _invalid(f"{capability_id} contains an unsupported parameter.")
+    _journal_ids(parameters)
     if spec["mode"] == "single":
         if "as_of" not in parameters or not _canonical_date(parameters["as_of"]):
             raise _invalid("as_of must be a YYYY-MM-DD date.")
@@ -473,15 +520,22 @@ def validate_financial_report_export_request(
     except (KeyError, TypeError) as exc:
         raise _invalid("The financial-report export capability is unsupported.") from exc
     context, parameters = _validate_envelope(request)
+    optional = (
+        {"journal_ids"}
+        if capability_id.removesuffix(".export") in _JOURNAL_FILTER_REPORTS
+        else set()
+    )
     if spec["mode"] == "single":
-        if set(parameters) != {"as_of", "format"}:
+        required = {"as_of", "format"}
+        if not required <= set(parameters) <= required | optional:
             raise _invalid(f"{capability_id} requires only as_of and format.")
         if not _canonical_date(parameters["as_of"]):
             raise _invalid("as_of must be a YYYY-MM-DD date.")
         date_from = None
         date_to = parameters["as_of"]
     else:
-        if set(parameters) != {"date_from", "date_to", "format"}:
+        required = {"date_from", "date_to", "format"}
+        if not required <= set(parameters) <= required | optional:
             raise _invalid(
                 f"{capability_id} requires only date_from, date_to, and format."
             )
@@ -494,6 +548,7 @@ def validate_financial_report_export_request(
     export_format = parameters["format"]
     if not isinstance(export_format, str) or export_format not in {"pdf", "xlsx"}:
         raise _invalid("format must be 'pdf' or 'xlsx'.")
+    _journal_ids(parameters)
     return context, date_from, date_to, export_format
 
 
@@ -526,6 +581,7 @@ def _encode_cursor(
     date_to: str,
     journal_id: int | None = None,
     partner_id: int | None = None,
+    journal_ids: list[int] | None = None,
 ) -> str:
     cursor_payload = {
         "after_line_id": line_id,
@@ -541,6 +597,8 @@ def _encode_cursor(
         cursor_payload["journal_id"] = journal_id
     if partner_id is not None:
         cursor_payload["partner_id"] = partner_id
+    if journal_ids is not None:
+        cursor_payload["journal_ids_sha256"] = _journal_ids_digest(journal_ids)
     payload = json.dumps(
         cursor_payload,
         ensure_ascii=False,
@@ -559,6 +617,7 @@ def _decode_cursor(
     date_to: str,
     journal_id: int | None = None,
     partner_id: int | None = None,
+    journal_ids: list[int] | None = None,
 ) -> str:
     try:
         padding = "=" * (-len(cursor) % 4)
@@ -586,6 +645,8 @@ def _decode_cursor(
         expected_fields.add("journal_id")
     if partner_id is not None:
         expected_fields.add("partner_id")
+    if journal_ids is not None:
+        expected_fields.add("journal_ids_sha256")
     if (
         not isinstance(value, dict)
         or set(value) != expected_fields
@@ -597,6 +658,10 @@ def _decode_cursor(
         or value["user_login"] != context["user_login"]
         or value["date_from"] != date_from
         or value["date_to"] != date_to
+        or (
+            journal_ids is not None
+            and value["journal_ids_sha256"] != _journal_ids_digest(journal_ids)
+        )
         or (
             journal_id is not None
             and (
@@ -810,6 +875,7 @@ def _read_financial_report(
     typed_values: bool = False,
     journal_id: int | None = None,
     partner_id: int | None = None,
+    journal_ids: list[int] | None = None,
 ) -> dict[str, Any]:
     after_line_id = (
         _decode_cursor(
@@ -820,6 +886,7 @@ def _read_financial_report(
             date_to=date_to,
             journal_id=journal_id,
             partner_id=partner_id,
+            journal_ids=journal_ids,
         )
         if cursor
         else None
@@ -836,6 +903,8 @@ def _read_financial_report(
         read_parameters["journal_id"] = journal_id
     if partner_id is not None:
         read_parameters["partner_id"] = partner_id
+    if journal_ids is not None:
+        read_parameters["journal_ids"] = journal_ids
     page = port.read_page(**read_parameters)
     metadata, columns, lines = _validated_page(
         port,
@@ -858,6 +927,7 @@ def _read_financial_report(
             date_to=date_to,
             journal_id=journal_id,
             partner_id=partner_id,
+            journal_ids=journal_ids,
         )
     return {
         **metadata,
@@ -883,6 +953,7 @@ def read_trial_balance(
         date_to=date_to,
         limit=limit,
         cursor=cursor,
+        journal_ids=_journal_ids(request["parameters"]),
     )
 
 
@@ -901,6 +972,7 @@ def read_balance_sheet(
         date_to=date_to,
         limit=limit,
         cursor=cursor,
+        journal_ids=_journal_ids(request["parameters"]),
     )
 
 
@@ -921,6 +993,7 @@ def read_profit_and_loss(
         date_to=date_to,
         limit=limit,
         cursor=cursor,
+        journal_ids=_journal_ids(request["parameters"]),
     )
 
 
@@ -990,6 +1063,7 @@ def read_typed_financial_report(
         cursor=cursor,
         typed_values=True,
         partner_id=partner_id,
+        journal_ids=_journal_ids(request["parameters"]),
     )
 
 
@@ -1025,13 +1099,17 @@ def export_financial_report(
     context, date_from, date_to, export_format = (
         validate_financial_report_export_request(capability_id, request)
     )
-    page = port.export(
-        capability_id=capability_id,
-        company_id=context["company_id"],
-        date_from=date_from,
-        date_to=date_to,
-        format=export_format,
-    )
+    export_parameters = {
+        "capability_id": capability_id,
+        "company_id": context["company_id"],
+        "date_from": date_from,
+        "date_to": date_to,
+        "format": export_format,
+    }
+    journal_ids = _journal_ids(request["parameters"])
+    if journal_ids is not None:
+        export_parameters["journal_ids"] = journal_ids
+    page = port.export(**export_parameters)
     expected = {
         "user_id",
         "company_visible",
