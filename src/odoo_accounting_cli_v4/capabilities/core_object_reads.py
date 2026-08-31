@@ -1403,6 +1403,9 @@ def _valid_journal_item(item: Any, company_id: int) -> bool:
             "reconciled",
             "matching_number",
             "analytic_distribution",
+            "tax_line_id",
+            "tax_ids",
+            "tax_base_amount",
         }
         and _valid_id(item["id"])
         and item["company_id"] == company_id
@@ -1427,6 +1430,9 @@ def _valid_journal_item(item: Any, company_id: int) -> bool:
         and isinstance(item["reconciled"], bool)
         and _optional_text(item["matching_number"])
         and _valid_line_analytic_distribution(item["analytic_distribution"])
+        and (item["tax_line_id"] is None or _valid_id(item["tax_line_id"]))
+        and (item["tax_ids"] == [] or _sorted_unique_ids(item["tax_ids"]))
+        and _decimal_text(item["tax_base_amount"])
     )
 
 

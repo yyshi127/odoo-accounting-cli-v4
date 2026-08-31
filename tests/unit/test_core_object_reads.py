@@ -399,6 +399,9 @@ def _item(capability_id: str, record_id: int = 31) -> dict:
             "reconciled": False,
             "matching_number": None,
             "analytic_distribution": {},
+            "tax_line_id": None,
+            "tax_ids": [],
+            "tax_base_amount": "0",
         }
     if capability_id in {"product.search", "product.get"}:
         return {

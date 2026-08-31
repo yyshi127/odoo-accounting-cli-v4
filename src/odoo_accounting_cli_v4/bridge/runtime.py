@@ -6114,6 +6114,11 @@ def _dispatch_financial_report(
                 raw_value is None
                 or raw_value is False
                 or (spec.get("partner_parameter") is True and raw_value == "")
+                or (
+                    action == "account.report.tax.read_page"
+                    and columns[index]["expression_label"] == "net"
+                    and raw_value == ""
+                )
             ):
                 normalized_value: str | None = None
             elif (

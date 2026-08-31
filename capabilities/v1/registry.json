@@ -10349,16 +10349,18 @@
             "tests/unit/test_core_object_reads.py",
             "tests/unit/test_core_object_reads_bridge.py",
             "tests/unit/test_core_object_reads_runtime.py",
-            "tests/unit/test_core_object_read_cli.py"
+            "tests/unit/test_core_object_read_cli.py",
+            "tests/unit/test_journal_item_tax_links.py"
           ],
-          "reason": "Unit tests cover the closed request and response, cursor binding, fixed bridge action, company scope, ACL gates, ORM normalization, and CLI dispatch."
+          "reason": "Unit tests cover the closed request and response, cursor binding, fixed bridge action, company scope, ACL gates, ORM normalization, CLI dispatch, and tax IDs/company-currency tax-base readback."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_core_object_read_batch_live.py"
+            "tests/integration/test_core_object_read_batch_live.py",
+            "tests/integration/test_invoice_tax_flow_batch_live.py"
           ],
-          "reason": "The shared live read-only smoke verifies the capability against both dedicated isolated database aliases as the ordinary accounting user."
+          "reason": "Shared isolated-database tests cover ordinary-user object reads and the rollback-only invoice, tax-line, and generic tax-report amount chain."
         },
         "golden": {
           "status": "planned",
@@ -10476,16 +10478,18 @@
             "tests/unit/test_core_object_reads.py",
             "tests/unit/test_core_object_reads_bridge.py",
             "tests/unit/test_core_object_reads_runtime.py",
-            "tests/unit/test_core_object_read_cli.py"
+            "tests/unit/test_core_object_read_cli.py",
+            "tests/unit/test_journal_item_tax_links.py"
           ],
-          "reason": "Unit tests cover the closed request and response, cursor binding, fixed bridge action, company scope, ACL gates, ORM normalization, and CLI dispatch."
+          "reason": "Unit tests cover the closed request and response, cursor binding, fixed bridge action, company scope, ACL gates, ORM normalization, CLI dispatch, and tax IDs/company-currency tax-base readback."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_core_object_read_batch_live.py"
+            "tests/integration/test_core_object_read_batch_live.py",
+            "tests/integration/test_invoice_tax_flow_batch_live.py"
           ],
-          "reason": "The shared live read-only smoke verifies the capability against both dedicated isolated database aliases as the ordinary accounting user."
+          "reason": "Shared isolated-database tests cover ordinary-user object reads and the rollback-only invoice, tax-line, and generic tax-report amount chain."
         },
         "golden": {
           "status": "planned",

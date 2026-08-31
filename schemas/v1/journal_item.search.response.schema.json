@@ -202,7 +202,10 @@
         "currency",
         "reconciled",
         "matching_number",
-        "analytic_distribution"
+        "analytic_distribution",
+        "tax_line_id",
+        "tax_ids",
+        "tax_base_amount"
       ],
       "properties": {
         "id": {
@@ -389,6 +392,19 @@
         },
         "analytic_distribution": {
           "$ref": "#/$defs/analytic_distribution"
+        },
+        "tax_line_id": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "tax_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 1}
+        },
+        "tax_base_amount": {
+          "$ref": "#/$defs/decimal",
+          "description": "Tax base in the journal item's company currency."
         }
       }
     },

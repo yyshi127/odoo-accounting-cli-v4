@@ -533,8 +533,11 @@ class Model:
         fields: list[str],
         order: str | None = None,
         limit: int | None = None,
+        **read_kwargs: Any,
     ) -> list[dict[str, Any]]:
         self.calls.append(("search_read", domain, order, limit, fields))
+        if read_kwargs:
+            self.calls.append(("read_options", read_kwargs))
         rows = [row for row in self.rows if _matches(row, domain)]
         if order:
             for part in reversed(order.split(",")):
@@ -547,6 +550,8 @@ class Model:
 
         def read_value(value: Any) -> Any:
             if isinstance(value, Record):
+                if read_kwargs.get("load", "_classic_read") is None:
+                    return value.id
                 label = getattr(value, "name", getattr(value, "complete_name", ""))
                 return [value.id, label]
             if isinstance(value, (list, Records, tuple)):
@@ -878,6 +883,9 @@ def _fixture() -> tuple[Env, dict[str, Any]]:
             matching_number=False,
             analytic_distribution=False,
             parent_state="posted",
+            tax_line_id=False,
+            tax_ids=Records(),
+            tax_base_amount=Decimal("0.00"),
         )
 
     journal_lines = [journal_line(31), journal_line(32)]
@@ -1626,6 +1634,9 @@ def _expected_item(capability_id: str, record_id: int = 31) -> dict[str, Any]:
             "reconciled": False,
             "matching_number": "31",
             "analytic_distribution": {},
+            "tax_line_id": None,
+            "tax_ids": [],
+            "tax_base_amount": "0",
         }
     if capability_id in {"product.search", "product.get"}:
         return {

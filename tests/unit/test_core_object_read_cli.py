@@ -583,6 +583,9 @@ def _item(capability_id: str) -> dict[str, Any]:
             "reconciled": False,
             "matching_number": None,
             "analytic_distribution": {"3,1": "60.125", "1,2": "39.875"},
+            "tax_line_id": None,
+            "tax_ids": [],
+            "tax_base_amount": "0",
         }
     if capability_id in {"payment.method.list", "payment.method.get"}:
         return {

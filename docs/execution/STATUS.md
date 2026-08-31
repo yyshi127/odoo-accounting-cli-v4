@@ -14,9 +14,37 @@ not 355 accounting operations, a coverage percentage, or proof that all workflow
 pass for the configured user. There are 16 `stock.*` IDs, but other historical
 sales/purchase extensions also remain; subtracting 16 does not establish a
 pure-accounting count or a coverage denominator. Registry SHA-256:
-`4cd4a7e99d28ab683b292fc3daae82c099c262a42bdfb24313a325e851b328da`.
+`409af5cb25a85e7a31e067b6d3addcd94d562d52721fbbdb4cb34f366f16f977`.
 
-The current financial-header batch extends customer_invoice.create,
+The current taxed-invoice batch adds tax_line_id, tax_ids and signed
+company-currency tax_base_amount to journal_item.search/get. Thirteen
+code/schema/registry/test files are deployed after backing up eleven existing
+targets across the initial deployment and report correction. report.tax also
+preserves the native Generic Tax group rows' exact empty net values as null;
+numeric tax cells and other reports retain strict validation. The server's
+necessary regression passed 199 journal-item cases in 27.04s and nine
+tax-report/registry/helper cases in 27.31s, with one authorization skip. Separate
+helper and report corrections passed two and 28 targeted cases respectively.
+
+The shared real workflow passed both aliases: 1 passed in 501.48s, exit 0. Each
+alias verified 34 CLI calls / 11 existing capabilities / six immediate replays,
+sales base/tax 180/23.40 and purchase base/tax 120/15.60, six posted journal items,
+the two actual tax-report child-row deltas, and trial-balance debit/credit delta
+339/339. All test records rolled back; the fresh-cursor residual audit passed.
+Business execution is uid 5/su=False/company 1; that separate audit is superuser
+read-only. No worker remains. Odoo19 PID 2855713 / restart-count 3, protected
+installed source and the earlier bank/deferred failure logs stayed unchanged.
+
+Two earlier failed attempts are retained with completed rollback audits: the
+4.32s test-only technical-model read before any CLI call, and the 251.96s failure
+at the populated tax report after both first-alias invoices and their tax items
+had passed. The latter exposed the real empty-net adapter defect described above;
+neither failed run is counted as complete acceptance. This is company-currency,
+13% price-excluded/on-invoice, in-process CLI/real-ORM evidence, not statutory
+returns, price-included/cash-basis/FX tax, external transport or durable replay.
+No command IDs, tax configuration, permissions or second-stage controls are added.
+
+The preceding financial-header batch extends customer_invoice.create,
 vendor_bill.create and invoice.update with optional partner_bank_id and
 fiscal_position_id (strict positive integer or null). Invoice.get reads both as
 IDs/null without loading the related bank/fiscal-position display names. Omission
@@ -51,8 +79,8 @@ tax, currency or configuration variant.
 
 | Workstream | Current evidence and remaining boundary |
 | --- | --- |
-| Queries and reports | Selected report/filter/export and aging workflows passed; this is not all reports or tax regimes. |
-| Invoices, bills and financial credits | Several customer/vendor lifecycle, credit, currency and adjustment workflows passed; taxed flows and actual journal/financial-reference switches are not fully accepted. |
+| Queries and reports | Selected report/filter/export, aging and populated generic-tax workflows passed; this is not all reports or statutory tax regimes. |
+| Invoices, bills and financial credits | Selected lifecycle, credit, currency, adjustment and 13% price-excluded customer/vendor tax workflows passed; actual journal/financial-reference switches and other tax variants remain unaccepted. |
 | Manual entries | Maturity, posting, aging, reconciliation/undo and trial-balance workflow passed; do not count unexecuted later steps from the blocked bank batch. |
 | Payments and reconciliation | Payment-difference, credit-settlement and advance-payment workflows passed in their stated scenarios; FX/early-payment variants remain outside that evidence. |
 | Bank matching | Implementations exist, but the combined receipt/matching workflow remains blocked by suspense/outstanding account configuration. |

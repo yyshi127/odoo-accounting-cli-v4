@@ -389,11 +389,14 @@ def _cli(
             "journal_entry.get": OdooJournalEntryPort,
             "journal_item.search": OdooCoreObjectReadPort,
             "journal_item.get": OdooCoreObjectReadPort,
+            "tax.get": OdooCoreObjectReadPort,
+            "invoice.tax_breakdown.inspect": OdooCoreObjectReadPort,
             "receivable.open_items.list": OdooOpenItemsPort,
             "payable.open_items.list": OdooOpenItemsPort,
             "report.trial_balance": OdooFinancialReportPort,
             "report.aged_receivable": OdooFinancialReportPort,
             "report.aged_payable": OdooFinancialReportPort,
+            "report.tax": OdooFinancialReportPort,
         }
         port_class = ports[capability_id]
         if port_class in (OdooFinancialReportPort, OdooOpenItemsPort):

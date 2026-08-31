@@ -2321,6 +2321,9 @@ def _raw_get_rows(
                 "reconciled",
                 "matching_number",
                 "analytic_distribution",
+                "tax_line_id",
+                "tax_ids",
+                "tax_base_amount",
             ),
             "payment.method.get": (
                 "id",
@@ -2356,7 +2359,13 @@ def _raw_get_rows(
     model = raw_model.with_context(active_test=False, allowed_company_ids=[company_id])
     if capability_id in {"cash_rounding.get", "account.transfer_model.get"}:
         model = model.with_company(env["res.company"].browse(company_id))
-    return model.search_read(domain, fields=list(fields), limit=1, order="id")
+    return model.search_read(
+        domain,
+        fields=list(fields),
+        limit=1,
+        order="id",
+        **({"load": None} if capability_id == "journal_item.get" else {}),
+    )
 
 
 def _normalize_master(
@@ -2610,9 +2619,13 @@ def _journal_item_rows(
             "reconciled",
             "matching_number",
             "analytic_distribution",
+            "tax_line_id",
+            "tax_ids",
+            "tax_base_amount",
         ],
         limit=parameters["limit"],
         order="id",
+        load=None,
     )
     return rows, True
 
@@ -2652,6 +2665,13 @@ def _normalize_journal_items(
         partner_id = _reference_id(row.pop("partner_id"))
         journal_id = _reference_id(row.pop("journal_id"))
         currency_id = _reference_id(row.pop("currency_id"))
+        tax_line_id = _reference_id(row["tax_line_id"])
+        if (
+            row["tax_line_id"] is not False
+            and row["tax_line_id"] is not None
+            and tax_line_id is None
+        ):
+            raise ValueError("invalid journal-item tax reference")
         if (
             _reference_id(row.pop("company_id")) != company_id
             or _reference_id(moves[move_id]["company_id"]) != company_id
@@ -2685,6 +2705,9 @@ def _normalize_journal_items(
                 "credit": _decimal_string(row["credit"]),
                 "balance": _decimal_string(row["balance"]),
                 "amount_currency": _decimal_string(row["amount_currency"]),
+                "tax_line_id": tax_line_id,
+                "tax_ids": _sorted_relation_ids(row["tax_ids"]),
+                "tax_base_amount": _decimal_string(row["tax_base_amount"]),
                 "currency": _currency_reference(currencies[currency_id]),
                 "reconciled": row["reconciled"],
                 "matching_number": _optional_text(row["matching_number"]),

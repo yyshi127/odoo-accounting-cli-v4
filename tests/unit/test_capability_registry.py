@@ -1179,6 +1179,10 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
             expected_live_tests.append(
                 "tests/integration/test_accounting_depth_batch_live.py"
             )
+        if capability_id in {"journal_item.search", "journal_item.get"}:
+            expected_live_tests.append(
+                "tests/integration/test_invoice_tax_flow_batch_live.py"
+            )
         assert descriptor["tests"]["integration"]["references"] == expected_live_tests
 
 

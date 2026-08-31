@@ -46,6 +46,30 @@ allowed, but changing the set or switching between filtered and unfiltered
 requests requires a new first page. Other reports, including the currently
 configured partner ledger, do not accept this optional parameter.
 
+## Invoice taxes and tax-linked journal items
+
+Use existing `tax.list` / `tax.get` results to choose the applicable tax IDs,
+then supply each invoice or bill line's `tax_ids` in `customer_invoice.create`,
+`vendor_bill.create` or `invoice.lines.replace`. Odoo calculates the amounts;
+`invoice.get` and `invoice.tax_breakdown.inspect` read back the invoice-currency
+totals and tax-group breakdown.
+
+`journal_item.search` and `journal_item.get` also return:
+
+- `tax_line_id`: the tax ID represented by a tax journal item, otherwise null.
+- `tax_ids`: sorted applied tax IDs on the journal item; an empty list is valid.
+- `tax_base_amount`: Odoo's signed tax base in **company currency**, not necessarily
+  the transaction currency shown by the item's `currency` field.
+
+After posting with `invoice.post`, search by `move_id` to connect the invoice's
+base and tax journal items to the tax IDs. Use `report.tax` for the native posted
+tax report. Its effective report and columns depend on the company's installed
+localization; a generic net/tax report is not proof of statutory-return coverage.
+Native generic-tax group rows may have no net amount; those cells are `null`,
+not zero. Actual numeric tax amounts retain their native values.
+When comparing changes, use the relevant tax row IDs and column expression labels;
+do not sum parent totals together with their child rows.
+
 ## Financial credit notes and settlement
 
 `customer_credit_note.create` and `vendor_refund.create` create draft financial

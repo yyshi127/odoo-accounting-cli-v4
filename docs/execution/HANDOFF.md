@@ -51,6 +51,15 @@ the Odoo source/add-on tree while building CLI capabilities.
   ID/null readback are implemented and deployed. The shared advance-payment
   workflow passed both aliases in 709.21s after 622 server regressions; its checkpoint
   below distinguishes null readback from the unavailable nonempty fixtures.
+- Journal-item tax IDs and company-currency tax-base readback are deployed.
+  Server regressions passed 208 cases plus two corrected-helper checks. The first
+  shared tax run failed on an unnecessary test-only technical-model metadata read
+  before its first CLI call; its rollback audit completed and the failure log is
+  retained. The next run exposed report.tax's rejection of native empty net cells
+  on group rows after its invoice/tax-item checks passed. A scoped adapter fix
+  and 28 targeted regressions followed. The final shared run passed both aliases
+  in 501.48s, with rollback verified; neither earlier failed run is counted as
+  full acceptance. See the final taxed-invoice checkpoint for the evidence scope.
 - These totals include historical inventory, sales, and purchase extensions.
   They are neither a count of pure-accounting commands nor a completion
   percentage for the accounting module. Picking, delivery, and stock-return
@@ -2955,3 +2964,104 @@ eighteen code/test/schema/registry files and the three updated public documents.
 The server Git HEAD remains 2e190bcdd70313c0a10dcc479e1a2834db240a50. Its accumulated
 working tree is intentional; never reset or pull over it. No service restart,
 installed-source edit, dependency change or business-database write is authorized.
+
+## Tax-linked journal items and populated tax reports — 2026-08-31
+
+This batch extends journal_item.search/get with tax_line_id (ID/null), tax_ids
+(sorted unique IDs, possibly empty), and tax_base_amount (signed company-currency
+decimal). Both paths use native search_read(load=None) and reuse the shared item
+schema. They do not read related tax display names, add tax-model ACL requirements
+to journal-item reads, elevate the user or change company scope.
+
+It also fixes a real populated-report defect: Generic Tax group rows have
+no_format='' for net, while the tax detail rows carry numbers. Only report.tax's
+exact empty net cell becomes null, never zero. Empty tax amounts, whitespace and
+numeric strings remain invalid; other financial-report behavior is unchanged.
+Native source account_generic_tax_report.py:518-525 supplies the blank, and
+account_report.py:3106-3153 preserves it in no_format. No report framework or
+configuration is added.
+
+Counts stay 355 mixed-domain IDs / 340 enabled implementations (210 reads,
+130 writes) / 685 schemas, with 307 unconfigured, 33 degraded and 15 disabled.
+Registry SHA-256 is
+409af5cb25a85e7a31e067b6d3addcd94d562d52721fbbdb4cb34f366f16f977.
+These are not pure-accounting totals or a completion percentage.
+
+Necessary server checks, in separately logged phases, passed:
+
+- 199 journal-item cases in 27.04s and nine report/registry/helper cases in 27.31s;
+  the shared live entry was skipped while its authorization flag was off.
+- Two test-helper checks in 0.69s, after removing a needless ir.model metadata
+  access from the fixture setup. Ordinary accounting users do not need that
+  administrator-only permission.
+- 28 report/amount/helper cases in 15.68s after the empty-net adapter correction.
+  Its new reproduction failed before the change and passed afterward; it also
+  verifies strict tax amounts and no blank-string relaxation in trial balance.
+
+The final shared case passed: 1 passed in 501.48s, exit 0, covering both v4-dev
+and v4-e2e. Per alias it ran 34 CLI calls / 11 existing capabilities / six immediate
+replays and inspected six current posted journal items. It creates customer and
+supplier documents at 100+13, then replaces the draft lines with quantity and
+discount changes: sales 2 x 100 less 10% = base 180, tax 23.40, total 203.40;
+purchases 3 x 50 less 20% = base 120, tax 15.60, total 135.60.
+
+Existing taxes 5 (sale) and 11 (purchase) are 13%, price-excluded, on-invoice.
+No tax or repartition configuration is created. Invoice/group totals, tax IDs,
+signed tax bases, tax-account balances, and search/get equality all pass. Native
+sales tax base/credit balance are negative on journal items, and the generic tax
+report reverses that display sign. Only the actual tax-ID child rows are compared
+against their pre-write report baseline; parent totals are not added again.
+Trial-balance debit/credit increases are 339/339 with zero net difference.
+
+The 11 capabilities are tax.get, customer_invoice.create, vendor_bill.create,
+invoice.lines.replace, invoice.get, invoice.tax_breakdown.inspect, invoice.post,
+journal_item.search, journal_item.get, report.tax and report.trial_balance.
+Business execution is uid 5/su=False/company 1, only in odoo_cli_v4_dev and
+odoo_cli_v4_e2e. All synthetic records roll back; the separate fresh-cursor
+superuser read-only residual audit also passes. This is in-process CLI/real-ORM
+evidence, not external bridge transport, concurrent/durable replay, statutory
+returns, price-included/cash-basis tax, tax refunds or FX-tax acceptance.
+
+Preserve both earlier failed runs and their completed rollback audits:
+
+- live-smoke.log: 4.32s, failed on the unnecessary fixture ir.model read before
+  any CLI call; SHA-256 c47828358971681509cffb504bd746af15521258fd5aca9bc2d82e956040d94a.
+- live-smoke-corrected.log: 251.96s, first-alias invoice and journal-item checks
+  passed, but the final populated tax report hit the empty-net defect;
+  SHA-256 9a05573e21f5b554ecf0c4067a8d2f055d1c521ef2527f7b723688b1739d5453.
+
+Baseline local/GitHub commit is 07d0aa9747804819e0c2a91c4d6863270fecf972.
+Private artifact directory: .tooling/accounting-tax-flow-20260831-6766e3c4.
+Thirteen code/schema/registry/test files were deployed. Initial deployment backed
+up nine existing targets and added two test files; the report correction backed
+up its two additional existing targets. Existing ownership/modes are preserved.
+
+- before-code.tgz SHA-256:
+  4798677597739a1bebd11819a0e990a622ff5c57d517c5425ef1c81ab68a1da5.
+- before-helper-fix.tgz SHA-256:
+  576e81c9b58c57dc3defaaeb0890f98352c540b62860044fe53b6026a538860b.
+- before-report-fix.tgz SHA-256:
+  6ef4a9edf7fe2ff3f7e3f54e751d0f3617f5b8ccb1d347001f1cc289c71d2d70.
+- before-docs.tgz SHA-256:
+  0776b914f19a08f4123d5d222a018abdf2e05b1bcced4ada263e133c2908681c.
+- Successful live-smoke-report-fixed.log SHA-256:
+  c4968b4b1d35a125ea9373994978b915d62ea6e97a8298deae0a06ac1a9ef4e3.
+- The successful run UUID is 57ecea6e-061f-408f-9378-b388b5704baf. Process groups
+  3146781, 3151709 and 3162676 are finished and empty. report-fix-code.sha256
+  identifies the final thirteen code files; final.sha256 also includes the three
+  public documents. Earlier code archives/manifests deliberately remain unchanged.
+
+Odoo19 remains PID 2855713 / NRestarts 3 / active-running. Nginx and PostgreSQL
+remain active. The protected installed addon and prior bank/deferred failure
+logs retain the hashes in the preceding checkpoint. There was no service restart,
+business-database write, installed-source edit or configuration/permission change.
+The server Git HEAD remains 2e190bcdd70313c0a10dcc479e1a2834db240a50; do not reset
+or pull over its accumulated working tree.
+
+Next candidate is the accounting cash-refund path for an already settled invoice:
+financial credit, opposite-direction customer/supplier payment record and
+reconciliation, using existing commands. This is not an actual bank transfer and
+must not be confused with bank.transaction.match. Determine any contract gap before
+adding code. Known bank configuration, asset/deferred addon, alternate-journal and
+nonempty financial-header fixture limitations remain unresolved. No new overall
+completion denominator or second-stage control project is introduced here.
