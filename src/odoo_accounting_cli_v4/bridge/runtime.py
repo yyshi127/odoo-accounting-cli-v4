@@ -462,6 +462,7 @@ _INVOICE_LINE_FIELDS = (
     "price_subtotal",
     "price_total",
     "tax_ids",
+    "analytic_distribution",
 )
 _INVOICE_DEFERRED_DATE_FIELDS = ("deferred_start_date", "deferred_end_date")
 _INVOICE_TERM_LINE_FIELDS = (
@@ -1796,6 +1797,19 @@ def _decimal_string(value: Any) -> str:
     return text.rstrip("0").rstrip(".") if "." in text else text
 
 
+def _line_analytic_distribution(value: Any) -> dict[str, str]:
+    from odoo_accounting_cli_v4.bridge.core_object_reads_runtime import (
+        _line_analytic_distribution as normalize_distribution,
+    )
+
+    try:
+        return normalize_distribution(value)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        ) from exc
+
+
 def _date_string(value: Any) -> str:
     if isinstance(value, date_type):
         return value.isoformat()
@@ -2317,6 +2331,7 @@ def _dispatch_journal_entry_get(
                 "date_maturity",
                 "reconciled",
                 "matching_number",
+                "analytic_distribution",
             ],
             order="sequence,id",
         )
@@ -2370,6 +2385,9 @@ def _dispatch_journal_entry_get(
             else None
         )
         line["matching_number"] = _optional_string(line["matching_number"])
+        line["analytic_distribution"] = _line_analytic_distribution(
+            line["analytic_distribution"]
+        )
         for field in ("debit", "credit", "balance", "amount_currency"):
             raw = line[field]
             line[field] = _decimal_string(raw)
@@ -2828,6 +2846,9 @@ def _dispatch_invoice_get(
         account_id = _reference_id(line.pop("account_id"))
         tax_values = line_tax_ids[line_id]
         line.pop("tax_ids")
+        line["analytic_distribution"] = _line_analytic_distribution(
+            line["analytic_distribution"]
+        )
         line["display_type"] = _optional_string(line["display_type"])
         line["name"] = _optional_string(line["name"])
         for field in _INVOICE_DEFERRED_DATE_FIELDS:

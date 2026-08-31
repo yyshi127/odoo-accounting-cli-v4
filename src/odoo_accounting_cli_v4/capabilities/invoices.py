@@ -11,6 +11,10 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 
+from odoo_accounting_cli_v4.capabilities.core_object_reads import (
+    _valid_line_analytic_distribution,
+)
+
 SEARCH_CAPABILITY_ID = "invoice.search"
 GET_CAPABILITY_ID = "invoice.get"
 PAYMENT_STATUS_CAPABILITY_ID = "invoice.payment_status.inspect"
@@ -92,6 +96,7 @@ _LINE_FIELDS = frozenset(
         "deferred_start_date",
         "deferred_end_date",
         "taxes",
+        "analytic_distribution",
     }
 )
 _TAX_FIELDS = frozenset(
@@ -797,6 +802,7 @@ def _validate_invoice(row: Any, *, company_id: int, invoice_id: int) -> dict[str
                 for field in ("deferred_start_date", "deferred_end_date")
             )
             or not isinstance(line["taxes"], list)
+            or not _valid_line_analytic_distribution(line["analytic_distribution"])
         ):
             raise _failed("Odoo returned an invalid invoice line.")
         key = (line["sequence"], line["id"])

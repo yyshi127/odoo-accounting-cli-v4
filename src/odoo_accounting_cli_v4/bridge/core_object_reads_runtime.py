@@ -1235,6 +1235,23 @@ def _decimal_string(value: Any) -> str:
     return "0" if text in {"-0", ""} else text
 
 
+def _line_analytic_distribution(value: Any) -> dict[str, str]:
+    if value is False or value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise TypeError("invalid analytic distribution")
+    result = {}
+    for key, percentage in value.items():
+        if not isinstance(key, str) or not key:
+            raise ValueError("invalid analytic distribution key")
+        if isinstance(percentage, bool) or not isinstance(
+            percentage, (int, float, Decimal)
+        ):
+            raise TypeError("invalid analytic distribution percentage")
+        result[key] = _decimal_string(percentage)
+    return result
+
+
 def _analytic_column_names(model: Any) -> tuple[str, ...]:
     columns = tuple(
         sorted(
@@ -2303,6 +2320,7 @@ def _raw_get_rows(
                 "currency_id",
                 "reconciled",
                 "matching_number",
+                "analytic_distribution",
             ),
             "payment.method.get": (
                 "id",
@@ -2591,6 +2609,7 @@ def _journal_item_rows(
             "currency_id",
             "reconciled",
             "matching_number",
+            "analytic_distribution",
         ],
         limit=parameters["limit"],
         order="id",
@@ -2669,6 +2688,9 @@ def _normalize_journal_items(
                 "currency": _currency_reference(currencies[currency_id]),
                 "reconciled": row["reconciled"],
                 "matching_number": _optional_text(row["matching_number"]),
+                "analytic_distribution": _line_analytic_distribution(
+                    row["analytic_distribution"]
+                ),
             }
         )
     return result

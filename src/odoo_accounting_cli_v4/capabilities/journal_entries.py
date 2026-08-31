@@ -11,6 +11,10 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 
+from odoo_accounting_cli_v4.capabilities.core_object_reads import (
+    _valid_line_analytic_distribution,
+)
+
 SEARCH_CAPABILITY_ID = "journal_entry.search"
 GET_CAPABILITY_ID = "journal_entry.get"
 CHECK_CAPABILITY_ID = "validation.journal_entry.check"
@@ -90,6 +94,7 @@ _LINE_FIELDS = frozenset(
         "date_maturity",
         "reconciled",
         "matching_number",
+        "analytic_distribution",
     }
 )
 
@@ -613,6 +618,7 @@ def _validate_entry(row: Any, *, company_id: int, entry_id: int) -> dict[str, An
             or not (line["date_maturity"] is None or _is_date(line["date_maturity"]))
             or not isinstance(line["reconciled"], bool)
             or not _valid_optional_string(line["matching_number"])
+            or not _valid_line_analytic_distribution(line["analytic_distribution"])
         ):
             raise _failed("Odoo returned an invalid journal-entry line.")
         key = (line["sequence"], line["id"])

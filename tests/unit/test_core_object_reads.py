@@ -398,6 +398,7 @@ def _item(capability_id: str, record_id: int = 31) -> dict:
             "currency": {"id": 6, "code": "CNY"},
             "reconciled": False,
             "matching_number": None,
+            "analytic_distribution": {},
         }
     if capability_id in {"product.search", "product.get"}:
         return {

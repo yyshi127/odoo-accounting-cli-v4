@@ -88,6 +88,7 @@ def _line() -> dict:
         "deferred_start_date": "2026-09-01",
         "deferred_end_date": "2026-12-31",
         "taxes": [],
+        "analytic_distribution": {"3,1": "60.125", "1,2": "39.875"},
     }
 
 

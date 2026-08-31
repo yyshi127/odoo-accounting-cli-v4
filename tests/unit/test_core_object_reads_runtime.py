@@ -876,6 +876,7 @@ def _fixture() -> tuple[Env, dict[str, Any]]:
             currency_id=cny,
             reconciled=False,
             matching_number=False,
+            analytic_distribution=False,
             parent_state="posted",
         )
 
@@ -1624,6 +1625,7 @@ def _expected_item(capability_id: str, record_id: int = 31) -> dict[str, Any]:
             "currency": {"id": 6, "code": "CNY"},
             "reconciled": False,
             "matching_number": "31",
+            "analytic_distribution": {},
         }
     if capability_id in {"product.search", "product.get"}:
         return {
@@ -2750,6 +2752,104 @@ def test_journal_item_search_applies_every_filter_and_normalizes_rows() -> None:
     ):
         assert term in call[1]
     assert call[2:4] == ("id", 1)
+
+
+@pytest.mark.parametrize("value", [False, None, {}])
+def test_line_analytic_distribution_normalizes_native_empty_values(value: Any) -> None:
+    assert core._line_analytic_distribution(value) == {}
+
+
+def test_line_analytic_distribution_preserves_keys_without_write_limits() -> None:
+    value = {
+        **{str(index): 1 for index in range(20)},
+        "2,1": Decimal("123.4567890"),
+        "1,2": -5.25,
+        "1,1": -7,
+        "opaque key\n": Decimal("2.5E-7"),
+        " ": -0.0,
+        "decimal-zero": Decimal("-0.000"),
+        "wide": Decimal("1E+300"),
+    }
+    original = value.copy()
+
+    assert core._line_analytic_distribution(value) == {
+        **{str(index): "1" for index in range(20)},
+        "2,1": "123.456789",
+        "1,2": "-5.25",
+        "1,1": "-7",
+        "opaque key\n": "0.00000025",
+        " ": "0",
+        "decimal-zero": "0",
+        "wide": "1" + "0" * 300,
+    }
+    assert value == original
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        True,
+        0,
+        [],
+        "",
+        {"": 1},
+        {1: 1},
+        *(
+            {"1": percentage}
+            for percentage in (
+                True,
+                False,
+                None,
+                "1",
+                [],
+                {},
+                float("nan"),
+                float("inf"),
+                Decimal("NaN"),
+                Decimal("-Infinity"),
+            )
+        ),
+    ],
+)
+def test_line_analytic_distribution_rejects_invalid_native_values(value: Any) -> None:
+    with pytest.raises((TypeError, ValueError)):
+        core._line_analytic_distribution(value)
+
+
+@pytest.mark.parametrize("capability_id", ["journal_item.search", "journal_item.get"])
+def test_journal_item_reads_select_and_normalize_analytic_distribution(
+    capability_id: str,
+) -> None:
+    env, fixture = _fixture()
+    fixture["journal_lines"][0].analytic_distribution = {
+        "3,1": Decimal("60.12500"),
+        "1,2": -5,
+        "opaque": -0.0,
+    }
+    env.models["account.analytic.account"].access = False
+
+    page = _dispatch(env, capability_id, _parameters(capability_id))
+
+    expected = _expected_item(capability_id)
+    expected["analytic_distribution"] = {"3,1": "60.125", "1,2": "-5", "opaque": "0"}
+    assert page["items"] == [expected]
+    assert "analytic_distribution" in _search_call(env.models["account.move.line"])[4]
+    assert env.models["account.analytic.account"].calls == []
+    assert env.models["account.analytic.plan"].calls == []
+
+
+@pytest.mark.parametrize("capability_id", ["journal_item.search", "journal_item.get"])
+def test_journal_item_reads_reject_invalid_native_analytic_distribution(
+    capability_id: str,
+) -> None:
+    env, fixture = _fixture()
+    fixture["journal_lines"][0].analytic_distribution = {"1": True}
+
+    with pytest.raises(Failure) as caught:
+        _dispatch(env, capability_id, _parameters(capability_id))
+
+    assert caught.value.code == "odoo_runtime_error"
+    assert caught.value.exit_code == 7
 
 
 @pytest.mark.parametrize(

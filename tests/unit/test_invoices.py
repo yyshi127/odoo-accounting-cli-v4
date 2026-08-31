@@ -167,6 +167,7 @@ def _line() -> dict:
         "deferred_start_date": None,
         "deferred_end_date": None,
         "taxes": [_tax()],
+        "analytic_distribution": {},
     }
 
 

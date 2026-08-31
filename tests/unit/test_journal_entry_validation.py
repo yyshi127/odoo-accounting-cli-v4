@@ -86,6 +86,7 @@ def _line(
         "date_maturity": None,
         "reconciled": False,
         "matching_number": None,
+        "analytic_distribution": {},
     }
 
 

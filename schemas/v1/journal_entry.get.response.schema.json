@@ -80,7 +80,7 @@
     "line": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "sequence", "display_type", "name", "account", "partner", "debit", "credit", "balance", "company_currency", "amount_currency", "currency", "date_maturity", "reconciled", "matching_number"],
+      "required": ["id", "sequence", "display_type", "name", "account", "partner", "debit", "credit", "balance", "company_currency", "amount_currency", "currency", "date_maturity", "reconciled", "matching_number", "analytic_distribution"],
       "properties": {
         "id": {"type": "integer", "minimum": 1},
         "sequence": {"type": "integer"},
@@ -101,7 +101,8 @@
         "currency": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/currency"}]},
         "date_maturity": {"type": ["string", "null"], "format": "date"},
         "reconciled": {"type": "boolean"},
-        "matching_number": {"oneOf": [{"type": "null"}, {"type": "string", "minLength": 1}]}
+        "matching_number": {"oneOf": [{"type": "null"}, {"type": "string", "minLength": 1}]},
+        "analytic_distribution": {"$ref": "journal_item.search.response.schema.json#/$defs/analytic_distribution"}
       },
       "allOf": [{
         "if": {

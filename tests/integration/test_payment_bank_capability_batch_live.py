@@ -387,6 +387,7 @@ def _cli(
             "payment.get": OdooPaymentPort,
             "journal_entry.get": OdooJournalEntryPort,
             "journal_item.search": OdooCoreObjectReadPort,
+            "journal_item.get": OdooCoreObjectReadPort,
             "report.trial_balance": OdooFinancialReportPort,
         }
         port = ports[capability_id](client)
@@ -1151,6 +1152,10 @@ def _collect_related(env: Any, tracked: dict[str, set[int]]) -> None:
     records["account.move.line"] = lines | records["account.move"].line_ids
     records["account.partial.reconcile"] = partials
     records["account.full.reconcile"] = fulls
+    if "account.analytic.line" in records:
+        records["account.analytic.line"] |= records[
+            "account.move.line"
+        ].analytic_line_ids
     for model, found in records.items():
         tracked[model].update(found.ids)
 
@@ -1171,6 +1176,9 @@ def _collect_marked(env: Any, tracked: dict[str, set[int]], marker: str) -> None
         ],
         "account.move.line": [("name", "ilike", marker)],
     }
+    for model in ("account.analytic.line", "account.analytic.account"):
+        if model in tracked:
+            domains[model] = [("name", "ilike", marker)]
     for model, domain in domains.items():
         tracked[model].update(
             env[model].with_context(active_test=False).search(domain).ids

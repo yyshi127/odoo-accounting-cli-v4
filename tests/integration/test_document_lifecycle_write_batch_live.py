@@ -9,6 +9,8 @@ credits through native automatic reconciliation, targeted undo and manual
 reapplication, without invoking the original lifecycle, bank or deferred workflows.
 The payment-difference-only case settles two 100-unit documents with 99-unit
 payments and explicit one-unit write-offs, without bank matching or setup changes.
+The analytic-readback-only case checks distributions on three document types,
+including one shared modification/clear and posted journal-item readbacks.
 """
 
 from __future__ import annotations
@@ -41,6 +43,7 @@ _CONFIG_ENV = "ODOO_ACCOUNTING_CLI_V4_CONFIG"
 _ALLOW_ENV = "ODACV4_ALLOW_DOCUMENT_LIFECYCLE_WRITE_SMOKE"
 _REFUND_ALLOW_ENV = "ODACV4_ALLOW_FINANCIAL_REFUND_SMOKE"
 _PAYMENT_DIFFERENCE_ALLOW_ENV = "ODACV4_ALLOW_PAYMENT_DIFFERENCE_SMOKE"
+_ANALYTIC_READBACK_ALLOW_ENV = "ODACV4_ALLOW_ANALYTIC_READBACK_SMOKE"
 _ALIASES = ("v4-dev", "v4-e2e")
 _DATABASES = {
     "v4-dev": "odoo_cli_v4_dev",
@@ -93,6 +96,19 @@ _PAYMENT_DIFFERENCE_CAPABILITIES = {
     "payment.get",
     "journal_entry.get",
     "invoice.payment_status.inspect",
+}
+_ANALYTIC_READBACK_CAPABILITIES = {
+    "analytic.account.create",
+    "customer_invoice.create",
+    "vendor_bill.create",
+    "journal_entry.create",
+    "invoice.lines.replace",
+    "invoice.post",
+    "journal_entry.post",
+    "invoice.get",
+    "journal_entry.get",
+    "journal_item.search",
+    "journal_item.get",
 }
 _RESULT_KEYS = {
     "model",
@@ -185,13 +201,16 @@ def _run_worker(
     *,
     refund_only: bool = False,
     payment_difference_only: bool = False,
+    analytic_readback_only: bool = False,
 ) -> None:
-    assert not (refund_only and payment_difference_only)
+    assert sum((refund_only, payment_difference_only, analytic_readback_only)) <= 1
     command, timeout = _worker_command(alias, run_id, config_path, runtime)
     if refund_only:
         command.append("--refund-only")
     elif payment_difference_only:
         command.append("--payment-difference-only")
+    elif analytic_readback_only:
+        command.append("--analytic-readback-only")
     environment = os.environ.copy()
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
     environment["PYTHONPATH"] = os.pathsep.join(
@@ -218,6 +237,8 @@ def _run_worker(
     capabilities = _REFUND_CAPABILITIES if refund_only else _CAPABILITIES
     if payment_difference_only:
         capabilities = _PAYMENT_DIFFERENCE_CAPABILITIES
+    elif analytic_readback_only:
+        capabilities = _ANALYTIC_READBACK_CAPABILITIES
     expected = {
         "alias": alias,
         "capabilities": sorted(capabilities),
@@ -275,6 +296,20 @@ def _run_worker(
                 },
             }
         )
+    elif analytic_readback_only:
+        expected.update(
+            {
+                "source_documents": 3,
+                "cli_calls": 30,
+                "immediate_replays": 8,
+                "modified_lines": 1,
+                "cleared_lines": 1,
+                "posted_journal_items": 7,
+                "analytic_accounts": 1,
+                "analytic_lines": 3,
+                "analytic_distributions_verified": True,
+            }
+        )
     else:
         expected.update(
             {"accounting_dates_verified": True, "marker_migration_verified": True}
@@ -308,6 +343,15 @@ if pytest is not None:
                 alias, run_id, config_path, runtime, payment_difference_only=True
             )
 
+    @pytest.mark.integration
+    def test_analytic_distributions_read_back_and_roll_back_per_alias() -> None:
+        config_path, runtime = _enabled_runtime(_ANALYTIC_READBACK_ALLOW_ENV)
+        run_id = uuid.uuid4()
+        for alias in _ALIASES:
+            _run_worker(
+                alias, run_id, config_path, runtime, analytic_readback_only=True
+            )
+
 
 def _arguments(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -320,6 +364,7 @@ def _arguments(argv: list[str] | None) -> argparse.Namespace:
     cases = parser.add_mutually_exclusive_group()
     cases.add_argument("--refund-only", action="store_true")
     cases.add_argument("--payment-difference-only", action="store_true")
+    cases.add_argument("--analytic-readback-only", action="store_true")
     args = parser.parse_args(argv)
     if args.database != _DATABASES[args.alias]:
         parser.error("alias and physical database do not match")
@@ -1392,6 +1437,248 @@ def _run_payment_difference_chain(
     }
 
 
+def _run_analytic_readback_chain(
+    client: core._RuntimeClient, alias: str, run_id: uuid.UUID
+) -> dict[str, Any]:
+    from odoo import fields
+
+    env = client.env
+    assert env.uid == _USER_ID and env.su is False
+    assert env.context["allowed_company_ids"] == [_COMPANY_ID]
+    ids = _fixture_ids(env, alias)
+    plan = _one(
+        env["account.analytic.plan"].search(
+            [("id", "=", 1), ("parent_id", "=", False)]
+        ),
+        "existing optional root analytic plan",
+    )
+    assert plan.default_applicability == "optional"
+    marker = f"ODACV4-{run_id.hex}-{alias}-analytic-readback"
+    today = fields.Date.to_string(fields.Date.context_today(env.user))
+    calls: list[str] = []
+    original_invoke = client.invoke
+
+    def counted_invoke(action: str, payload: dict[str, Any]) -> dict[str, Any]:
+        calls.append(action)
+        return original_invoke(action, payload)
+
+    client.invoke = counted_invoke
+    analytic = core._write(
+        client,
+        alias,
+        run_id,
+        "analytic.account.create",
+        {
+            "name": marker + "-account",
+            "plan_id": plan.id,
+            "code": None,
+            "partner_id": None,
+        },
+        explicit_key=f"analytic-readback:{alias}:{run_id.hex}:account",
+    )
+    assert analytic["model"] == "account.analytic.account"
+    assert analytic["company_id"] == _COMPANY_ID and analytic["state"] == "active"
+    assert analytic["source_id"] == plan.id
+    assert analytic["name"].startswith(marker + "-account ")
+    distribution = {str(analytic["id"]): "100"}
+    changed_distribution = {str(analytic["id"]): "75.25"}
+    parameters: dict[str, dict[str, Any]] = {}
+    for kind in ("customer", "supplier"):
+        supplier = kind == "supplier"
+        parameters[kind] = {
+            "partner_id": ids[kind],
+            "journal_id": ids["purchase_journal" if supplier else "sale_journal"],
+            "date": today,
+            "invoice_date": today,
+            "currency_id": ids["currency"],
+            "reference": marker + "-" + kind,
+            "lines": [
+                {
+                    "name": marker + "-" + kind,
+                    "product_id": None,
+                    "account_id": ids["expense" if supplier else "income"],
+                    "quantity": "1",
+                    "price_unit": "100",
+                    "discount": "0",
+                    "tax_ids": [],
+                    "analytic_distribution": distribution,
+                }
+            ],
+        }
+    clear_name = marker + "-clear"
+    parameters["customer"]["lines"].append(
+        {
+            **parameters["customer"]["lines"][0],
+            "name": clear_name,
+            "price_unit": "20",
+        }
+    )
+    parameters["entry"] = {
+        "journal_id": ids["general_journal"],
+        "date": today,
+        "reference": marker + "-entry",
+        "lines": [
+            {
+                "name": marker + "-entry",
+                "account_id": ids["expense"],
+                "partner_id": ids["supplier"],
+                "debit": "100",
+                "credit": "0",
+                "analytic_distribution": distribution,
+            },
+            {
+                "name": marker + "-offset",
+                "account_id": ids["asset"],
+                "partner_id": ids["supplier"],
+                "debit": "0",
+                "credit": "100",
+                "analytic_distribution": None,
+            },
+        ],
+    }
+    expected = {
+        kind: {
+            line["name"]: line["analytic_distribution"] or {}
+            for line in values["lines"]
+        }
+        for kind, values in parameters.items()
+    }
+    moves: dict[str, int] = {}
+
+    def read_document(kind: str, state: str) -> dict[str, Any]:
+        entry = kind == "entry"
+        document = core._cli(
+            client,
+            alias,
+            run_id,
+            "journal_entry.get" if entry else "invoice.get",
+            {"entry_id" if entry else "invoice_id": moves[kind]},
+        )
+        assert document["id"] == moves[kind] and document["state"] == state
+        assert document["company_id"] == _COMPANY_ID and document["date"] == today
+        assert document["journal"]["id"] == parameters[kind]["journal_id"]
+        assert len(document["lines"]) == len(expected[kind])
+        assert {
+            line["name"]: line["analytic_distribution"] for line in document["lines"]
+        } == expected[kind]
+        return document
+
+    for kind, capability_id in (
+        ("customer", "customer_invoice.create"),
+        ("supplier", "vendor_bill.create"),
+        ("entry", "journal_entry.create"),
+    ):
+        created = _dispatch_twice(
+            client,
+            alias,
+            run_id,
+            capability_id,
+            parameters[kind],
+            explicit_key=f"analytic-readback:{alias}:{run_id.hex}:{kind}",
+        )
+        assert created["state"] == "draft"
+        moves[kind] = created["id"]
+        read_document(kind, "draft")
+
+    replacement = [dict(line) for line in parameters["customer"]["lines"]]
+    replacement[0]["analytic_distribution"] = changed_distribution
+    replacement[1]["analytic_distribution"] = None
+    replaced = _dispatch_twice(
+        client,
+        alias,
+        run_id,
+        "invoice.lines.replace",
+        {"move_id": moves["customer"], "lines": replacement},
+    )
+    assert replaced["id"] == moves["customer"] and replaced["state"] == "draft"
+    expected["customer"] = {
+        line["name"]: line["analytic_distribution"] or {} for line in replacement
+    }
+    read_document("customer", "draft")
+
+    posted_ids: set[int] = set()
+    analytic_source_ids: set[int] = set()
+    for kind, move_id in moves.items():
+        posted = _dispatch_twice(
+            client,
+            alias,
+            run_id,
+            "journal_entry.post" if kind == "entry" else "invoice.post",
+            {"move_id": move_id},
+        )
+        assert posted["id"] == move_id and posted["state"] == "posted"
+        document = read_document(kind, "posted")
+        page = core._cli(
+            client,
+            alias,
+            run_id,
+            "journal_item.search",
+            {"move_id": move_id, "posted_only": True, "limit": 10},
+        )
+        assert page["has_more"] is False and page["next_cursor"] is None
+        items = {item["id"]: item for item in page["items"]}
+        assert len(items) == len(page["items"]) == (3 if kind == "customer" else 2)
+        assert set(items) == set(posted["line_ids"])
+        posted_ids.update(items)
+        expected_by_id = {
+            line["id"]: line["analytic_distribution"] for line in document["lines"]
+        }
+        assert set(expected_by_id) <= set(items)
+        for line_id, item in items.items():
+            assert item["company_id"] == _COMPANY_ID and item["date"] == today
+            assert item["move"]["id"] == move_id and item["move"]["state"] == "posted"
+            assert item["analytic_distribution"] == expected_by_id.get(line_id, {})
+            if item["analytic_distribution"]:
+                analytic_source_ids.add(line_id)
+        selected = [
+            line
+            for line in document["lines"]
+            if line["analytic_distribution"] or line["name"] == clear_name
+        ]
+        assert len(selected) == (2 if kind == "customer" else 1)
+        for line in selected:
+            item = core._cli(
+                client, alias, run_id, "journal_item.get", {"line_id": line["id"]}
+            )
+            assert item == items[line["id"]]
+
+    assert len(calls) == 30 and len(posted_ids) == 7
+    assert len(analytic_source_ids) == 3
+    core._collect_marked(env, client.tracked, run_id.hex)
+    analytic_lines = (
+        env["account.analytic.line"]
+        .browse(sorted(client.tracked["account.analytic.line"]))
+        .exists()
+    )
+    assert len(analytic_lines) == 3
+    assert set(analytic_lines.move_line_id.ids) == analytic_source_ids
+    assert all(line.company_id.id == _COMPANY_ID for line in analytic_lines)
+    assert set(analytic_lines.account_id.ids) == {analytic["id"]}
+    assert client.tracked["account.analytic.account"] == {analytic["id"]}
+    assert client.tracked["account.move"] == set(moves.values())
+    assert posted_ids <= client.tracked["account.move.line"]
+    assert all(
+        not client.tracked[model]
+        for model in (
+            "account.payment",
+            "account.bank.statement.line",
+            "account.partial.reconcile",
+            "account.full.reconcile",
+        )
+    )
+    return {
+        "source_documents": len(moves),
+        "cli_calls": len(calls),
+        "immediate_replays": 8,
+        "modified_lines": 1,
+        "cleared_lines": 1,
+        "posted_journal_items": len(posted_ids),
+        "analytic_accounts": len(client.tracked["account.analytic.account"]),
+        "analytic_lines": len(analytic_lines),
+        "analytic_distributions_verified": True,
+    }
+
+
 def _live_worker(argv: list[str] | None = None) -> int:
     args = _arguments(argv)
     sys.path.insert(0, str(args.odoo_source.resolve(strict=True)))
@@ -1414,6 +1701,9 @@ def _live_worker(argv: list[str] | None = None) -> int:
     registry = Registry(args.database)
     cursor = registry.cursor()
     tracked: dict[str, set[int]] = {model: set() for model in core._BUSINESS_MODELS}
+    if args.analytic_readback_only:
+        tracked["account.analytic.account"] = set()
+        tracked["account.analytic.line"] = set()
     env = client = None
     failure: BaseException | None = None
     details: dict[str, Any] = {}
@@ -1445,6 +1735,9 @@ def _live_worker(argv: list[str] | None = None) -> int:
         elif args.payment_difference_only:
             details = _run_payment_difference_chain(client, args.alias, args.run_id)
             assert client.capabilities == _PAYMENT_DIFFERENCE_CAPABILITIES
+        elif args.analytic_readback_only:
+            details = _run_analytic_readback_chain(client, args.alias, args.run_id)
+            assert client.capabilities == _ANALYTIC_READBACK_CAPABILITIES
         else:
             _run_chain(client, args.alias, args.run_id)
             assert client.capabilities == _CAPABILITIES

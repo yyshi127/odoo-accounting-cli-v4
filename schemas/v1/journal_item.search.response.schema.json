@@ -112,6 +112,14 @@
     }
   ],
   "$defs": {
+    "analytic_distribution": {
+      "type": "object",
+      "propertyNames": {"type": "string", "minLength": 1},
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^(?:0|-?(?:[1-9][0-9]*(?:\\.[0-9]*[1-9])?|0\\.[0-9]*[1-9]))(?![\\s\\S])"
+      }
+    },
     "data": {
       "type": "object",
       "additionalProperties": false,
@@ -193,7 +201,8 @@
         "amount_currency",
         "currency",
         "reconciled",
-        "matching_number"
+        "matching_number",
+        "analytic_distribution"
       ],
       "properties": {
         "id": {
@@ -377,6 +386,9 @@
               "type": "string"
             }
           ]
+        },
+        "analytic_distribution": {
+          "$ref": "#/$defs/analytic_distribution"
         }
       }
     },

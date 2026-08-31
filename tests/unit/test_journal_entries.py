@@ -141,6 +141,7 @@ def _entry() -> dict:
                 "date_maturity": "2025-02-28",
                 "reconciled": False,
                 "matching_number": None,
+                "analytic_distribution": {},
             },
             {
                 "id": 302,
@@ -162,6 +163,7 @@ def _entry() -> dict:
                 "date_maturity": None,
                 "reconciled": True,
                 "matching_number": "P",
+                "analytic_distribution": {},
             },
         ],
         "totals": {"debit": "123.45", "credit": "123.45", "balance": "0.00"},

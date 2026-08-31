@@ -28,9 +28,16 @@ the Odoo source/add-on tree while building CLI capabilities.
   financial credit-note auto/undo/apply acceptance is recorded near the
   end of this document: all 11 existing capabilities passed on both aliases,
   with rollback verification and no new production interfaces.
-- The current eight-interface financial-report journal-filter extension is
+- The preceding eight-interface financial-report journal-filter extension is
   implemented, with local and focused server tests passing. Its shared dual-alias
-  read-only acceptance passed in 465.22s; see the newest checkpoint at the end.
+  read-only acceptance passed in 465.22s; see its checkpoint near the end.
+- Explicit payment-difference settlement is checkpoint `45fa807`, pushed to
+  `rebuild/v4`; both isolated aliases passed its shared eight-capability workflow.
+- The four-interface analytic-distribution readback implementation is deployed.
+  Server focused tests passed (641 passed, 4 authorization skips). The corrected
+  shared run passed both isolated aliases with rollback (1 passed in 470.78s).
+  The first test-fixture request failure and its separate correction are retained
+  below; no worker remains.
 - These totals include historical inventory, sales, and purchase extensions.
   They are neither a count of pure-accounting commands nor a completion
   percentage for the accounting module. Picking, delivery, and stock-return
@@ -2362,3 +2369,143 @@ compatibility, and include generated account.analytic.line records in rollback
 auditing. Select existing visible analytic accounts if possible; do not change
 analytic configuration, elevate the business user or add an unrelated framework.
 No analytic readback change or live acceptance is claimed by this payment batch.
+
+## 2026-08-31 analytic-distribution readback checkpoint (latest completed batch)
+
+This accounting-only batch completes existing line-data responses, not new command
+IDs: `invoice.get` lines, `journal_entry.get` lines, and `journal_item.search/get`
+items now require `analytic_distribution`. The registry remains unchanged at
+355 mixed-domain IDs, 340 enabled handlers and 685 schema files. Historical stock,
+sales and purchase extensions remain outside current accounting-core coverage.
+
+### Implementation and native boundaries
+
+- Five production Python files and three response schemas change. The public
+  readers reuse one small validator; the two runtime modules share one normalizer.
+  `journal_item.get` already reuses the search item schema, and bridge ports pass
+  nested line data through unchanged. No new model lookup, ACL, command, bridge
+  action or control framework is added. `validation.journal_entry.check` retains
+  its existing response and checks.
+- Native `False`, `None` and empty JSON objects read as `{}`. Nonempty string keys
+  are preserved verbatim, including comma-separated combinations, their order
+  within each key, and accounts repeated across different keys. Reads do not
+  resolve account names or apply the CLI write restrictions to stored data.
+- Percentages accept finite native int/float/Decimal values and return canonical
+  signed decimal strings. Zero and negative zero become `"0"`; trailing fractional
+  zeros are removed, without a new quantization step. Values are not bounded to
+  0-100, four decimal places, sixteen entries or a global total of 100. This retains
+  ORM-returned precision, not precision already rounded away by native writes.
+- Existing line writes still clear a distribution with `null`, not `{}`. No write
+  schema or write handler is changed. Header-only invoice/journal-entry searches
+  do not gain line data. `journal_entry.get` is used for ordinary entries only;
+  invoices, bills and financial credit notes use `invoice.get`.
+
+Read-only native inspection found stored writable JSON with no field-level group
+restriction. Native writes round using the configured analytic precision (two
+digits in these isolated databases), and validate totals conditionally by mandatory
+root plan rather than unconditionally across the mapping. Both aliases have an
+existing optional root plan 1 but no usable analytic accounts. The shared smoke
+therefore creates one temporary account through `analytic.account.create`, reuses
+plan 1 without configuration changes, and includes the account and generated
+analytic lines in the normal rollback audit.
+
+### Verification and the retained fixture correction
+
+Local selections passed: 158 new public/schema cases, 670 existing public read and
+journal-check cases, 9 focused CLI cases, 96 invoice/journal runtime cases, 261 core
+read runtime cases, and 115 bridge/helper cases. Authorization-off integration
+cases skip as intended. Ruff passed after excluding only three independently
+confirmed pre-existing diagnostics on their original files; no unrelated lint or
+formatting changes were made.
+
+The server's focused selection passed `641 passed, 4 skipped in 30.45s`, exit 0.
+The skips were the four separately authorized database tests; the analytic case
+is executed explicitly in the shared run, not accepted via a skipped test.
+
+The first shared run failed in v4-dev after creating and reading the three draft
+documents, before `invoice.lines.replace` reached the runtime. The test copied
+creation lines but omitted `product_id` and `discount`, which the existing
+replacement request schema requires. Failure-time collection, rollback and the
+fresh-cursor audit completed before the error was re-raised. The result was
+`1 failed in 91.47s`; v4-e2e was not attempted in that run. Only those two test
+fields were added. Offline validation accepts the corrected request and rejects
+each missing field; no production contract or handler changed for this fix.
+
+The corrected shared run passed both aliases: `1 passed in 470.78s`, exit 0. Each
+alias demonstrated 30 CLI invocations across 11 existing capabilities: create
+the temporary analytic account, create a customer invoice, supplier bill and
+ordinary entry, replace the customer lines once, post all three documents, and
+read through the four completed interfaces. The customer example changes one
+distribution from 100 to 75.25 and clears another with null; reads must return
+75.25 and `{}` before and after posting. Eight immediate replays, seven posted
+journal items, three generated analytic lines and one temporary analytic account
+are checked. No payment, bank transaction or reconciliation record is created.
+
+Business execution uses uid 5, `su=False`, company 1, solely in `odoo_cli_v4_dev`
+and `odoo_cli_v4_e2e`. All records are rolled back. The fresh-cursor residual audit
+uses the existing superuser read-only inspection, not an elevated business write.
+The old smoke branches do not gain analytic-model lookups or tracking. Live
+coverage is in-process CLI with real ORM in one transaction per alias, not external
+bridge transport, durable commit/replay, concurrent exactly-once behavior, or live
+acceptance of every composite-key/signed-percentage boundary covered by units.
+
+### Deployment and recovery
+
+Local baseline is `45fa80738f051056980d355dd67ad608700c35bc`. All 20 existing code/
+test/schema targets matched their baseline Git blobs on the server before backup;
+the new test path was absent. The 21 deployed files were hash-verified, with
+existing modes/owners preserved. The later fixture correction has its own backup
+and archive; `verified-code.sha256` records the final 21-file code set.
+
+Private artifact directory on the server:
+`/opt/odoo-accounting-cli-v4/.tooling/accounting-analytic-readback-20260831-20f6a347`
+
+- `before-code.tgz` backs up 20 original code/test/schema files; SHA-256
+  `8d3fe3db0366df6a058becb3774a8fe3ade91e685d64691be4e351e15d23a22a`.
+- Initial `code.tgz` SHA-256:
+  `006a75a5d5a69a02d0588d776aacd229363ef82fbd79883c24ef2408e292efa9`.
+- `before-smoke-fixture-fix.tgz` SHA-256:
+  `423cf31765f62049ed8b3315288e1379de855fe850670e2654937a01daf3da3e`.
+- `smoke-fixture-fix.tgz` SHA-256:
+  `75f8021d132d5073a699493b90cac92e1c51cec0fd4a0d3c3c1447fb41025520`.
+- `before-docs.tgz` backs up README, STATUS and HANDOFF after baseline comparison;
+  SHA-256 `f3897680c2c5bfc5ada72ad8be4d2f2e2a467083b253d79c18ed176325451d10`.
+- Focused `focused.log` SHA-256:
+  `623d62135cdaf9b4e67a282b3d3b1da6de2d912da124b5e3c85157dc34a9025c`.
+- First failed `live-smoke.log` SHA-256:
+  `f0f5196a20e475bbaf26dcf60927342e6afa1137e231b3c8f43ce4a1b32430d1`.
+- Corrected `live-corrected.log` SHA-256:
+  `f964a6bd6af79020908c8bdf24e57196c9469086c594de90c8c11830376b6d16`.
+  `live-corrected.exit` is 0; runner/process group 2836072 has finished. The original
+  failed runner 2830801 has also finished; do not overwrite either run's evidence.
+
+The server Git HEAD remains `2e190bcdd70313c0a10dcc479e1a2834db240a50`; its prior
+working-tree changes are preserved. Do not reset, pull over or otherwise replace
+that checkout to manufacture a matching HEAD. Services, installed Odoo/add-ons,
+bank and analytic configuration, and business databases are outside this change.
+
+The post-run audit confirmed all 21 final code/test/schema file hashes, retained
+archives and logs, and the unchanged registry digest. The earlier failed bank and
+deferred workflow logs and installed exchange-rate add-on digest were unchanged.
+Odoo19 retained MainPID 1678372, NRestarts 2, active/running state and its
+2026-08-30 10:25:07 CST activation timestamp; Nginx and PostgreSQL remained active.
+Both verification process groups were empty. The final documentation consists of
+README.md and these STATUS/HANDOFF updates; no installed-service change is needed.
+
+### Next accounting work
+
+The next compact high-frequency gap is direct creation with a negative unit-price
+adjustment line. `customer_invoice.create` and `vendor_bill.create` reject signed
+negative prices in schema, public validation and runtime, while
+`invoice.lines.replace` already accepts them. Complete those existing creation
+interfaces and verify a positive overall document such as 100 plus -10 equals 90
+through create/read/post/replay; do not count existing signed line replacement as
+a new ability. Native accounting behavior still needs verification before changes.
+
+A second verified contract gap is draft `invoice.update.changes` lacking
+`journal_id` and `currency_id`. Reuse existing company/type/access checks and the
+changes fingerprint if taking that on; investigate native currency recomputation
+and journal fixed-currency constraints without changing configuration. Neither
+follow-up is implemented or accepted by this readback batch. The separate bank
+configuration and installed-addon singleton blockers remain unresolved; this
+batch does not authorize their repair or establish full accounting coverage.

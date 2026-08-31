@@ -44,6 +44,7 @@ GET_LINE_FIELDS = [
     "date_maturity",
     "reconciled",
     "matching_number",
+    "analytic_distribution",
 ]
 
 
@@ -220,6 +221,7 @@ class _Environment:
                     "date_maturity": False,
                     "reconciled": False,
                     "matching_number": False,
+                    "analytic_distribution": False,
                 },
                 {
                     "id": 502,
@@ -238,6 +240,7 @@ class _Environment:
                     "date_maturity": False,
                     "reconciled": False,
                     "matching_number": False,
+                    "analytic_distribution": False,
                 },
             ]
         self.models: dict[str, Any] = {
@@ -425,6 +428,7 @@ def test_get_reads_header_and_complete_lines_in_one_dispatch() -> None:
                     "date_maturity": None,
                     "reconciled": False,
                     "matching_number": None,
+                    "analytic_distribution": {},
                 },
                 {
                     "id": 502,
@@ -442,6 +446,7 @@ def test_get_reads_header_and_complete_lines_in_one_dispatch() -> None:
                     "date_maturity": None,
                     "reconciled": False,
                     "matching_number": None,
+                    "analytic_distribution": {},
                 },
             ],
             "totals": {"debit": "-1.25", "credit": "0", "balance": "-1.25"},
@@ -459,6 +464,35 @@ def test_get_reads_header_and_complete_lines_in_one_dispatch() -> None:
     assert line_search[2] == [("move_id", "=", 99)]
     assert line_search[3] == GET_LINE_FIELDS
     assert line_search[5] == "sequence,id"
+
+
+def test_get_preserves_native_analytic_distribution_without_account_lookup() -> None:
+    env = _Environment(mode="get")
+    env.models["account.move.line"].rows[0]["analytic_distribution"] = {
+        "3,2": 125.25,
+        "2,3": -25.25,
+        "2": -0.0,
+    }
+    result = runtime._dispatch(
+        env, GET_ACTION, {"company_id": 7, "move_id": 99}, 7
+    )
+    assert result["entry"]["lines"][0]["analytic_distribution"] == {
+        "3,2": "125.25",
+        "2,3": "-25.25",
+        "2": "0",
+    }
+    assert result["entry"]["lines"][1]["analytic_distribution"] == {}
+    assert "analytic_distribution" in _search_call(env, "account.move.line")[3]
+    assert not any("analytic" in str(call[:2]) for call in env.calls)
+
+
+def test_get_rejects_malformed_analytic_distribution_as_runtime_failure() -> None:
+    env = _Environment(mode="get")
+    env.models["account.move.line"].rows[0]["analytic_distribution"] = []
+    with pytest.raises(RuntimeFailure) as caught:
+        runtime._dispatch(env, GET_ACTION, {"company_id": 7, "move_id": 99}, 7)
+    assert caught.value.code == "odoo_runtime_error"
+    assert caught.value.exit_code == 7
 
 
 @pytest.mark.parametrize(

@@ -582,6 +582,7 @@ def _item(capability_id: str) -> dict[str, Any]:
             "currency": {"id": 6, "code": "CNY"},
             "reconciled": False,
             "matching_number": None,
+            "analytic_distribution": {"3,1": "60.125", "1,2": "39.875"},
         }
     if capability_id in {"payment.method.list", "payment.method.get"}:
         return {

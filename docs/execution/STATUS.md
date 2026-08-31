@@ -16,8 +16,27 @@ sales/purchase extensions also remain; subtracting 16 does not establish a
 pure-accounting count or a coverage denominator. Registry SHA-256:
 `aa86c26d53290343c1b8ce105aa7945f4f2f93575c99be2e77a6185fbb7acc96`.
 
-Payment-difference settlement is the latest completed batch. The two existing
-receivable/payable payment.register commands now accept explicit open/reconcile handling,
+The latest completed batch adds analytic-distribution readback to the four existing
+invoice.get, journal_entry.get and journal_item.search/get interfaces. Native keys and finite
+signed percentages are preserved; empty distributions read as objects, and no
+new account lookups, write-input expansion, IDs or schema files are introduced.
+The 21 code/test/schema files are deployed and hash-verified after a 20-file
+backup. Server focused tests passed: 641 passed and 4 authorization skips in
+30.45s, exit 0. The first shared live case failed in v4-dev before line replacement
+because the test omitted the existing required product_id and discount fields;
+its rollback audit completed, and the 91.47s failure log is retained. Only those
+two test-fixture fields were corrected; production code did not change. The
+separate corrected shared run passed both aliases: 1 passed in 470.78s, exit 0.
+Each alias verified 30 CLI calls across 11 existing capabilities, eight immediate
+replays, modification/clearing readbacks before and after posting, seven posted
+journal items, and rollback of the three documents, one temporary analytic account
+and three generated analytic lines. This is in-process CLI/real-ORM acceptance,
+not external bridge or durable replay evidence. No worker remains; the installed
+add-on digest and Odoo19 service state remain unchanged. See HANDOFF.md for the
+retained failure, correction, passing logs and recovery archives.
+
+The preceding completed payment-difference batch extended the two existing
+receivable/payable payment.register commands with explicit open/reconcile handling,
 an active company-scoped write-off account and an optional label. Reconcile
 requires an explicit amount and closes the remaining document difference through
 the native payment wizard. Omitted new fields retain the old behavior. No IDs,
@@ -35,11 +54,12 @@ transport, durable replay, early-payment discounts, foreign currency or bank
 matching. No worker remains, and Odoo19 state and the installed add-on digest
 remain unchanged. See HANDOFF.md for retained logs and recovery files.
 
-The next verified gap is analytic-distribution readback in the existing
-invoice.get, journal_entry.get and journal_item.search/get interfaces. Distribution
-is already writable but missing from these detail responses. Complete the read/
-edit/read workflow without inventing more command IDs; native data boundaries
-and analytic-line rollback tracking still need verification for that next batch.
+Subsequent read-only review found two concrete accounting gaps: draft invoice.update
+does not expose journal_id/currency_id, and customer_invoice.create/vendor_bill.create
+reject negative unit-price adjustment lines although invoice.lines.replace already
+accepts signed prices. Neither gap has been implemented or live-verified by this
+readback batch. Continue with a coherent existing-command workflow rather than
+adding inventory IDs or treating mixed-domain command totals as completion.
 
 Independent accounting dates extend three existing invoice/bill commands.
 Their 14-capability CLI/ORM lifecycle smoke passed

@@ -112,6 +112,25 @@ isolated databases: `100` residual, `99` payment, signed `1` write-off and zero
 remaining balance, with immediate replay and rollback checks. This is not a claim
 of foreign-currency, early-payment-discount or bank-matching acceptance.
 
+## Analytic distribution readback
+
+`invoice.get` and `journal_entry.get` include `analytic_distribution` on each
+returned line. `journal_item.search` and `journal_item.get` expose the same field
+on each journal item, so distributions can be checked before and after posting.
+
+An empty distribution is `{}`. Nonempty mappings preserve Odoo's stored keys,
+including comma-separated analytic-account combinations, and return percentages
+as finite canonical decimal strings such as `"75.25"`. Reading does not resolve
+account names, merge keys, round again, or impose the CLI write-input limits on
+native stored data. Negative percentages, overlapping combination keys and
+native precision are preserved when present.
+
+To clear a distribution through an existing line-write command, supply
+`"analytic_distribution": null`; its readback is `{}`. The empty object is a read
+representation, not a newly accepted write input. `invoice.lines.replace`
+replaces the entire invoice line set, so retain the other lines and fields you
+intend to keep.
+
 ## Invoice and bill accounting dates
 
 `customer_invoice.create` and `vendor_bill.create` accept an optional `date`

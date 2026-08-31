@@ -330,6 +330,17 @@ def _decimal_text(value: Any) -> bool:
         return False
 
 
+def _valid_line_analytic_distribution(value: Any) -> bool:
+    return isinstance(value, dict) and all(
+        isinstance(key, str)
+        and bool(key)
+        and _decimal_text(percentage)
+        and percentage != "-0"
+        and ("." not in percentage or not percentage.endswith("0"))
+        for key, percentage in value.items()
+    )
+
+
 def _named_reference(value: Any) -> bool:
     return (
         isinstance(value, dict)
@@ -1391,6 +1402,7 @@ def _valid_journal_item(item: Any, company_id: int) -> bool:
             "currency",
             "reconciled",
             "matching_number",
+            "analytic_distribution",
         }
         and _valid_id(item["id"])
         and item["company_id"] == company_id
@@ -1414,6 +1426,7 @@ def _valid_journal_item(item: Any, company_id: int) -> bool:
         and _currency_reference(item["currency"])
         and isinstance(item["reconciled"], bool)
         and _optional_text(item["matching_number"])
+        and _valid_line_analytic_distribution(item["analytic_distribution"])
     )
 
 

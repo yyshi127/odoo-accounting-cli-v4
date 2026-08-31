@@ -54,6 +54,7 @@ INVOICE_LINE_FIELDS = [
     "price_subtotal",
     "price_total",
     "tax_ids",
+    "analytic_distribution",
 ]
 TERM_LINE_FIELDS = [
     "id",
@@ -376,6 +377,7 @@ def _responses(
                     "price_subtotal": 100.0,
                     "price_total": 113.0,
                     "tax_ids": [4],
+                    "analytic_distribution": False,
                 }
             ]
         ]
@@ -720,6 +722,7 @@ def test_get_reads_only_invoice_line_subset_and_exact_related_records() -> None:
         "discount": "0",
         "price_subtotal": "100",
         "price_total": "113",
+        "analytic_distribution": {},
         "deferred_start_date": None,
         "deferred_end_date": None,
         "taxes": [
@@ -763,6 +766,40 @@ def test_get_reads_only_invoice_line_subset_and_exact_related_records() -> None:
         ["name", "type_tax_use", "amount_type", "amount", "price_include"],
     )
     _assert_related_read(env, "product.product", [11], ["display_name"])
+
+
+@pytest.mark.parametrize("empty", [False, None, {}])
+def test_get_normalizes_empty_analytic_distribution(empty: Any) -> None:
+    env = _Environment("get")
+    env.models["account.move.line"].responses[0][0]["analytic_distribution"] = empty
+    result = runtime._dispatch(env, GET_ACTION, _payload(GET_ACTION), 7)
+    assert result["invoice"]["lines"][0]["analytic_distribution"] == {}
+
+
+def test_get_preserves_native_analytic_keys_and_signed_percentages() -> None:
+    env = _Environment("get")
+    raw = {"3,2": 125.25, "2,3": -25.25, "2": -0.0, "native key": 0.0000123}
+    env.models["account.move.line"].responses[0][0]["analytic_distribution"] = raw
+    result = runtime._dispatch(env, GET_ACTION, _payload(GET_ACTION), 7)
+    assert result["invoice"]["lines"][0]["analytic_distribution"] == {
+        "3,2": "125.25",
+        "2,3": "-25.25",
+        "2": "0",
+        "native key": "0.0000123",
+    }
+    assert "analytic_distribution" in _search_calls(env, "account.move.line")[0][3]
+    assert not any("analytic" in str(call[:2]) for call in env.calls)
+
+
+def test_get_rejects_malformed_analytic_distribution_as_runtime_failure() -> None:
+    env = _Environment("get")
+    env.models["account.move.line"].responses[0][0]["analytic_distribution"] = {
+        "2": True
+    }
+    with pytest.raises(RuntimeFailure) as caught:
+        runtime._dispatch(env, GET_ACTION, _payload(GET_ACTION), 7)
+    assert caught.value.code == "odoo_runtime_error"
+    assert caught.value.exit_code == 7
 
 
 @pytest.mark.parametrize(

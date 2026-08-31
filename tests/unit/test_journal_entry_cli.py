@@ -65,6 +65,7 @@ def _entry() -> dict:
             "date_maturity": None,
             "reconciled": False,
             "matching_number": None,
+            "analytic_distribution": {"3,1": "100"},
         },
         {
             "id": 302,
@@ -82,6 +83,7 @@ def _entry() -> dict:
             "date_maturity": None,
             "reconciled": False,
             "matching_number": None,
+            "analytic_distribution": {},
         },
     ]
     item["totals"] = {"debit": "123.45", "credit": "123.45", "balance": "0"}
