@@ -1725,6 +1725,143 @@ def test_invoice_update_passes_accounting_dates_to_drafts_and_replays(
     assert invoice.date == "2025-03-01"
 
 
+@pytest.mark.parametrize(
+    "move_type", ["out_invoice", "in_invoice", "out_refund", "in_refund"]
+)
+@pytest.mark.parametrize(
+    "fields", [("journal_id",), ("currency_id",), ("journal_id", "currency_id")]
+)
+def test_invoice_update_writes_header_references_and_replays(
+    move_type: str, fields: tuple[str, ...]
+) -> None:
+    env = Env()
+    invoice = env.existing_move(610, move_type=move_type, state="draft")
+    invoice.date = date(2025, 2, 1)
+    journal_type = "sale" if move_type.startswith("out_") else "purchase"
+    journal = env.add(
+        "account.journal",
+        61,
+        name="Alternative journal",
+        company_id=env.company,
+        type=journal_type,
+        currency_id=env.currency,
+    )
+    references = {"journal_id": journal.id, "currency_id": env.foreign_currency.id}
+    changes = {field: references[field] for field in fields}
+    changes.update({"date": "2025-03-01", "reference": "Updated header"})
+    parameters = {"move_id": invoice.id, "changes": changes}
+    payload = _payload(
+        "invoice.update",
+        parameters,
+        key=writes._deterministic_key("invoice.update", parameters, 7),
+    )
+
+    assert not writes.dispatch(env, payload, 7, Failure)["idempotent_replay"]
+    assert writes._current_invoice_changes(invoice, set(changes)) == changes
+    assert writes.dispatch(env, payload, 7, Failure)["idempotent_replay"]
+    expected_values = dict(changes)
+    expected_values["ref"] = expected_values.pop("reference")
+    assert [call[3] for call in env.calls if call[:2] == ("write", "account.move")] == [
+        expected_values
+    ]
+    if "journal_id" in fields:
+        assert any(
+            call[:2] == ("search", "account.journal")
+            and ("company_id", "=", 7) in call[2]
+            and ("type", "=", journal_type) in call[2]
+            for call in env.calls
+        )
+    if "currency_id" in fields:
+        assert any(
+            call[:2] == ("search", "res.currency")
+            and ("active", "=", True) in call[2]
+            for call in env.calls
+        )
+    invoice.state = "posted"
+    assert writes.dispatch(env, payload, 7, Failure)["idempotent_replay"]
+    changed = {"move_id": invoice.id, "changes": {"currency_id": env.currency.id}}
+    if "currency_id" not in fields:
+        changed["changes"]["currency_id"] = env.foreign_currency.id
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(
+            env,
+            _payload(
+                "invoice.update",
+                changed,
+                key=writes._deterministic_key("invoice.update", changed, 7),
+            ),
+            7,
+            Failure,
+        )
+    assert caught.value.code == "state_conflict"
+    assert sum(call[:2] == ("write", "account.move") for call in env.calls) == 1
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"journal_id": 999},
+        {"journal_id": 62},
+        {"journal_id": 11},
+        {"currency_id": 999},
+        {"currency_id": 3},
+    ],
+)
+def test_invoice_update_rejects_unavailable_header_references_without_write(
+    changes: dict[str, int],
+) -> None:
+    env = Env()
+    invoice = env.existing_move(610, move_type="out_invoice", state="draft")
+    other_company = env.add("res.company", 8, name="Other company")
+    env.add(
+        "account.journal", 62, name="Other journal", company_id=other_company, type="sale"
+    )
+    env.add("res.currency", 3, name="Inactive currency", active=False)
+    parameters = {"move_id": invoice.id, "changes": changes}
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(
+            env,
+            _payload(
+                "invoice.update",
+                parameters,
+                key=writes._deterministic_key("invoice.update", parameters, 7),
+            ),
+            7,
+            Failure,
+        )
+    assert caught.value.code == "record_not_found"
+    assert not any(call[0] == "write" for call in env.calls)
+
+
+@pytest.mark.parametrize("field", ["journal_id", "currency_id"])
+@pytest.mark.parametrize("value", [None, True, 0, -1, "1", 1.0])
+def test_invoice_update_header_reference_ids_are_validated_at_runtime(
+    field: str, value: Any
+) -> None:
+    assert not writes._valid_parameters(
+        "invoice.update", {"move_id": 610, "changes": {field: value}}
+    )
+
+
+@pytest.mark.parametrize("model", ["account.journal", "res.currency"])
+def test_invoice_update_respects_header_reference_read_access(model: str) -> None:
+    env = Env()
+    env.denied_access = (model, "read")
+    parameters = {"move_id": 610, "changes": {"journal_id": 10, "currency_id": 2}}
+    result = writes.dispatch(
+        env,
+        _payload(
+            "invoice.update",
+            parameters,
+            key=writes._deterministic_key("invoice.update", parameters, 7),
+        ),
+        7,
+        Failure,
+    )
+    assert result["access_allowed"] is False and result["result"] is None
+    assert not any(call[0] == "write" for call in env.calls)
+
+
 def test_document_create_writes_optional_headers_lines_and_scopes_references() -> None:
     env = Env()
     parameters = _document_parameters(env, "customer_invoice.create")

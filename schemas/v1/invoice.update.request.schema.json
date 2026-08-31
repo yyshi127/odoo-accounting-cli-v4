@@ -43,6 +43,14 @@
               "type": "integer",
               "minimum": 1
             },
+            "journal_id": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "currency_id": {
+              "type": "integer",
+              "minimum": 1
+            },
             "invoice_date": {
               "type": "string",
               "format": "date"

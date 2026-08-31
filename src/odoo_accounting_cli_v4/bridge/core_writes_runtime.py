@@ -177,6 +177,8 @@ _DOCUMENT_TYPES = ("out_invoice", "in_invoice", "out_refund", "in_refund")
 _INVOICE_UPDATE_KEYS = frozenset(
     {
         "partner_id",
+        "journal_id",
+        "currency_id",
         "date",
         "invoice_date",
         "invoice_date_due",
@@ -971,6 +973,8 @@ _MODELS = {
     "invoice.update": {
         "res.company",
         "res.partner",
+        "res.currency",
+        "account.journal",
         "account.payment.term",
         "account.move",
     },
@@ -1337,6 +1341,8 @@ _ACCESS = {
     },
     "invoice.update": {
         ("res.partner", "read"),
+        ("res.currency", "read"),
+        ("account.journal", "read"),
         ("account.payment.term", "read"),
         ("account.move", "read"),
         ("account.move", "write"),
@@ -2710,7 +2716,9 @@ def _valid_invoice_changes(value: Any) -> bool:
     ):
         return False
     for field_name, field_value in value.items():
-        if field_name == "partner_id" and not _is_id(field_value):
+        if field_name in {"partner_id", "journal_id", "currency_id"} and not _is_id(
+            field_value
+        ):
             return False
         if field_name in {"date", "invoice_date"} and not _is_date(field_value):
             return False
@@ -7989,10 +7997,32 @@ def _lifecycle_move(
 
 def _validate_invoice_update_references(
     env: Any,
+    move: Any,
     changes: dict[str, Any],
     company_id: int,
     failure_type: type[Exception],
 ) -> None:
+    if "journal_id" in changes:
+        journal_type = (
+            "sale" if move.move_type in {"out_invoice", "out_refund"} else "purchase"
+        )
+        _ensure_ids(
+            env,
+            "account.journal",
+            {changes["journal_id"]},
+            [("company_id", "=", company_id), ("type", "=", journal_type)],
+            company_id,
+            failure_type,
+        )
+    if "currency_id" in changes:
+        _ensure_ids(
+            env,
+            "res.currency",
+            {changes["currency_id"]},
+            [("active", "=", True)],
+            company_id,
+            failure_type,
+        )
     if "partner_id" in changes:
         _ensure_ids(
             env,
@@ -8034,8 +8064,8 @@ def _validate_journal_update_references(
 def _current_invoice_changes(move: Any, requested_fields: set[str]) -> dict[str, Any]:
     values: dict[str, Any] = {}
     for field_name in requested_fields:
-        if field_name == "partner_id":
-            values[field_name] = _many2one_id(move.partner_id)
+        if field_name in {"partner_id", "journal_id", "currency_id"}:
+            values[field_name] = _many2one_id(getattr(move, field_name))
         elif field_name == "payment_term_id":
             values[field_name] = _many2one_id(move.invoice_payment_term_id)
         elif field_name == "reference":
@@ -8072,7 +8102,7 @@ def _update_move(
     changes = parameters["changes"]
     invoice_action = capability_id == "invoice.update"
     if invoice_action:
-        _validate_invoice_update_references(env, changes, company_id, failure_type)
+        _validate_invoice_update_references(env, move, changes, company_id, failure_type)
         current = _current_invoice_changes(move, set(changes))
     else:
         _validate_journal_update_references(env, changes, company_id, failure_type)
@@ -8090,6 +8120,8 @@ def _update_move(
     field_map = (
         {
             "partner_id": "partner_id",
+            "journal_id": "journal_id",
+            "currency_id": "currency_id",
             "date": "date",
             "invoice_date": "invoice_date",
             "invoice_date_due": "invoice_date_due",

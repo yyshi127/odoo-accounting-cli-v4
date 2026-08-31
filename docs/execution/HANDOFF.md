@@ -38,6 +38,11 @@ the Odoo source/add-on tree while building CLI capabilities.
   shared run passed both isolated aliases with rollback (1 passed in 470.78s).
   The first test-fixture request failure and its separate correction are retained
   below; no worker remains.
+- Negative-price invoice/bill creation is checkpoint `e1510a1`, pushed to
+  `rebuild/v4`. The subsequent invoice.update journal/currency fields are deployed;
+  both isolated aliases passed real currency-change/posting acceptance in 517.22s.
+  Actual journal-switch acceptance remains pending because there is no alternate
+  permitted journal fixture. See the final checkpoint for this distinction.
 - These totals include historical inventory, sales, and purchase extensions.
   They are neither a count of pure-accounting commands nor a completion
   percentage for the accounting module. Picking, delivery, and stock-return
@@ -2510,7 +2515,7 @@ follow-up is implemented or accepted by this readback batch. The separate bank
 configuration and installed-addon singleton blockers remain unresolved; this
 batch does not authorize their repair or establish full accounting coverage.
 
-## 2026-08-31 negative-price creation checkpoint (latest completed batch)
+## 2026-08-31 negative-price creation checkpoint
 
 This batch extends two existing accounting interfaces, customer_invoice.create
 and vendor_bill.create. Only their price_unit validation changes to the existing
@@ -2617,3 +2622,113 @@ These findings are for the next batch only: no header-write implementation or
 live acceptance is claimed here. Reuse the existing update/fingerprint/ORM path
 and verify both ordinary journal/currency edits and native refusal cases without
 changing account/journal configuration, services or installed source.
+
+## 2026-08-31 invoice-header update checkpoint
+
+This batch extends existing invoice.update, not stock/logistics operations.
+changes.journal_id and changes.currency_id accept strict positive integer IDs.
+The existing lifecycle supports customer invoices, supplier bills and financial
+credit notes/refunds. Journal lookup requires the exact selected company and
+sale/purchase type appropriate to the document; currency lookup requires an active
+accessible record. Native write/inverses recompute balances and numbering. A
+journal currency is a default, not a hard lock, and numeric unit prices are not
+exchanged automatically. Forced account currency, previous posting/numbering and
+installed manual-rate rules remain native restrictions. Existing confirmations,
+fingerprints and posted no-change replay are retained; actual edits require draft.
+
+The registry adds account.journal/res.currency read-model dependencies to this
+existing handler. Counts remain 355 mixed-domain IDs / 340 handlers / 685 schemas,
+not pure-accounting coverage. Current registry SHA-256 is
+90162a226b7bb79da51b14446472309152a2990093c49d0ab9136132a5d4c8b3.
+
+Local validation passed 183 runtime cases, 102 public/bridge/lifecycle cases and
+4 selected registry/existing-update cases (451 deselected). All 70 requests for
+the two-alias shared case passed offline schema/contract checks; Ruff and diff
+checks passed. Server focused tests passed 285 cases / 4 authorization skips in
+74.61s, followed by 4 selected registry/existing-update cases in 22.66s; exits 0.
+
+The existing analytic-readback smoke passed with 35 CLI calls / 12 existing
+capabilities / 10 immediate replays per alias. It changes the customer invoice
+and supplier bill from CNY to USD, leaves them in USD through posting, and checks
+the same numeric totals 110/90 plus company-currency totals 150.70/123.30. The
+USD-to-CNY rate 1.37 is an existing historical fixture, not a current market rate.
+The case verifies no manual-rate override, currency/amount_currency/balance,
+negative storno lines, analytic distributions, balanced journal items and the
+existing rollback audit. It verified three documents, nine current posted journal
+items, three analytic lines and one temporary analytic account per alias. The
+dual-alias run passed: 1 passed in 517.22s, exit 0, with rollback_verified=true for
+both databases. Business writes use uid 5/su=False/company 1; the existing
+fresh-cursor residual audit is superuser read-only inspection. This is untaxed
+in-process CLI/real-ORM acceptance, not external bridge transport, durable replay,
+concurrency, tax, manual-rate or financial-credit-note acceptance. No failed live
+attempt occurred in this batch; the process group is empty.
+
+Read-only inspection under uid 5/su=False/company 1 found only sale journal 9
+and purchase journal 10 in both databases, even with active_test=False. The user
+cannot create journals. The shared case therefore submits the existing journal
+ID with the real currency change: combined-input validation is not evidence of
+an actual journal switch. Unit tests cover alternate journals, all four invoice
+types, missing/wrong-company/wrong-type references, inactive currency, read-ACL
+failure and posted-state refusal. Positive real journal-switch acceptance remains
+pending an authorized suitable fixture; do not change configuration or elevate.
+
+Server artifact directory:
+`/opt/odoo-accounting-cli-v4/.tooling/accounting-invoice-headers-20260831-5d97b31a`
+
+- Baseline local/GitHub commit: e1510a116adfc54efacb8444ead11e8ebbe43191.
+- before-code.tgz: six existing files; new public-contract test was absent.
+  SHA-256 ec063eb07ef094b76438d648e0d027f0ae728f0fdce0a57edda9f3031ad84cc7.
+- code.tgz: seven files, SHA-256
+  78125368bf26005fa24f13db655b66029a7cc994b0a4080b71447348a2dc1b34.
+- before-docs.tgz: README, STATUS, HANDOFF; SHA-256
+  86e28f4c7e75bbf0de2d3e6eccd6fcd8e07cdcc59f6332dbe29537397f46d512.
+- focused.log: SHA-256
+  2050254568d265c07f39fa12c1bc310d5334c14593382e61432b3b698132c3d1.
+- existing-update.log: SHA-256
+  01e75b0051165e63fa85167dca33b0f14f50c87896640ebb8a28e262bd8ac140.
+- live-smoke.log: SHA-256
+  fb2f23b93c8c39ab9f45dc8bdf8c325dec4ba3874c06bc227df620e946514dd8.
+
+All existing code and document targets matched the baseline before their backup;
+code.sha256 verifies the seven deployed code/test/schema files. final.sha256
+includes the three updated documents for the ten-file checkpoint. Existing
+owners and modes were preserved. Server Git HEAD remains
+2e190bcdd70313c0a10dcc479e1a2834db240a50; do not reset/pull over its working tree.
+The runner/process group 2903827 finished and is empty. Post-run verification
+confirmed all seven frozen code hashes, backup archives, the installed exchange
+addon and both earlier bank/deferred failure logs. Odoo19 retained PID 2855713 /
+NRestarts 3 / active-running / activation 10:24:22 CST; Nginx/PostgreSQL remain
+active. No service, dependency, configuration or installed-source changes were
+issued. The two pre-change archives and completed test logs/exits are also retained
+in the same relative private .tooling directory locally, with matching hashes.
+
+### Next verified accounting gap
+
+Manual receivable/payable journal-entry lines cannot currently accept
+date_maturity in journal_entry.create or journal_entry.lines.replace. Both
+closed request schemas, public/runtime validators, ORM values and replacement
+snapshots omit it. Existing journal_entry/journal_item reads expose the field,
+and receivable/payable open-items filters already use it for ordinary entries.
+Add only an optional YYYY-MM-DD-or-null line value through those existing paths;
+preserve omitted-field fingerprints and target comparison, and treat explicit
+null as clearing. Full line replacement still rebuilds the submitted line set.
+
+Read-only installed-source review found a plain writable Date field at
+account/models/account_move_line.py:369-375, with no default/compute/required
+attribute. The constraint at :1364-1377 applies to invoice/payment-term types,
+not a new requirement for manual entry lines. Do not invent AR/AP-required,
+non-AR/AP-forbidden or maturity-on/after-accounting-date restrictions. Native
+reconciliation sorting and installed aged-partner reports use maturity or fall
+back to accounting date. Keep the current CLI draft-only replacement boundary.
+
+A coherent follow-up can reuse 12 existing capabilities: journal_entry.create,
+journal_entry.lines.replace, journal_entry.post, journal_entry.get,
+journal_item.search, receivable.open_items.list, payable.open_items.list,
+report.aged_receivable, report.aged_payable, report.trial_balance,
+reconciliation.apply and reconciliation.undo. The reconciliation request must
+use the two-line line_ids branch, not invoice_id (which rejects manual entries).
+Undo covers an isolated two-line reconciliation, not arbitrary multi-counterpart
+graphs. Verify due/future amounts, report/open-item changes, reconciliation and
+undo, immediate replays and final rollback under uid 5 without configuration
+changes. This follow-up is source/contract analysis only, not implemented or
+accepted work. The bank configuration and installed-addon blockers remain open.

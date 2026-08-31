@@ -884,6 +884,8 @@ def _validate_invoice_update_parameters(parameters: Any) -> dict[str, Any]:
     changes = parameters["changes"]
     allowed = {
         "partner_id",
+        "journal_id",
+        "currency_id",
         "date",
         "invoice_date",
         "invoice_date_due",
@@ -893,8 +895,9 @@ def _validate_invoice_update_parameters(parameters: Any) -> dict[str, Any]:
     }
     if not isinstance(changes, dict) or not changes or not set(changes) <= allowed:
         raise _invalid("parameters.changes contains no supported invoice update.")
-    if "partner_id" in changes and not _valid_id(changes["partner_id"]):
-        raise _invalid("changes.partner_id must be a positive integer.")
+    for field in ("partner_id", "journal_id", "currency_id"):
+        if field in changes and not _valid_id(changes[field]):
+            raise _invalid(f"changes.{field} must be a positive integer.")
     for field in ("date", "invoice_date"):
         if field in changes and not _is_date(changes[field]):
             raise _invalid(f"changes.{field} must be a YYYY-MM-DD date.")

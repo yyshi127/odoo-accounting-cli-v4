@@ -103,6 +103,7 @@ _ANALYTIC_READBACK_CAPABILITIES = {
     "vendor_bill.create",
     "journal_entry.create",
     "invoice.lines.replace",
+    "invoice.update",
     "invoice.post",
     "journal_entry.post",
     "invoice.get",
@@ -300,14 +301,17 @@ def _run_worker(
         expected.update(
             {
                 "source_documents": 3,
-                "cli_calls": 30,
-                "immediate_replays": 8,
+                "cli_calls": 35,
+                "immediate_replays": 10,
                 "modified_lines": 1,
                 "cleared_lines": 1,
                 "posted_journal_items": 9,
                 "negative_price_lines": 2,
                 "customer_total": "110",
                 "vendor_total": "90",
+                "currency_ids": {"company": 6, "customer": 1, "supplier": 1},
+                "currency_changes": 2,
+                "company_currency_totals": {"customer": "150.7", "supplier": "123.3"},
                 "analytic_accounts": 1,
                 "analytic_lines": 3,
                 "analytic_distributions_verified": True,
@@ -1459,6 +1463,27 @@ def _run_analytic_readback_chain(
     assert plan.default_applicability == "optional"
     marker = f"ODACV4-{run_id.hex}-{alias}-analytic-readback"
     today = fields.Date.to_string(fields.Date.context_today(env.user))
+    company = env.company
+    company_currency = company.currency_id
+    foreign_currency = _one(
+        env["res.currency"].search([("id", "=", 1), ("active", "=", True)]),
+        "existing active USD currency",
+    )
+    assert (company_currency.id, company_currency.name) == (6, "CNY")
+    assert foreign_currency.name == "USD" and ids["currency"] == company_currency.id
+    assert (ids["sale_journal"], ids["purchase_journal"]) == (9, 10)
+
+    def to_company(amount: Decimal) -> Decimal:
+        return Decimal(
+            str(
+                foreign_currency._convert(
+                    float(amount), company_currency, company, today
+                )
+            )
+        )
+
+    # This is an existing historical fixture rate, not a current market-rate claim.
+    assert to_company(Decimal(1)) == Decimal("1.37")
     calls: list[str] = []
     original_invoke = client.invoke
 
@@ -1557,6 +1582,7 @@ def _run_analytic_readback_chain(
         for kind, values in parameters.items()
     }
     moves: dict[str, int] = {}
+    expected_currencies = dict.fromkeys(parameters, company_currency.id)
 
     def read_document(kind: str, state: str) -> dict[str, Any]:
         entry = kind == "entry"
@@ -1570,11 +1596,13 @@ def _run_analytic_readback_chain(
         assert document["id"] == moves[kind] and document["state"] == state
         assert document["company_id"] == _COMPANY_ID and document["date"] == today
         assert document["journal"]["id"] == parameters[kind]["journal_id"]
+        assert document["currency"]["id"] == expected_currencies[kind]
         assert len(document["lines"]) == len(expected[kind])
         assert {
             line["name"]: line["analytic_distribution"] for line in document["lines"]
         } == expected[kind]
         if not entry:
+            assert env["account.move"].browse(moves[kind]).is_exchange is False
             prices = {
                 line["name"]: Decimal(line["price_unit"])
                 for line in parameters[kind]["lines"]
@@ -1627,12 +1655,31 @@ def _run_analytic_readback_chain(
     expected["customer"] = {
         line["name"]: line["analytic_distribution"] or {} for line in replacement
     }
-    read_document("customer", "draft")
+    for kind in ("customer", "supplier"):
+        assert expected_currencies[kind] != foreign_currency.id
+        # Only one journal per type exists: its ID is a combined-input no-op.
+        updated = _dispatch_twice(
+            client,
+            alias,
+            run_id,
+            "invoice.update",
+            {
+                "move_id": moves[kind],
+                "changes": {
+                    "journal_id": parameters[kind]["journal_id"],
+                    "currency_id": foreign_currency.id,
+                },
+            },
+        )
+        assert updated["id"] == moves[kind] and updated["state"] == "draft"
+        expected_currencies[kind] = foreign_currency.id
+        read_document(kind, "draft")
 
     posted_ids: set[int] = set()
     analytic_source_ids: set[int] = set()
     negative_price_ids: set[int] = set()
     document_totals: dict[str, str] = {}
+    company_totals: dict[str, str] = {}
     for kind, move_id in moves.items():
         posted = _dispatch_twice(
             client,
@@ -1664,19 +1711,32 @@ def _run_analytic_readback_chain(
         }
         assert set(expected_by_id) <= set(items)
         sources = {line["name"]: line for line in parameters[kind]["lines"]}
-        balances = {}
+        balances, currency_amounts = {}, {}
         for line in document["lines"]:
             source = sources[line["name"]]
             assert items[line["id"]]["account"]["id"] == source["account_id"]
-            balances[line["id"]] = (
+            currency_amounts[line["id"]] = (
                 Decimal(source["debit"]) - Decimal(source["credit"])
                 if kind == "entry"
                 else Decimal(source["price_unit"]) * (-1 if kind == "customer" else 1)
             )
+            balances[line["id"]] = (
+                currency_amounts[line["id"]]
+                if kind == "entry"
+                else to_company(currency_amounts[line["id"]])
+            )
         if kind != "entry":
             term_ids = set(items) - set(balances)
             assert len(term_ids) == 1
-            balances[term_ids.pop()] = -sum(balances.values())
+            term_id = term_ids.pop()
+            balances[term_id] = -sum(balances.values())
+            currency_amounts[term_id] = -sum(currency_amounts.values())
+            assert abs(balances[term_id]) == to_company(
+                Decimal(document["amount_total"])
+            )
+            company_totals[kind] = format(
+                abs(Decimal(items[term_id]["balance"])).normalize(), "f"
+            )
             negative_price_ids.update(
                 line["id"]
                 for line in document["lines"]
@@ -1689,16 +1749,21 @@ def _run_analytic_readback_chain(
         for line_id, item in items.items():
             assert item["company_id"] == _COMPANY_ID and item["date"] == today
             assert item["move"]["id"] == move_id and item["move"]["state"] == "posted"
+            assert item["journal"]["id"] == parameters[kind]["journal_id"]
+            assert item["currency"]["id"] == expected_currencies[kind]
+            assert Decimal(item["amount_currency"]) == currency_amounts[line_id]
             assert item["analytic_distribution"] == expected_by_id.get(line_id, {})
             assert Decimal(item["balance"]) == balances[line_id]
             assert Decimal(item["debit"]) - Decimal(item["credit"]) == balances[line_id]
             if line_id in negative_price_ids:
+                red_amount = -abs(balances[line_id])
                 assert (Decimal(item["debit"]), Decimal(item["credit"])) == (
-                    (0, -10) if kind == "customer" else (-10, 0)
+                    (0, red_amount) if kind == "customer" else (red_amount, 0)
                 )
             if item["analytic_distribution"]:
                 analytic_source_ids.add(line_id)
         assert sum(Decimal(item["balance"]) for item in items.values()) == 0
+        assert sum(Decimal(item["amount_currency"]) for item in items.values()) == 0
         selected = [
             line
             for line in document["lines"]
@@ -1711,7 +1776,7 @@ def _run_analytic_readback_chain(
             )
             assert item == items[line["id"]]
 
-    assert len(calls) == 30 and len(posted_ids) == 9
+    assert len(calls) == 35 and len(posted_ids) == 9
     assert len(negative_price_ids) == 2
     assert len(analytic_source_ids) == 3
     core._collect_marked(env, client.tracked, run_id.hex)
@@ -1739,13 +1804,23 @@ def _run_analytic_readback_chain(
     return {
         "source_documents": len(moves),
         "cli_calls": len(calls),
-        "immediate_replays": 8,
+        "immediate_replays": 10,
         "modified_lines": 1,
         "cleared_lines": 1,
         "posted_journal_items": len(posted_ids),
         "negative_price_lines": len(negative_price_ids),
         "customer_total": document_totals["customer"],
         "vendor_total": document_totals["supplier"],
+        "currency_ids": {
+            "company": company_currency.id,
+            "customer": expected_currencies["customer"],
+            "supplier": expected_currencies["supplier"],
+        },
+        "currency_changes": sum(
+            expected_currencies[kind] != parameters[kind]["currency_id"]
+            for kind in ("customer", "supplier")
+        ),
+        "company_currency_totals": company_totals,
         "analytic_accounts": len(client.tracked["account.analytic.account"]),
         "analytic_lines": len(analytic_lines),
         "analytic_distributions_verified": True,

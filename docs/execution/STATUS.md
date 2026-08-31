@@ -14,9 +14,37 @@ not 355 accounting operations, a coverage percentage, or proof that all workflow
 pass for the configured user. There are 16 `stock.*` IDs, but other historical
 sales/purchase extensions also remain; subtracting 16 does not establish a
 pure-accounting count or a coverage denominator. Registry SHA-256:
-`aa86c26d53290343c1b8ce105aa7945f4f2f93575c99be2e77a6185fbb7acc96`.
+`90162a226b7bb79da51b14446472309152a2990093c49d0ab9136132a5d4c8b3`.
 
-The latest completed batch allows negative unit-price adjustment lines through
+The latest invoice-header batch extends existing invoice.update.changes with
+optional journal_id/currency_id. Both are strict positive integer IDs; journals
+must match the selected company and customer/supplier document type, and currencies
+must be active and accessible. Native write/inverses handle the changes without
+an artificial journal-currency lock or manual journal-item reconstruction. The
+registry adds the two reference-model read dependencies, not new IDs or handlers.
+Seven code/test/schema files are deployed and hash-verified after a six-file
+backup; the dedicated public-contract test file is new. Server focused tests
+passed: 285 passed / 4 authorization skips in 74.61s, followed by 4 existing-update
+and registry cases in 22.66s. The shared dual-alias live run passed: 1 passed in
+517.22s, exit 0. Each alias verified 35 CLI calls / 12 existing capabilities /
+10 immediate replays, changing customer and supplier documents from CNY to USD
+and posting them as 110/90 USD with 150.70/123.30 CNY journal totals using the
+historical fixture rate. Nine current posted journal items, negative storno
+lines and analytic distributions were checked. All three documents, three
+analytic lines and one temporary analytic account were rolled back. Business
+execution is uid 5/su=False/company 1; the fresh-cursor rollback audit is read-only
+superuser inspection. This is untaxed in-process CLI/real-ORM evidence, not
+external bridge transport, durable replay or manual-rate/tax/refund acceptance.
+The runner is finished; Odoo19 PID 2855713 / restart-count 3, installed source,
+and the earlier blocker evidence remained unchanged.
+
+Actual journal-switch acceptance remains a fixture gap: both isolated databases
+have only one sale journal and one purchase journal, including archived records,
+and uid 5 cannot create journals. The shared case keeps those journal IDs and
+changes the actual currency; it must not be described as a real journal switch.
+No configuration or permission change is authorized to fill this gap.
+
+The preceding completed batch allows negative unit-price adjustment lines through
 the existing customer_invoice.create and vendor_bill.create interfaces. It reuses
 the signed decimal validators without changing quantities, discounts, native
 posting, access checks or command counts. Eight code/test/schema files are
@@ -72,10 +100,14 @@ matching. No worker remains, and Odoo19 state and the installed add-on digest
 remain unchanged. See HANDOFF.md for retained logs and recovery files.
 
 The negative-price creation gap is completed above; signed line replacement
-already existed and is not a new command. The separate draft invoice.update gap
-still lacks journal_id/currency_id and has not been implemented. Continue with
-coherent existing-command workflows rather than adding inventory IDs or treating
-mixed-domain command totals as completion.
+already existed and is not a new command. The draft invoice.update journal/currency
+fields are implemented; actual currency acceptance and the journal-switch fixture
+limitation are distinguished above. The next verified input gap is optional
+date_maturity on journal_entry.create/lines.replace lines: reads and open-items
+already expose/use it. The source/contract findings and a 12-capability accounting
+workflow are recorded in HANDOFF; that follow-up is not implemented. Continue
+coherent workflows without adding inventory IDs or treating mixed-domain totals
+as completion.
 
 Independent accounting dates extend three existing invoice/bill commands.
 Their 14-capability CLI/ORM lifecycle smoke passed

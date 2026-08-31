@@ -8503,6 +8503,8 @@
           "res.company",
           "res.partner",
           "account.payment.term",
+          "account.journal",
+          "res.currency",
           "account.move"
         ],
         "wizards": [],
@@ -8511,6 +8513,8 @@
           "_references/base/models/res_company.py",
           "_references/base/models/res_partner.py",
           "account/models/account_payment_term.py",
+          "account/models/account_journal.py",
+          "_references/base/models/res_currency.py",
           "account/models/account_move.py"
         ]
       },
@@ -8534,6 +8538,8 @@
         "acl": [
           "res.partner:read",
           "account.payment.term:read",
+          "account.journal:read",
+          "res.currency:read",
           "account.move:read",
           "account.move:write"
         ]

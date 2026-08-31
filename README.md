@@ -145,6 +145,33 @@ invoice or bill with a negative total under its currency-rounding rules. Use the
 appropriate financial credit-note/refund workflow instead. In storno companies,
 negative adjustment lines retain native negative debit/credit signs on readback.
 
+## Draft invoice journals and currencies
+
+`invoice.update` accepts optional positive integer `journal_id` and `currency_id`
+inside `changes`, for draft customer invoices, supplier bills and financial
+credit notes/refunds. For example, this is a `parameters` excerpt:
+
+```json
+{
+  "move_id": 101,
+  "changes": {"journal_id": 9, "currency_id": 1}
+}
+```
+
+Use accessible IDs for the selected company; the example IDs are not universal.
+The journal must belong to that exact company and be a sales journal for customer
+documents or a purchase journal for supplier documents. The currency must be
+active and accessible. Omit a field to retain the existing update contract;
+neither new field accepts `null`. Existing confirmation and replay rules apply.
+
+Odoo's ordinary write recomputes currency amounts, journal items and native
+numbering. Changing currency does not exchange the numeric unit prices: a line
+priced at 100 remains priced at 100 in the selected currency. A journal's currency
+is a default, not an invoice-currency hard lock. Forced account currencies,
+previously posted/numbered documents and installed exchange-rate customizations
+can impose further native restrictions. Read `invoice.get` and journal items
+after the update; the CLI does not bypass those rules or edit posted documents.
+
 ## Invoice and bill accounting dates
 
 `customer_invoice.create` and `vendor_bill.create` accept an optional `date`
