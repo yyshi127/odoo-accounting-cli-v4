@@ -536,7 +536,7 @@ _ENTRY_LINE_REQUIRED_KEYS = frozenset(
     {"name", "account_id", "partner_id", "debit", "credit"}
 )
 _ENTRY_LINE_OPTIONAL_KEYS = frozenset(
-    {"currency_id", "amount_currency", "analytic_distribution"}
+    {"currency_id", "amount_currency", "analytic_distribution", "date_maturity"}
 )
 _REFUND_REQUIRED_KEYS = frozenset({"move_id", "date", "reason"})
 _PAYMENT_REGISTER_REQUIRED_KEYS = frozenset({"move_id", "journal_id", "payment_date"})
@@ -2680,6 +2680,11 @@ def _valid_entry_lines(value: Any, *, minimum: int = 2) -> bool:
             or (debit > 0) == (credit > 0)
             or ("currency_id" in line) != ("amount_currency" in line)
             or (
+                "date_maturity" in line
+                and line["date_maturity"] is not None
+                and not _is_date(line["date_maturity"])
+            )
+            or (
                 "analytic_distribution" in line
                 and not _valid_analytic_distribution(line["analytic_distribution"])
             )
@@ -2849,6 +2854,7 @@ def _normalized_entry_replacement_lines(
             "name": line["name"],
             "account_id": line["account_id"],
             "partner_id": line["partner_id"],
+            "date_maturity": line.get("date_maturity"),
             "debit": _canonical_decimal_text(line["debit"]),
             "credit": _canonical_decimal_text(line["credit"]),
             "currency_id": line.get("currency_id") or company_currency_id,
@@ -2865,6 +2871,21 @@ def _normalized_entry_replacement_lines(
         }
         for line in lines
     ]
+
+
+def _entry_lines_match(
+    current: list[dict[str, Any]] | None,
+    lines: list[dict[str, Any]],
+    company_currency_id: int,
+) -> bool:
+    expected = _normalized_entry_replacement_lines(lines, company_currency_id)
+    if current is None or len(current) != len(expected):
+        return False
+    for actual, target, requested in zip(current, expected, lines, strict=True):
+        if "date_maturity" not in requested:
+            # An omitted date must not make an otherwise unchanged replay rewrite lines.
+            target["date_maturity"] = actual["date_maturity"]
+    return current == expected
 
 
 def _valid_asset_create_parameters(parameters: dict[str, Any]) -> bool:
@@ -7923,6 +7944,11 @@ def _create_entry(
                     "debit": Decimal(line["debit"]),
                     "credit": Decimal(line["credit"]),
                     **(
+                        {"date_maturity": line["date_maturity"] or False}
+                        if "date_maturity" in line
+                        else {}
+                    ),
+                    **(
                         {
                             "currency_id": line["currency_id"] or False,
                             "amount_currency": (
@@ -8210,6 +8236,7 @@ def _current_entry_lines(move: Any) -> list[dict[str, Any]] | None:
                 "name": line.name,
                 "account_id": account_id,
                 "partner_id": _many2one_id(line.partner_id),
+                "date_maturity": _nullable_value(getattr(line, "date_maturity", None)),
                 "debit": _canonical_decimal_text(line.debit),
                 "credit": _canonical_decimal_text(line.credit),
                 "currency_id": _many2one_id(line.currency_id),
@@ -8372,6 +8399,11 @@ def _replacement_commands(
                 "debit": Decimal(line["debit"]),
                 "credit": Decimal(line["credit"]),
                 **(
+                    {"date_maturity": line["date_maturity"] or False}
+                    if "date_maturity" in line
+                    else {}
+                ),
+                **(
                     {
                         "currency_id": line["currency_id"] or False,
                         "amount_currency": (
@@ -8410,8 +8442,9 @@ def _replace_move_lines(
         company_currency_id = _validate_entry_line_references(
             env, lines, company_id, failure_type
         )
-        expected = _normalized_entry_replacement_lines(lines, company_currency_id)
-        matches = _current_entry_lines(move) == expected
+        matches = _entry_lines_match(
+            _current_entry_lines(move), lines, company_currency_id
+        )
     if matches:
         return _move_result(move, company_id), True
     if invoice_action and _has_external_invoice_line_source(move):
@@ -8434,7 +8467,7 @@ def _replace_move_lines(
     verified = (
         _invoice_lines_match(_current_invoice_lines(move), lines)
         if invoice_action
-        else _current_entry_lines(move) == expected
+        else _entry_lines_match(_current_entry_lines(move), lines, company_currency_id)
     )
     if not verified:
         raise _fail(

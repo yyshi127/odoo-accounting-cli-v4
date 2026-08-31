@@ -39,10 +39,14 @@ the Odoo source/add-on tree while building CLI capabilities.
   The first test-fixture request failure and its separate correction are retained
   below; no worker remains.
 - Negative-price invoice/bill creation is checkpoint `e1510a1`, pushed to
-  `rebuild/v4`. The subsequent invoice.update journal/currency fields are deployed;
+  `rebuild/v4`. Invoice.update journal/currency is checkpoint `3c71911`;
   both isolated aliases passed real currency-change/posting acceptance in 517.22s.
   Actual journal-switch acceptance remains pending because there is no alternate
-  permitted journal fixture. See the final checkpoint for this distinction.
+  permitted journal fixture. See its checkpoint for this distinction.
+- Manual-entry date_maturity inputs are deployed. Necessary server regressions
+  and the corrected shared dual-alias workflow passed (1 passed in 921.11s), with
+  rollback verified. The original test-helper failure and its separate correction
+  are retained in the final checkpoint; no worker remains.
 - These totals include historical inventory, sales, and purchase extensions.
   They are neither a count of pure-accounting commands nor a completion
   percentage for the accounting module. Picking, delivery, and stock-return
@@ -2702,9 +2706,9 @@ active. No service, dependency, configuration or installed-source changes were
 issued. The two pre-change archives and completed test logs/exits are also retained
 in the same relative private .tooling directory locally, with matching hashes.
 
-### Next verified accounting gap
+### Follow-up identified at the invoice-header checkpoint
 
-Manual receivable/payable journal-entry lines cannot currently accept
+At that checkpoint, manual receivable/payable journal-entry lines could not accept
 date_maturity in journal_entry.create or journal_entry.lines.replace. Both
 closed request schemas, public/runtime validators, ORM values and replacement
 snapshots omit it. Existing journal_entry/journal_item reads expose the field,
@@ -2730,5 +2734,128 @@ use the two-line line_ids branch, not invoice_id (which rejects manual entries).
 Undo covers an isolated two-line reconciliation, not arbitrary multi-counterpart
 graphs. Verify due/future amounts, report/open-item changes, reconciliation and
 undo, immediate replays and final rollback under uid 5 without configuration
-changes. This follow-up is source/contract analysis only, not implemented or
-accepted work. The bank configuration and installed-addon blockers remain open.
+changes. Those were source/contract findings, not acceptance evidence; the
+implementation and current verification state follow below. The bank
+configuration and installed-addon blockers remain open.
+
+## 2026-08-31 manual-entry maturity checkpoint
+
+Existing journal_entry.create and journal_entry.lines.replace now accept optional
+date_maturity on each line: a canonical real YYYY-MM-DD string or null. Explicit
+null writes native False; an omitted key is not added to ORM input or request
+fingerprints. Snapshots include the native date. An otherwise unchanged old
+replacement request ignores only its omitted maturity fields, so it does not
+rewrite or clear them; an actual full replacement rebuilds all submitted lines.
+Supply dates to retain when replacing lines for another change. Native ORM and
+the CLI's draft-only actual-edit boundary are preserved. No mandatory AR/AP date,
+date/account-type restriction or maturity-after-accounting-date rule is invented.
+
+Existing journal_entry/journal_item reads expose the value. Open-item date bounds
+filter the raw maturity date (unset dates do not match); installed aged reports
+fall back to accounting date. No IDs, handlers, registry dependencies, schema
+files, configuration, permissions or inventory capabilities are added.
+
+Local necessary regression: 318 passed in 137.57s; six selected existing-entry
+cases also passed. Both shared modules skip with write authorization disabled.
+All 66 complete request templates for the two aliases passed offline schema and
+public-contract checks. Independent review corrected two test-only mistakes
+before deployment: journal_entry.get takes entry_id, and journal_item.search
+exposes balance/reconciled rather than amount_residual. Residuals are verified
+through open_items. Ruff and diff checks passed. Server regression passed 318
+cases / 2 authorization skips in 75.26s and six selected existing-entry cases in
+25.50s. The first shared live run failed in 11.18s on the initial aged-receivable
+read, before creating entries; its rollback audit completed. The helper omitted
+capability_id when constructing financial-report and open-item ports, selecting
+trial balance for an aged request. Only test code was corrected locally; a new
+five-route regression first reproduced the bug, then passed with both live tests
+unauthorized (1 passed / 2 skipped, 0.65s). No production validation was relaxed.
+The corrected two test files are deployed; the server helper regression passed
+1 case / 2 authorization skips in 0.71s. The default production CLI already binds
+both port types to the requested capability; this was a shared-helper-only fix.
+Corrected shared acceptance passed both aliases: 1 passed in 921.11s, exit 0.
+Each alias verified 62 CLI calls / 12 capabilities / 16 immediate replays, four
+manual entries, eight current posted items and rollback_verified=true. It verified
+AR 120/AP 90, both reconciliation/undo pairs and trial-balance debit/credit delta
+420/420. Past-due sources moved to period2; future counterparts restored after
+undo moved to period0 with the opposite sign, retaining a zero combined total.
+This is company-currency in-process CLI/real-ORM acceptance, not external bridge
+transport, durable replay, concurrency, tax or foreign-currency acceptance.
+
+The new shared case uses 12 existing accounting capabilities and verifies
+four manual entries per alias: AR 120 and AP 90, future/cleared/past maturity,
+posting, open items, native aged reports, opposite future-dated entries,
+reconciliation, undo, immediate replay and trial balance. Business actions use
+uid 5/su=False/company 1 only in odoo_cli_v4_dev and odoo_cli_v4_e2e. It always
+rolls back, followed by the existing fresh-cursor superuser read-only residual
+audit. It does not run the known blocked bank workflow or modify fixtures.
+
+Baseline local/GitHub commit: 3c7191149c162e0854980d24329b2713c5f11134.
+Server artifact directory:
+`/opt/odoo-accounting-cli-v4/.tooling/accounting-entry-maturity-20260831-a9503a31`
+
+- before-code.tgz contains five existing targets, all matching baseline blobs;
+  the three new test paths were absent. SHA-256
+  3b216038ae6ae078b0966b2a78eab925a55d094135e0f83b2960c15c32c7c10b.
+- code.tgz contains eight files, SHA-256
+  e65c5326c754b9a26ec3e0243805857f93ceeaba25cef862c4fe5798ac1c6b0c.
+- code.sha256 verified all eight deployed files. Existing ownership and modes
+  were retained. The pre-change archive is also downloaded locally with its
+  matching SHA-256; local artifacts use the same relative private directory.
+- runner/process group 2999206 finished and is empty. focused.exit and
+  existing-entry.exit are 0; live-smoke.exit is 1. Retain these original logs
+  when deploying the test-only fix and rerunning under distinct log names.
+- before-docs.tgz contains the three baseline documents, SHA-256
+  ec8d962ad490b82ae0afd46ae9d869ab26e94bef8ad4470e68b845b750d9aa67.
+- focused.log SHA-256:
+  77b89be585e0530df8b495536e6f4e9703da24e6d68b0a8af5b1caff43dc6431.
+- existing-entry.log SHA-256:
+  8371825d795d1c3e6a2769af00d32ed4ae824d389cefbfe3a4e4b38a86686dd1.
+- initial live-smoke.log SHA-256:
+  9eb036657cd23b26fe157aed2d83e3f1e079bf19e49f0292fab9842612754dea.
+- test-fix.tgz contains only the corrected helper and new shared test; SHA-256
+  6b4b9fc0f98434e75f4e5b38d32426d8e4a0edff9bb6549bdcc31e1c24240f18.
+  Both prior versions remain in code.tgz. verified-code.sha256 verifies all eight
+  final code/test/schema targets, without overwriting the initial manifest.
+- Corrected runner/process group 3009611 finished and is empty. The new result
+  files are helper-regression.log/.exit and live-smoke-corrected.log/.exit;
+  both exit files are 0. Keep the initial failure log alongside the passing run.
+- helper-regression.log SHA-256:
+  5e2d006d3dc1c85e532b8f218a106f4e2b38ccb6eba86b58cb2d67e5b87f9af8.
+- live-smoke-corrected.log SHA-256:
+  d1bf2997b1a12ab10325617a3e388f77df5117522e3b30c56bc3e1365d06dfe3.
+
+verified-code.sha256 records the eight final code/test/schema files; final.sha256
+adds README, STATUS and HANDOFF for the eleven-file checkpoint. The original and
+corrected test logs/exits and both pre-change archives are retained in the same
+relative private artifact directory locally as well as on the server.
+
+Post-run Odoo19 state remains PID 2855713 / NRestarts 3 / active-running;
+Nginx and PostgreSQL are active. Registry, installed exchange-rate addon and the
+earlier bank/deferred failure logs matched their recorded hashes. Server Git HEAD
+remains 2e190bcdd70313c0a10dcc479e1a2834db240a50; do not reset/pull over its working
+tree. This batch has not restarted services or changed business databases,
+installed source, dependencies or accounting setup. Prior journal-switch fixture,
+bank-account-role and installed-addon limitations remain unresolved.
+
+### Next accounting candidate (not implemented)
+
+Read-only contract/source review identified missing per-document
+fiscal_position_id input in customer_invoice.create, vendor_bill.create and
+invoice.update. Native account.move exposes a writable company-checked field;
+partner defaults do not replace the ability to explicitly select it per document.
+Read-only probes under uid 5/company 1/su=False found read access but zero
+company-matching or shared fiscal positions in both isolated databases, including
+inactive records. Both transactions were forced read-only, rolled back and
+closed. A positive selection/switch therefore has no existing acceptance fixture;
+do not label clearing an empty value as a successful real selection, or create
+configuration without authorization.
+
+If implementing this next, reuse the three existing inputs and native write.
+Distinguish omission from explicit null and validate the referenced company and
+ordinary-user access. Creation already submits explicit account_id/tax_ids on
+lines: do not silently map those inputs again. Changing or clearing the header
+does not mean reapplying the position to every existing line. The separate native
+action_update_fpos_values also recomputes unit prices, so do not invoke it
+implicitly. Preserve native country/tax consistency and posted-state refusal.
+This is a candidate operation gap, not a new command, implemented feature or
+verified workflow; no configuration/source repair is authorized by this finding.

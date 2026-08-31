@@ -782,6 +782,7 @@ def _validate_journal_lines(lines: Any, *, minimum: int) -> list[dict[str, Any]]
         "currency_id",
         "amount_currency",
         "analytic_distribution",
+        "date_maturity",
     }
     total_debit = Decimal(0)
     total_credit = Decimal(0)
@@ -801,6 +802,12 @@ def _validate_journal_lines(lines: Any, *, minimum: int) -> list[dict[str, Any]]
         if not _valid_optional_id(line["partner_id"]):
             raise _invalid(
                 "Journal-entry line partner_id must be null or a positive integer."
+            )
+        if "date_maturity" in line and not (
+            line["date_maturity"] is None or _is_date(line["date_maturity"])
+        ):
+            raise _invalid(
+                "Journal-entry line date_maturity must be null or a YYYY-MM-DD date."
             )
         debit = _decimal(line["debit"], signed=False)
         credit = _decimal(line["credit"], signed=False)

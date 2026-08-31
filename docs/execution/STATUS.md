@@ -16,7 +16,31 @@ sales/purchase extensions also remain; subtracting 16 does not establish a
 pure-accounting count or a coverage denominator. Registry SHA-256:
 `90162a226b7bb79da51b14446472309152a2990093c49d0ab9136132a5d4c8b3`.
 
-The latest invoice-header batch extends existing invoice.update.changes with
+The current manual-entry batch adds optional date_maturity (YYYY-MM-DD or null)
+to journal_entry.create and journal_entry.lines.replace. Explicit null clears
+the date; omission preserves old request fingerprints and unchanged replays.
+An actual full replacement still rebuilds the submitted lines, so dates to keep
+must be supplied with other edits. Native ORM behavior and draft-only editing
+remain unchanged. Eight code/test/schema files are deployed after backing up the
+five existing targets. Local necessary regressions passed 318 cases, plus six
+selected existing-entry cases. Server regression passed 318 cases / 2 authorization
+skips in 75.26s, then six existing-entry cases in 25.50s. The first shared live run
+failed on its initial aged-report read before creating entries: the test helper
+omitted capability IDs when constructing report/open-item ports. Its rollback
+audit completed and the failure log is retained. The test-only correction is
+deployed; its regression passed locally and on the server (1 passed / 2
+authorization skips, server 0.71s). Corrected shared acceptance passed both aliases:
+1 passed in 921.11s, exit 0. Each alias verified 62 CLI calls / 12 capabilities /
+16 immediate replays, four manual entries, eight current posted items, AR 120 /
+AP 90, due/future open items, native aging, reconciliation/undo and trial-balance
+debit/credit delta 420/420. All test records rolled back. Business execution is
+uid 5/su=False/company 1; the fresh-cursor rollback audit is superuser read-only.
+This is in-process CLI/real-ORM acceptance, not external bridge transport,
+durable replay, concurrency, tax or foreign-currency acceptance. No worker remains;
+Odoo19 PID 2855713 / restart-count 3 and protected file hashes remained unchanged.
+It adds no command IDs, stock operations, configuration or permission changes.
+
+The preceding invoice-header batch extends existing invoice.update.changes with
 optional journal_id/currency_id. Both are strict positive integer IDs; journals
 must match the selected company and customer/supplier document type, and currencies
 must be active and accessible. Native write/inverses handle the changes without
@@ -102,10 +126,10 @@ remain unchanged. See HANDOFF.md for retained logs and recovery files.
 The negative-price creation gap is completed above; signed line replacement
 already existed and is not a new command. The draft invoice.update journal/currency
 fields are implemented; actual currency acceptance and the journal-switch fixture
-limitation are distinguished above. The next verified input gap is optional
-date_maturity on journal_entry.create/lines.replace lines: reads and open-items
-already expose/use it. The source/contract findings and a 12-capability accounting
-workflow are recorded in HANDOFF; that follow-up is not implemented. Continue
+limitation are distinguished above. Optional date_maturity on manual-entry lines
+is now implemented and passed corrected shared acceptance as described above. Its
+source/contract findings and 12-capability accounting workflow are recorded in
+HANDOFF. Continue
 coherent workflows without adding inventory IDs or treating mixed-domain totals
 as completion.
 

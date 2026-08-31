@@ -361,6 +361,7 @@ def _cli(
     from odoo_accounting_cli_v4.bridge.financial_reports import OdooFinancialReportPort
     from odoo_accounting_cli_v4.bridge.invoices import OdooInvoicePort
     from odoo_accounting_cli_v4.bridge.journal_entries import OdooJournalEntryPort
+    from odoo_accounting_cli_v4.bridge.open_items import OdooOpenItemsPort
     from odoo_accounting_cli_v4.bridge.payments import OdooPaymentPort
 
     request = _request(alias, run_id, capability_id, parameters)
@@ -388,9 +389,17 @@ def _cli(
             "journal_entry.get": OdooJournalEntryPort,
             "journal_item.search": OdooCoreObjectReadPort,
             "journal_item.get": OdooCoreObjectReadPort,
+            "receivable.open_items.list": OdooOpenItemsPort,
+            "payable.open_items.list": OdooOpenItemsPort,
             "report.trial_balance": OdooFinancialReportPort,
+            "report.aged_receivable": OdooFinancialReportPort,
+            "report.aged_payable": OdooFinancialReportPort,
         }
-        port = ports[capability_id](client)
+        port_class = ports[capability_id]
+        if port_class in (OdooFinancialReportPort, OdooOpenItemsPort):
+            port = port_class(client, capability_id)
+        else:
+            port = port_class(client)
         argv = ["read", capability_id, "--request", "-"]
     stdout, stderr = io.StringIO(), io.StringIO()
     client.last_runtime_failure = None

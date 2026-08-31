@@ -79,6 +79,13 @@
                 ],
                 "minimum": 1
               },
+              "date_maturity": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date"
+              },
               "debit": {
                 "$ref": "#/$defs/decimal"
               },

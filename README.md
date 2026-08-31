@@ -196,6 +196,27 @@ include both fields in the same update when both are intentional. Posting can
 adjust the date or reject the operation under native rules. This does not bypass
 a closed accounting period or allow editing a posted document.
 
+## Manual journal-entry due dates
+
+`journal_entry.create` and `journal_entry.lines.replace` accept optional
+`date_maturity` on individual lines. It is independent of the entry's accounting
+`date`. For example, add `"date_maturity": "2026-09-30"` to a receivable or payable
+line, or use `"date_maturity": null` to clear it. Dates are `YYYY-MM-DD` strings;
+the CLI adds no requirement that maturity be on or after the accounting date.
+
+Read `journal_entry.get` or `journal_item.search/get` to check the stored date.
+Receivable/payable open-item `due_date_from` and `due_date_to` filters use the
+stored maturity date; an unset date does not match those date bounds. Native
+aged-receivable/payable reports instead fall back to the accounting date when
+maturity is unset. Maturity affects aging, not the entry's debit/credit amounts.
+
+Omitting the new field does not change old request fingerprints or make an
+otherwise unchanged line-replacement replay rewrite existing dates. A real
+`journal_entry.lines.replace` still replaces the entire submitted line set:
+include dates you intend to keep when changing other line values. New lines
+without a supplied date use the native default, not the deleted lines' dates.
+Actual replacement remains draft-only; this adds no posted-line edit command.
+
 ## Deferred invoice and bill lines
 
 The existing `customer_invoice.create`, `vendor_bill.create`,
