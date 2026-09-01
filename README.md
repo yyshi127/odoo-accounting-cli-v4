@@ -97,6 +97,23 @@ debit/credit values; preserve those signs when comparing journal items and
 reports. This settlement workflow is distinct from recording an actual cash
 refund, which requires the appropriate payment/bank workflow.
 
+For a refund of an already settled original document, create and post the
+financial credit note, then use its ID as `move_id` when registering the refund.
+`receivable.payment.register` accepts customer invoices and customer credit notes:
+Odoo selects an inbound customer receipt for `out_invoice`, or an outbound
+customer refund for `out_refund`. `payable.payment.register` accepts supplier bills
+and supplier refunds: Odoo selects an outbound supplier payment for `in_invoice`,
+or an inbound supplier refund for `in_refund`. The two commands cannot be used
+interchangeably across customer and supplier documents.
+
+Amounts remain positive; do not negate the refund amount. Supply an explicit
+`amount` to refund only part of the credit, or omit it to settle the remaining
+balance using the native wizard defaults. Read `payment.get` for direction and
+credit-note linkage, and `invoice.payment_status.inspect` for the remaining
+balance. Registration records the accounting payment and its reconciliation;
+it does not send a bank transfer or match a bank statement, and a settled
+document can remain `in_payment` until the banking workflow is complete.
+
 `receivable.payment.register` and `payable.payment.register` accept optional
 `payment_difference_handling` (`open` or `reconcile`). For a document with a
 remaining balance of `100`, this parameter excerpt records `99` and writes off

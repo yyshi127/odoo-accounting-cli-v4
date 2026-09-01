@@ -12136,8 +12136,8 @@
     },
     "payable.payment.register": {
       "summary": {
-        "zh_CN": "登记供应商付款",
-        "en_US": "Register a vendor payment"
+        "zh_CN": "登记供应商付款或退款收款",
+        "en_US": "Register a vendor payment or refund receipt"
       },
       "domain": "payments",
       "access": "write",
@@ -12215,6 +12215,7 @@
             "tests/unit/test_core_writes.py",
             "tests/unit/test_core_writes_bridge.py",
             "tests/unit/test_core_writes_runtime.py",
+            "tests/unit/test_payment_register_writeoff_runtime.py",
             "tests/unit/test_core_write_cli.py"
           ],
           "reason": "Unit tests cover the closed request, exact confirmation, fixed bridge action, Odoo-side execution, idempotent replay, and CLI response contract."
@@ -12223,9 +12224,10 @@
           "status": "implemented",
           "references": [
             "tests/integration/test_core_write_batch_live.py",
-            "tests/integration/test_accounting_depth_batch_live.py"
+            "tests/integration/test_accounting_depth_batch_live.py",
+            "tests/integration/test_invoice_cash_refund_batch_live.py"
           ],
-          "reason": "The shared dual-database rollback smoke covers partial-payment residuals and replay."
+          "reason": "Shared dual-database rollback smokes cover invoice and credit-note payments, partial residuals, direction, reconciliation and immediate replay."
         },
         "golden": {
           "status": "planned",
@@ -12250,10 +12252,12 @@
         ],
         "aliases": {
           "zh_CN": [
-            "登记供应商付款"
+            "登记供应商付款",
+            "登记供应商退款收款"
           ],
           "en_US": [
-            "Register a vendor payment"
+            "Register a vendor payment",
+            "Register a vendor refund receipt"
           ]
         },
         "not_for": {
@@ -14517,8 +14521,8 @@
     },
     "receivable.payment.register": {
       "summary": {
-        "zh_CN": "登记客户收款",
-        "en_US": "Register a customer receipt"
+        "zh_CN": "登记客户收款或退款",
+        "en_US": "Register a customer receipt or refund"
       },
       "domain": "payments",
       "access": "write",
@@ -14596,6 +14600,7 @@
             "tests/unit/test_core_writes.py",
             "tests/unit/test_core_writes_bridge.py",
             "tests/unit/test_core_writes_runtime.py",
+            "tests/unit/test_payment_register_writeoff_runtime.py",
             "tests/unit/test_core_write_cli.py"
           ],
           "reason": "Unit tests cover the closed request, exact confirmation, fixed bridge action, Odoo-side execution, idempotent replay, and CLI response contract."
@@ -14604,9 +14609,10 @@
           "status": "implemented",
           "references": [
             "tests/integration/test_core_write_batch_live.py",
-            "tests/integration/test_accounting_depth_batch_live.py"
+            "tests/integration/test_accounting_depth_batch_live.py",
+            "tests/integration/test_invoice_cash_refund_batch_live.py"
           ],
-          "reason": "The shared dual-database rollback smoke covers partial-payment residuals and replay."
+          "reason": "Shared dual-database rollback smokes cover invoice and credit-note payments, partial residuals, direction, reconciliation and immediate replay."
         },
         "golden": {
           "status": "planned",
@@ -14631,10 +14637,12 @@
         ],
         "aliases": {
           "zh_CN": [
-            "登记客户收款"
+            "登记客户收款",
+            "登记客户退款"
           ],
           "en_US": [
-            "Register a customer receipt"
+            "Register a customer receipt",
+            "Register a customer refund"
           ]
         },
         "not_for": {

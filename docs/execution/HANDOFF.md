@@ -1,6 +1,6 @@
 # Odoo Accounting CLI V4 handoff
 
-Updated: 2026-08-31 (Asia/Shanghai)
+Updated: 2026-09-01 (Asia/Shanghai)
 
 ## Objective and working rule
 
@@ -60,6 +60,11 @@ the Odoo source/add-on tree while building CLI capabilities.
   and 28 targeted regressions followed. The final shared run passed both aliases
   in 501.48s, with rollback verified; neither earlier failed run is counted as
   full acceptance. See the final taxed-invoice checkpoint for the evidence scope.
+- Cash-refund registration now accepts customer credit notes and supplier refunds
+  through the two existing payment.register commands. Six code/registry/test files
+  are deployed; 318 server regressions passed with one authorization skip. The
+  shared settled-invoice/partial-refund workflow passed both aliases in 919.40s,
+  with rollback verified. See the cash-refund checkpoint below for its boundary.
 - These totals include historical inventory, sales, and purchase extensions.
   They are neither a count of pure-accounting commands nor a completion
   percentage for the accounting module. Picking, delivery, and stock-return
@@ -3065,3 +3070,77 @@ must not be confused with bank.transaction.match. Determine any contract gap bef
 adding code. Known bank configuration, asset/deferred addon, alternate-journal and
 nonempty financial-header fixture limitations remain unresolved. No new overall
 completion denominator or second-stage control project is introduced here.
+
+## Cash-refund registration checkpoint — 2026-09-01
+
+The preceding taxed-invoice batch is committed at
+9bc4180c7ea41ee5f081962c2eb6c65a33d21aba, the local baseline for this batch.
+Counts remain 355 mixed-domain IDs / 340 handlers / 685 schemas. Registry SHA-256
+is aafdbd1570639a61c3be8a4c53999ed6ed7904a694a9d7548443b696dabaa2e1.
+
+Two existing commands are extended, not replaced or supplemented with new IDs:
+
+- receivable.payment.register accepts out_invoice and out_refund.
+- payable.payment.register accepts in_invoice and in_refund.
+- Native account.payment.register determines direction and customer/supplier type.
+  Refund amounts stay positive; customers receive outbound refunds and suppliers
+  return funds through inbound payments. Request/response schemas, operation keys,
+  company scope and ACLs are unchanged. Registry summaries/aliases expose refunds.
+- Explicit write-off readback uses the actual source type: out_invoice/in_refund
+  positive; in_invoice/out_refund negative. Refund write-off is unit-tested here,
+  not added to the shared live scenario or claimed as live acceptance.
+
+The production change is confined to source-family selection and difference sign.
+Local necessary regression passed 317 tests in 6.42s, after four refund cases first
+failed against the old source-type filter. The initial broader registry run had
+18 passes and one failure because the new evidence references were not in its old
+expectations; the aligned write-registry test then passed in 6.31s, with one
+authorization skip for the live file. No business smoke ran on the local machine.
+
+Private artifact directory: .tooling/accounting-cash-refunds-20260831-6d31f902.
+Six code/registry/test files are deployed after a five-existing-file backup;
+test_invoice_cash_refund_batch_live.py is the new file. Existing file ownership
+and modes are restored. The server baseline was compared by Git blob against the
+local pre-batch commit before any overwrite; deployed bytes match deploy.sha256.
+
+- before-code.tgz SHA-256:
+  820318dc5b89e41651cd21cd63f11e0e4fc84469fc2b0a0165517faf58d079da.
+- code-final.tgz SHA-256:
+  e9491b333dcc0df15b3b69190a4c55912c00556d2ba7f9efe441fb417f983c9f.
+- before-docs.tgz SHA-256:
+  abc35890fbc36e0831f5af25a95d00992635bc9f473addadca0ede36f950bd4f.
+- Server focused regression: 318 passed / one authorization skip, 21.72s, exit 0.
+- Shared live run: 1 passed in 919.40s, exit 0. Run UUID
+  565204ee-7264-41f4-9fab-50df73d5533d. Runner/process group 3197634 is finished
+  and empty. focused.log SHA-256 is
+  62a00106261cfd3944b360674ffa64b3ecb30dd3d50cf691e39c8592970db306;
+  live-smoke.log SHA-256 is
+  228602009c8e96cab9e662e6ab8199e698c106185890f06b1860756c1c17ff17.
+
+The shared scenario targets each isolated alias with uid 5/company 1/su=False:
+settle customer invoice 100 and supplier bill 100 first, then create/post customer
+credit 40 and supplier refund 60. Record customer refunds 20 plus default remainder
+20 and supplier refund receipts 30 plus default remainder 30. Verify that original
+reconciliations remain unchanged, credit residuals decrease to zero, refunds use
+opposite payment directions, and posted storno journal items balance. Each alias
+passed 12 existing capabilities / 62 CLI calls / 14 immediate replays, six payments,
+20 journal items, six partial/four full reconciliations and trial-balance debit/
+credit delta 400/400.
+
+All business activity must roll back; the reused fresh-cursor residual audit is
+separately superuser read-only. The existing CNY/storno/manual-payment fixtures are
+read, not reconfigured. This is not a bank transfer, bank-statement matching,
+foreign-currency/taxed-refund, external bridge or durable/concurrent replay proof.
+
+Next bounded candidate is correction of an already reconciled refund: payment.cancel
+or payment.reset_to_draft, with restored credit residual and the other refund/original
+settlement preserved. Both commands already exist; prior smoke checks cancellation
+state or an unallocated payment reset, not this complete refund-correction result.
+Inspect for an actual gap before changing production code. Known bank configuration,
+asset/deferred addon and financial-reference fixture blockers remain unchanged.
+
+After the run, Odoo19 remains MainPID 2855713 / NRestarts 3 / active-running;
+Nginx and PostgreSQL remain active. The protected addon and earlier bank/deferred
+failure logs retain their recorded hashes. No service was restarted and no master
+configuration, permissions, installed Odoo/addon source or business database was
+changed.

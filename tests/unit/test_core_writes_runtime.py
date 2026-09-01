@@ -1020,7 +1020,7 @@ class Env:
             self._next_id + 1, move_type="entry", state="posted", residual="0"
         )
         self._next_id = payment_move.id
-        is_invoice = source.move_type == "out_invoice"
+        is_invoice = source.move_type in {"out_invoice", "out_refund"}
         amount = Decimal(
             str(getattr(wizard.records[0], "amount", False) or source.amount_residual)
         )
@@ -1034,6 +1034,10 @@ class Env:
             journal_id=self.models["account.journal"].browse(wizard.journal_id),
             date=wizard.payment_date,
             amount=amount,
+            payment_type="inbound"
+            if source.move_type in {"out_invoice", "in_refund"}
+            else "outbound",
+            partner_type="customer" if is_invoice else "supplier",
             move_id=Records(self, "account.move", [payment_move]),
             reconciled_invoice_ids=source
             if is_invoice
@@ -2406,6 +2410,8 @@ def test_reversal_uses_odoo19_wizard_and_marker_for_replay() -> None:
     (
         ("receivable.payment.register", "out_invoice"),
         ("payable.payment.register", "in_invoice"),
+        ("receivable.payment.register", "out_refund"),
+        ("payable.payment.register", "in_refund"),
     ),
 )
 def test_payment_register_uses_full_residual_wizard_and_replays_by_source(
@@ -2431,6 +2437,13 @@ def test_payment_register_uses_full_residual_wizard_and_replays_by_source(
     assert first["result"]["state"] == "in_process"
     assert second["idempotent_replay"] is True
     calls = [call for call in env.calls if call[0] == "action_create_payments"]
+    payment = env.models["account.payment"].browse(first["result"]["id"])
+    assert payment.payment_type == (
+        "inbound" if move_type in {"out_invoice", "in_refund"} else "outbound"
+    )
+    assert payment.partner_type == (
+        "customer" if move_type in {"out_invoice", "out_refund"} else "supplier"
+    )
     assert calls == [
         (
             "action_create_payments",
@@ -2466,9 +2479,20 @@ def test_payment_register_replay_rejects_changed_payment_parameters() -> None:
     assert caught.value.code == "idempotency_conflict"
 
 
-def test_partial_payment_register_rounds_amount_leaves_open_and_replays() -> None:
+@pytest.mark.parametrize(
+    "capability_id,move_type",
+    [
+        ("receivable.payment.register", "out_invoice"),
+        ("receivable.payment.register", "out_refund"),
+        ("payable.payment.register", "in_invoice"),
+        ("payable.payment.register", "in_refund"),
+    ],
+)
+def test_partial_payment_register_rounds_amount_leaves_open_and_replays(
+    capability_id, move_type
+) -> None:
     env = Env()
-    source = env.existing_move(120, move_type="out_invoice", residual="125.50")
+    source = env.existing_move(120, move_type=move_type, residual="125.50")
     parameters = {
         "move_id": source.id,
         "journal_id": env.bank_journal.id,
@@ -2476,7 +2500,7 @@ def test_partial_payment_register_rounds_amount_leaves_open_and_replays() -> Non
         "amount": "50",
     }
     payload = _payload(
-        "receivable.payment.register", parameters, key="partial-payment-operation"
+        capability_id, parameters, key="partial-payment-operation"
     )
 
     first = writes.dispatch(env, payload, 7, Failure)
@@ -2494,13 +2518,15 @@ def test_partial_payment_register_rounds_amount_leaves_open_and_replays() -> Non
     )
     assert wizard_values["amount"] == 50.0
     assert wizard_values["payment_difference_handling"] == "open"
+    assert "payment_type" not in wizard_values
+    assert "partner_type" not in wizard_values
 
     too_large = {**parameters, "amount": "80"}
     with pytest.raises(Failure) as caught:
         writes.dispatch(
             env,
             _payload(
-                "receivable.payment.register",
+                capability_id,
                 too_large,
                 key="second-partial-payment-operation",
             ),
@@ -2508,6 +2534,33 @@ def test_partial_payment_register_rounds_amount_leaves_open_and_replays() -> Non
             Failure,
         )
     assert caught.value.code == "state_conflict"
+
+
+@pytest.mark.parametrize(
+    "capability_id,move_type",
+    [
+        ("receivable.payment.register", "in_invoice"),
+        ("receivable.payment.register", "in_refund"),
+        ("payable.payment.register", "out_invoice"),
+        ("payable.payment.register", "out_refund"),
+    ],
+)
+def test_payment_register_rejects_other_document_family(capability_id, move_type):
+    env = Env()
+    source = env.existing_move(100, move_type=move_type)
+    payload = _payload(
+        capability_id,
+        {
+            "move_id": source.id,
+            "journal_id": env.bank_journal.id,
+            "payment_date": "2025-02-04",
+        },
+        key=f"{capability_id}:{source.id}",
+    )
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(env, payload, 7, Failure)
+    assert caught.value.code == "record_not_found"
+    assert not any(call[0] == "create" for call in env.calls)
 
 
 @pytest.mark.parametrize(

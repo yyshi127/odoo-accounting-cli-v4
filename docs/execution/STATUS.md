@@ -1,6 +1,6 @@
 # Execution status
 
-## Current accounting phase — 2026-08-31
+## Current accounting phase — 2026-09-01
 
 The active objective is capability-first accounting delivery in
 [GOAL_SUMMARY.md](GOAL_SUMMARY.md). Historical sales, purchasing and inventory
@@ -14,9 +14,25 @@ not 355 accounting operations, a coverage percentage, or proof that all workflow
 pass for the configured user. There are 16 `stock.*` IDs, but other historical
 sales/purchase extensions also remain; subtracting 16 does not establish a
 pure-accounting count or a coverage denominator. Registry SHA-256:
-`409af5cb25a85e7a31e067b6d3addcd94d562d52721fbbdb4cb34f366f16f977`.
+`aafdbd1570639a61c3be8a4c53999ed6ed7904a694a9d7548443b696dabaa2e1`.
 
-The current taxed-invoice batch adds tax_line_id, tax_ids and signed
+The current cash-refund batch extends receivable.payment.register to customer
+credit notes and payable.payment.register to supplier refunds. Odoo's native
+wizard determines the payment direction; the write-off readback uses the actual
+source-document type for its sign. Requests, schemas, IDs, ACLs and operation keys
+are unchanged. Registry summaries and aliases expose the existing commands' refund
+support. Six code/registry/test files are deployed after backing up five existing
+targets. Necessary server regression passed 318 cases with one authorization skip
+in 21.72s. The shared dual-alias real workflow passed: 1 passed in 919.40s,
+exit 0. Each alias verified 62 CLI calls / 12 existing capabilities / 14 immediate
+replays, two settled originals, customer credit 40 refunded as 20 plus 20,
+supplier refund 60 received as 30 plus 30, six payments, 20 posted journal items,
+unchanged original reconciliations and trial-balance debit/credit delta 400/400.
+All test records rolled back; the fresh-cursor residual audits passed. Business
+execution is uid 5/su=False/company 1; those separate audits are superuser read-only.
+This is refund payment accounting, not bank transfers or bank-statement matching.
+
+The preceding taxed-invoice batch adds tax_line_id, tax_ids and signed
 company-currency tax_base_amount to journal_item.search/get. Thirteen
 code/schema/registry/test files are deployed after backing up eleven existing
 targets across the initial deployment and report correction. report.tax also

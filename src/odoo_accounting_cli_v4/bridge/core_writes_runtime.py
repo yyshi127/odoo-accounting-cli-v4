@@ -8856,10 +8856,10 @@ def _register_payment(
     key: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
-    move_type = (
-        "out_invoice"
+    move_types = (
+        ["out_invoice", "out_refund"]
         if capability_id == "receivable.payment.register"
-        else "in_invoice"
+        else ["in_invoice", "in_refund"]
     )
     source = _search_one(
         env,
@@ -8867,7 +8867,7 @@ def _register_payment(
         [
             ("id", "=", parameters["move_id"]),
             ("company_id", "=", company_id),
-            ("move_type", "=", move_type),
+            ("move_type", "in", move_types),
         ],
         company_id,
         failure_type,
@@ -9039,7 +9039,11 @@ def _register_payment(
             exit_code=6,
         )
     if handling == "reconcile":
-        signed_difference = difference if move_type == "out_invoice" else -difference
+        signed_difference = (
+            difference
+            if source.move_type in {"out_invoice", "in_refund"}
+            else -difference
+        )
         writeoff_lines = payment.move_id.line_ids.filtered(
             lambda line: line.account_id.id == parameters["writeoff_account_id"]
             and line.name == wizard.writeoff_label

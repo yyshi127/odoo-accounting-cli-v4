@@ -68,7 +68,7 @@ class PaymentEnv(Env):
                     ),
                     currency_id=wizard.currency_id,
                     amount_currency=difference
-                    if source.move_type == "out_invoice"
+                    if source.move_type in {"out_invoice", "in_refund"}
                     else -difference,
                 )
                 payment.move_id.records[0].line_ids = Records(
@@ -77,13 +77,16 @@ class PaymentEnv(Env):
         return result
 
 
-def case(capability="receivable.payment.register", *, amount="99"):
+def case(capability="receivable.payment.register", *, amount="99", move_type=None):
     env = PaymentEnv()
     source = env.existing_move(
         100,
-        move_type="out_invoice"
-        if capability == "receivable.payment.register"
-        else "in_invoice",
+        move_type=move_type
+        or (
+            "out_invoice"
+            if capability == "receivable.payment.register"
+            else "in_invoice"
+        ),
     )
     parameters = {
         "move_id": source.id,
@@ -98,10 +101,18 @@ def case(capability="receivable.payment.register", *, amount="99"):
 
 
 @pytest.mark.parametrize(
-    "capability", ["receivable.payment.register", "payable.payment.register"]
+    "capability,move_type,sign",
+    [
+        ("receivable.payment.register", "out_invoice", 1),
+        ("receivable.payment.register", "out_refund", -1),
+        ("payable.payment.register", "in_invoice", -1),
+        ("payable.payment.register", "in_refund", 1),
+    ],
 )
-def test_explicit_writeoff_settles_the_residual_and_replays(capability):
-    env, source, payload = case(capability)
+def test_explicit_writeoff_settles_the_residual_and_replays(
+    capability, move_type, sign
+):
+    env, source, payload = case(capability, move_type=move_type)
     first = writes.dispatch(env, payload, 7, Failure)
     second = writes.dispatch(env, payload, 7, Failure)
     assert source.amount_residual == 0
@@ -109,6 +120,7 @@ def test_explicit_writeoff_settles_the_residual_and_replays(capability):
     assert second["idempotent_replay"] is True
     payment = env.models["account.payment"].browse(first["result"]["id"])
     assert payment.amount == Decimal(99)
+    assert payment.move_id.line_ids.records[0].amount_currency == sign
     assert payment.memo == payload["idempotency_key"]
     assert payment.move_id.invoice_origin == writes._operation_marker(
         capability, payload["idempotency_key"], payload["parameters"]
@@ -147,6 +159,32 @@ def test_same_key_cannot_change_or_remove_writeoff_parameters(change):
         writes.dispatch(env, modified, 7, Failure)
     assert caught.value.code == "idempotency_conflict"
     assert len([call for call in env.calls if call[0] == "action_create_payments"]) == 1
+
+
+@pytest.mark.parametrize(
+    "capability,move_type",
+    [
+        ("receivable.payment.register", "out_refund"),
+        ("payable.payment.register", "in_refund"),
+    ],
+)
+def test_refund_writeoff_rejects_reversed_native_sign(
+    capability, move_type, monkeypatch
+):
+    env, _source, payload = case(capability, move_type=move_type)
+    original_register = env.register_payment
+
+    def wrong_sign(wizard):
+        result = original_register(wizard)
+        payment = env.models["account.payment"].browse(result["res_id"])
+        line = payment.move_id.line_ids.records[0]
+        line.amount_currency = -line.amount_currency
+        return result
+
+    monkeypatch.setattr(env, "register_payment", wrong_sign)
+    with pytest.raises(Failure) as caught:
+        writes.dispatch(env, payload, 7, Failure)
+    assert caught.value.code == "odoo_write_error"
 
 
 @pytest.mark.parametrize("unavailable", ["missing", "foreign", "inactive"])
