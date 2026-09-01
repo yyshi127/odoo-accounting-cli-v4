@@ -3144,3 +3144,105 @@ Nginx and PostgreSQL remain active. The protected addon and earlier bank/deferre
 failure logs retain their recorded hashes. No service was restarted and no master
 configuration, permissions, installed Odoo/addon source or business database was
 changed.
+
+## Grouped invoice/bill payment checkpoint — 2026-09-01
+
+The local baseline is c1e4b1ae889af2e83471a28a0b35c20c039711be. Counts remain
+355 mixed-domain command IDs / 340 handlers (210 reads, 130 writes) / 685 schema
+files; no command ID or schema file is added. The final registry SHA-256 is
+272fcf3c261ee1b36f7f2471545e41bf803bdc4d9ed5875d3acf3baf12f1d38f.
+
+Two existing write commands gain a deliberately narrow multi-document mode:
+
+- `receivable.payment.register` accepts `move_ids` for two through 100 posted
+  customer invoices (`out_invoice`) and creates one full customer receipt.
+- `payable.payment.register` accepts the same shape for posted supplier bills
+  (`in_invoice`) and creates one full supplier payment.
+- Multi-document requests allow only `move_ids`, `journal_id` and `payment_date`.
+  Source IDs must be distinct and are sorted before hashing. Every document must share
+  company, exact move type, partner and currency, have positive residual,
+  and form one native Odoo payment-register batch. The wizard must return exactly
+  one payment. Partial amounts, write-offs and refunds remain on the unchanged
+  single-`move_id` path.
+- The operation key binds the normalized source set; the marker is stored on the
+  payment. Replay validates that marker, date, journal and exact source-document set,
+  including after all residuals reach zero. Generic payment readback intentionally
+  does not claim source reconciliation IDs; live acceptance verifies reconciliation
+  through all source invoices/bills.
+
+Nine files form the implementation checkpoint: the registry, two request schemas,
+the core write contract and runtime, one existing registry test, and three new
+payment-register-many tests. Necessary local regression passed 234 tests with 576
+deselected in 313.82s; the initial new contract/runtime/registry selection passed 43
+tests in 24.80s. Pre-commit review found one contract/bridge mismatch: the public
+layer generated the grouped deterministic key while a direct bridge payload could
+provide an arbitrary key. The bridge now computes the identical key and rejects a
+mismatch before model access. Registry line endings were also normalized to LF so
+deployed bytes, committed bytes and the documented SHA agree. After those corrections,
+41 contract/runtime tests passed in 7.20s and the registry-alignment test passed in
+7.30s; a combined selection passed 42 cases with 18 deselected. Ruff passed for the
+changed Python files, and the live integration module compiled and skipped cleanly
+without authorization.
+
+Private server artifact directory:
+`.tooling/accounting-grouped-payments-20260901-f8f80a94`.
+The six pre-existing code targets were archived before deployment, all deployed
+bytes were hash-verified, and the corrected test file was separately backed up
+before replacement.
+
+- `before-code.tgz` SHA-256:
+  e4f2c75c5c80b7cacc92424520922148c86fca1809a4d5f2d14b47b0f0d17a00.
+- `before-live-test-fix.tgz` SHA-256:
+  28b51c95993a7489a4a550425aeab99c974a68249a695ff06fcc92ff6a5b7373.
+- Pre-review `code-final.tgz` SHA-256:
+  e8a549dc1b15439cf7141db9ae76c7acb3b9ae5efd50c7b6a305b5b261c46da8.
+- `before-key-binding-fix.tgz` SHA-256:
+  4522da5ebc925645881724be020a8ab64e49ac3a47224208dee9bff57bba66a5.
+- Final `code-final-keyfix.tgz` SHA-256:
+  cf01d4f3110dcbd97d6ecd385eed9dcbd14ef11edae96cd9d1e7ad07f05b4f1b.
+- `before-docs.tgz` SHA-256:
+  57b5d9ca425001bcf57299159aff3b53116b7f79630706462d33491119e79cdd.
+- Server focused regression: 234 passed / 573 deselected in 220.88s, exit 0;
+  log SHA-256 49c537c5fdd5e4d2643bcfae1c75fb330edaefa010842bf0c1a75615ebc876ea.
+- Server registry selection: three passed in 20.27s, exit 0; log SHA-256
+  e4f22fc7749a73d5094f57ceb56fe6589cf17ae65668409845c22b00b8d8d3b4.
+- Final server key-binding/contract/registry selection: 42 passed in 14.68s,
+  exit 0; log SHA-256
+  7bc02cfa6c036832a3b56d1ce2efcca7b203a2d6abbea3b9ddd97a138989fcd7.
+- Corrected shared live workflow: one passed in 482.74s, exit 0; log SHA-256
+  964c186ee810336dc8c67289f7c1e72ba58a00fcf8730b1506c6e3e71e3bbc21.
+
+The first live attempt is retained, but is not counted as acceptance. It failed
+after 145.54s solely because the new test asserted that the generic payment result
+must expose partial-reconciliation IDs. The worker completed rollback and the
+fresh-cursor residual audit before raising. The assertion was corrected to check
+the four source documents; production code was unchanged. That failed-attempt log
+SHA-256 is f1927491114351cf22e1a165cacab548564706babecdbd84000369ff7159fab1.
+The successful live run was not repeated after the key-enforcement correction:
+it already entered through the public layer with the same final deterministic key,
+while the new local/server unit case covers rejection of a forged bridge key.
+
+The successful shared scenario ran against both isolated aliases as uid 5,
+company 1, su=False. Per alias it created and posted two customer invoices and two
+supplier bills, registered one combined receipt and one combined payment, exercised
+nine existing capabilities through 30 CLI calls with ten immediate replays, and
+observed trial-balance debit/credit delta 400/400. Across both aliases that is 60
+calls, 20 replays, eight source documents and four combined payments. All business
+records rolled back; a separate fresh-cursor read-only audit confirmed no residual
+records. No worker remains. At 10:24:27 CST, after the final tests, the pre-existing
+Odoo19 process exited with `ModuleNotFoundError: passlib`; systemd restarted it at
+10:24:38 as PID 3995891 / NRestarts 4. The same approximately daily failure appears
+on August 29-31. This deployment did not issue a restart or alter that environment.
+Odoo19, Nginx and PostgreSQL are active. No installed addon, permission,
+configuration or business database was changed. The server Git HEAD intentionally
+remains 2e190bcdd70313c0a10dcc479e1a2834db240a50; do not pull or reset over that
+working tree.
+
+Internal bank transfer is not included. The current isolated configuration has only
+one suitable bank/cash journal per database, and source inspection did not establish
+a native Odoo 19 action that safely creates the paired transfer required by this
+CLI contract. Do not synthesize two unrelated payments and call that complete.
+The next bounded capability candidates are `invoice.duplicate` and
+`invoice.type.switch`. A payment-hold flag is not a payment-enforcement control,
+and fiscal-position application lacks safe writable fixtures; neither should be
+claimed as the next capability batch without resolving those facts.

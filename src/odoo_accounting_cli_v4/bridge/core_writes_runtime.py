@@ -544,6 +544,9 @@ _ENTRY_LINE_OPTIONAL_KEYS = frozenset(
 )
 _REFUND_REQUIRED_KEYS = frozenset({"move_id", "date", "reason"})
 _PAYMENT_REGISTER_REQUIRED_KEYS = frozenset({"move_id", "journal_id", "payment_date"})
+_PAYMENT_REGISTER_MANY_REQUIRED_KEYS = frozenset(
+    {"move_ids", "journal_id", "payment_date"}
+)
 
 _PARAMETER_KEYS = {
     "customer_invoice.create": {
@@ -588,6 +591,7 @@ _PARAMETER_KEYS = {
     "journal_entry.reverse": {"move_id", "date", "reason"},
     "receivable.payment.register": {
         "move_id",
+        "move_ids",
         "journal_id",
         "payment_date",
         "amount",
@@ -597,6 +601,7 @@ _PARAMETER_KEYS = {
     },
     "payable.payment.register": {
         "move_id",
+        "move_ids",
         "journal_id",
         "payment_date",
         "amount",
@@ -4197,7 +4202,11 @@ def _valid_parameters(
         "receivable.payment.register",
         "payable.payment.register",
     }:
-        required_keys = _PAYMENT_REGISTER_REQUIRED_KEYS
+        required_keys = (
+            _PAYMENT_REGISTER_MANY_REQUIRED_KEYS
+            if "move_ids" in parameters
+            else _PAYMENT_REGISTER_REQUIRED_KEYS
+        )
     elif capability_id in {"reconciliation.apply", "reconciliation.undo"}:
         required_keys = frozenset()
     elif capability_id == "payment_term.create":
@@ -4326,6 +4335,18 @@ def _valid_parameters(
         "receivable.payment.register",
         "payable.payment.register",
     }:
+        if "move_ids" in parameters:
+            move_ids = parameters["move_ids"]
+            return (
+                set(parameters) == _PAYMENT_REGISTER_MANY_REQUIRED_KEYS
+                and isinstance(move_ids, list)
+                and 2 <= len(move_ids) <= 100
+                and all(_is_id(move_id) for move_id in move_ids)
+                and len(set(move_ids)) == len(move_ids)
+                and move_ids == sorted(move_ids)
+                and _is_id(parameters["journal_id"])
+                and _is_date(parameters["payment_date"])
+            )
         handling = parameters.get("payment_difference_handling")
         if "payment_difference_handling" in parameters and handling not in (
             "open",
@@ -5001,6 +5022,18 @@ def _deterministic_key(
     if capability_id in config_lifecycle_ids:
         target_name = config_lifecycle_ids[capability_id]
         return f"{capability_id}:{parameters[target_name]}"
+    if (
+        capability_id in {"receivable.payment.register", "payable.payment.register"}
+        and "move_ids" in parameters
+    ):
+        canonical = json.dumps(
+            parameters,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        return f"{capability_id}:{company_id}:{digest}"
     if capability_id in {
         "customer_credit_note.create",
         "vendor_refund.create",
@@ -8848,6 +8881,158 @@ def _rounded_currency_amount(currency: Any, value: str) -> Decimal:
     return Decimal(str(currency.round(float(Decimal(value)))))
 
 
+def _register_many_payments(
+    env: Any,
+    capability_id: str,
+    parameters: dict[str, Any],
+    company_id: int,
+    key: str,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    move_ids = parameters["move_ids"]
+    move_type = (
+        "out_invoice"
+        if capability_id == "receivable.payment.register"
+        else "in_invoice"
+    )
+    sources = _scoped(env, "account.move", company_id).search(
+        [
+            ("id", "in", move_ids),
+            ("company_id", "=", company_id),
+            ("move_type", "=", move_type),
+        ]
+    )
+    if set(_record_ids(sources)) != set(move_ids):
+        raise _fail(
+            failure_type,
+            "record_not_found",
+            "One or more payment source documents were not found.",
+            exit_code=4,
+        )
+    partner_ids = set(_record_ids(sources.partner_id))
+    currency_ids = set(_record_ids(sources.currency_id))
+    if len(partner_ids) != 1 or len(currency_ids) != 1:
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Batch payment sources must use one partner and one currency.",
+            exit_code=5,
+        )
+    if any(source.state != "posted" for source in sources):
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Every batch payment source must be posted.",
+            exit_code=5,
+        )
+    operation_marker = _operation_marker(capability_id, key, parameters)
+    candidates = _scoped(env, "account.payment", company_id).search(
+        [("company_id", "=", company_id), ("memo", "=", key)], limit=2
+    )
+    if candidates:
+        payment = candidates if len(candidates) == 1 else None
+        if (
+            payment is None
+            or payment.state == "canceled"
+            or payment.journal_id.id != parameters["journal_id"]
+            or str(payment.date) != parameters["payment_date"]
+            or payment.move_id.invoice_origin != operation_marker
+            or _payment_sources(payment) != set(move_ids)
+        ):
+            raise _fail(
+                failure_type,
+                "idempotency_conflict",
+                "The payment idempotency key conflicts with another payment.",
+                exit_code=5,
+            )
+        return _payment_result(payment, company_id, source_id=None), True
+    if any(Decimal(str(source.amount_residual)) <= 0 for source in sources):
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Every batch payment source must have a posted positive residual.",
+            exit_code=5,
+        )
+    currency = next(iter(sources)).currency_id
+    total_residual = _rounded_currency_amount(
+        currency, str(sum(Decimal(str(source.amount_residual)) for source in sources))
+    )
+    _ensure_ids(
+        env,
+        "account.journal",
+        {parameters["journal_id"]},
+        [("company_id", "=", company_id), ("type", "in", ["bank", "cash"])],
+        company_id,
+        failure_type,
+    )
+    wizard = (
+        _scoped(env, "account.payment.register", company_id)
+        .with_context(
+            active_model="account.move",
+            active_ids=move_ids,
+            default_invoice_origin=operation_marker,
+        )
+        .create(
+            {
+                "journal_id": parameters["journal_id"],
+                "payment_date": parameters["payment_date"],
+                "communication": key,
+                "installments_mode": "full",
+                "group_payment": True,
+            }
+        )
+    )
+    if (
+        len(wizard.batches) != 1
+        or not wizard.can_edit_wizard
+        or not wizard.can_group_payments
+        or not wizard.group_payment
+        or wizard.early_payment_discount_mode
+        or wizard.writeoff_is_exchange_account
+        or wizard.currency_id.id != currency.id
+        or _rounded_currency_amount(currency, str(wizard.amount)) != total_residual
+        or _rounded_currency_amount(currency, str(wizard.payment_difference)) != 0
+    ):
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "The native payment wizard cannot combine these documents into one full payment.",
+            exit_code=5,
+        )
+    wizard.action_create_payments()
+    payments = _scoped(env, "account.payment", company_id).search(
+        [("company_id", "=", company_id), ("memo", "=", key)], limit=2
+    )
+    if len(payments) != 1:
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not create exactly one combined payment.",
+            exit_code=6,
+        )
+    payment = payments
+    if (
+        payment.state == "canceled"
+        or payment.memo != key
+        or payment.journal_id.id != parameters["journal_id"]
+        or str(payment.date) != parameters["payment_date"]
+        or payment.move_id.invoice_origin != operation_marker
+        or _payment_sources(payment) != set(move_ids)
+        or _rounded_currency_amount(currency, str(payment.amount)) != total_residual
+        or any(
+            _rounded_currency_amount(currency, str(source.amount_residual)) != 0
+            for source in sources
+        )
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo returned an invalid combined registered payment.",
+            exit_code=6,
+        )
+    return _payment_result(payment, company_id, source_id=None), False
+
+
 def _register_payment(
     env: Any,
     capability_id: str,
@@ -8856,6 +9041,10 @@ def _register_payment(
     key: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if "move_ids" in parameters:
+        return _register_many_payments(
+            env, capability_id, parameters, company_id, key, failure_type
+        )
     move_types = (
         ["out_invoice", "out_refund"]
         if capability_id == "receivable.payment.register"

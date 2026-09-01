@@ -26,14 +26,36 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "move_id",
         "journal_id",
         "payment_date"
+      ],
+      "oneOf": [
+        {
+          "required": ["move_id"],
+          "properties": {"move_ids": false}
+        },
+        {
+          "required": ["move_ids"],
+          "properties": {
+            "move_id": false,
+            "amount": false,
+            "payment_difference_handling": false,
+            "writeoff_account_id": false,
+            "writeoff_label": false
+          }
+        }
       ],
       "properties": {
         "move_id": {
           "type": "integer",
           "minimum": 1
+        },
+        "move_ids": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 1}
         },
         "journal_id": {
           "type": "integer",

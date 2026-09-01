@@ -1083,18 +1083,31 @@ def _validate_refund_parameters(parameters: Any) -> dict[str, Any]:
 
 
 def _validate_payment_register_parameters(parameters: Any) -> dict[str, Any]:
-    required = {"move_id", "journal_id", "payment_date"}
-    allowed = required | {
+    common = {"journal_id", "payment_date"}
+    optional = {
         "amount",
         "payment_difference_handling",
         "writeoff_account_id",
         "writeoff_label",
     }
-    if not isinstance(parameters, dict) or not required <= set(parameters) <= allowed:
+    if not isinstance(parameters, dict):
         raise _invalid(
             "Payment registration parameters do not match the fixed contract."
         )
-    for key in ("move_id", "journal_id"):
+    keys = set(parameters)
+    single = common | {"move_id"} <= keys <= common | {"move_id"} | optional
+    many = keys == common | {"move_ids"}
+    if not single and not many:
+        raise _invalid(
+            "Payment registration parameters do not match the fixed contract."
+        )
+    if many:
+        move_ids = _validate_ids(parameters["move_ids"])
+        if move_ids is None or not 2 <= len(move_ids) <= 100:
+            raise _invalid(
+                "parameters.move_ids must contain 2-100 distinct positive integers."
+            )
+    for key in ("move_id", "journal_id") if single else ("journal_id",):
         if not _valid_id(parameters[key]):
             raise _invalid(f"parameters.{key} must be a positive integer.")
     if not _is_date(parameters["payment_date"]):
@@ -1126,7 +1139,10 @@ def _validate_payment_register_parameters(parameters: Any) -> dict[str, Any]:
         raise _invalid(
             "Write-off fields require payment_difference_handling='reconcile'."
         )
-    return dict(parameters)
+    normalized = dict(parameters)
+    if many:
+        normalized["move_ids"] = sorted(move_ids)
+    return normalized
 
 
 def _validate_payment_fields(values: Any, *, partial: bool) -> dict[str, Any]:
@@ -3979,6 +3995,15 @@ def _expected_idempotency_key(
         return None
     if capability_id in _PAYMENT_REGISTER_CAPABILITIES and "amount" in parameters:
         return None
+    if capability_id in _PAYMENT_REGISTER_CAPABILITIES and "move_ids" in parameters:
+        canonical = json.dumps(
+            parameters,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        return f"{capability_id}:{company_id}:{digest}"
     if (
         capability_id
         in _ORDER_UPDATE_CAPABILITIES | _ORDER_LINE_REPLACEMENT_CAPABILITIES
@@ -5130,7 +5155,7 @@ def _validate_result(
     elif capability_id in _PAYMENT_REGISTER_CAPABILITIES:
         expected_move_types = {None}
         expected_states = {"in_process", "paid"}
-        expected_source_id = parameters["move_id"]
+        expected_source_id = parameters.get("move_id")
     elif capability_id == "payment.post":
         expected_move_types = {None}
         expected_states = {"in_process", "paid"}
@@ -5143,6 +5168,11 @@ def _validate_result(
         result["move_type"] not in expected_move_types
         or result["state"] not in expected_states
         or result["source_id"] != expected_source_id
+        or (
+            capability_id in _PAYMENT_REGISTER_CAPABILITIES
+            and "move_ids" in parameters
+            and (not result["reconciled"] or not result["line_ids"])
+        )
     ):
         raise _failed("Odoo returned a result inconsistent with the requested write.")
     return deepcopy(result)

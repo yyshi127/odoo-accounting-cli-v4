@@ -2745,7 +2745,13 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
         if capability_id in EXTENDED_WRITES:
             expected_unit_tests.add("tests/unit/test_extended_core_writes.py")
         if capability_id in {"receivable.payment.register", "payable.payment.register"}:
-            expected_unit_tests.add("tests/unit/test_payment_register_writeoff_runtime.py")
+            expected_unit_tests.update(
+                {
+                    "tests/unit/test_payment_register_writeoff_runtime.py",
+                    "tests/unit/test_payment_register_many_contract.py",
+                    "tests/unit/test_payment_register_many_runtime.py",
+                }
+            )
         if capability_id in {"customer_invoice.create", "vendor_bill.create", "invoice.update"}:
             expected_unit_tests.update({
                 "tests/unit/test_invoice_financial_headers.py",
@@ -2772,6 +2778,7 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
                 "tests/integration/test_core_write_batch_live.py",
                 "tests/integration/test_accounting_depth_batch_live.py",
                 "tests/integration/test_invoice_cash_refund_batch_live.py",
+                "tests/integration/test_payment_register_many_batch_live.py",
             ]
         elif capability_id in stock_transfer_batch_writes:
             assert descriptor["tests"]["integration"]["status"] == "implemented"

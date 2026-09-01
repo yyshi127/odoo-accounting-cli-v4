@@ -12136,8 +12136,8 @@
     },
     "payable.payment.register": {
       "summary": {
-        "zh_CN": "登记供应商付款或退款收款",
-        "en_US": "Register a vendor payment or refund receipt"
+        "zh_CN": "登记供应商账单付款（支持多账单合并）或供应商退款收款",
+        "en_US": "Register vendor bill payments (including grouped bills) or refund receipts"
       },
       "domain": "payments",
       "access": "write",
@@ -12203,9 +12203,9 @@
       },
       "strategies": {
         "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_partial_invoice_payment_registration_as_configured_business_user",
-        "verify": "same_transaction_partial_residual_and_replay_validation",
-        "idempotency": "odoo_persisted_business_marker_and_result_replay",
+        "execute": "fixed_single_or_full_grouped_invoice_payment_registration_as_configured_business_user",
+        "verify": "same_transaction_single_or_grouped_residual_and_replay_validation",
+        "idempotency": "single_document_legacy_key_or_company_and_normalized_batch_digest_with_odoo_persisted_business_marker_and_result_replay",
         "reverse": "payment.cancel"
       },
       "tests": {
@@ -12216,18 +12216,21 @@
             "tests/unit/test_core_writes_bridge.py",
             "tests/unit/test_core_writes_runtime.py",
             "tests/unit/test_payment_register_writeoff_runtime.py",
+            "tests/unit/test_payment_register_many_contract.py",
+            "tests/unit/test_payment_register_many_runtime.py",
             "tests/unit/test_core_write_cli.py"
           ],
-          "reason": "Unit tests cover the closed request, exact confirmation, fixed bridge action, Odoo-side execution, idempotent replay, and CLI response contract."
+          "reason": "Unit tests cover compatible single-document and normalized grouped requests, exact confirmation, deterministic keys, fixed bridge action, Odoo-side execution, idempotent replay, and CLI response contract."
         },
         "integration": {
           "status": "implemented",
           "references": [
             "tests/integration/test_core_write_batch_live.py",
             "tests/integration/test_accounting_depth_batch_live.py",
-            "tests/integration/test_invoice_cash_refund_batch_live.py"
+            "tests/integration/test_invoice_cash_refund_batch_live.py",
+            "tests/integration/test_payment_register_many_batch_live.py"
           ],
-          "reason": "Shared dual-database rollback smokes cover invoice and credit-note payments, partial residuals, direction, reconciliation and immediate replay."
+          "reason": "Shared dual-database rollback smokes cover single invoice and credit-note payments, grouped full bill payments, partial residuals, direction, reconciliation and immediate replay."
         },
         "golden": {
           "status": "planned",
@@ -12257,7 +12260,8 @@
           ],
           "en_US": [
             "Register a vendor payment",
-            "Register a vendor refund receipt"
+            "Register a vendor refund receipt",
+            "Register one payment for multiple vendor bills"
           ]
         },
         "not_for": {
@@ -14521,8 +14525,8 @@
     },
     "receivable.payment.register": {
       "summary": {
-        "zh_CN": "登记客户收款或退款",
-        "en_US": "Register a customer receipt or refund"
+        "zh_CN": "登记客户发票收款（支持多发票合并）或退款",
+        "en_US": "Register customer invoice receipts (including grouped invoices) or refunds"
       },
       "domain": "payments",
       "access": "write",
@@ -14588,9 +14592,9 @@
       },
       "strategies": {
         "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_partial_invoice_payment_registration_as_configured_business_user",
-        "verify": "same_transaction_partial_residual_and_replay_validation",
-        "idempotency": "odoo_persisted_business_marker_and_result_replay",
+        "execute": "fixed_single_or_full_grouped_invoice_payment_registration_as_configured_business_user",
+        "verify": "same_transaction_single_or_grouped_residual_and_replay_validation",
+        "idempotency": "single_document_legacy_key_or_company_and_normalized_batch_digest_with_odoo_persisted_business_marker_and_result_replay",
         "reverse": "payment.cancel"
       },
       "tests": {
@@ -14601,18 +14605,21 @@
             "tests/unit/test_core_writes_bridge.py",
             "tests/unit/test_core_writes_runtime.py",
             "tests/unit/test_payment_register_writeoff_runtime.py",
+            "tests/unit/test_payment_register_many_contract.py",
+            "tests/unit/test_payment_register_many_runtime.py",
             "tests/unit/test_core_write_cli.py"
           ],
-          "reason": "Unit tests cover the closed request, exact confirmation, fixed bridge action, Odoo-side execution, idempotent replay, and CLI response contract."
+          "reason": "Unit tests cover compatible single-document and normalized grouped requests, exact confirmation, deterministic keys, fixed bridge action, Odoo-side execution, idempotent replay, and CLI response contract."
         },
         "integration": {
           "status": "implemented",
           "references": [
             "tests/integration/test_core_write_batch_live.py",
             "tests/integration/test_accounting_depth_batch_live.py",
-            "tests/integration/test_invoice_cash_refund_batch_live.py"
+            "tests/integration/test_invoice_cash_refund_batch_live.py",
+            "tests/integration/test_payment_register_many_batch_live.py"
           ],
-          "reason": "Shared dual-database rollback smokes cover invoice and credit-note payments, partial residuals, direction, reconciliation and immediate replay."
+          "reason": "Shared dual-database rollback smokes cover single invoice and credit-note payments, grouped full invoice receipts, partial residuals, direction, reconciliation and immediate replay."
         },
         "golden": {
           "status": "planned",
@@ -14642,7 +14649,8 @@
           ],
           "en_US": [
             "Register a customer receipt",
-            "Register a customer refund"
+            "Register a customer refund",
+            "Register one receipt for multiple customer invoices"
           ]
         },
         "not_for": {

@@ -14,9 +14,47 @@ not 355 accounting operations, a coverage percentage, or proof that all workflow
 pass for the configured user. There are 16 `stock.*` IDs, but other historical
 sales/purchase extensions also remain; subtracting 16 does not establish a
 pure-accounting count or a coverage denominator. Registry SHA-256:
-`aafdbd1570639a61c3be8a4c53999ed6ed7904a694a9d7548443b696dabaa2e1`.
+`272fcf3c261ee1b36f7f2471545e41bf803bdc4d9ed5875d3acf3baf12f1d38f`.
 
-The current cash-refund batch extends receivable.payment.register to customer
+The current grouped-payment batch extends the existing
+receivable.payment.register and payable.payment.register commands with a bounded
+`move_ids` mode for two through 100 posted documents. One native
+account.payment.register wizard creates exactly one full customer receipt or one
+full supplier payment for documents sharing company, exact move type, partner and
+currency. The normalized source set is part of the operation key and persisted
+marker; immediate replay resolves the same payment even after every source residual
+is zero. The original `move_id` path, including partial payment, write-off and refund
+support, is unchanged. This is invoice/bill settlement, not account_batch_payment,
+an internal bank transfer or bank-statement matching.
+
+Nine code/schema/registry/test files are deployed after backing up six existing
+targets. Counts remain 355 IDs / 340 handlers / 685 schemas: this batch adds no
+command ID or schema file. Local necessary regression passed 234 cases plus the
+initial 43-case contract/registry suite. Pre-commit review then found that the
+direct bridge did not enforce the public layer's grouped-payment deterministic key
+and that registry.json had mixed line endings. Both were corrected: public and
+bridge keys now match, a wrong key is rejected before Odoo access, registry bytes are
+LF-normalized, and the final post-review selection passed 42 local and 42 server
+cases. Server focused regression passed 234 cases in 220.88s; the registry suite
+passed three cases in 20.27s. The corrected shared
+dual-alias live workflow passed: 1 passed in 482.74s, exit 0. Each alias verified
+30 CLI calls / nine existing capabilities / ten immediate replays, four posted
+source documents, two combined payments and balanced trial-balance debit/credit
+delta 400/400. All test records rolled back and the fresh-cursor audit passed.
+The first live attempt failed only because the new test expected generic payment
+readback to expose source reconciliation IDs; rollback and residual audit completed,
+then the test was corrected to verify each source document's payment status. No
+production code changed for that correction. Internal bank transfer remains deferred:
+the isolated databases expose neither a second suitable liquidity journal nor a
+verified native Odoo 19 paired-transfer action for this CLI contract.
+
+At 10:24:27 CST the pre-existing Odoo19 process exited on its recurring missing-
+`passlib` startup/import defect and systemd restarted it at 10:24:38. The same daily
+sequence is present for August 29-31; no deployment or test issued a restart. Odoo19
+is active as PID 3995891 / restart-count 4, and Nginx/PostgreSQL remain active. This
+external service defect is recorded, not repaired within the CLI capability scope.
+
+The preceding cash-refund batch extends receivable.payment.register to customer
 credit notes and payable.payment.register to supplier refunds. Odoo's native
 wizard determines the payment direction; the write-off readback uses the actual
 source-document type for its sign. Requests, schemas, IDs, ACLs and operation keys
