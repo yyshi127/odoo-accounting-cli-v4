@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/report.customer_statement.send.request.schema.json",
+  "title": "report.customer_statement.send request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": "string", "format": "uuid", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"},
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["date_from", "date_to"],
+      "properties": {
+        "partner_id": {"type": "integer", "minimum": 1},
+        "partner_ids": {"type": "array", "minItems": 2, "maxItems": 100, "uniqueItems": true, "items": {"type": "integer", "minimum": 1}},
+        "date_from": {"type": "string", "format": "date"},
+        "date_to": {"type": "string", "format": "date"}
+      },
+      "oneOf": [{"required": ["partner_id"]}, {"required": ["partner_ids"]}]
+    }
+  }
+}

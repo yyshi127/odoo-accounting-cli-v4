@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 357
-EXPECTED_ENABLED_CAPABILITY_COUNT = 342
-EXPECTED_IMPLEMENTED_READ_COUNT = 210
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 132
+EXPECTED_CAPABILITY_COUNT = 366
+EXPECTED_ENABLED_CAPABILITY_COUNT = 351
+EXPECTED_IMPLEMENTED_READ_COUNT = 214
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 137
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 309
-EXPECTED_DEGRADED_CAPABILITY_COUNT = 33
-EXPECTED_SCHEMA_COUNT = 689
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 314
+EXPECTED_DEGRADED_CAPABILITY_COUNT = 37
+EXPECTED_SCHEMA_COUNT = 707
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "70afbb625e34ce065b06e4d058fd1ff9c41b17174f80e15109b246e0824ec8c3"
+    "72cc69c57422ee052477a86bdfa41b45276360a4755fdbb16dbb3df64c2f0ed8"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -149,6 +149,7 @@ IMPLEMENTED_READS = {
     "invoice.analysis.search": "invoice_analysis_search",
     "invoice.analysis.summary": "invoice_analysis_summary",
     "invoice.payment_status.inspect": "invoice_payment_status_inspect",
+    "invoice.send.inspect": "invoice_send_inspect",
     "incoterm.get": "incoterm_get",
     "incoterm.list": "incoterm_list",
     "journal.group.get": "journal_group_get",
@@ -158,6 +159,7 @@ IMPLEMENTED_READS = {
     "payment.search": "payment_search",
     "payment.get": "payment_get",
     "payment.receipt.pdf.export": "document_payment_receipt_pdf_export",
+    "payment.receipt.send.inspect": "payment_receipt_send_inspect",
     "reconciliation.candidates.list": "reconciliation_candidates_list",
     "reconciliation.full.get": "reconciliation_full_get",
     "reconciliation.full.list": "reconciliation_full_list",
@@ -210,6 +212,8 @@ IMPLEMENTED_READS = {
     "asset.depreciation_schedule.get": "asset_depreciation_schedule_get",
     "report.asset": "report_asset",
     "report.asset.export": "report_asset_export",
+    "report.customer_statement.export": "report_customer_statement_export",
+    "report.followup.export": "report_followup_export",
     "report.deferred_expense": "report_deferred_expense",
     "report.deferred_expense.export": "report_deferred_expense_export",
     "report.deferred_revenue": "report_deferred_revenue",
@@ -230,9 +234,7 @@ IMPLEMENTED_READS = {
     "fiscal_position.resolve": "fiscal_position_resolve",
     "fiscal_position.get": "fiscal_position_get",
     "fiscal_position.search": "fiscal_position_search",
-    "fiscal_position.account_mapping.list": (
-        "fiscal_position_account_mapping_list"
-    ),
+    "fiscal_position.account_mapping.list": ("fiscal_position_account_mapping_list"),
     "fiscal_position.tax_mapping.list": "fiscal_position_tax_mapping_list",
     "fiscal_year.get": "fiscal_year_get",
     "fiscal_year.search": "fiscal_year_search",
@@ -428,6 +430,14 @@ IMPLEMENTED_WRITES = {
     "journal.group.create",
     "journal.group.update",
 } | ORDER_DOCUMENT_WRITES
+ACCOUNTING_DELIVERY_WRITES = {
+    "invoice.followup.update",
+    "invoice.send",
+    "payment.receipt.send",
+    "report.customer_statement.send",
+    "report.followup.send",
+}
+ENABLED_WRITES = IMPLEMENTED_WRITES | ACCOUNTING_DELIVERY_WRITES
 EXTENDED_WRITES = {
     "asset.cancel",
     "asset.dispose",
@@ -762,9 +772,7 @@ CORE_OBJECT_READ_HANDLERS = {
     "tax.repartition_line.list": "tax_repartition_line_list",
     "fiscal_position.get": "fiscal_position_get",
     "fiscal_position.search": "fiscal_position_search",
-    "fiscal_position.account_mapping.list": (
-        "fiscal_position_account_mapping_list"
-    ),
+    "fiscal_position.account_mapping.list": ("fiscal_position_account_mapping_list"),
     "fiscal_position.tax_mapping.list": "fiscal_position_tax_mapping_list",
     "product.get": "product_get",
     "product.search": "product_search",
@@ -865,7 +873,7 @@ def test_registry_contains_the_frozen_full_matrix() -> None:
 
     assert len(registry.ids()) == EXPECTED_CAPABILITY_COUNT
     assert len(IMPLEMENTED_READS) == EXPECTED_IMPLEMENTED_READ_COUNT
-    assert len(IMPLEMENTED_WRITES) == EXPECTED_IMPLEMENTED_WRITE_COUNT
+    assert len(ENABLED_WRITES) == EXPECTED_IMPLEMENTED_WRITE_COUNT
     statuses = [registry.describe(item)["status"]["value"] for item in registry.ids()]
     assert statuses.count("disabled") == EXPECTED_DISABLED_CAPABILITY_COUNT
     assert statuses.count("unconfigured") == EXPECTED_UNCONFIGURED_CAPABILITY_COUNT
@@ -968,7 +976,7 @@ def test_every_unimplemented_capability_is_honestly_disabled_without_a_handler()
     registry = load_registry()
 
     for capability_id in registry.ids():
-        if capability_id in IMPLEMENTED_READS or capability_id in IMPLEMENTED_WRITES:
+        if capability_id in IMPLEMENTED_READS or capability_id in ENABLED_WRITES:
             continue
         descriptor = registry.describe(capability_id)
         assert descriptor["handler_key"] is None
@@ -1130,6 +1138,15 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
                     "diagnostic.journal_integrity.inspect",
                 }
                 else "tests/integration/test_read_capability_batch_live.py"
+            )
+        elif capability_id in {
+            "invoice.send.inspect",
+            "payment.receipt.send.inspect",
+            "report.customer_statement.export",
+            "report.followup.export",
+        }:
+            expected_live_test = (
+                "tests/integration/test_accounting_delivery_batch_live.py"
             )
         elif capability_id == "report.trial_balance":
             expected_live_test = "tests/integration/test_trial_balance_live.py"
@@ -2506,10 +2523,7 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             "cash_rounding.update",
         }:
             assert descriptor["status"]["value"] == "degraded"
-            assert (
-                descriptor["status"]["reason_code"]
-                == "database_global_record_scope"
-            )
+            assert descriptor["status"]["reason_code"] == "database_global_record_scope"
         elif capability_id in {
             "account.account.create",
             "account.group.create",
@@ -2755,11 +2769,17 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
                     "tests/unit/test_payment_register_many_runtime.py",
                 }
             )
-        if capability_id in {"customer_invoice.create", "vendor_bill.create", "invoice.update"}:
-            expected_unit_tests.update({
-                "tests/unit/test_invoice_financial_headers.py",
-                "tests/unit/test_invoice_financial_headers_runtime.py",
-            })
+        if capability_id in {
+            "customer_invoice.create",
+            "vendor_bill.create",
+            "invoice.update",
+        }:
+            expected_unit_tests.update(
+                {
+                    "tests/unit/test_invoice_financial_headers.py",
+                    "tests/unit/test_invoice_financial_headers_runtime.py",
+                }
+            )
         if capability_id in INVOICE_COPY_TYPE_WRITES:
             expected_unit_tests.update(
                 {
@@ -2768,7 +2788,11 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
                 }
             )
         assert set(descriptor["tests"]["unit"]["references"]) == expected_unit_tests
-        if capability_id in {"customer_invoice.create", "vendor_bill.create", "invoice.update"}:
+        if capability_id in {
+            "customer_invoice.create",
+            "vendor_bill.create",
+            "invoice.update",
+        }:
             assert descriptor["tests"]["integration"]["status"] == "implemented"
             prior_tests = (
                 ["tests/integration/test_document_lifecycle_write_batch_live.py"]
@@ -2787,7 +2811,10 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             assert descriptor["tests"]["integration"]["references"] == [
                 "tests/integration/test_invoice_duplicate_type_switch_batch_live.py"
             ]
-        elif capability_id in {"receivable.payment.register", "payable.payment.register"}:
+        elif capability_id in {
+            "receivable.payment.register",
+            "payable.payment.register",
+        }:
             assert descriptor["tests"]["integration"]["status"] == "implemented"
             assert descriptor["tests"]["integration"]["references"] == [
                 "tests/integration/test_core_write_batch_live.py",

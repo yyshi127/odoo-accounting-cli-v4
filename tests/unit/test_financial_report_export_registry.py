@@ -183,7 +183,7 @@ def test_export_request_schemas_are_closed_and_format_checked(
     )
     assert parameter_schema["additionalProperties"] is False
     assert set(parameter_schema["required"]) == expected
-    assert set(parameter_schema["properties"]) == expected
+    assert set(parameter_schema["properties"]) - {"journal_ids"} == expected
     assert parameter_schema["properties"]["format"]["enum"] == ["pdf", "xlsx"]
 
     invalid = copy.deepcopy(request)

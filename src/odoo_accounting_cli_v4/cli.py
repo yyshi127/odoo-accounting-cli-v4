@@ -17,6 +17,7 @@ from odoo_accounting_cli_v4 import __version__
 from odoo_accounting_cli_v4.bridge.account_accounts import OdooAccountListPort
 from odoo_accounting_cli_v4.bridge.account_returns import OdooAccountReturnPort
 from odoo_accounting_cli_v4.bridge.accounting_access import OdooAccountingAccessPort
+from odoo_accounting_cli_v4.bridge.accounting_delivery import OdooAccountingDeliveryPort
 from odoo_accounting_cli_v4.bridge.assets import OdooAssetPort
 from odoo_accounting_cli_v4.bridge.bank_reconciliation import (
     OdooBankReconciliationPort,
@@ -84,6 +85,14 @@ from odoo_accounting_cli_v4.capabilities.account_returns import (
 from odoo_accounting_cli_v4.capabilities.accounting_access import (
     read_accounting_access,
     validate_accounting_access_request,
+)
+from odoo_accounting_cli_v4.capabilities.accounting_delivery import (
+    ACCOUNTING_DELIVERY_CAPABILITY_IDS,
+    ACCOUNTING_DELIVERY_READ_CAPABILITY_IDS,
+    ACCOUNTING_DELIVERY_WRITE_CAPABILITY_IDS,
+    AccountingDeliveryError,
+    execute_accounting_delivery,
+    validate_accounting_delivery_request,
 )
 from odoo_accounting_cli_v4.capabilities.assets import (
     AssetReadError,
@@ -388,6 +397,12 @@ _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
     ),
     "report_journal_export": partial(export_financial_report, "report.journal.export"),
     "report_asset_export": partial(export_financial_report, "report.asset.export"),
+    "report_customer_statement_export": partial(
+        export_financial_report, "report.customer_statement.export"
+    ),
+    "report_followup_export": partial(
+        export_financial_report, "report.followup.export"
+    ),
     "report_deferred_expense_export": partial(
         export_financial_report, "report.deferred_expense.export"
     ),
@@ -564,6 +579,9 @@ _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
     "invoice_search": search_invoices,
     "invoice_get": get_invoice,
     "invoice_payment_status_inspect": inspect_invoice_payment_status,
+    "invoice_send_inspect": lambda port, request: execute_accounting_delivery(
+        port, "invoice.send.inspect", request
+    ),
     "invoice_analysis_search": lambda port, request: read_invoice_analysis(
         port, "invoice.analysis.search", request
     ),
@@ -574,6 +592,9 @@ _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
     "payable_open_items_list": search_payable_open_items,
     "payment_search": search_payments,
     "payment_get": get_payment,
+    "payment_receipt_send_inspect": lambda port, request: execute_accounting_delivery(
+        port, "payment.receipt.send.inspect", request
+    ),
     "reconciliation_candidates_list": list_reconciliation_candidates,
     "bank_transaction_list": list_bank_transactions,
     "bank_transaction_search": search_bank_transactions,
@@ -840,6 +861,13 @@ _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "report_asset_export": partial(
         validate_financial_report_export_request, "report.asset.export"
     ),
+    "report_customer_statement_export": partial(
+        validate_financial_report_export_request,
+        "report.customer_statement.export",
+    ),
+    "report_followup_export": partial(
+        validate_financial_report_export_request, "report.followup.export"
+    ),
     "report_deferred_expense_export": partial(
         validate_financial_report_export_request, "report.deferred_expense.export"
     ),
@@ -1046,6 +1074,9 @@ _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "invoice_search": validate_invoice_search_request,
     "invoice_get": validate_invoice_get_request,
     "invoice_payment_status_inspect": validate_invoice_payment_status_request,
+    "invoice_send_inspect": partial(
+        validate_accounting_delivery_request, "invoice.send.inspect"
+    ),
     "invoice_analysis_search": partial(
         validate_invoice_analysis_request, "invoice.analysis.search"
     ),
@@ -1056,6 +1087,9 @@ _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "payable_open_items_list": validate_payable_open_items_list_request,
     "payment_search": validate_payment_search_request,
     "payment_get": validate_payment_get_request,
+    "payment_receipt_send_inspect": partial(
+        validate_accounting_delivery_request, "payment.receipt.send.inspect"
+    ),
     "reconciliation_candidates_list": validate_reconciliation_candidates_request,
     "bank_transaction_list": validate_bank_transaction_list_request,
     "bank_transaction_search": validate_bank_transaction_search_request,
@@ -1298,6 +1332,8 @@ _CAPABILITY_MODELS = {
     "report.executive_summary.export": "account.report",
     "report.journal.export": "account.report",
     "report.asset.export": "account.report",
+    "report.customer_statement.export": "account.report",
+    "report.followup.export": "account.report",
     "report.deferred_expense.export": "account.report",
     "report.deferred_revenue.export": "account.report",
     "report.multicurrency_revaluation.export": "account.report",
@@ -1368,12 +1404,19 @@ _CAPABILITY_MODELS = {
     "invoice.search": "account.move",
     "invoice.get": "account.move",
     "invoice.payment_status.inspect": "account.move",
+    "invoice.send.inspect": "account.move",
+    "invoice.send": "account.move",
+    "invoice.followup.update": "account.move",
     "invoice.analysis.search": "account.invoice.report",
     "invoice.analysis.summary": "account.invoice.report",
     "receivable.open_items.list": "account.move.line",
     "payable.open_items.list": "account.move.line",
     "payment.search": "account.payment",
     "payment.get": "account.payment",
+    "payment.receipt.send.inspect": "account.payment",
+    "payment.receipt.send": "account.payment",
+    "report.customer_statement.send": "res.partner",
+    "report.followup.send": "res.partner",
     "reconciliation.candidates.list": "account.move.line",
     "bank.transaction.list": "account.bank.statement.line",
     "bank.transaction.search": "account.bank.statement.line",
@@ -1965,6 +2008,7 @@ def _execute_read(
         AccountReturnReadError,
         JournalAnalysisReadError,
         LocalizationConfigurationReadError,
+        AccountingDeliveryError,
     ) as exc:
         raise CliError(
             exc.code,
@@ -2008,6 +2052,7 @@ def _execute_read(
         AccountReturnReadError,
         JournalAnalysisReadError,
         LocalizationConfigurationReadError,
+        AccountingDeliveryError,
     ) as exc:
         verified_user_id = _verified_port_user_id(port)
         raise CliError(
@@ -2197,12 +2242,28 @@ def _execute_read(
                                                                     ]
                                                                     if capability_id
                                                                     == "fiscal_position.tax_mapping.list"
-                                                                    else [
-                                                                        item["id"]
-                                                                        for item in data[
-                                                                            "items"
+                                                                    else (
+                                                                        [
+                                                                            record[
+                                                                                "record_id"
+                                                                            ]
+                                                                            for record in data[
+                                                                                "result"
+                                                                            ][
+                                                                                "records"
+                                                                            ]
                                                                         ]
-                                                                    ]
+                                                                        if capability_id
+                                                                        in ACCOUNTING_DELIVERY_READ_CAPABILITY_IDS
+                                                                        else [
+                                                                            item[
+                                                                                "id"
+                                                                            ]
+                                                                            for item in data[
+                                                                                "items"
+                                                                            ]
+                                                                        ]
+                                                                    )
                                                                 )
                                                             )
                                                         )
@@ -2263,10 +2324,15 @@ def _execute_write_run(
             capability=capability_id,
             idempotency_key=idempotency_key,
         )
-    if (
-        capability_id not in CORE_WRITE_CAPABILITY_IDS
-        or descriptor["handler_key"] != "core_write"
-    ):
+    is_core_write = (
+        capability_id in CORE_WRITE_CAPABILITY_IDS
+        and descriptor["handler_key"] == "core_write"
+    )
+    is_accounting_delivery_write = (
+        capability_id in ACCOUNTING_DELIVERY_WRITE_CAPABILITY_IDS
+        and descriptor["handler_key"] == "accounting_delivery"
+    )
+    if not (is_core_write or is_accounting_delivery_write):
         raise CliError(
             "capability_unavailable",
             "The registered write capability has no allowlisted handler.",
@@ -2307,7 +2373,10 @@ def _execute_write_run(
     request_id = _safe_request_id(request)
     try:
         registry.validate_instance(descriptor["schemas"]["request"], request)
-        validate_core_write_request(capability_id, request)
+        if is_core_write:
+            validate_core_write_request(capability_id, request)
+        else:
+            validate_accounting_delivery_request(capability_id, request)
     except InstanceValidationError as exc:
         raise CliError(
             "invalid_request",
@@ -2318,7 +2387,7 @@ def _execute_write_run(
             request_id=request_id,
             idempotency_key=idempotency_key,
         ) from exc
-    except CoreWriteError as exc:
+    except (CoreWriteError, AccountingDeliveryError) as exc:
         raise CliError(
             exc.code,
             str(exc),
@@ -2336,14 +2405,23 @@ def _execute_write_run(
     port: object | None = None
     try:
         port = port_factory(capability_id, request)
-        data = execute_core_write(
-            port,
-            capability_id,
-            request,
-            idempotency_key,
-            confirmation,
-        )
-    except CoreWriteError as exc:
+        if is_core_write:
+            data = execute_core_write(
+                port,
+                capability_id,
+                request,
+                idempotency_key,
+                confirmation,
+            )
+        else:
+            data = execute_accounting_delivery(
+                port,
+                capability_id,
+                request,
+                idempotency_key,
+                confirmation,
+            )
+    except (CoreWriteError, AccountingDeliveryError) as exc:
         verified_user_id = _verified_port_user_id(port)
         raise CliError(
             exc.code,
@@ -2401,6 +2479,65 @@ def _execute_write_run(
 
     context = request["context"]
     result = data["result"]
+    if is_accounting_delivery_write:
+        if capability_id in {
+            "invoice.send",
+            "payment.receipt.send",
+            "report.customer_statement.send",
+            "report.followup.send",
+        }:
+            record_ids = result["record_ids"]
+            verification = {
+                "processed_count": result["processed_count"],
+                "idempotent_replay": data["idempotent_replay"],
+            }
+        else:
+            record_ids = [result["record_id"]]
+            verification = {
+                "no_followup": result["no_followup"],
+                "idempotent_replay": data["idempotent_replay"],
+            }
+        warnings = []
+        if descriptor["status"]["value"] == "degraded":
+            warnings.append(
+                {
+                    "code": "capability_degraded",
+                    "reason_code": descriptor["status"]["reason_code"],
+                }
+            )
+        model = _CAPABILITY_MODELS[capability_id]
+        document = success_document(
+            capability_id,
+            data,
+            request_id=request_id,
+            warnings=warnings,
+            database=context["database"],
+            company_id=context["company_id"],
+            user_id=getattr(port, "user_id", None),
+            model=model,
+            record_ids=record_ids,
+            idempotency_key=idempotency_key,
+            verification=verification,
+        )
+        try:
+            registry.validate_instance(descriptor["schemas"]["response"], document)
+        except InstanceValidationError as exc:
+            raise CliError(
+                "failed_validation",
+                "The Odoo result does not match the capability schema.",
+                exit_code=8,
+                status="failed_validation",
+                capability=capability_id,
+                request_id=request_id,
+                database=context["database"],
+                company_id=context["company_id"],
+                user_id=_verified_port_user_id(port),
+                model=model,
+                record_ids=record_ids,
+                idempotency_key=idempotency_key,
+            ) from exc
+        return document
+
     result_id = result["id"]
     if capability_id in {
         "deferred_expense.generate_entries",
@@ -2479,6 +2616,8 @@ def _configured_port_factory(capability_id: str, request: dict[str, Any]) -> obj
         return OdooBudgetReportPort(client)
     if capability_id in CORE_WRITE_CAPABILITY_IDS:
         return OdooCoreWritePort(client)
+    if capability_id in ACCOUNTING_DELIVERY_CAPABILITY_IDS:
+        return OdooAccountingDeliveryPort(client)
     if capability_id == "partner.accounting.search":
         return OdooPartnerAccountingPort(client)
     if capability_id in {

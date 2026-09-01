@@ -227,6 +227,22 @@ class CountryModel(AccessModel):
         return [{"id": 86, "code": self.code}]
 
 
+class PartnerModel(AccessModel):
+    def __init__(self, available: bool = True, *, access: bool = True) -> None:
+        super().__init__(access)
+        self.available = available
+        self.context = None
+
+    def with_context(self, **context):
+        self.context = context
+        self.calls.append(("with_context", context))
+        return self
+
+    def search_count(self, domain, *, limit):
+        self.calls.append(("search_count", domain, limit))
+        return int(self.available)
+
+
 class EffectiveReport:
     def __init__(self, native: dict) -> None:
         self.native = native
@@ -296,6 +312,7 @@ class FakeEnv:
         access: bool = True,
         denied_model: str | None = None,
         missing_model: str | None = None,
+        partner_available: bool = True,
         country_code: str = "CN",
         chart_template: str = "cn_oscg",
         native: dict | None = None,
@@ -323,6 +340,7 @@ class FakeEnv:
             "account.tax": AccessModel(),
             "res.currency": AccessModel(),
             "res.country": self.country,
+            "res.partner": PartnerModel(partner_available),
         }
         if denied_model is not None:
             self.models[denied_model].access = False
@@ -414,6 +432,133 @@ def test_all_nineteen_exports_use_the_fixed_spec_acl_and_options(
         "sha256": hashlib.sha256(b"%PDF-example").hexdigest(),
         "content_base64": base64.b64encode(b"%PDF-example").decode("ascii"),
     }
+
+
+@pytest.mark.parametrize(
+    ("capability_id", "xml_id", "mode", "date_from"),
+    [
+        (
+            "report.customer_statement.export",
+            "account_reports.customer_statement_report",
+            "range",
+            "2026-01-01",
+        ),
+        (
+            "report.followup.export",
+            "account_reports.followup_report",
+            "single",
+            None,
+        ),
+    ],
+)
+def test_partner_exports_scope_one_visible_partner_in_native_options(
+    capability_id: str, xml_id: str, mode: str, date_from: str | None
+) -> None:
+    env = FakeEnv(options={"report_id": 91, "partner_ids": [17]})
+    payload = _payload(capability_id, date_from=date_from)
+    payload["partner_id"] = 17
+
+    page = exports.dispatch(env, payload, 7, failure_type=RuntimeFailure)
+
+    assert exports.CAPABILITY_SPECS[capability_id] == {
+        "xml_id": xml_id,
+        "mode": mode,
+        "models": (
+            "account.report",
+            "account.move.line",
+            "res.currency",
+            "res.partner",
+        ),
+        "partner_parameter": True,
+    }
+    assert env.refs == [(xml_id, False)]
+    assert env.models["res.partner"].calls == [
+        ("has_access", "read"),
+        (
+            "with_context",
+            {"active_test": False, "allowed_company_ids": [7]},
+        ),
+        (
+            "search_count",
+            [
+                ("id", "=", 17),
+                "|",
+                ("company_id", "=", False),
+                ("company_id", "=", 7),
+            ],
+            1,
+        ),
+    ]
+    assert env.root.calls == [
+        ("with_context", {"allowed_company_ids": [7]}),
+        (
+            "get_options",
+            {
+                "all_entries": False,
+                "date": {
+                    "date_from": date_from if date_from is not None else False,
+                    "date_to": "2026-08-28",
+                    "mode": mode,
+                    "filter": "custom",
+                },
+                "partner_ids": [17],
+            },
+        ),
+    ]
+    assert env.effective.calls == [("pdf", {"report_id": 91, "partner_ids": [17]})]
+    assert page["access_allowed"] is True
+
+
+def test_partner_export_rejects_a_partner_outside_the_company_scope() -> None:
+    env = FakeEnv(
+        partner_available=False,
+        options={"report_id": 91, "partner_ids": [17]},
+    )
+    payload = _payload("report.customer_statement.export")
+    payload["partner_id"] = 17
+
+    with pytest.raises(RuntimeFailure) as caught:
+        exports.dispatch(env, payload, 7, failure_type=RuntimeFailure)
+
+    assert caught.value.code == "company_unavailable"
+    assert env.effective.calls == []
+
+
+def test_partner_export_preserves_partner_read_acl() -> None:
+    env = FakeEnv(
+        denied_model="res.partner",
+        options={"report_id": 91, "partner_ids": [17]},
+    )
+    payload = _payload("report.followup.export", date_from=None)
+    payload["partner_id"] = 17
+
+    page = exports.dispatch(env, payload, 7, failure_type=RuntimeFailure)
+
+    assert page["module_installed"] is True
+    assert page["access_allowed"] is False
+    assert env.effective.calls == []
+
+
+@pytest.mark.parametrize("partner_id", [None, 0, True])
+def test_partner_export_payload_requires_a_positive_partner(partner_id: object) -> None:
+    payload = _payload("report.customer_statement.export")
+    if partner_id is not None:
+        payload["partner_id"] = partner_id
+
+    with pytest.raises(RuntimeFailure) as caught:
+        exports.dispatch(FakeEnv(), payload, 7, failure_type=RuntimeFailure)
+
+    assert caught.value.code == "bridge_protocol_error"
+
+
+def test_non_partner_export_rejects_partner_payload() -> None:
+    payload = _payload()
+    payload["partner_id"] = 17
+
+    with pytest.raises(RuntimeFailure) as caught:
+        exports.dispatch(FakeEnv(), payload, 7, failure_type=RuntimeFailure)
+
+    assert caught.value.code == "bridge_protocol_error"
 
 
 def test_xlsx_accepts_bytes_like_content_and_uses_standard_base64() -> None:

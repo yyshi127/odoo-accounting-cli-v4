@@ -24,6 +24,8 @@ def _request(capability_id: str, *, export_format: str = "pdf") -> dict:
             "format": export_format,
         }
     )
+    if FINANCIAL_REPORT_EXPORTS[capability_id].get("requires_partner_id") is True:
+        parameters["partner_id"] = 17
     return {
         "schema_version": "v1",
         "request_id": "28b85ef8-87d1-4537-a13d-762b0459b22e",
@@ -92,19 +94,41 @@ def test_each_fixed_report_export_returns_verified_binary(
             "content_base64",
         )
     }
-    assert port.calls == [
-        {
-            "capability_id": capability_id,
-            "company_id": 7,
-            "date_from": (
-                None
-                if FINANCIAL_REPORT_EXPORTS[capability_id]["mode"] == "single"
-                else "2025-01-01"
-            ),
-            "date_to": "2025-01-31",
-            "format": export_format,
-        }
-    ]
+    expected_call = {
+        "capability_id": capability_id,
+        "company_id": 7,
+        "date_from": (
+            None
+            if FINANCIAL_REPORT_EXPORTS[capability_id]["mode"] == "single"
+            else "2025-01-01"
+        ),
+        "date_to": "2025-01-31",
+        "format": export_format,
+    }
+    if FINANCIAL_REPORT_EXPORTS[capability_id].get("requires_partner_id") is True:
+        expected_call["partner_id"] = 17
+    assert port.calls == [expected_call]
+
+
+@pytest.mark.parametrize(
+    "capability_id",
+    ["report.customer_statement.export", "report.followup.export"],
+)
+@pytest.mark.parametrize("partner_id", [None, 0, True])
+def test_partner_export_requires_one_positive_partner_id(
+    capability_id: str, partner_id: object
+) -> None:
+    request = _request(capability_id)
+    if partner_id is None:
+        del request["parameters"]["partner_id"]
+    else:
+        request["parameters"]["partner_id"] = partner_id
+
+    with pytest.raises(FinancialReportError) as caught:
+        validate_financial_report_export_request(capability_id, request)
+
+    assert caught.value.code == "invalid_request"
+    assert caught.value.exit_code == 2
 
 
 @pytest.mark.parametrize(

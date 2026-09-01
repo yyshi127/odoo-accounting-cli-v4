@@ -84,6 +84,16 @@ FINANCIAL_REPORT_EXPORTS = {
         "key": "singapore_gst",
         "mode": "range",
     },
+    "report.customer_statement.export": {
+        "key": "customer_statement",
+        "mode": "range",
+        "requires_partner_id": True,
+    },
+    "report.followup.export": {
+        "key": "followup",
+        "mode": "single",
+        "requires_partner_id": True,
+    },
 }
 FINANCIAL_REPORT_EXPORT_CAPABILITY_IDS = frozenset(FINANCIAL_REPORT_EXPORTS)
 _JOURNAL_FILTER_REPORTS = frozenset(
@@ -190,6 +200,7 @@ class FinancialReportExportPort(Protocol):
         date_to: str,
         format: str,
         journal_ids: list[int] | None = None,
+        partner_id: int | None = None,
     ) -> dict[str, Any]: ...
 
 
@@ -525,17 +536,24 @@ def validate_financial_report_export_request(
         if capability_id.removesuffix(".export") in _JOURNAL_FILTER_REPORTS
         else set()
     )
+    required_partner = (
+        {"partner_id"} if spec.get("requires_partner_id") is True else set()
+    )
     if spec["mode"] == "single":
-        required = {"as_of", "format"}
+        required = {"as_of", "format"} | required_partner
         if not required <= set(parameters) <= required | optional:
+            if required_partner:
+                raise _invalid(f"{capability_id} contains invalid export parameters.")
             raise _invalid(f"{capability_id} requires only as_of and format.")
         if not _canonical_date(parameters["as_of"]):
             raise _invalid("as_of must be a YYYY-MM-DD date.")
         date_from = None
         date_to = parameters["as_of"]
     else:
-        required = {"date_from", "date_to", "format"}
+        required = {"date_from", "date_to", "format"} | required_partner
         if not required <= set(parameters) <= required | optional:
+            if required_partner:
+                raise _invalid(f"{capability_id} contains invalid export parameters.")
             raise _invalid(
                 f"{capability_id} requires only date_from, date_to, and format."
             )
@@ -548,6 +566,8 @@ def validate_financial_report_export_request(
     export_format = parameters["format"]
     if not isinstance(export_format, str) or export_format not in {"pdf", "xlsx"}:
         raise _invalid("format must be 'pdf' or 'xlsx'.")
+    if required_partner and not _valid_id(parameters["partner_id"]):
+        raise _invalid("partner_id must be a positive integer.")
     _journal_ids(parameters)
     return context, date_from, date_to, export_format
 
@@ -1109,6 +1129,8 @@ def export_financial_report(
     journal_ids = _journal_ids(request["parameters"])
     if journal_ids is not None:
         export_parameters["journal_ids"] = journal_ids
+    if FINANCIAL_REPORT_EXPORTS[capability_id].get("requires_partner_id") is True:
+        export_parameters["partner_id"] = request["parameters"]["partner_id"]
     page = port.export(**export_parameters)
     expected = {
         "user_id",

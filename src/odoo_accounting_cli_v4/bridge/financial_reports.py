@@ -58,7 +58,12 @@ _EXPORT_CAPABILITY_IDS = frozenset(
         "report.china.profit_and_loss.export",
         "report.china.cash_flow.export",
         "report.singapore.gst.export",
+        "report.customer_statement.export",
+        "report.followup.export",
     }
+)
+_PARTNER_EXPORTS = frozenset(
+    {"report.customer_statement.export", "report.followup.export"}
 )
 
 
@@ -216,6 +221,7 @@ class OdooFinancialReportExportPort:
         date_to: str,
         format: str,
         journal_ids: list[int] | None = None,
+        partner_id: int | None = None,
     ) -> dict[str, Any]:
         self._user_id = None
         if (
@@ -232,6 +238,16 @@ class OdooFinancialReportExportPort:
         }
         if journal_ids is not None:
             payload["journal_ids"] = _journal_ids(capability_id, journal_ids)
+        if capability_id in _PARTNER_EXPORTS:
+            if (
+                not isinstance(partner_id, int)
+                or isinstance(partner_id, bool)
+                or partner_id <= 0
+            ):
+                raise ValueError("partner_id must be a positive integer.")
+            payload["partner_id"] = partner_id
+        elif partner_id is not None:
+            raise ValueError("partner_id is unsupported for this financial report.")
         page = self._client.invoke(_EXPORT_ACTION, payload)
         expected = {
             "user_id",

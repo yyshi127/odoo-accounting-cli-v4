@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/payment.receipt.send.inspect.response.schema.json",
+  "title": "payment.receipt.send.inspect response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "success", "capability", "status", "data", "warnings", "error", "odoo", "audit"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": ["string", "null"], "format": "uuid"},
+    "success": {"type": "boolean"},
+    "capability": {"const": "payment.receipt.send.inspect"},
+    "status": {"type": "string", "minLength": 1},
+    "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "response.schema.json#/$defs/error"}]},
+    "odoo": {"$ref": "response.schema.json#/$defs/odoo"},
+    "audit": {"$ref": "response.schema.json#/$defs/audit"}
+  },
+  "allOf": [{"if": {"properties": {"success": {"const": true}}, "required": ["success"]}, "then": {"properties": {"request_id": {"type": "string", "format": "uuid"}, "status": {"const": "verified"}, "data": {"$ref": "#/$defs/data"}, "error": {"type": "null"}}}, "else": {"properties": {"data": {"type": "null"}, "error": {"$ref": "response.schema.json#/$defs/error"}}}}],
+  "$defs": {
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["idempotent_replay", "result"],
+      "properties": {
+        "idempotent_replay": {"const": false},
+        "result": {"$ref": "#/$defs/inspection_result"}
+      }
+    },
+    "inspection_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["records"],
+      "properties": {"records": {"type": "array", "minItems": 1, "maxItems": 100, "uniqueItems": true, "items": {"$ref": "#/$defs/inspection_record"}}}
+    },
+    "inspection_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record_id", "partner_id", "recipient_emails", "template_id", "report_id", "sending_methods", "warnings", "sendable"],
+      "properties": {
+        "record_id": {"type": "integer", "minimum": 1},
+        "partner_id": {"type": "integer", "minimum": 1},
+        "recipient_emails": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "template_id": {"type": ["integer", "null"], "minimum": 1},
+        "report_id": {"type": ["integer", "null"], "minimum": 1},
+        "sending_methods": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "warnings": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "sendable": {"type": "boolean"}
+      }
+    }
+  }
+}

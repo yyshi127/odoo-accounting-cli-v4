@@ -149,6 +149,28 @@ CAPABILITY_SPECS = {
         "fiscal_country_code": "SG",
         "chart_template": "sg",
     },
+    "report.customer_statement.export": {
+        "xml_id": "account_reports.customer_statement_report",
+        "mode": "range",
+        "models": (
+            "account.report",
+            "account.move.line",
+            "res.currency",
+            "res.partner",
+        ),
+        "partner_parameter": True,
+    },
+    "report.followup.export": {
+        "xml_id": "account_reports.followup_report",
+        "mode": "single",
+        "models": (
+            "account.report",
+            "account.move.line",
+            "res.currency",
+            "res.partner",
+        ),
+        "partner_parameter": True,
+    },
 }
 _FORMATS = {
     "pdf": {
@@ -216,7 +238,7 @@ def _validated_payload(
     payload: Any, company_id: int, failure_type: Any
 ) -> tuple[dict[str, Any], str, str | None, str, str]:
     if not isinstance(payload, dict) or not (
-        _PAYLOAD_KEYS <= set(payload) <= _PAYLOAD_KEYS | {"journal_ids"}
+        _PAYLOAD_KEYS <= set(payload) <= _PAYLOAD_KEYS | {"journal_ids", "partner_id"}
     ):
         raise _protocol_failure(failure_type)
 
@@ -251,6 +273,19 @@ def _validated_payload(
         financial_report_journals.validate_journal_ids(payload["journal_ids"], failure_type)
 
     spec = CAPABILITY_SPECS[capability_id]
+    partner_id = payload.get("partner_id")
+    if (
+        spec.get("partner_parameter") is True
+        and (
+            "partner_id" not in payload
+            or not isinstance(partner_id, int)
+            or isinstance(partner_id, bool)
+            or partner_id <= 0
+        )
+        or spec.get("partner_parameter") is not True
+        and "partner_id" in payload
+    ):
+        raise _protocol_failure(failure_type)
     if (
         spec["mode"] == "range"
         and (not _canonical_date(date_from) or date_from > date_to)
@@ -309,6 +344,7 @@ def dispatch(
         payload, company_id, failure_type
     )
     journal_ids = sorted(payload["journal_ids"]) if "journal_ids" in payload else None
+    partner_id = payload.get("partner_id")
     company_model = env["res.company"]
     company_visible = bool(
         company_model.search_count([("id", "=", company_id)], limit=1)
@@ -364,6 +400,28 @@ def dispatch(
             file_format=file_format,
         )
 
+    if spec.get("partner_parameter") is True:
+        partner_available = bool(
+            env["res.partner"]
+            .with_context(active_test=False, allowed_company_ids=[company_id])
+            .search_count(
+                [
+                    ("id", "=", partner_id),
+                    "|",
+                    ("company_id", "=", False),
+                    ("company_id", "=", company_id),
+                ],
+                limit=1,
+            )
+        )
+        if not partner_available:
+            raise _failure(
+                failure_type,
+                "company_unavailable",
+                "The company-scoped partner is unavailable.",
+                3,
+            )
+
     previous_options = {
         "all_entries": False,
         "date": {
@@ -377,6 +435,8 @@ def dispatch(
         previous_options["journals"] = financial_report_journals.journal_options(
             env, company_id, journal_ids, failure_type
         )
+    if partner_id is not None:
+        previous_options["partner_ids"] = [partner_id]
     scoped_root_report = root_report.with_context(allowed_company_ids=[company_id])
     options = scoped_root_report.get_options(previous_options)
     report_id = options.get("report_id") if isinstance(options, dict) else None
@@ -384,6 +444,10 @@ def dispatch(
         not isinstance(report_id, int)
         or isinstance(report_id, bool)
         or report_id <= 0
+        or (
+            spec.get("partner_parameter") is True
+            and options.get("partner_ids") != [partner_id]
+        )
     ):
         raise _runtime_failure(failure_type)
 

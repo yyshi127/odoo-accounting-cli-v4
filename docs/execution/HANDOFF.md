@@ -16,10 +16,19 @@ the Odoo source/add-on tree while building CLI capabilities.
 
 ## Current authoritative count
 
-- Registry: 357 capability IDs; 342 enabled handlers (210 reads and 132 writes)
+- Registry: 366 capability IDs; 351 enabled handlers (214 reads and 137 writes)
   and 15 disabled IDs.
-- Runtime status: 309 `unconfigured`, 33 `degraded`, and 15 `disabled`.
-- Versioned JSON Schema documents: 689.
+- Runtime status: 314 `unconfigured`, 37 `degraded`, and 15 `disabled`.
+- Versioned JSON Schema documents: 707.
+- The accounting-delivery batch adds nine commands for invoice/payment readiness,
+  native queue-only invoice and payment-receipt processing, customer-statement and
+  follow-up PDF export, report-delivery attempts, and invoice/bill follow-up
+  exclusion. Seven commands passed positively on both isolated aliases; the two
+  report-send commands remain positive-live pending because configured uid 5 lacks
+  native `res.partner:write`, and the smoke verified their clean authorization
+  denial instead. Server focused tests passed 344 cases, the shared dual-alias smoke
+  passed in 319.93 seconds with rollback, and the final metadata closure passed 53
+  cases. The exact deployment and evidence checkpoint is at the end of this file.
 - The invoice-copy/type batch adds `invoice.duplicate` and `invoice.type.switch`.
   Its final server regression passed 901 cases and its shared dual-alias real-Odoo
   workflow passed in 687.67s with rollback verification. It also corrects
@@ -3378,3 +3387,122 @@ creation is not proven. These are later coverage/control gaps, not reasons to ad
 speculative framework code to this capability-first batch. Select the next compact
 accounting batch from a re-audited module/workflow/lifecycle gap, not from command
 count or historical stock operations.
+
+## Accounting-delivery checkpoint — 2026-09-01
+
+This batch starts from local/GitHub baseline
+`862bdf926558ff4112578299df39256294db6525` on `rebuild/v4`. It adds exactly nine
+capability IDs:
+
+1. `invoice.send.inspect`
+2. `invoice.send`
+3. `payment.receipt.send.inspect`
+4. `payment.receipt.send`
+5. `report.customer_statement.export`
+6. `report.customer_statement.send`
+7. `report.followup.export`
+8. `report.followup.send`
+9. `invoice.followup.update`
+
+The proposed `journal_item.followup.update` was removed before delivery. Odoo 19's
+journal-item field is computed/inverse-coupled to the whole invoice and does not
+provide an independent line-level follow-up state; keeping that command would have
+created a misleading duplicate of the invoice-level operation. The final registry
+is 366 mixed-domain IDs / 351 enabled handlers (214 reads and 137 writes) / 707
+schemas, with 314 `unconfigured`, 37 `degraded`, and 15 `disabled`. Registry file
+SHA-256 is
+`ddc36d6eaad3fedeea4927244316112d52be02136ed30eeecd3b2750e2edb083`.
+
+The two native send handlers return `record_ids` and `processed_count`; this means
+Odoo accepted/processed the targets, not that an external mailbox received them.
+They force `mail_notify_force_send=False`, verify a marked `mail.message`, and
+support immediate serial replay. They do not promise mail-queue persistence,
+external SMTP delivery, concurrent same-key exactly-once behavior, or reversal of
+already queued mail. The two inspection commands are rollback-only reads of native
+wizard readiness. Customer-statement and follow-up exports use the fixed native
+account-report export path. `invoice.followup.update` writes the invoice/bill
+`no_followup` value and verifies the receivable/payable term-line propagation; it
+does not target customer receipts or independent journal items.
+
+Local verification completed as follows:
+
+- 344 broad affected registry/contract/delivery/export cases passed in 578.84s.
+- 299 focused delivery and financial-export cases passed in 64.87s.
+- 662 central core-write compatibility cases passed in 2064.62s.
+- The final 53-case registry and live-evidence closure passed in 308.05s.
+- Ruff checks, Ruff formatting for new/touched batch tests, JSON parsing,
+  integration collection, Python compilation, and `git diff --check` passed.
+- Independent final review found no remaining P1/P2 defect. Remaining P3 coverage
+  debt is plural/batch positive live execution, invoice receipt/credit-note send,
+  supplier-bill follow-up update, and exact ACL-metadata symmetry.
+
+Server deployment used a fixed 41-file allowlist: one registry, eight source files,
+18 schemas, 13 unit-test files, and one integration test. Fourteen existing targets
+were archived and 27 paths were new. The server tree has mixed historical
+ownership; the initial attempt to extract as `odoo` stopped before overwrite because
+root-owned 0755 directories do not allow new files. The successful path extracted
+only the allowlisted files as root, then restored every existing target's recorded
+UID/GID/mode individually. No directory permission was changed and no recursive
+source ownership operation was used.
+
+Server evidence:
+
+- Focused regression: 344 passed in 781.53s, exit 0.
+- Shared real-Odoo smoke: 1 passed in 319.93s, exit 0, run UUID
+  `56c1ee25-adc7-40f1-9c28-807def54f8c8`.
+- Final post-live metadata closure: 53 passed in 339.05s, exit 0.
+- Each alias ran as uid 5, company 1, `su=False`. All nine target commands were
+  exercised; seven completed positively. `report.customer_statement.send` and
+  `report.followup.send` returned the expected clean authorization denial because
+  configured uid 5 has `res.partner:read` but not `res.partner:write`. Their generic
+  implementation remains available to eligible users, but positive native report
+  sending is not yet accepted and stays `planned` in registry evidence.
+- Each alias verified two readiness inspections, two valid PDF exports, two native
+  marked messages, three immediate replays, invoice/receivable-line follow-up
+  propagation, no external-delivery claim, outer rollback, and fresh-cursor residual
+  absence.
+- Both fixed test customers have no email, while uid 5 cannot create or write a
+  partner. A test-only sudo recordset therefore applied a temporary
+  `example.invalid` email to the existing customer inside the same outer transaction.
+  Every CLI call still ran as uid 5 with `su=False`; a fresh cursor proved both
+  customer emails returned to null after rollback.
+
+Four failed live attempts are retained and not counted as acceptance:
+
+- Attempt 1 stopped before a target command because the test reused the unrelated
+  split-receipt fixture, which requires an outstanding account absent from these
+  isolated databases. Its attachment audit also mixed Odoo's implicit `res_field`
+  filter with an explicit ID query; both test-only dependencies were removed.
+- Attempt 2 supplied a caller-selected key to deterministic `partner.create` and
+  was rejected before Odoo write access.
+- Attempt 3 used the proper key but was correctly denied because uid 5 cannot create
+  partners; the test switched to the existing isolated fixture partner instead of
+  changing ACLs.
+- Attempt 4 incorrectly asserted that every core fixture write has a mandatory
+  framework-generated key. The test now uses the framework key when required and a
+  normalized-parameter hash when caller selection is permitted.
+
+Every failed worker rolled back and passed residual verification. The first focused
+server command also retained a non-test attempt that ran zero cases because its cwd
+was omitted; the corrected attempt is the 344-case result above.
+
+Private server evidence directory:
+`/opt/odoo-accounting-cli-v4/.tooling/accounting-delivery-359fb86e-63d4-47b9-95cd-ea09c856afed`.
+
+- Original-target backup archive SHA-256:
+  `b1b72e228b8a2a8265089df3da1b643c44a1a8dd29aed050d4d778831180fe05`.
+- Final 41-file deployed snapshot SHA-256:
+  `e38f86f57348f202be9f4bdd48ad2fbe26619c014edd85fc7700005c9961f08e`.
+- Successful 344-case focused log SHA-256:
+  `df05d8cf7bc3b611a82d1463e99a6a8de30ffc0f62eb7fffab91acb943325555`.
+- Successful dual-alias live log SHA-256:
+  `1887848a69ae83c01a4ac985a83d43475e717d9150108bf04c8a7b565dcac0fc`.
+- Successful final metadata log SHA-256:
+  `102d592df49ac12dd5b478c3452d459bac2a072d19bcf7321602f02dd8e74265`.
+
+Before and after deployment, tests, and live workers, Odoo19 remained active as PID
+`3995891` with `NRestarts=4`; Nginx and PostgreSQL remained active. No service was
+restarted. Root filesystem use remains 96%, so future work must continue using
+small per-batch backups. The remote Git tree remains intentionally old and heavily
+dirty; never use pull/reset/checkout as deployment. Continue with explicit file
+allowlists, pre-overwrite backups, and byte verification.
