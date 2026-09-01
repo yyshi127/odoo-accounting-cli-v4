@@ -1171,3 +1171,69 @@ real Odoo verification.
 
 No pre-existing Odoo database, service, V2/V3 installation, Odoo source tree,
 or legacy harness is a V4 write target.
+
+## Foreign-currency settlement workflow checkpoint — 2026-09-01
+
+This checkpoint starts from local/GitHub baseline
+`22df4510ead3f0f3ef5402c2467f0b5d0736812f`. It adds no capability ID, schema,
+production handler, or Odoo configuration. The authoritative totals therefore
+remain 366 mixed-domain IDs, 351 enabled handlers (214 reads and 137 writes),
+708 schemas, 314 `unconfigured`, 37 `degraded`, and 15 `disabled`.
+
+The new guarded integration workflow proves twelve existing public capabilities
+together rather than counting their registration as coverage:
+`currency.rate.list`, `currency.convert`, `customer_invoice.create`,
+`vendor_bill.create`, `invoice.post`, `invoice.get`,
+`receivable.payment.register`, `payable.payment.register`,
+`invoice.payment_status.inspect`, `payment.get`, `journal_item.search`, and
+`report.trial_balance`. The shared real-ORM CLI helper only gained the two
+currency port mappings needed to dispatch the first two reads.
+
+Each isolated alias created one USD 100 customer invoice and one USD 100 vendor
+bill dated 2025-01-15, when 1 USD equalled CNY 1.36. It registered the inbound
+and outbound payments on 2025-02-01, when 1 USD equalled CNY 1.37. Both source
+documents were fully reconciled, each payment read back at CNY 137, and Odoo
+created one balanced CNY 1 exchange-difference entry per settlement. Odoo 19's
+monthly journal sequence assigned those exchange moves the accounting date
+2025-02-28. The workflow therefore queries the trial balance through that
+accounting date and verifies an exact debit and credit delta of CNY 548.
+
+The final server run passed both `v4-dev` / `odoo_cli_v4_dev` and `v4-e2e` /
+`odoo_cli_v4_e2e` in one pytest case: `1 passed in 443.73s`, exit 0. Per alias it
+recorded 29 public CLI calls, six immediate idempotent replays, two source
+documents, two payments, two exchange moves, uid 5, company 1, `su=False`, and
+`rollback_verified=true`. Every write stayed inside one outer transaction per
+database; a fresh cursor verified the marked records absent after rollback.
+
+Five earlier executions are retained but are not acceptance evidence. They
+respectively exposed the root/peer-authentication launch mismatch, an overly
+strict decimal-text assertion, an incorrect assumption that exchange entries
+retain the payment date, a test-only string/date type mismatch, and a trial
+balance range that stopped before the exchange accounting date. The first and
+second stopped before target writes, as did the fourth test-only type failure;
+all workers that entered a database ran the same rollback/fresh-cursor cleanup
+path. One additional process preflight exited before pytest because its own
+command line matched the check; it was not a live execution.
+
+Local collection, Ruff check/format, and `git diff --check` passed. Server
+collection found exactly one guarded test; the server project virtualenv does
+not contain Ruff, so the corrected server static check intentionally used pytest
+collection while local Ruff remained authoritative. Independent review found no
+submission blocker.
+
+Private server evidence directory:
+`/opt/odoo-accounting-cli-v4/.tooling/accounting-fx-settlement-20260901-6d19c2a9f4b7`.
+The passing log SHA-256 is
+`923bc7d8cf2431d098cd546cffe10f413585363fd253a63173ba958e1d6a472e`;
+the corrected collection log SHA-256 is
+`e0199936360688128e2eae2261c0aa60c96e2b4dc2f198785bf7c5b6eb74e3ce`.
+The final deployed test and shared-helper SHA-256 values are
+`8415273c0f8031d436e26f77a393c53ccf367e0bfa4c09936eb778fe5526578f`
+and `2d20199ad019a299c37589319dda45d8fbd8afc2e4c45c47909cecc33a7201b4`.
+
+Before and after the successful run, Odoo19 remained active on PID `3995891`
+with `NRestarts=4`; Nginx and PostgreSQL remained active. No service-control
+command was issued. Root filesystem use remains 96%, with about 3.6 GB free.
+This checkpoint proves one positive, untaxed, full-settlement USD/CNY workflow;
+it does not prove partial settlement, early-payment discount, write-off,
+multi-company, arbitrary currencies, or complete accounting coverage.

@@ -358,6 +358,10 @@ def _cli(
     )
     from odoo_accounting_cli_v4.bridge.core_object_reads import OdooCoreObjectReadPort
     from odoo_accounting_cli_v4.bridge.core_writes import OdooCoreWritePort
+    from odoo_accounting_cli_v4.bridge.currency_rates import (
+        OdooCurrencyConvertPort,
+        OdooCurrencyRateListPort,
+    )
     from odoo_accounting_cli_v4.bridge.financial_reports import OdooFinancialReportPort
     from odoo_accounting_cli_v4.bridge.invoices import OdooInvoicePort
     from odoo_accounting_cli_v4.bridge.journal_entries import OdooJournalEntryPort
@@ -383,6 +387,8 @@ def _cli(
             "bank.transaction.search": OdooBankTransactionSearchPort,
             "bank.transaction.reconciliation.get": OdooBankReconciliationPort,
             "bank.transaction.match_candidates.list": OdooBankReconciliationPort,
+            "currency.convert": OdooCurrencyConvertPort,
+            "currency.rate.list": OdooCurrencyRateListPort,
             "invoice.get": OdooInvoicePort,
             "invoice.payment_status.inspect": OdooInvoicePort,
             "payment.get": OdooPaymentPort,

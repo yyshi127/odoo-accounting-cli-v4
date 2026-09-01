@@ -3647,3 +3647,117 @@ database uniqueness constraint, external effects from custom modules, or full
 Odoo accounting coverage. Choose the next compact accounting workflow from the
 remaining module/workflow/lifecycle gap matrix; do not infer completion from the
 unchanged command count.
+
+## Foreign-currency settlement workflow checkpoint — 2026-09-01
+
+### Scope and files
+
+This checkpoint starts from committed baseline
+`22df4510ead3f0f3ef5402c2467f0b5d0736812f` on `rebuild/v4`. It deliberately
+adds no capability ID, schema, registry entry, or production implementation.
+Only these two test-side files change:
+
+- `tests/integration/test_foreign_currency_settlement_batch_live.py` is a new
+  guarded dual-database workflow.
+- `tests/integration/test_payment_bank_capability_batch_live.py` adds the
+  existing `OdooCurrencyRateListPort` and `OdooCurrencyConvertPort` mappings to
+  the shared in-process public-CLI harness.
+
+The registry remains at 366 IDs, 351 enabled handlers (214 read / 137 write),
+708 schemas, 314 `unconfigured`, 37 `degraded`, and 15 `disabled`. This is a
+workflow-depth checkpoint, not a command-count increase.
+
+### Accepted workflow
+
+The test uses these twelve public interfaces:
+
+1. `currency.rate.list`
+2. `currency.convert`
+3. `customer_invoice.create`
+4. `vendor_bill.create`
+5. `invoice.post`
+6. `invoice.get`
+7. `receivable.payment.register`
+8. `payable.payment.register`
+9. `invoice.payment_status.inspect`
+10. `payment.get`
+11. `journal_item.search`
+12. `report.trial_balance`
+
+For each of `v4-dev` and `v4-e2e`, uid 5/company 1 creates a USD 100 customer
+invoice and a USD 100 vendor bill at the fixed 2025-01-15 rate of CNY 1.36,
+posts them, and settles them on 2025-02-01 at CNY 1.37. It proves:
+
+- source moves balance at CNY 136 each;
+- inbound and outbound payment moves balance at CNY 137 each;
+- both documents reach zero foreign- and company-currency residuals;
+- both payment-status reads link the native reconciliation and payment;
+- Odoo creates two separate balanced CNY 1 exchange-difference moves;
+- the exchange journal's monthly sequence assigns 2025-02-28 as their actual
+  accounting date;
+- the trial-balance delta through 2025-02-28 is exactly debit CNY 548 and credit
+  CNY 548;
+- six writes immediately replay through the existing idempotency path without
+  creating another record;
+- all marked records disappear after outer rollback and fresh-cursor checking.
+
+Per alias the workflow performs exactly 29 CLI calls: three rate/conversion
+reads, two before/after trial-balance reads, and twelve calls for each of the
+customer and vendor branches. An independent static review recomputed both the
+29-call total and the CNY 548 total and found no blocker.
+
+### Verification and evidence
+
+Local verification passed integration collection, Ruff check, Ruff formatting,
+and `git diff --check`. Server collection found exactly the one guarded case.
+The final real-Odoo command, run as the `odoo` system user, recorded:
+
+- `v4-dev` / `odoo_cli_v4_dev`: 29 calls, six replays, 548/548, rollback true;
+- `v4-e2e` / `odoo_cli_v4_e2e`: 29 calls, six replays, 548/548, rollback true;
+- final pytest result: `1 passed in 443.73s`, exit 0.
+
+Private evidence directory:
+`/opt/odoo-accounting-cli-v4/.tooling/accounting-fx-settlement-20260901-6d19c2a9f4b7`.
+
+- Initial two-file upload archive: 14275 bytes, SHA-256
+  `c8cde2ba3bb1d82b1bb2eb5fe57b237d922cde04c0f6ba072be337a9cc938f15`.
+- Original existing-helper backup: SHA-256
+  `0d9e080f6813c249b2dcb1bd78feb708a31ca2af19a82ba6027682a9bbeea1b6`.
+- Final test file: SHA-256
+  `8415273c0f8031d436e26f77a393c53ccf367e0bfa4c09936eb778fe5526578f`.
+- Final shared helper: SHA-256
+  `2d20199ad019a299c37589319dda45d8fbd8afc2e4c45c47909cecc33a7201b4`.
+- Passing attempt-6 log: SHA-256
+  `923bc7d8cf2431d098cd546cffe10f413585363fd253a63173ba958e1d6a472e`.
+- Corrected server collection log: SHA-256
+  `e0199936360688128e2eae2261c0aa60c96e2b4dc2f198785bf7c5b6eb74e3ce`.
+
+Five failed executions remain in the same private directory and are not counted
+as acceptance: root peer authentication; decimal-string representation; payment
+date versus exchange accounting date; string versus Python `date`; and a report
+end date that excluded the exchange moves. The peer-authentication attempt never
+entered a database. Every later worker that entered one reached its
+rollback/fresh-cursor cleanup before surfacing an assertion. The separate
+self-matching process preflight never launched pytest. The first combined server
+static attempt also failed only because the project virtualenv has no Ruff; the
+corrected server collection and local Ruff checks passed.
+
+After the final run Odoo19, Nginx, and PostgreSQL were all active. Odoo PID
+`3995891` and `NRestarts=4` were unchanged; no service was restarted. Root disk
+use is still 96%, so retain the small explicit-allowlist deployment approach.
+The server Git tree remains intentionally old and dirty; never use pull, reset,
+or checkout as deployment.
+
+### Next work
+
+Do not add more variants to this workflow in the same batch. The remaining
+foreign-currency variants—partial settlement, early-payment discount and explicit
+write-off—stay as later workflow-depth gaps.
+
+The next compact capability candidate found by the read-only server audit is the
+analytic-accounting lifecycle. A minimal 8-10-interface batch can extend plan
+reads, create/update child plans, archive/restore company-scoped analytic
+accounts, and CRUD/summarize manual analytic lines. Keep manual lines restricted
+to `move_line_id=False` and `category=other`; do not expose root-plan creation,
+plan deletion, or edits that propagate back into posted accounting entries. This
+candidate has not been implemented or accepted yet.
