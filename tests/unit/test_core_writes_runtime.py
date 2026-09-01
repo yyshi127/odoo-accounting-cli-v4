@@ -1300,6 +1300,8 @@ def test_public_action_and_closed_capability_batch_are_exact() -> None:
         "invoice.cancel",
         "invoice.reset_to_draft",
         "invoice.post",
+        "invoice.duplicate",
+        "invoice.type.switch",
         "journal_entry.create",
         "journal_entry.update",
         "journal_entry.lines.replace",

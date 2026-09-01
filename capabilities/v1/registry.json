@@ -7673,6 +7673,32 @@
       },
       "handler_key": "core_write"
     },
+    "invoice.duplicate": {
+      "summary": {"zh_CN": "复制发票或账单为新草稿", "en_US": "Duplicate an invoice or bill as a new draft"},
+      "domain": "invoices_and_bills",
+      "access": "write",
+      "source": {"modules": ["account"], "models": ["res.company", "account.move", "account.move.line"], "wizards": [], "report_handlers": [], "locations": ["account/models/account_move.py"]},
+      "schemas": {"request": "schemas/v1/invoice.duplicate.request.schema.json", "response": "schemas/v1/invoice.duplicate.response.schema.json"},
+      "requirements": {"modules": ["account"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["account.group_account_invoice"], "acl": ["account.move:read", "account.move:create", "account.move:write", "account.move.line:read", "account.move.line:create"]},
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_native_account_move_copy_as_draft", "verify": "same_transaction_new_draft_source_binding_and_response_schema_validation", "idempotency": "caller_chosen_operation_key_and_source_parameter_marker_allow_distinct_duplicates_and_same_key_replay", "reverse": "invoice.cancel_or_delete_draft_outside_this_capability"},
+      "tests": {"unit": {"status": "implemented", "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_bridge.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_core_write_cli.py", "tests/unit/test_invoice_copy_type_contract.py", "tests/unit/test_invoice_copy_type_runtime.py"], "reason": "Unit tests cover the generic core-write path, closed request, caller-selected operation key and source-bound draft result."}, "integration": {"status": "implemented", "references": ["tests/integration/test_invoice_duplicate_type_switch_batch_live.py"], "reason": "The guarded live smoke verifies native draft duplication, type switching and rollback."}, "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred."}, "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is deferred."}},
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "Availability is evaluated for each configured database, company, and user at runtime."},
+      "routing": {"object": "account.move", "actions": ["duplicate"], "aliases": {"zh_CN": ["复制发票", "复制账单"], "en_US": ["Duplicate an invoice", "Duplicate a bill"]}, "not_for": {"zh_CN": [], "en_US": []}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
+    "invoice.type.switch": {
+      "summary": {"zh_CN": "切换草稿发票或账单的发票退款类型", "en_US": "Switch a draft invoice or bill between invoice and refund types"},
+      "domain": "invoices_and_bills",
+      "access": "write",
+      "source": {"modules": ["account"], "models": ["res.company", "account.move", "account.move.line", "account.tax"], "wizards": [], "report_handlers": [], "locations": ["account/models/account_move.py"]},
+      "schemas": {"request": "schemas/v1/invoice.type.switch.request.schema.json", "response": "schemas/v1/invoice.type.switch.response.schema.json"},
+      "requirements": {"modules": ["account"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["account.group_account_invoice"], "acl": ["account.move:read", "account.move:write", "account.move.line:read", "account.move.line:write", "account.tax:read"]},
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_same_business_family_draft_move_type_switch", "verify": "same_transaction_target_type_draft_state_and_response_schema_validation", "idempotency": "move_and_target_type_deterministic_key_with_target_state_replay", "reverse": "invoice.type.switch_to_original_type"},
+      "tests": {"unit": {"status": "implemented", "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_bridge.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_core_write_cli.py", "tests/unit/test_invoice_copy_type_contract.py", "tests/unit/test_invoice_copy_type_runtime.py"], "reason": "Unit tests cover the generic core-write path, closed target enum, deterministic key and exact draft result binding."}, "integration": {"status": "implemented", "references": ["tests/integration/test_invoice_duplicate_type_switch_batch_live.py"], "reason": "The guarded live smoke verifies native draft duplication, type switching and rollback."}, "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred."}, "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is deferred."}},
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "Availability is evaluated for each configured database, company, and user at runtime."},
+      "routing": {"object": "account.move", "actions": ["type_switch"], "aliases": {"zh_CN": ["切换发票退款类型", "切换账单退款类型"], "en_US": ["Switch invoice type", "Switch bill type"]}, "not_for": {"zh_CN": [], "en_US": []}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
     "invoice.get": {
       "summary": {
         "zh_CN": "读取发票或账单明细",

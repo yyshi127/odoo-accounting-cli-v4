@@ -80,13 +80,13 @@ def _assert_invalid(capability_id: str, parameters: dict[str, object]) -> None:
 def test_batch_registry_metadata_and_cumulative_counts_are_exact() -> None:
     registry = load_registry()
 
-    assert len(registry.ids()) == 355
+    assert len(registry.ids()) == 357
     assert (
         sum(
             registry.describe(capability_id)["handler_key"] is not None
             for capability_id in registry.ids()
         )
-        == 340
+        == 342
     )
     assert (
         sum(
@@ -102,7 +102,7 @@ def test_batch_registry_metadata_and_cumulative_counts_are_exact() -> None:
             and registry.describe(capability_id)["access"] == "write"
             for capability_id in registry.ids()
         )
-        == 130
+        == 132
     )
     assert (
         sum(
@@ -116,7 +116,7 @@ def test_batch_registry_metadata_and_cumulative_counts_are_exact() -> None:
             registry.describe(capability_id)["status"]["value"] == "unconfigured"
             for capability_id in registry.ids()
         )
-        == 307
+        == 309
     )
     assert (
         sum(
@@ -172,7 +172,7 @@ def test_batch_has_exactly_eighteen_closed_public_schema_files() -> None:
     registry = load_registry()
     schema_root = Path(__file__).resolve().parents[2] / "schemas" / "v1"
 
-    assert len(list(schema_root.glob("*.schema.json"))) == 685
+    assert len(list(schema_root.glob("*.schema.json"))) == 689
     for capability_id in BATCH_IDS:
         descriptor = registry.describe(capability_id)
         request_schema = registry.load_schema(descriptor["schemas"]["request"])

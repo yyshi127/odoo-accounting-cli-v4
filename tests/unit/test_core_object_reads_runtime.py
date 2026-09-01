@@ -2765,6 +2765,24 @@ def test_journal_item_search_applies_every_filter_and_normalizes_rows() -> None:
     assert call[2:4] == ("id", 1)
 
 
+@pytest.mark.parametrize("capability_id", ["journal_item.search", "journal_item.get"])
+def test_journal_item_reads_normalize_an_unnamed_draft_move(
+    capability_id: str,
+) -> None:
+    env, fixture = _fixture()
+    line = fixture["journal_lines"][0]
+    line.move_id.name = False
+    line.move_id.state = "draft"
+    line.move_id.move_type = "out_invoice"
+    line.parent_state = "draft"
+
+    page = _dispatch(env, capability_id, _parameters(capability_id))
+
+    expected = _expected_item(capability_id)
+    expected["move"].update(name=None, state="draft", move_type="out_invoice")
+    assert page["items"] == [expected]
+
+
 @pytest.mark.parametrize("value", [False, None, {}])
 def test_line_analytic_distribution_normalizes_native_empty_values(value: Any) -> None:
     assert core._line_analytic_distribution(value) == {}

@@ -16,13 +16,17 @@ the Odoo source/add-on tree while building CLI capabilities.
 
 ## Current authoritative count
 
-- Registry: 355 capability IDs; 340 enabled handlers (210 reads and 130 writes)
+- Registry: 357 capability IDs; 342 enabled handlers (210 reads and 132 writes)
   and 15 disabled IDs.
-- Runtime status: 307 `unconfigured`, 33 `degraded`, and 15 `disabled`.
-- Versioned JSON Schema documents: 685.
-- Latest registry-expansion checkpoint: `44314c8`, pushed to `rebuild/v4`.
-  The final supporting-object checkpoint and its evidence limits are recorded
-  near the end of this document.
+- Runtime status: 309 `unconfigured`, 33 `degraded`, and 15 `disabled`.
+- Versioned JSON Schema documents: 689.
+- The invoice-copy/type batch adds `invoice.duplicate` and `invoice.type.switch`.
+  Its final server regression passed 901 cases and its shared dual-alias real-Odoo
+  workflow passed in 687.67s with rollback verification. It also corrects
+  `journal_item.search/get` to represent an unnamed draft move's native
+  `name=False` as JSON null. The detailed checkpoint and evidence boundaries are
+  at the end of this document. The pushed baseline before this batch is
+  `e7ab43be4fda36f82eb2b9840ebdd3dc5d801af6` on `rebuild/v4`.
 - The subsequent independent-accounting-date implementation is checkpoint
   `63b5288`; its 14-capability lifecycle passed on both isolated aliases. The
   financial credit-note auto/undo/apply acceptance is recorded near the
@@ -3242,7 +3246,135 @@ Internal bank transfer is not included. The current isolated configuration has o
 one suitable bank/cash journal per database, and source inspection did not establish
 a native Odoo 19 action that safely creates the paired transfer required by this
 CLI contract. Do not synthesize two unrelated payments and call that complete.
-The next bounded capability candidates are `invoice.duplicate` and
-`invoice.type.switch`. A payment-hold flag is not a payment-enforcement control,
-and fiscal-position application lacks safe writable fixtures; neither should be
-claimed as the next capability batch without resolving those facts.
+The following checkpoint implements the then-next bounded candidates,
+`invoice.duplicate` and `invoice.type.switch`. A payment-hold flag remains outside
+this batch because it is not payment enforcement, and fiscal-position application
+still lacks safe writable fixtures.
+
+## Invoice duplication and type switching checkpoint - 2026-09-01
+
+The pre-batch local/GitHub baseline is
+`e7ab43be4fda36f82eb2b9840ebdd3dc5d801af6`. The registry now contains 357
+mixed-domain IDs and 342 enabled handlers (210 reads and 132 writes), with 309
+`unconfigured`, 33 `degraded`, and 15 `disabled` statuses. There are 689 public
+schema files. The exact sorted-ID SHA-256 is
+`70afbb625e34ce065b06e4d058fd1ff9c41b17174f80e15109b246e0824ec8c3`;
+the registry-file SHA-256 is
+`631c6e916c6ff2248a000995395dc9890e7d00d366ebf7fd0b60009c125f75cd`.
+These mixed-domain totals are implementation inventory, not an accounting
+completion percentage.
+
+Two fixed write capabilities are added:
+
+- `invoice.duplicate` accepts only `move_id` and a caller-chosen operation key.
+  It uses native `account.move.copy()` for `out_invoice`, `out_refund`,
+  `in_invoice`, and `in_refund`, then verifies a distinct, unpaid, never-posted
+  draft of the same type. Same-key replay resolves the same draft; a changed
+  source conflicts, while another valid key deliberately creates another copy.
+  Human `invoice_origin` tokens are preserved, inherited `ODACV4/ODACV4K`
+  tokens are stripped on copy-of-copy, and the new key/fingerprint markers are
+  appended in one write. A 400-character native origin is covered without the
+  unrelated period-transfer helper's 255-character limit.
+- `invoice.type.switch` accepts only `move_id` and one of the four fixed financial
+  document types. The exact deterministic key is
+  `invoice.type.switch:{move_id}:{target_move_type}`. Runtime permits only a draft
+  with `posted_before=False`, treats an already selected target as replay, and
+  otherwise allows only the native customer-side or supplier-side counterpart.
+  It calls `action_switch_move_type()` and verifies the same move ID, target type,
+  and draft state. General journal entries and cross-side conversions fail closed.
+
+The batch retains native business-user ACLs and company/record-rule scope.
+Duplication requires fixed `account.move` read/create/write and
+`account.move.line` read/create access; type switching requires fixed
+`account.move` read/write, `account.move.line` read/write, and `account.tax` read
+access. There is no sudo path, configuration change, arbitrary ORM dispatcher, or
+business-database write target.
+
+The shared workflow exposed a separate legitimate read edge. Odoo 19 stores an
+unnamed draft move as `name=False`; `journal_item.search/get` previously rejected
+the normalized item because their public contract required a nonempty move name.
+The runtime now maps only native false/none/empty to JSON null, the public contract
+accepts null or a nonempty string, and the shared search-item schema uses
+`string|null`. `journal_item.get` already references that item schema. Empty and
+whitespace move names remain invalid, and the journal item's own line name remains
+a string. This does not synthesize `/` or another document number.
+
+Twenty-two final code/schema/registry/test files were deployed together. Fifteen
+pre-existing targets matched the local pre-batch Git blobs before overwrite and
+were archived; seven new paths were verified absent. Existing owners/modes were
+restored and every final deployed byte matches `deploy.sha256`. Necessary local
+evidence includes the 51-case contract/closure selection, 20 invoice-copy/type
+runtime cases after the long-origin correction, and 849 affected journal-item
+public/runtime/schema cases. Ruff, JSON parsing, Python compilation, and
+`git diff --check` passed. Independent reviews found no blocking contract/runtime,
+ACL, schema, count, or live-test inconsistency.
+
+Final server regression passed 901 cases in 95.97s, exit 0. The shared real-Odoo
+workflow passed both isolated aliases: 1 passed in 687.67s, exit 0, run UUID
+`a6536a63-fa30-4da5-a601-0a3a4bd33c24`. Per alias it ran as uid 5, company 1,
+su=False and verified seven capabilities through 46 CLI calls and 12 immediate
+replays. It created and posted one customer and one supplier source, duplicated
+both into distinct drafts, created two additional never-posted drafts, switched
+each to its financial refund counterpart and back, and reread the documents and
+journal items. Header/line business signatures, amounts, new line IDs, unchanged
+originals, balanced entries, storno sign inversion, and balance restoration passed.
+Each alias tracked six `account.move` records; all synthetic rows rolled back and
+the separate fresh-cursor residual audit passed. No worker remains.
+
+Three unsuccessful runs are retained and are not counted as acceptance:
+
+- Attempt 1 failed in 26.90s before invoking either new command because the live
+  fixture supplied a custom key to deterministic `invoice.post`. The fixture was
+  corrected to `invoice.post:{move_id}`; rollback/residual verification passed.
+- Attempt 2 failed in 78.99s after duplication succeeded, when
+  `journal_item.search` rejected the duplicate's valid unnamed draft move.
+  Rollback/residual verification passed.
+- A separately retained diagnostic run printed the normalized native
+  `move.name=false`, proving the exact read-contract defect. Its diagnostic test
+  file is archived and is not the final deployed test. The scoped runtime/public/
+  schema correction then passed 849 local cases and the final 901-case server run.
+
+Private artifact directory:
+`.tooling/accounting-invoice-copy-type-20260901-42f9c7d1`.
+
+- Initial six-target backup `before-code.tgz` SHA-256:
+  `73e40b3b620c09a11a5d6b0c39119035f0218f5dde1da073a1052683c93bb69f`.
+- Three frozen-closure targets `before-frozen-closures.tgz` SHA-256:
+  `0184d7622df4a00d4e71514db5bceff7497cd3f9546bc4266bd4e1e5aeab006a`.
+- First live-test correction `before-live-test-fix.tgz` SHA-256:
+  `34f46b69861ffba43c463340e5b1d6b8f553b21f12d716b9546a0e4328fcc392`.
+- Pre-diagnostic live test `before-live-diagnostic.tgz` SHA-256:
+  `3cca39c2cb52821cbd62d27d5699c926cc9563d0674244175d456a1a7b5e9996`.
+- Six-target draft-name backup `before-journal-item-draft-name.tgz` SHA-256:
+  `fc16e558f57dc7bf7674408cd17f3b69787639e1416c59d61705480fe019c75f`.
+- Diagnostic live test archive `diagnostic-live-test.tgz` SHA-256:
+  `2f1ac4532c34a69aa2fee7644c65cd869effb6b8cf30953cd58c9fe9dcebf737`.
+- Pre-change public documents `before-docs.tgz` SHA-256:
+  `fde6566181368de3d26e7d4901cf697ba8f10b0a50cee9dcbe9968c1600994e4`.
+- Final 22-file `code-final.tgz` SHA-256:
+  `da4f7ebc06af15aba7ea941038229076adf913cad66a01c6c1ca8f9eea888aa3`.
+- Final focused log SHA-256:
+  `6956c5639a0cdbd9610ed92485462bb6f3c747352865088f7086621284ad7676`.
+- Final passing live log SHA-256:
+  `5013208c4ededde58d2d6e45d3471d5d15eda85980ed123ab404bce2d0094baa`.
+- Failed attempt logs SHA-256:
+  `03044ef73d1f0bc39c4f46ac064c411c37f5bdbac9b47b225c7a098bdac0c722`
+  and `4108aa49bdbb1c355e56278379b0e9fd72693e1597ff579fddd5d48c3b5d106c`.
+- Diagnostic log SHA-256:
+  `f1fc3c9bfe93e1bf1c575ec847667607569cb43f19d3614549ab17f76917dfbe`.
+
+Before and after deployment and all live runs, Odoo19 remained active as PID
+3995891 / NRestarts 4; Nginx and PostgreSQL remained active. No service-control
+command, installed Odoo/add-on edit, permission/configuration change, or business
+database write was issued. Server Git HEAD intentionally remains
+`2e190bcdd70313c0a10dcc479e1a2834db240a50`; do not pull or reset over its
+accumulated working tree.
+
+Acceptance is deliberately bounded: the real workflow used positive, untaxed,
+company-currency documents with `account_storno=True`. The native negative-total
+and taxed switch branches remain unaccepted. Marker-based duplicate replay has no
+database uniqueness constraint or lock, so concurrent same-key exactly-once
+creation is not proven. These are later coverage/control gaps, not reasons to add
+speculative framework code to this capability-first batch. Select the next compact
+accounting batch from a re-audited module/workflow/lifecycle gap, not from command
+count or historical stock operations.

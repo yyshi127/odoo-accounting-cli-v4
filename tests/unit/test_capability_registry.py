@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 355
-EXPECTED_ENABLED_CAPABILITY_COUNT = 340
+EXPECTED_CAPABILITY_COUNT = 357
+EXPECTED_ENABLED_CAPABILITY_COUNT = 342
 EXPECTED_IMPLEMENTED_READ_COUNT = 210
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 130
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 132
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 307
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 309
 EXPECTED_DEGRADED_CAPABILITY_COUNT = 33
-EXPECTED_SCHEMA_COUNT = 685
+EXPECTED_SCHEMA_COUNT = 689
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "19ebbf7a41194146c4e89056ca81eab166fc2c23af4984b4c4d9dd9c86e47a72"
+    "70afbb625e34ce065b06e4d058fd1ff9c41b17174f80e15109b246e0824ec8c3"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -343,9 +343,11 @@ IMPLEMENTED_WRITES = {
     "deferred_expense.generate_entries",
     "deferred_revenue.generate_entries",
     "invoice.cancel",
+    "invoice.duplicate",
     "invoice.lines.replace",
     "invoice.post",
     "invoice.reset_to_draft",
+    "invoice.type.switch",
     "invoice.update",
     "journal.archive",
     "journal.create",
@@ -447,6 +449,7 @@ DOCUMENT_LIFECYCLE_WRITES = {
     "journal_entry.reset_to_draft",
     "journal_entry.update",
 }
+INVOICE_COPY_TYPE_WRITES = {"invoice.duplicate", "invoice.type.switch"}
 PAYMENT_BANK_WRITES = {
     "bank.transaction.match",
     "bank.transaction.unmatch",
@@ -2757,6 +2760,13 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
                 "tests/unit/test_invoice_financial_headers.py",
                 "tests/unit/test_invoice_financial_headers_runtime.py",
             })
+        if capability_id in INVOICE_COPY_TYPE_WRITES:
+            expected_unit_tests.update(
+                {
+                    "tests/unit/test_invoice_copy_type_contract.py",
+                    "tests/unit/test_invoice_copy_type_runtime.py",
+                }
+            )
         assert set(descriptor["tests"]["unit"]["references"]) == expected_unit_tests
         if capability_id in {"customer_invoice.create", "vendor_bill.create", "invoice.update"}:
             assert descriptor["tests"]["integration"]["status"] == "implemented"
@@ -2771,6 +2781,11 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             assert descriptor["tests"]["integration"]["references"] == [
                 *prior_tests,
                 "tests/integration/test_invoice_financial_headers_prepayment_batch_live.py",
+            ]
+        elif capability_id in INVOICE_COPY_TYPE_WRITES:
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == [
+                "tests/integration/test_invoice_duplicate_type_switch_batch_live.py"
             ]
         elif capability_id in {"receivable.payment.register", "payable.payment.register"}:
             assert descriptor["tests"]["integration"]["status"] == "implemented"

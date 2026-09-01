@@ -1414,7 +1414,9 @@ def _valid_journal_item(item: Any, company_id: int) -> bool:
         and isinstance(item["move"], dict)
         and set(item["move"]) == {"id", "name", "state", "move_type"}
         and _valid_id(item["move"]["id"])
-        and _nonempty(item["move"]["name"])
+        and (
+            item["move"]["name"] is None or _nonempty(item["move"]["name"])
+        )
         and item["move"]["state"] in {"draft", "posted", "cancel"}
         and _nonempty(item["move"]["move_type"])
         and _coded_reference(item["account"])

@@ -2688,7 +2688,7 @@ def _normalize_journal_items(
                 "date_maturity": _optional_date_string(row["date_maturity"]),
                 "move": {
                     "id": move_id,
-                    "name": move["name"],
+                    "name": _optional_text(move["name"]),
                     "state": move["state"],
                     "move_type": move["move_type"],
                 },

@@ -7,16 +7,53 @@ The active objective is capability-first accounting delivery in
 logistics are outside this phase; picking and physical-return commands are not
 accounting-core completion. Financial credit notes/refunds remain in scope.
 
-The current registry has 355 IDs, 340 enabled handlers (210 reads, 130 writes),
-and 685 schemas. Statuses are 307 `unconfigured`, 33 `degraded`, and 15 `disabled`.
+The current registry has 357 IDs, 342 enabled handlers (210 reads, 132 writes),
+and 689 schemas. Statuses are 309 `unconfigured`, 33 `degraded`, and 15 `disabled`.
 These are implementation totals including historical non-accounting extensions,
-not 355 accounting operations, a coverage percentage, or proof that all workflows
+not 357 accounting operations, a coverage percentage, or proof that all workflows
 pass for the configured user. There are 16 `stock.*` IDs, but other historical
 sales/purchase extensions also remain; subtracting 16 does not establish a
 pure-accounting count or a coverage denominator. Registry SHA-256:
-`272fcf3c261ee1b36f7f2471545e41bf803bdc4d9ed5875d3acf3baf12f1d38f`.
+`631c6e916c6ff2248a000995395dc9890e7d00d366ebf7fd0b60009c125f75cd`.
 
-The current grouped-payment batch extends the existing
+The current invoice-copy/type batch adds `invoice.duplicate` and
+`invoice.type.switch`. Duplication uses native `account.move.copy()` for the four
+financial invoice/bill types, returns a new draft, preserves business origin text,
+and binds replay to a caller-chosen key without preventing a deliberate second copy
+under another key. Type switching uses native `action_switch_move_type()` only for
+a never-posted draft and only between the customer invoice/credit pair or supplier
+bill/refund pair. Its deterministic key binds move ID and target type. Neither
+command invokes an arbitrary model/method dispatcher or bypasses native ACLs.
+
+The live workflow also exposed an existing read-contract defect: Odoo 19 returns
+`account.move.name=False` for a valid unnamed draft, while `journal_item.search/get`
+previously required a nonempty move name. The runtime now represents that exact
+state as JSON `null`; the public validator and shared item schema accept null but
+still reject empty strings. `journal_item.get` inherits the same item schema by
+reference. This is a compatibility correction for legitimate draft journal items,
+not a fabricated move number.
+
+Twenty-two code/schema/registry/test files are deployed after backing up all 15
+pre-existing targets. Local contract/closure, long-origin runtime, and affected
+journal-item selections passed 51, 20, and 849 cases respectively; Ruff, JSON,
+compile, and diff checks passed. The final server selection passed 901 cases in
+95.97s. The corrected shared dual-alias live workflow passed: 1 passed in 687.67s,
+exit 0. Each alias executed 46 CLI calls across seven capabilities, including 12
+immediate replays, two native duplicates, and two documents switched to refund and
+back. Business headers, lines, totals, draft/posted journal items, storno balance
+inversion/restoration, unchanged originals, and fresh-cursor rollback audits all
+passed as uid 5/su=False/company 1.
+
+Two failed live attempts and one diagnostic run are retained and are not counted
+as acceptance. The first stopped before a new capability because the test supplied
+a non-deterministic key to `invoice.post`; the second duplicated successfully but
+found the valid unnamed-draft journal-item defect above. Every worker rolled back
+and completed its residual audit before reporting failure. Final evidence is for
+positive, untaxed, company-currency documents with `account_storno=True`; taxed or
+negative-total switch branches and concurrent exactly-once duplication remain
+outside that proof.
+
+The preceding grouped-payment batch extends the existing
 receivable.payment.register and payable.payment.register commands with a bounded
 `move_ids` mode for two through 100 posted documents. One native
 account.payment.register wizard creates exactly one full customer receipt or one

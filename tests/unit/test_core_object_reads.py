@@ -1088,6 +1088,26 @@ def test_journal_item_search_passes_every_normalized_filter() -> None:
     }
 
 
+@pytest.mark.parametrize("capability_id", ["journal_item.search", "journal_item.get"])
+def test_journal_item_reads_accept_an_unnamed_draft_move(capability_id: str) -> None:
+    item = _item(capability_id)
+    item["move"].update(name=None, state="draft", move_type="out_invoice")
+    parameters = (
+        {GET_ID_FIELDS[capability_id]: item["id"]}
+        if capability_id == "journal_item.get"
+        else _required_page_parameters(capability_id)
+    )
+
+    result = read_core_object(
+        capability_id,
+        FakePort([item]),
+        _request(parameters),
+    )
+
+    returned = result if capability_id == "journal_item.get" else result["items"][0]
+    assert returned["move"]["name"] is None
+
+
 @pytest.mark.parametrize(
     ("capability_id", "parameters", "expected_filters"),
     [

@@ -134,6 +134,11 @@ PARAMETERS = {
     "invoice.cancel": {"move_id": 116},
     "invoice.reset_to_draft": {"move_id": 117},
     "invoice.post": {"move_id": 101},
+    "invoice.duplicate": {"move_id": 122},
+    "invoice.type.switch": {
+        "move_id": 123,
+        "target_move_type": "out_refund",
+    },
     "journal_entry.create": _journal_parameters(),
     "journal_entry.update": {
         "move_id": 118,
@@ -738,7 +743,14 @@ def _key(capability_id: str) -> str:
         "budget.create",
     }:
         return f"smoke:{capability_id}:0001"
+    if capability_id == "invoice.duplicate":
+        return "invoice-duplicate-safe-key-001"
     parameters = PARAMETERS[capability_id]
+    if capability_id == "invoice.type.switch":
+        return (
+            f"invoice.type.switch:{parameters['move_id']}:"
+            f"{parameters['target_move_type']}"
+        )
     if capability_id == "stock.transfer.quantities.set":
         digest = sha256(
             json.dumps(
@@ -1314,6 +1326,19 @@ def _result(capability_id: str, **changes) -> dict:
         result.update(id=501, state="draft", move_type="out_invoice")
     elif capability_id == "vendor_bill.create":
         result.update(id=502, state="draft", move_type="in_invoice")
+    elif capability_id == "invoice.duplicate":
+        result.update(
+            id=518,
+            state="draft",
+            move_type="out_invoice",
+            source_id=parameters["move_id"],
+        )
+    elif capability_id == "invoice.type.switch":
+        result.update(
+            state="draft",
+            move_type=parameters["target_move_type"],
+            source_id=parameters["move_id"],
+        )
     elif capability_id == "invoice.post":
         result["move_type"] = "out_invoice"
     elif capability_id.startswith("invoice."):

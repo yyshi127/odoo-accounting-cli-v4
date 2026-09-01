@@ -109,6 +109,21 @@ def test_journal_item_tax_contract(capability_id, registry):
 
 
 @pytest.mark.parametrize("capability_id", CAPABILITIES)
+def test_journal_item_unnamed_draft_move_contract(capability_id, registry):
+    item = public._item(capability_id)
+    item["move"].update(name=None, state="draft", move_type="out_invoice")
+
+    _read(capability_id, item)
+    _schema(registry, capability_id, item)
+
+    item["move"]["name"] = ""
+    with pytest.raises(public.CoreObjectReadError):
+        _read(capability_id, item)
+    with pytest.raises(InstanceValidationError):
+        _schema(registry, capability_id, item)
+
+
+@pytest.mark.parametrize("capability_id", CAPABILITIES)
 @pytest.mark.parametrize(
     "field,value",
     [("tax_line_id", value) for value in (False, 0, -1, "5", [5, "name"])]

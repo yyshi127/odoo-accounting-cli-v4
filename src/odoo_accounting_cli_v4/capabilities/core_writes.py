@@ -45,6 +45,8 @@ CORE_WRITE_CAPABILITY_IDS = frozenset(
         "invoice.lines.replace",
         "invoice.cancel",
         "invoice.reset_to_draft",
+        "invoice.duplicate",
+        "invoice.type.switch",
         "journal_entry.update",
         "journal_entry.lines.replace",
         "journal_entry.cancel",
@@ -1143,6 +1145,18 @@ def _validate_payment_register_parameters(parameters: Any) -> dict[str, Any]:
     if many:
         normalized["move_ids"] = sorted(move_ids)
     return normalized
+
+
+def _validate_invoice_type_switch_parameters(parameters: Any) -> dict[str, Any]:
+    if (
+        not isinstance(parameters, dict)
+        or set(parameters) != {"move_id", "target_move_type"}
+        or not _valid_id(parameters["move_id"])
+        or parameters["target_move_type"]
+        not in {"out_invoice", "out_refund", "in_invoice", "in_refund"}
+    ):
+        raise _invalid("Invoice-type-switch parameters do not match the fixed contract.")
+    return dict(parameters)
 
 
 def _validate_payment_fields(values: Any, *, partial: bool) -> dict[str, Any]:
@@ -3618,6 +3632,10 @@ def validate_core_write_request(
         normalized = _validate_invoice_update_parameters(parameters)
     elif capability_id == "invoice.lines.replace":
         normalized = _validate_invoice_line_replacement_parameters(parameters)
+    elif capability_id == "invoice.duplicate":
+        normalized = _validate_single_id(parameters, "move_id")
+    elif capability_id == "invoice.type.switch":
+        normalized = _validate_invoice_type_switch_parameters(parameters)
     elif capability_id == "journal_entry.update":
         normalized = _validate_journal_entry_update_parameters(parameters)
     elif capability_id == "journal_entry.lines.replace":
@@ -3993,6 +4011,13 @@ def _expected_idempotency_key(
         return None
     if capability_id in _REFUND_CAPABILITIES:
         return None
+    if capability_id == "invoice.duplicate":
+        return None
+    if capability_id == "invoice.type.switch":
+        return (
+            f"invoice.type.switch:{parameters['move_id']}:"
+            f"{parameters['target_move_type']}"
+        )
     if capability_id in _PAYMENT_REGISTER_CAPABILITIES and "amount" in parameters:
         return None
     if capability_id in _PAYMENT_REGISTER_CAPABILITIES and "move_ids" in parameters:
@@ -4992,6 +5017,27 @@ def _validate_result(
             or result["source_id"] is not None
         ):
             raise _failed("Odoo returned a mismatched document-lifecycle result.")
+        return deepcopy(result)
+    if capability_id == "invoice.duplicate":
+        if (
+            result["model"] != "account.move"
+            or not _valid_id(result["id"])
+            or result["id"] == parameters["move_id"]
+            or result["state"] != "draft"
+            or result["move_type"] not in _INVOICE_MOVE_TYPES
+            or result["source_id"] != parameters["move_id"]
+        ):
+            raise _failed("Odoo returned a mismatched duplicated invoice result.")
+        return deepcopy(result)
+    if capability_id == "invoice.type.switch":
+        if (
+            result["model"] != "account.move"
+            or result["id"] != parameters["move_id"]
+            or result["state"] != "draft"
+            or result["move_type"] != parameters["target_move_type"]
+            or result["source_id"] != parameters["move_id"]
+        ):
+            raise _failed("Odoo returned a mismatched switched invoice result.")
         return deepcopy(result)
     if (
         capability_id

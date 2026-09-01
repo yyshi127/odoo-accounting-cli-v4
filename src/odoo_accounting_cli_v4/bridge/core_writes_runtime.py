@@ -27,6 +27,8 @@ CAPABILITIES = frozenset(
         "invoice.cancel",
         "invoice.reset_to_draft",
         "invoice.post",
+        "invoice.duplicate",
+        "invoice.type.switch",
         "journal_entry.create",
         "journal_entry.update",
         "journal_entry.lines.replace",
@@ -582,6 +584,8 @@ _PARAMETER_KEYS = {
     "invoice.cancel": {"move_id"},
     "invoice.reset_to_draft": {"move_id"},
     "invoice.post": {"move_id"},
+    "invoice.duplicate": {"move_id"},
+    "invoice.type.switch": {"move_id", "target_move_type"},
     "journal_entry.create": {"journal_id", "date", "lines", "reference"},
     "journal_entry.update": {"move_id", "changes"},
     "journal_entry.lines.replace": {"move_id", "lines"},
@@ -837,6 +841,8 @@ _GROUPS = {
     "invoice.cancel": "account.group_account_invoice",
     "invoice.reset_to_draft": "account.group_account_invoice",
     "invoice.post": "account.group_account_invoice",
+    "invoice.duplicate": "account.group_account_invoice",
+    "invoice.type.switch": "account.group_account_invoice",
     "journal_entry.create": "account.group_account_user",
     "journal_entry.update": "account.group_account_user",
     "journal_entry.lines.replace": "account.group_account_user",
@@ -1003,6 +1009,13 @@ _MODELS = {
     "invoice.cancel": {"res.company", "account.move"},
     "invoice.reset_to_draft": {"res.company", "account.move"},
     "invoice.post": {"res.company", "account.move"},
+    "invoice.duplicate": {"res.company", "account.move", "account.move.line"},
+    "invoice.type.switch": {
+        "res.company",
+        "account.tax",
+        "account.move",
+        "account.move.line",
+    },
     "journal_entry.create": {
         "res.company",
         "res.partner",
@@ -1381,6 +1394,20 @@ _ACCESS = {
         ("account.move", "write"),
     },
     "invoice.post": {("account.move", "read"), ("account.move", "write")},
+    "invoice.duplicate": {
+        ("account.move", "read"),
+        ("account.move", "create"),
+        ("account.move", "write"),
+        ("account.move.line", "read"),
+        ("account.move.line", "create"),
+    },
+    "invoice.type.switch": {
+        ("account.tax", "read"),
+        ("account.move", "read"),
+        ("account.move", "write"),
+        ("account.move.line", "read"),
+        ("account.move.line", "write"),
+    },
     "journal_entry.create": {
         ("res.partner", "read"),
         ("account.journal", "read"),
@@ -4316,6 +4343,12 @@ def _valid_parameters(
         "journal_entry.reset_to_draft",
     }:
         return _is_id(parameters["move_id"])
+    if capability_id == "invoice.duplicate":
+        return _is_id(parameters["move_id"])
+    if capability_id == "invoice.type.switch":
+        return _is_id(parameters["move_id"]) and parameters[
+            "target_move_type"
+        ] in _DOCUMENT_TYPES
     if capability_id in {"invoice.post", "journal_entry.post"}:
         return _is_id(parameters["move_id"])
     if capability_id == "journal_entry.reverse" or capability_id in {
@@ -4842,6 +4875,13 @@ def _deterministic_key(
         ).encode("utf-8")
         digest = hashlib.sha256(canonical).hexdigest()[:32]
         return f"{capability_id}:{parameters['move_id']}:{digest}"
+    if capability_id == "invoice.duplicate":
+        return None
+    if capability_id == "invoice.type.switch":
+        return (
+            f"invoice.type.switch:{parameters['move_id']}:"
+            f"{parameters['target_move_type']}"
+        )
     if capability_id in {
         "invoice.lines.replace",
         "journal_entry.lines.replace",
@@ -8614,6 +8654,160 @@ def _transition_move(
     return _move_result(move, company_id), False
 
 
+def _duplicate_invoice(
+    env: Any,
+    capability_id: str,
+    parameters: dict[str, Any],
+    company_id: int,
+    key: str,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    source = _search_one(
+        env,
+        "account.move",
+        [
+            ("id", "=", parameters["move_id"]),
+            ("company_id", "=", company_id),
+            ("move_type", "in", list(_DOCUMENT_TYPES)),
+        ],
+        company_id,
+        failure_type,
+    )
+    key_marker = _idempotency_key_marker(capability_id, company_id, key)
+    operation_marker = _operation_marker(capability_id, key, parameters)
+    candidates = _scoped(env, "account.move", company_id).search(
+        [
+            ("company_id", "=", company_id),
+            ("move_type", "in", list(_DOCUMENT_TYPES)),
+            ("invoice_origin", "ilike", key_marker),
+        ]
+    )
+    candidates = candidates.filtered(
+        lambda move: _move_has_marker(move, key_marker)
+    )
+    if candidates:
+        if (
+            len(candidates) != 1
+            or not _move_has_marker(candidates, operation_marker)
+            or candidates.state != "draft"
+            or bool(candidates.posted_before)
+            or candidates.move_type != source.move_type
+            or candidates.payment_state != "not_paid"
+            or bool(candidates.reconciled_payment_ids)
+        ):
+            raise _fail(
+                failure_type,
+                "idempotency_conflict",
+                "The invoice duplication key conflicts with another document.",
+                exit_code=5,
+            )
+        return _move_result(candidates, company_id, source_id=source.id), True
+    preserved_origin = ";".join(
+        token
+        for token in (
+            part.strip() for part in str(source.invoice_origin or "").split(";")
+        )
+        if token
+        and not token.startswith("ODACV4:")
+        and not token.startswith("ODACV4K:")
+    )
+    duplicate = source.copy(default={"invoice_origin": preserved_origin or False})
+    duplicate_id = duplicate.id
+    if not _is_id(duplicate_id) or duplicate_id == source.id:
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not return a new duplicated invoice.",
+            exit_code=6,
+        )
+    duplicate = _search_one(
+        env,
+        "account.move",
+        [
+            ("id", "=", duplicate_id),
+            ("company_id", "=", company_id),
+            ("move_type", "=", source.move_type),
+        ],
+        company_id,
+        failure_type,
+    )
+    origin_tokens = [
+        token.strip()
+        for token in str(duplicate.invoice_origin or "").split(";")
+        if token.strip()
+    ]
+    for marker in (key_marker, operation_marker):
+        if marker not in origin_tokens:
+            origin_tokens.append(marker)
+    duplicate.write({"invoice_origin": ";".join(origin_tokens)})
+    if (
+        duplicate.state != "draft"
+        or bool(duplicate.posted_before)
+        or duplicate.payment_state != "not_paid"
+        or bool(duplicate.reconciled_payment_ids)
+        or not _move_has_marker(duplicate, key_marker)
+        or not _move_has_marker(duplicate, operation_marker)
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo returned an invalid duplicated invoice.",
+            exit_code=6,
+        )
+    return _move_result(duplicate, company_id, source_id=source.id), False
+
+
+def _switch_invoice_type(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    move = _search_one(
+        env,
+        "account.move",
+        [
+            ("id", "=", parameters["move_id"]),
+            ("company_id", "=", company_id),
+            ("move_type", "in", list(_DOCUMENT_TYPES)),
+        ],
+        company_id,
+        failure_type,
+    )
+    if move.state != "draft" or bool(move.posted_before):
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Only a never-posted draft invoice can switch document type.",
+            exit_code=5,
+        )
+    target = parameters["target_move_type"]
+    if move.move_type == target:
+        return _move_result(move, company_id, source_id=move.id), True
+    expected_target = {
+        "out_invoice": "out_refund",
+        "out_refund": "out_invoice",
+        "in_invoice": "in_refund",
+        "in_refund": "in_invoice",
+    }[move.move_type]
+    if target != expected_target:
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "The requested invoice type is not the native counterpart type.",
+            exit_code=5,
+        )
+    move.action_switch_move_type()
+    if move.state != "draft" or move.move_type != target or bool(move.posted_before):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not switch the invoice to the requested type.",
+            exit_code=6,
+        )
+    return _move_result(move, company_id, source_id=move.id), False
+
+
 def _post_move(
     env: Any,
     capability_id: str,
@@ -10652,7 +10846,7 @@ def _append_move_marker(move: Any, marker: str, failure_type: type[Exception]) -
         raise _fail(
             failure_type,
             "idempotency_conflict",
-            "The transfer entry cannot hold another operation marker.",
+            "The accounting move cannot hold another operation marker.",
             exit_code=5,
         )
     move.write({"invoice_origin": value})
@@ -14229,6 +14423,12 @@ def _dispatch_allowed(
         return _transition_move(
             env, capability_id, parameters, company_id, failure_type
         )
+    if capability_id == "invoice.duplicate":
+        return _duplicate_invoice(
+            env, capability_id, parameters, company_id, key, failure_type
+        )
+    if capability_id == "invoice.type.switch":
+        return _switch_invoice_type(env, parameters, company_id, failure_type)
     if capability_id in {"invoice.post", "journal_entry.post"}:
         return _post_move(env, capability_id, parameters, company_id, failure_type)
     if capability_id == "journal_entry.reverse":
