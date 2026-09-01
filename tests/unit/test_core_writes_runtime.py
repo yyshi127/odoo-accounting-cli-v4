@@ -1482,6 +1482,37 @@ def test_optional_references_do_not_expand_static_access_gate() -> None:
     assert ("account.move.line", "create") in writes._ACCESS["journal_entry.reverse"]
 
 
+@pytest.mark.parametrize(
+    "capability_id",
+    [
+        "journal_entry.post",
+        "journal_entry.cancel",
+        "journal_entry.reset_to_draft",
+    ],
+)
+def test_batch_journal_lifecycle_rejects_non_general_journals_before_actions(
+    monkeypatch: pytest.MonkeyPatch, capability_id: str
+) -> None:
+    moves = [
+        Record(
+            "account.move",
+            31,
+            journal_id=Record("account.journal", 41, type="general"),
+        ),
+        Record(
+            "account.move",
+            32,
+            journal_id=Record("account.journal", 42, type="bank"),
+        ),
+    ]
+    monkeypatch.setattr(writes, "_ensure_ids", lambda *_args, **_kwargs: moves)
+
+    with pytest.raises(Failure) as raised:
+        writes._batch_lifecycle_moves(object(), capability_id, [31, 32], 7, Failure)
+
+    assert raised.value.code == "record_not_found"
+
+
 def test_asset_create_uses_a_visible_marker_and_replays_only_full_fingerprint() -> None:
     env = Env()
     parameters = _asset_parameters(env)

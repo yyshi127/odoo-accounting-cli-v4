@@ -25,15 +25,26 @@
     "parameters": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "payment_id"
-      ],
       "properties": {
         "payment_id": {
           "type": "integer",
           "minimum": 1
+        },
+        "payment_ids": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
         }
-      }
+      },
+      "oneOf": [
+        {"required": ["payment_id"]},
+        {"required": ["payment_ids"]}
+      ]
     }
   }
 }

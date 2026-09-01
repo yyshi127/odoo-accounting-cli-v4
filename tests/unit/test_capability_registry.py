@@ -46,7 +46,7 @@ EXPECTED_IMPLEMENTED_WRITE_COUNT = 137
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
 EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 314
 EXPECTED_DEGRADED_CAPABILITY_COUNT = 37
-EXPECTED_SCHEMA_COUNT = 707
+EXPECTED_SCHEMA_COUNT = 708
 EXPECTED_CAPABILITY_IDS_SHA256 = (
     "72cc69c57422ee052477a86bdfa41b45276360a4755fdbb16dbb3df64c2f0ed8"
 )
@@ -458,6 +458,17 @@ DOCUMENT_LIFECYCLE_WRITES = {
     "journal_entry.lines.replace",
     "journal_entry.reset_to_draft",
     "journal_entry.update",
+}
+BATCH_LIFECYCLE_WRITES = {
+    "invoice.post",
+    "invoice.cancel",
+    "invoice.reset_to_draft",
+    "journal_entry.post",
+    "journal_entry.cancel",
+    "journal_entry.reset_to_draft",
+    "payment.post",
+    "payment.cancel",
+    "payment.reset_to_draft",
 }
 INVOICE_COPY_TYPE_WRITES = {"invoice.duplicate", "invoice.type.switch"}
 PAYMENT_BANK_WRITES = {
@@ -2787,6 +2798,8 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
                     "tests/unit/test_invoice_copy_type_runtime.py",
                 }
             )
+        if capability_id in BATCH_LIFECYCLE_WRITES:
+            expected_unit_tests.add("tests/unit/test_lifecycle_batch_contract.py")
         assert set(descriptor["tests"]["unit"]["references"]) == expected_unit_tests
         if capability_id in {
             "customer_invoice.create",
@@ -2810,6 +2823,19 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             assert descriptor["tests"]["integration"]["status"] == "implemented"
             assert descriptor["tests"]["integration"]["references"] == [
                 "tests/integration/test_invoice_duplicate_type_switch_batch_live.py"
+            ]
+        elif capability_id in BATCH_LIFECYCLE_WRITES:
+            prior_live_test = (
+                "tests/integration/test_document_lifecycle_write_batch_live.py"
+                if capability_id in DOCUMENT_LIFECYCLE_WRITES
+                else "tests/integration/test_payment_bank_capability_batch_live.py"
+                if capability_id in PAYMENT_BANK_WRITES
+                else "tests/integration/test_core_write_batch_live.py"
+            )
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == [
+                prior_live_test,
+                "tests/integration/test_batch_lifecycle_write_live.py",
             ]
         elif capability_id in {
             "receivable.payment.register",
@@ -2987,7 +3013,7 @@ def test_payment_bank_batch_has_exact_registry_and_schema_contracts() -> None:
             "payment_reference",
         },
         "payment.update_draft": {"payment_id", "changes"},
-        "payment.reset_to_draft": {"payment_id"},
+        "payment.reset_to_draft": {"payment_id", "payment_ids"},
         "bank.transaction.update": {"transaction_id", "changes"},
         "bank.transaction.match": {"transaction_id", "candidate_line_ids"},
         "bank.transaction.unmatch": {"transaction_id"},
@@ -3027,12 +3053,18 @@ def test_payment_bank_batch_has_exact_registry_and_schema_contracts() -> None:
                 branch.get("properties", {}).get("data")
                 for branch in response_schema["allOf"]
             ]
-            assert {
+            expected_data_contract = {
                 "oneOf": [
                     {"type": "null"},
                     {"$ref": "core-write-result.schema.json"},
+                    *(
+                        [{"$ref": "core-write-batch-result.schema.json"}]
+                        if capability_id == "payment.reset_to_draft"
+                        else []
+                    ),
                 ]
-            } in data_contracts
+            }
+            assert expected_data_contract in data_contracts
 
     create_parameters = registry.load_schema(
         "schemas/v1/payment.create.request.schema.json"

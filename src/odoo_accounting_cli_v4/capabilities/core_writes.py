@@ -217,6 +217,22 @@ _JOURNAL_ENTRY_LIFECYCLE_CAPABILITIES = frozenset(
 _DOCUMENT_LIFECYCLE_CAPABILITIES = (
     _INVOICE_LIFECYCLE_CAPABILITIES | _JOURNAL_ENTRY_LIFECYCLE_CAPABILITIES
 )
+_MOVE_BATCH_LIFECYCLE_CAPABILITIES = frozenset(
+    {
+        "invoice.post",
+        "invoice.cancel",
+        "invoice.reset_to_draft",
+        "journal_entry.post",
+        "journal_entry.cancel",
+        "journal_entry.reset_to_draft",
+    }
+)
+_PAYMENT_BATCH_LIFECYCLE_CAPABILITIES = frozenset(
+    {"payment.post", "payment.cancel", "payment.reset_to_draft"}
+)
+_BATCH_LIFECYCLE_CAPABILITIES = (
+    _MOVE_BATCH_LIFECYCLE_CAPABILITIES | _PAYMENT_BATCH_LIFECYCLE_CAPABILITIES
+)
 _DOCUMENT_CONTENT_CAPABILITIES = frozenset(
     {
         "invoice.update",
@@ -402,6 +418,7 @@ _PAGE_FIELDS = frozenset(
         "result",
     }
 )
+_BATCH_RESULT_FIELDS = frozenset({"items", "processed_count"})
 _DECIMAL_PATTERN = re.compile(r"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 _SIGNED_DECIMAL_PATTERN = re.compile(r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 _ANALYTIC_KEY_PATTERN = re.compile(r"^[1-9][0-9]*(?:,[1-9][0-9]*)*$")
@@ -1048,6 +1065,25 @@ def _validate_single_id(parameters: Any, field: str) -> dict[str, Any]:
             f"parameters.{field} must be the only positive integer parameter."
         )
     return dict(parameters)
+
+
+def _validate_singular_or_batch_ids(
+    parameters: Any, singular_field: str, batch_field: str
+) -> dict[str, Any]:
+    if not isinstance(parameters, dict):
+        raise _invalid(
+            f"parameters must contain exactly one of {singular_field} or {batch_field}."
+        )
+    if set(parameters) == {singular_field} and _valid_id(parameters[singular_field]):
+        return dict(parameters)
+    if set(parameters) == {batch_field}:
+        ids = _validate_ids(parameters[batch_field])
+        if ids is not None and 2 <= len(ids) <= 100:
+            return {batch_field: sorted(ids)}
+    raise _invalid(
+        f"parameters must contain one positive {singular_field}, or {batch_field} "
+        "with 2 to 100 unique positive integers."
+    )
 
 
 def _validate_reverse_parameters(parameters: Any) -> dict[str, Any]:
@@ -3640,13 +3676,10 @@ def validate_core_write_request(
         normalized = _validate_journal_entry_update_parameters(parameters)
     elif capability_id == "journal_entry.lines.replace":
         normalized = _validate_journal_line_replacement_parameters(parameters)
-    elif capability_id in {
-        "invoice.cancel",
-        "invoice.reset_to_draft",
-        "journal_entry.cancel",
-        "journal_entry.reset_to_draft",
-    } or capability_id in {"invoice.post", "journal_entry.post"}:
-        normalized = _validate_single_id(parameters, "move_id")
+    elif capability_id in _MOVE_BATCH_LIFECYCLE_CAPABILITIES:
+        normalized = _validate_singular_or_batch_ids(
+            parameters, "move_id", "move_ids"
+        )
     elif capability_id == "journal_entry.reverse":
         normalized = _validate_reverse_parameters(parameters)
     elif capability_id in _REFUND_CAPABILITIES:
@@ -3657,8 +3690,10 @@ def validate_core_write_request(
         normalized = _validate_payment_create_parameters(parameters)
     elif capability_id == "payment.update_draft":
         normalized = _validate_payment_update_parameters(parameters)
-    elif capability_id == "payment.reset_to_draft":
-        normalized = _validate_single_id(parameters, "payment_id")
+    elif capability_id in _PAYMENT_BATCH_LIFECYCLE_CAPABILITIES:
+        normalized = _validate_singular_or_batch_ids(
+            parameters, "payment_id", "payment_ids"
+        )
     elif capability_id in _RECONCILIATION_CAPABILITIES:
         normalized = _validate_reconciliation_parameters(capability_id, parameters)
     elif capability_id == "bank.transaction.record":
@@ -3745,6 +3780,14 @@ def validate_core_write_request(
 def _expected_idempotency_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in _BATCH_LIFECYCLE_CAPABILITIES and (
+        "move_ids" in parameters or "payment_ids" in parameters
+    ):
+        canonical = json.dumps(
+            parameters, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        return f"{capability_id}:{company_id}:{digest}"
     if capability_id in {
         "account.tag.create",
         "tax.group.create",
@@ -4220,6 +4263,21 @@ def _valid_result_shape(result: Any) -> bool:
     )
 
 
+def _valid_batch_result_shape(result: Any) -> bool:
+    return (
+        isinstance(result, dict)
+        and set(result) == _BATCH_RESULT_FIELDS
+        and _is_integer(result["processed_count"])
+        and 2 <= result["processed_count"] <= 100
+        and isinstance(result["items"], list)
+        and len(result["items"]) == result["processed_count"]
+        and all(_valid_result_shape(item) for item in result["items"])
+        and all(_valid_id(item["id"]) for item in result["items"])
+        and [item["id"] for item in result["items"]]
+        == sorted({item["id"] for item in result["items"]})
+    )
+
+
 def _validate_page(
     port: CoreWritePort, page: Any
 ) -> tuple[bool, dict[str, Any] | None]:
@@ -4231,7 +4289,11 @@ def _validate_page(
         or not isinstance(page["module_installed"], bool)
         or not isinstance(page["access_allowed"], bool)
         or not isinstance(page["idempotent_replay"], bool)
-        or not (page["result"] is None or _valid_result_shape(page["result"]))
+        or not (
+            page["result"] is None
+            or _valid_result_shape(page["result"])
+            or _valid_batch_result_shape(page["result"])
+        )
     ):
         raise _failed("The Odoo bridge returned an invalid core-write result.")
     try:
@@ -5224,6 +5286,42 @@ def _validate_result(
     return deepcopy(result)
 
 
+def _validate_batch_result(
+    capability_id: str,
+    parameters: dict[str, Any],
+    result: Any,
+    *,
+    company_id: int,
+    idempotent_replay: bool,
+) -> dict[str, Any]:
+    if not _valid_batch_result_shape(result):
+        raise _failed("Odoo returned a malformed core-write batch result.")
+    singular_field, batch_field = (
+        ("move_id", "move_ids")
+        if capability_id in _MOVE_BATCH_LIFECYCLE_CAPABILITIES
+        else ("payment_id", "payment_ids")
+    )
+    expected_ids = parameters[batch_field]
+    if (
+        result["processed_count"] != len(expected_ids)
+        or [item["id"] for item in result["items"]] != expected_ids
+    ):
+        raise _failed("Odoo returned a mismatched core-write batch result.")
+    return {
+        "items": [
+            _validate_result(
+                capability_id,
+                {singular_field: target_id},
+                item,
+                company_id=company_id,
+                idempotent_replay=idempotent_replay,
+            )
+            for target_id, item in zip(expected_ids, result["items"], strict=True)
+        ],
+        "processed_count": result["processed_count"],
+    }
+
+
 def execute_core_write(
     port: CoreWritePort,
     capability_id: str,
@@ -5258,13 +5356,25 @@ def execute_core_write(
             "A target or referenced accounting record was not found.",
             exit_code=4,
         )
-    return {
-        "idempotent_replay": idempotent_replay,
-        "result": _validate_result(
+    validated_result = (
+        _validate_batch_result(
             capability_id,
             parameters,
             result,
             company_id=context["company_id"],
             idempotent_replay=idempotent_replay,
-        ),
+        )
+        if capability_id in _BATCH_LIFECYCLE_CAPABILITIES
+        and ("move_ids" in parameters or "payment_ids" in parameters)
+        else _validate_result(
+            capability_id,
+            parameters,
+            result,
+            company_id=context["company_id"],
+            idempotent_replay=idempotent_replay,
+        )
+    )
+    return {
+        "idempotent_replay": idempotent_replay,
+        "result": validated_result,
     }

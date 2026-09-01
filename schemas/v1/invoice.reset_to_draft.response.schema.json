@@ -25,7 +25,8 @@
     "data": {
       "oneOf": [
         {"type": "null"},
-        {"$ref": "core-write-result.schema.json"}
+        {"$ref": "core-write-result.schema.json"},
+        {"$ref": "core-write-batch-result.schema.json"}
       ]
     },
     "warnings": {"type": "array", "items": {"type": "object"}},
@@ -48,7 +49,12 @@
         "properties": {
           "request_id": {"type": "string", "format": "uuid"},
           "status": {"const": "verified"},
-          "data": {"$ref": "core-write-result.schema.json"},
+          "data": {
+            "oneOf": [
+              {"$ref": "core-write-result.schema.json"},
+              {"$ref": "core-write-batch-result.schema.json"}
+            ]
+          },
           "error": {"type": "null"}
         }
       },

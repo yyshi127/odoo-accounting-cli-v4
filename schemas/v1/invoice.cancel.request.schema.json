@@ -25,15 +25,26 @@
     "parameters": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "move_id"
-      ],
       "properties": {
         "move_id": {
           "type": "integer",
           "minimum": 1
+        },
+        "move_ids": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
         }
-      }
+      },
+      "oneOf": [
+        {"required": ["move_id"]},
+        {"required": ["move_ids"]}
+      ]
     }
   }
 }

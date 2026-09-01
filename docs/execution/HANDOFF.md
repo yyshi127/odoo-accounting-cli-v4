@@ -19,7 +19,14 @@ the Odoo source/add-on tree while building CLI capabilities.
 - Registry: 366 capability IDs; 351 enabled handlers (214 reads and 137 writes)
   and 15 disabled IDs.
 - Runtime status: 314 `unconfigured`, 37 `degraded`, and 15 `disabled`.
-- Versioned JSON Schema documents: 707.
+- Versioned JSON Schema documents: 708.
+- The latest batch adds no command ID or handler. It extends nine existing
+  invoice, journal-entry and payment post/cancel/reset commands with a closed
+  2-100-ID batch form while preserving every singular request. Full-scope
+  preflight, deterministic full-set keys, sorted explicit results, serial replay
+  and one outer transaction are verified. The final server focused selection
+  passed 181 cases and the dual-alias real-ORM smoke passed in 487.94 seconds with
+  rollback. The detailed checkpoint is at the end of this file.
 - The accounting-delivery batch adds nine commands for invoice/payment readiness,
   native queue-only invoice and payment-receipt processing, customer-statement and
   follow-up PDF export, report-delivery attempts, and invoice/bill follow-up
@@ -3506,3 +3513,137 @@ restarted. Root filesystem use remains 96%, so future work must continue using
 small per-batch backups. The remote Git tree remains intentionally old and heavily
 dirty; never use pull/reset/checkout as deployment. Continue with explicit file
 allowlists, pre-overwrite backups, and byte verification.
+
+## Batch lifecycle support checkpoint — 2026-09-01
+
+This batch starts from local/GitHub baseline
+`8a24a0848a74b0ece19aed989f48b1554066e8ec` on `rebuild/v4`. It adds no
+capability ID and no production handler. The authoritative totals are 366
+mixed-domain IDs, 351 enabled handlers (214 reads and 137 writes), 708 schemas,
+314 `unconfigured`, 37 `degraded`, and 15 `disabled`. Registry-file SHA-256 is
+`4a80f295b9b0008fee915af6d7612e8f7a2067099009fc40bd3e0e8d1b71f7df`.
+
+The following nine existing capabilities now accept either their original
+singular field or a closed batch field:
+
+1. `invoice.post`, `invoice.cancel`, `invoice.reset_to_draft`
+2. `journal_entry.post`, `journal_entry.cancel`,
+   `journal_entry.reset_to_draft`
+3. `payment.post`, `payment.cancel`, `payment.reset_to_draft`
+
+Invoice and journal-entry commands use `move_id` or `move_ids`; payment commands
+use `payment_id` or `payment_ids`. The plural form requires 2-100 distinct positive
+integer IDs. Public validation rejects duplicates and mixed singular/plural input,
+then normalizes IDs into ascending order. The deterministic key binds the complete
+normalized ID set and company, so caller order cannot create a different operation.
+Batch responses use the shared `core-write-batch-result` schema with sorted
+`items` and an exact `processed_count`; singular response shapes remain unchanged.
+
+Runtime execution resolves the complete record set and validates access, company,
+document type and every state before changing any record. Invoice and journal-entry
+transitions use the native recordset action. Payment transitions call the native
+action once per payment only after the complete preflight, while retaining the
+single outer write cursor and transaction. This narrow compatibility is required
+because the installed custom module
+`/mnt/odoo/odoo19/custom/addons/exchange_currency_rate` reads `self.is_exchange`
+inside a multi-record `account.move` constraint and raises `Expected singleton`.
+The CLI did not modify that add-on, the Odoo source tree, configuration or ACLs.
+Any propagated ORM error still reaches the existing bridge rollback path; this is
+a database-transaction guarantee, not a claim about external side effects from an
+arbitrary custom module.
+
+Final review also found and closed one scope gap before commit: batch
+`journal_entry.post` had checked `move_type=entry` but had not applied the same
+`journal.type=general` boundary as the other journal-entry lifecycle commands.
+All three batch journal lifecycles now reject a non-general journal during the
+full preflight, before any native action; three parameterized unit cases lock this
+boundary.
+
+Local verification included:
+
+- 139 new lifecycle contract cases for normalization, invalid ID sets,
+  full-set idempotency keys, bridge/capability result validation, and CLI output.
+- 132 existing singular document/payment cases, 642 central core-write cases,
+  and 41 grouped-payment regressions passed during production review.
+- After the payment compatibility correction, the combined payment-runtime and
+  lifecycle-contract selection passed 159 cases in 105.78 seconds.
+- After the final journal-type scope correction, the combined scope,
+  payment-runtime, lifecycle-contract and registry selection passed 181 cases in
+  332.51 seconds.
+- The full capability-registry test passed 19 cases; Ruff, JSON parsing,
+  compilation, formatting checks for the new standalone batch tests, and
+  `git diff --check` passed.
+
+Server deployment and verification used an explicit allowlist only. The initial
+29-file archive added one shared schema and two new tests while overwriting 26
+existing targets. Before overwrite, those 26 targets were byte-identical to the
+local baseline and were backed up. The later compatibility correction backed up
+the deployed runtime and the existing payment-runtime test separately before
+synchronizing them. Ownership and modes were restored per file; no recursive
+ownership or service-control command was used.
+
+Server evidence:
+
+- Initial focused regression: 286 passed in 318.13 seconds, exit 0.
+- Intermediate payment-runtime/lifecycle-contract regression: 159 passed in
+  136.85 seconds, exit 0.
+- Final scope/payment/runtime/contract/registry regression: 181 passed in 309.57
+  seconds, exit 0.
+- Final shared dual-alias real-Odoo smoke: 1 passed in 487.94 seconds, exit 0.
+- Both `v4-dev` / `odoo_cli_v4_dev` and `v4-e2e` /
+  `odoo_cli_v4_e2e` ran as uid 5, company 1, `su=False`.
+- Each alias created two invoices, two balanced journal entries and two inbound
+  payments inside its outer transaction. All nine batch capabilities completed
+  their native post/cancel/reset transitions and immediate replay; result IDs were
+  sorted and `processed_count` was exact.
+- One representative `invoice.post` request mixed a valid ID with a missing ID;
+  full preflight rejected it before the valid draft changed. This negative live
+  case is not evidence that all nine commands received the same invalid-ID case.
+- Both outer transactions rolled back, fresh cursors found no marked records, and
+  no live worker remains.
+
+Two failed live attempts are retained and are not acceptance evidence. The first
+reported only the public `odoo_write_error`; a diagnostic-only assertion-chain
+improvement then exposed the exact stack. In both attempts, invoice and
+journal-entry batches had passed before `payment.post` tried to create two payment
+moves together. The custom currency module's multi-record constraint raised
+`Expected singleton: account.move(...)`. Both worker paths completed rollback and
+fresh-cursor residual verification before surfacing the failure. The production
+fix was limited to singleton native payment actions within the unchanged outer
+transaction; the final dual-alias run passed.
+
+Private server evidence directory:
+`/opt/odoo-accounting-cli-v4/.tooling/accounting-batch-lifecycle-20260901-9c04f8fe22ae`.
+
+- Original 26-target backup `before-existing-files.tgz` SHA-256:
+  `de8316450408a70221f161e00a7d6df4cda06f6d6f37fe1afa21732cde871f92`.
+- Initial 29-file archive `code-and-tests.tgz` SHA-256:
+  `92182517eeed738227734511879b2f34276eec3a09bea2f98fa9b411bd25c9ee`.
+- Final 31-file archive `code-final-31-files.tgz`: 250614 bytes, SHA-256
+  `f52c18b43b13d70f2d65a63b531e8501f05e1670e192879b5fedfe5bf1d373ed`;
+  all 31 deployed targets matched it byte-for-byte.
+- Pre-compatibility runtime and payment-test backup SHA-256 values:
+  `398c6635075e318224f39ff6169e37a9fb208d58e8d5777ae067b3afa78f818e`
+  and `7892bd0c966853840dbe387d631078956d572585f48549c7c89d78f6a172c165`.
+- Pre-journal-type-scope three-file backup SHA-256:
+  `5b8f9b737e87f0ea28628c781f6a000c014275083e2d2ae774ba1279c0c5e024`.
+- Final focused and passing-live log SHA-256 values:
+  `e9941f9e2cfc4bd1ca62ded3c655ebb46c370dc501f5b8cf1cc14200ce391161`
+  and `00e7a4668b58240ee7baf2e374fb5d1a08ef3d195b50e933c47def6e25d4ab12`.
+- The first public-error and exact-cause diagnostic log SHA-256 values:
+  `5c31e6156b0520e6f59f91c159a5bc30daf1977543752d856aa239731e768eca`
+  and `446d11be4810c345c3344b19df087b0275377326d41db2c11f8708f628cfac86`.
+
+Before and after the final live run, Odoo19 remained active on PID `3995891` with
+`NRestarts=4`; Nginx and PostgreSQL remained active. No service was restarted.
+Root filesystem use remains 96% with about 3.4 GB free, so continue using compact
+per-batch backups. Server Git HEAD remains intentionally old and the tree remains
+dirty; never use pull/reset/checkout as deployment.
+
+Acceptance remains bounded. The live workflow used positive, untaxed,
+company-currency invoices, balanced entries and inbound manual payments. It does
+not prove every invoice/payment variant, concurrent exactly-once behavior, a
+database uniqueness constraint, external effects from custom modules, or full
+Odoo accounting coverage. Choose the next compact accounting workflow from the
+remaining module/workflow/lifecycle gap matrix; do not infer completion from the
+unchanged command count.

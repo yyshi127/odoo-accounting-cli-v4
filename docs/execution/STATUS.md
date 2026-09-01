@@ -8,13 +8,51 @@ logistics are outside this phase; picking and physical-return commands are not
 accounting-core completion. Financial credit notes/refunds remain in scope.
 
 The current registry has 366 IDs, 351 enabled handlers (214 reads, 137 writes),
-and 707 schemas. Statuses are 314 `unconfigured`, 37 `degraded`, and 15 `disabled`.
+and 708 schemas. Statuses are 314 `unconfigured`, 37 `degraded`, and 15 `disabled`.
 These are implementation totals including historical non-accounting extensions,
 not 366 accounting operations, a coverage percentage, or proof that all workflows
 pass for the configured user. There are 16 `stock.*` IDs, but other historical
 sales/purchase extensions also remain; subtracting 16 does not establish a
 pure-accounting count or a coverage denominator. Registry SHA-256:
-`ddc36d6eaad3fedeea4927244316112d52be02136ed30eeecd3b2750e2edb083`.
+`4a80f295b9b0008fee915af6d7612e8f7a2067099009fc40bd3e0e8d1b71f7df`.
+
+The latest batch adds no capability ID or handler. It deepens nine existing
+lifecycle commands: `invoice.post/cancel/reset_to_draft`,
+`journal_entry.post/cancel/reset_to_draft`, and
+`payment.post/cancel/reset_to_draft`. Their singular `move_id` or `payment_id`
+contracts remain available; plural requests accept 2-100 distinct positive IDs,
+normalize them into sorted order, bind the complete normalized set into the
+deterministic key, preflight the complete record/company/type/state scope, and
+return explicit sorted `items` plus `processed_count`. All transitions share one
+outer database transaction. Payment actions run per singleton only after the full
+preflight because the installed `exchange_currency_rate` add-on has a confirmed
+multi-record `account.move` constraint defect; the add-on itself was not changed.
+
+Final local scope, payment-runtime, lifecycle-contract and registry verification
+passed 181 cases in 332.51 seconds. The server had already passed 286 focused cases
+in 318.13 seconds and an intermediate 159-case compatibility selection in 136.85
+seconds; the final scope-aware selection passed 181 cases in 309.57 seconds. The
+final shared dual-alias real-ORM workflow passed in 487.94 seconds. Each alias
+exercised all nine batch lifecycles as uid 5,
+company 1 and `su=False`, using two invoices, two journal entries and two payments,
+nine immediate replays, and one representative valid-plus-missing-ID preflight.
+Both outer transactions rolled back and the fresh-cursor residual checks passed.
+The two earlier payment-post failures are retained only as diagnostic evidence;
+both workers verified rollback before reporting the confirmed custom-add-on
+`Expected singleton` failure.
+
+The private server evidence directory is
+`/opt/odoo-accounting-cli-v4/.tooling/accounting-batch-lifecycle-20260901-9c04f8fe22ae`.
+Its final 31-file code/schema/registry/test archive is 250614 bytes with SHA-256
+`f52c18b43b13d70f2d65a63b531e8501f05e1670e192879b5fedfe5bf1d373ed`;
+all 31 deployed files were compared byte-for-byte with that archive. The original
+26-file backup SHA-256 is
+`de8316450408a70221f161e00a7d6df4cda06f6d6f37fe1afa21732cde871f92`.
+Final focused and live log SHA-256 values are
+`e9941f9e2cfc4bd1ca62ded3c655ebb46c370dc501f5b8cf1cc14200ce391161`
+and `00e7a4668b58240ee7baf2e374fb5d1a08ef3d195b50e933c47def6e25d4ab12`.
+Odoo, Nginx and PostgreSQL remained active; Odoo stayed on PID `3995891` with
+`NRestarts=4`, no service was restarted, and no live worker remains.
 
 The accounting-delivery batch adds nine real commands:
 `invoice.send.inspect`, `invoice.send`, `payment.receipt.send.inspect`,

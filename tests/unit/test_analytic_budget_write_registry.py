@@ -172,7 +172,7 @@ def test_batch_has_exactly_eighteen_closed_public_schema_files() -> None:
     registry = load_registry()
     schema_root = Path(__file__).resolve().parents[2] / "schemas" / "v1"
 
-    assert len(list(schema_root.glob("*.schema.json"))) == 707
+    assert len(list(schema_root.glob("*.schema.json"))) == 708
     for capability_id in BATCH_IDS:
         descriptor = registry.describe(capability_id)
         request_schema = registry.load_schema(descriptor["schemas"]["request"])

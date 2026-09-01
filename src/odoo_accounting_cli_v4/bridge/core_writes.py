@@ -27,6 +27,18 @@ _RESULT_FIELDS = {
     "full_reconcile_id",
     "reconciled",
 }
+_BATCH_RESULT_FIELDS = {"items", "processed_count"}
+_BATCH_LIFECYCLE_CAPABILITIES = {
+    "invoice.post",
+    "invoice.cancel",
+    "invoice.reset_to_draft",
+    "journal_entry.post",
+    "journal_entry.cancel",
+    "journal_entry.reset_to_draft",
+    "payment.post",
+    "payment.cancel",
+    "payment.reset_to_draft",
+}
 
 
 class BridgeClient(Protocol):
@@ -73,6 +85,21 @@ def _valid_result(result: Any) -> bool:
     )
 
 
+def _valid_batch_result(result: Any) -> bool:
+    return (
+        isinstance(result, dict)
+        and set(result) == _BATCH_RESULT_FIELDS
+        and _positive_integer(result["processed_count"])
+        and 2 <= result["processed_count"] <= 100
+        and isinstance(result["items"], list)
+        and len(result["items"]) == result["processed_count"]
+        and all(_valid_result(item) for item in result["items"])
+        and all(_positive_integer(item["id"]) for item in result["items"])
+        and [item["id"] for item in result["items"]]
+        == sorted({item["id"] for item in result["items"]})
+    )
+
+
 class OdooCoreWritePort:
     """Invoke only ``accounting.core_write.execute`` with its closed payload."""
 
@@ -96,6 +123,9 @@ class OdooCoreWritePort:
         parameters: dict[str, Any],
     ) -> dict[str, Any]:
         self._user_id = None
+        batch_request = capability_id in _BATCH_LIFECYCLE_CAPABILITIES and (
+            "move_ids" in parameters or "payment_ids" in parameters
+        )
         page = self._client.invoke(
             _ACTION,
             {
@@ -114,7 +144,14 @@ class OdooCoreWritePort:
             or not isinstance(page["module_installed"], bool)
             or not isinstance(page["access_allowed"], bool)
             or not isinstance(page["idempotent_replay"], bool)
-            or not (page["result"] is None or _valid_result(page["result"]))
+            or not (
+                page["result"] is None
+                or (
+                    _valid_batch_result(page["result"])
+                    if batch_request
+                    else _valid_result(page["result"])
+                )
+            )
         ):
             raise ValueError("The Odoo bridge returned an invalid core-write result.")
         self._user_id = page["user_id"]

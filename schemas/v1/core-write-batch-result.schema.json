@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/core-write-batch-result.schema.json",
+  "title": "Core write batch result data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "idempotent_replay",
+    "result"
+  ],
+  "properties": {
+    "idempotent_replay": {
+      "type": "boolean"
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "processed_count"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "core-write-result.schema.json#/properties/result"
+          }
+        },
+        "processed_count": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 100
+        }
+      }
+    }
+  }
+}

@@ -44,6 +44,9 @@
         },
         {
           "$ref": "core-write-result.schema.json"
+        },
+        {
+          "$ref": "core-write-batch-result.schema.json"
         }
       ]
     },
@@ -92,7 +95,10 @@
             "const": "verified"
           },
           "data": {
-            "$ref": "core-write-result.schema.json"
+            "oneOf": [
+              {"$ref": "core-write-result.schema.json"},
+              {"$ref": "core-write-batch-result.schema.json"}
+            ]
           },
           "error": {
             "type": "null"

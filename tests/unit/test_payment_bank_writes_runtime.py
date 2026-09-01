@@ -220,6 +220,94 @@ def test_payment_reset_calls_the_native_action_and_rejects_rejected(
     assert raised.value.code == "state_conflict"
 
 
+@pytest.mark.parametrize(
+    ("runtime_method", "native_action", "initial_states", "action_state"),
+    [
+        ("_post_payment", "action_post", ["draft", "draft", "paid"], "in_process"),
+        (
+            "_cancel_payment",
+            "action_cancel",
+            ["draft", "in_process", "canceled"],
+            "canceled",
+        ),
+        (
+            "_reset_payment_to_draft",
+            "action_draft",
+            ["paid", "canceled", "draft"],
+            "draft",
+        ),
+    ],
+)
+def test_batch_payment_actions_run_per_singleton_and_replay(
+    monkeypatch,
+    runtime_method: str,
+    native_action: str,
+    initial_states: list[str],
+    action_state: str,
+) -> None:
+    calls: list[tuple[str, int]] = []
+    payments = [
+        _payment(id=payment_id, state=state)
+        for payment_id, state in zip((31, 32, 33), initial_states, strict=True)
+    ]
+    for payment in payments:
+
+        def action(row=payment) -> None:
+            calls.append((native_action, row.id))
+            row.state = action_state
+
+        setattr(payment, native_action, action)
+    monkeypatch.setattr(runtime, "_batch_payments", lambda *_args: Records(payments))
+
+    method = getattr(runtime, runtime_method)
+    first, first_replay = method(object(), {"payment_ids": [31, 32, 33]}, 7, Failure)
+    second, second_replay = method(object(), {"payment_ids": [31, 32, 33]}, 7, Failure)
+
+    assert [item["id"] for item in first["items"]] == [31, 32, 33]
+    assert first["processed_count"] == 3
+    assert second == first
+    assert first_replay is False
+    assert second_replay is True
+    assert calls == [(native_action, 31), (native_action, 32)]
+
+
+@pytest.mark.parametrize(
+    ("runtime_method", "native_action", "valid_state"),
+    [
+        ("_post_payment", "action_post", "draft"),
+        ("_cancel_payment", "action_cancel", "in_process"),
+        ("_reset_payment_to_draft", "action_draft", "canceled"),
+    ],
+)
+def test_batch_payment_actions_preflight_every_state(
+    monkeypatch,
+    runtime_method: str,
+    native_action: str,
+    valid_state: str,
+) -> None:
+    calls: list[int] = []
+    payments = [
+        _payment(id=31, state=valid_state),
+        _payment(id=32, state="rejected"),
+    ]
+    for payment in payments:
+        setattr(
+            payment,
+            native_action,
+            lambda row=payment: calls.append(row.id),
+        )
+    monkeypatch.setattr(runtime, "_batch_payments", lambda *_args: Records(payments))
+
+    with pytest.raises(Failure) as raised:
+        getattr(runtime, runtime_method)(
+            object(), {"payment_ids": [31, 32]}, 7, Failure
+        )
+
+    assert raised.value.code == "state_conflict"
+    assert payments[0].state == valid_state
+    assert calls == []
+
+
 def _transaction(**changes: Any) -> SimpleNamespace:
     values = {
         "id": 41,

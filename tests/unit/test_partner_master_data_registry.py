@@ -491,7 +491,7 @@ def test_partner_batch_registry_counts_handlers_and_schema_inventory_are_exact()
         == "72cc69c57422ee052477a86bdfa41b45276360a4755fdbb16dbb3df64c2f0ed8"
     )
     schema_root = Path(__file__).resolve().parents[2] / "schemas" / "v1"
-    assert len(list(schema_root.glob("*.schema.json"))) == 707
+    assert len(list(schema_root.glob("*.schema.json"))) == 708
 
 
 def test_partner_batch_registry_models_acl_groups_and_evidence_are_exact() -> None:

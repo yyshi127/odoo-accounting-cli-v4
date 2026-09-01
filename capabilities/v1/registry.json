@@ -7561,8 +7561,8 @@
     },
     "invoice.cancel": {
       "summary": {
-        "zh_CN": "取消发票或账单",
-        "en_US": "Cancel an invoice or bill"
+        "zh_CN": "原子取消单张或 2–100 张发票或账单",
+        "en_US": "Atomically cancel one or a batch of 2–100 invoices or bills"
       },
       "domain": "invoices_and_bills",
       "access": "write",
@@ -7607,10 +7607,10 @@
         ]
       },
       "strategies": {
-        "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_native_account_move_button_cancel_action",
-        "verify": "same_transaction_target_cancel_state_reread_and_response_schema_validation",
-        "idempotency": "target_cancel_state_check_before_native_button_cancel",
+        "preview": "singular_or_2_to_100_distinct_ids_closed_validation_normalized_sorted_and_exact_capability_confirmation",
+        "execute": "full_batch_record_scope_company_invoice_type_and_state_preflight_then_single_transaction_all_or_nothing_native_cancel",
+        "verify": "explicit_batch_result_with_exact_normalized_record_ids_target_states_same_transaction_reread_and_response_schema_validation",
+        "idempotency": "capability_company_and_full_normalized_sorted_record_id_set_key_with_serial_target_state_replay",
         "reverse": "invoice.reset_to_draft_when_native_state_allows"
       },
       "tests": {
@@ -7621,16 +7621,18 @@
             "tests/unit/test_document_lifecycle_writes_runtime.py",
             "tests/unit/test_core_writes_bridge.py",
             "tests/unit/test_core_write_cli.py",
-            "tests/unit/test_document_lifecycle_write_cli.py"
+            "tests/unit/test_document_lifecycle_write_cli.py",
+            "tests/unit/test_lifecycle_batch_contract.py"
           ],
-          "reason": "Unit tests cover the closed request, native state preconditions, configured-user ACL gates, target-state replay, bridge contract, and CLI dispatch."
+          "reason": "The existing unit tests continue to cover the singular request and native runtime behavior; the batch contract unit test covers batch-request normalization, full normalized-ID-set idempotency keys, bridge and capability contracts, explicit batch results, and CLI verification."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_document_lifecycle_write_batch_live.py"
+            "tests/integration/test_document_lifecycle_write_batch_live.py",
+            "tests/integration/test_batch_lifecycle_write_live.py"
           ],
-          "reason": "The guarded shared live smoke verifies the native document lifecycle transition and target-state replay against both isolated database aliases."
+          "reason": "The existing integration smoke continues to cover singular native execution; the new live smoke covers dual-database batch execution, immediate replay, and rollback, plus a representative whole-batch invalid-ID no-op for invoice.post."
         },
         "golden": {
           "status": "planned",
@@ -7655,10 +7657,10 @@
         ],
         "aliases": {
           "zh_CN": [
-            "取消发票或账单"
+            "原子取消单张或 2–100 张发票或账单"
           ],
           "en_US": [
-            "Cancel an invoice or bill"
+            "Atomically cancel one or a batch of 2–100 invoices or bills"
           ]
         },
         "not_for": {
@@ -8077,8 +8079,8 @@
     },
     "invoice.post": {
       "summary": {
-        "zh_CN": "过账发票或账单",
-        "en_US": "Post an invoice or bill"
+        "zh_CN": "原子过账单张或 2–100 张发票或账单",
+        "en_US": "Atomically post one or a batch of 2–100 invoices or bills"
       },
       "domain": "invoices_and_bills",
       "access": "write",
@@ -8124,10 +8126,10 @@
         ]
       },
       "strategies": {
-        "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_accounting_core_write_action_as_configured_business_user",
-        "verify": "post_write_same_transaction_reread_and_response_schema_validation",
-        "idempotency": "odoo_persisted_business_marker_and_result_replay",
+        "preview": "singular_or_2_to_100_distinct_ids_closed_validation_normalized_sorted_and_exact_capability_confirmation",
+        "execute": "full_batch_record_scope_company_invoice_type_and_state_preflight_then_single_transaction_all_or_nothing_native_post",
+        "verify": "explicit_batch_result_with_exact_normalized_record_ids_target_states_same_transaction_reread_and_response_schema_validation",
+        "idempotency": "capability_company_and_full_normalized_sorted_record_id_set_key_with_serial_target_state_replay",
         "reverse": "customer_credit_note.create_or_vendor_refund.create"
       },
       "tests": {
@@ -8137,16 +8139,18 @@
             "tests/unit/test_core_writes.py",
             "tests/unit/test_core_writes_bridge.py",
             "tests/unit/test_core_writes_runtime.py",
-            "tests/unit/test_core_write_cli.py"
+            "tests/unit/test_core_write_cli.py",
+            "tests/unit/test_lifecycle_batch_contract.py"
           ],
-          "reason": "Unit tests cover the closed request, exact confirmation, fixed bridge action, Odoo-side execution, idempotent replay, and CLI response contract."
+          "reason": "The existing unit tests continue to cover the singular request and native runtime behavior; the batch contract unit test covers batch-request normalization, full normalized-ID-set idempotency keys, bridge and capability contracts, explicit batch results, and CLI verification."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_core_write_batch_live.py"
+            "tests/integration/test_core_write_batch_live.py",
+            "tests/integration/test_batch_lifecycle_write_live.py"
           ],
-          "reason": "The guarded live write smoke verified first execution and immediate idempotent replay against both dedicated isolated database aliases."
+          "reason": "The existing integration smoke continues to cover singular native execution; the new live smoke covers dual-database batch execution, immediate replay, and rollback, plus a representative whole-batch invalid-ID no-op for invoice.post."
         },
         "golden": {
           "status": "planned",
@@ -8171,10 +8175,10 @@
         ],
         "aliases": {
           "zh_CN": [
-            "过账发票或账单"
+            "原子过账单张或 2–100 张发票或账单"
           ],
           "en_US": [
-            "Post an invoice or bill"
+            "Atomically post one or a batch of 2–100 invoices or bills"
           ]
         },
         "not_for": {
@@ -8191,8 +8195,8 @@
     },
     "invoice.reset_to_draft": {
       "summary": {
-        "zh_CN": "将发票或账单重置为草稿",
-        "en_US": "Reset an invoice or bill to draft"
+        "zh_CN": "原子将单张或 2–100 张发票或账单重置为草稿",
+        "en_US": "Atomically reset one or a batch of 2–100 invoices or bills to draft"
       },
       "domain": "invoices_and_bills",
       "access": "write",
@@ -8237,10 +8241,10 @@
         ]
       },
       "strategies": {
-        "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_native_account_move_button_draft_action",
-        "verify": "same_transaction_target_draft_state_reread_and_response_schema_validation",
-        "idempotency": "target_draft_state_check_before_native_button_draft",
+        "preview": "singular_or_2_to_100_distinct_ids_closed_validation_normalized_sorted_and_exact_capability_confirmation",
+        "execute": "full_batch_record_scope_company_invoice_type_and_state_preflight_then_single_transaction_all_or_nothing_native_reset_to_draft",
+        "verify": "explicit_batch_result_with_exact_normalized_record_ids_target_states_same_transaction_reread_and_response_schema_validation",
+        "idempotency": "capability_company_and_full_normalized_sorted_record_id_set_key_with_serial_target_state_replay",
         "reverse": "invoice.post_when_business_intent_requires_reposting"
       },
       "tests": {
@@ -8251,16 +8255,18 @@
             "tests/unit/test_document_lifecycle_writes_runtime.py",
             "tests/unit/test_core_writes_bridge.py",
             "tests/unit/test_core_write_cli.py",
-            "tests/unit/test_document_lifecycle_write_cli.py"
+            "tests/unit/test_document_lifecycle_write_cli.py",
+            "tests/unit/test_lifecycle_batch_contract.py"
           ],
-          "reason": "Unit tests cover the closed request, native state preconditions, configured-user ACL gates, target-state replay, bridge contract, and CLI dispatch."
+          "reason": "The existing unit tests continue to cover the singular request and native runtime behavior; the batch contract unit test covers batch-request normalization, full normalized-ID-set idempotency keys, bridge and capability contracts, explicit batch results, and CLI verification."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_document_lifecycle_write_batch_live.py"
+            "tests/integration/test_document_lifecycle_write_batch_live.py",
+            "tests/integration/test_batch_lifecycle_write_live.py"
           ],
-          "reason": "The guarded shared live smoke verifies the native reset-to-draft transition and target-state replay against both isolated database aliases."
+          "reason": "The existing integration smoke continues to cover singular native execution; the new live smoke covers dual-database batch execution, immediate replay, and rollback, plus a representative whole-batch invalid-ID no-op for invoice.post."
         },
         "golden": {
           "status": "planned",
@@ -8285,10 +8291,10 @@
         ],
         "aliases": {
           "zh_CN": [
-            "将发票或账单重置为草稿"
+            "原子将单张或 2–100 张发票或账单重置为草稿"
           ],
           "en_US": [
-            "Reset an invoice or bill to draft"
+            "Atomically reset one or a batch of 2–100 invoices or bills to draft"
           ]
         },
         "not_for": {
@@ -9227,8 +9233,8 @@
     },
     "journal_entry.cancel": {
       "summary": {
-        "zh_CN": "取消总账分录",
-        "en_US": "Cancel a general journal entry"
+        "zh_CN": "原子取消单笔或 2–100 笔普通日记账分录",
+        "en_US": "Atomically cancel one or a batch of 2–100 general journal entries"
       },
       "domain": "general_ledger",
       "access": "write",
@@ -9273,10 +9279,10 @@
         ]
       },
       "strategies": {
-        "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_native_account_move_button_cancel_action",
-        "verify": "same_transaction_target_cancel_state_reread_and_response_schema_validation",
-        "idempotency": "target_cancel_state_check_before_native_button_cancel",
+        "preview": "singular_or_2_to_100_distinct_ids_closed_validation_normalized_sorted_and_exact_capability_confirmation",
+        "execute": "full_batch_record_scope_company_general_entry_type_and_state_preflight_then_single_transaction_all_or_nothing_native_cancel",
+        "verify": "explicit_batch_result_with_exact_normalized_record_ids_target_states_same_transaction_reread_and_response_schema_validation",
+        "idempotency": "capability_company_and_full_normalized_sorted_record_id_set_key_with_serial_target_state_replay",
         "reverse": "journal_entry.reset_to_draft_when_native_state_allows"
       },
       "tests": {
@@ -9287,16 +9293,18 @@
             "tests/unit/test_document_lifecycle_writes_runtime.py",
             "tests/unit/test_core_writes_bridge.py",
             "tests/unit/test_core_write_cli.py",
-            "tests/unit/test_document_lifecycle_write_cli.py"
+            "tests/unit/test_document_lifecycle_write_cli.py",
+            "tests/unit/test_lifecycle_batch_contract.py"
           ],
-          "reason": "Unit tests cover the closed request, native state preconditions, configured-user ACL gates, target-state replay, bridge contract, and CLI dispatch."
+          "reason": "The existing unit tests continue to cover the singular request and native runtime behavior; the batch contract unit test covers batch-request normalization, full normalized-ID-set idempotency keys, bridge and capability contracts, explicit batch results, and CLI verification."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_document_lifecycle_write_batch_live.py"
+            "tests/integration/test_document_lifecycle_write_batch_live.py",
+            "tests/integration/test_batch_lifecycle_write_live.py"
           ],
-          "reason": "The guarded shared live smoke verifies the native document lifecycle transition and target-state replay against both isolated database aliases."
+          "reason": "The existing integration smoke continues to cover singular native execution; the new live smoke covers dual-database batch execution, immediate replay, and rollback, plus a representative whole-batch invalid-ID no-op for invoice.post."
         },
         "golden": {
           "status": "planned",
@@ -9321,10 +9329,10 @@
         ],
         "aliases": {
           "zh_CN": [
-            "取消总账分录"
+            "原子取消单笔或 2–100 笔普通日记账分录"
           ],
           "en_US": [
-            "Cancel a general journal entry"
+            "Atomically cancel one or a batch of 2–100 general journal entries"
           ]
         },
         "not_for": {
@@ -9708,8 +9716,8 @@
     },
     "journal_entry.post": {
       "summary": {
-        "zh_CN": "过账总账分录",
-        "en_US": "Post a general journal entry"
+        "zh_CN": "原子过账单笔或 2–100 笔普通日记账分录",
+        "en_US": "Atomically post one or a batch of 2–100 general journal entries"
       },
       "domain": "general_ledger",
       "access": "write",
@@ -9755,10 +9763,10 @@
         ]
       },
       "strategies": {
-        "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_accounting_core_write_action_as_configured_business_user",
-        "verify": "post_write_same_transaction_reread_and_response_schema_validation",
-        "idempotency": "odoo_persisted_business_marker_and_result_replay",
+        "preview": "singular_or_2_to_100_distinct_ids_closed_validation_normalized_sorted_and_exact_capability_confirmation",
+        "execute": "full_batch_record_scope_company_general_entry_type_and_state_preflight_then_single_transaction_all_or_nothing_native_post",
+        "verify": "explicit_batch_result_with_exact_normalized_record_ids_target_states_same_transaction_reread_and_response_schema_validation",
+        "idempotency": "capability_company_and_full_normalized_sorted_record_id_set_key_with_serial_target_state_replay",
         "reverse": "journal_entry.reverse"
       },
       "tests": {
@@ -9768,16 +9776,18 @@
             "tests/unit/test_core_writes.py",
             "tests/unit/test_core_writes_bridge.py",
             "tests/unit/test_core_writes_runtime.py",
-            "tests/unit/test_core_write_cli.py"
+            "tests/unit/test_core_write_cli.py",
+            "tests/unit/test_lifecycle_batch_contract.py"
           ],
-          "reason": "Unit tests cover the closed request, exact confirmation, fixed bridge action, Odoo-side execution, idempotent replay, and CLI response contract."
+          "reason": "The existing unit tests continue to cover the singular request and native runtime behavior; the batch contract unit test covers batch-request normalization, full normalized-ID-set idempotency keys, bridge and capability contracts, explicit batch results, and CLI verification."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_core_write_batch_live.py"
+            "tests/integration/test_core_write_batch_live.py",
+            "tests/integration/test_batch_lifecycle_write_live.py"
           ],
-          "reason": "The guarded live write smoke verified first execution and immediate idempotent replay against both dedicated isolated database aliases."
+          "reason": "The existing integration smoke continues to cover singular native execution; the new live smoke covers dual-database batch execution, immediate replay, and rollback, plus a representative whole-batch invalid-ID no-op for invoice.post."
         },
         "golden": {
           "status": "planned",
@@ -9802,10 +9812,10 @@
         ],
         "aliases": {
           "zh_CN": [
-            "过账总账分录"
+            "原子过账单笔或 2–100 笔普通日记账分录"
           ],
           "en_US": [
-            "Post a general journal entry"
+            "Atomically post one or a batch of 2–100 general journal entries"
           ]
         },
         "not_for": {
@@ -9822,8 +9832,8 @@
     },
     "journal_entry.reset_to_draft": {
       "summary": {
-        "zh_CN": "将总账分录重置为草稿",
-        "en_US": "Reset a general journal entry to draft"
+        "zh_CN": "原子将单笔或 2–100 笔普通日记账分录重置为草稿",
+        "en_US": "Atomically reset one or a batch of 2–100 general journal entries to draft"
       },
       "domain": "general_ledger",
       "access": "write",
@@ -9868,10 +9878,10 @@
         ]
       },
       "strategies": {
-        "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_native_account_move_button_draft_action",
-        "verify": "same_transaction_target_draft_state_reread_and_response_schema_validation",
-        "idempotency": "target_draft_state_check_before_native_button_draft",
+        "preview": "singular_or_2_to_100_distinct_ids_closed_validation_normalized_sorted_and_exact_capability_confirmation",
+        "execute": "full_batch_record_scope_company_general_entry_type_and_state_preflight_then_single_transaction_all_or_nothing_native_reset_to_draft",
+        "verify": "explicit_batch_result_with_exact_normalized_record_ids_target_states_same_transaction_reread_and_response_schema_validation",
+        "idempotency": "capability_company_and_full_normalized_sorted_record_id_set_key_with_serial_target_state_replay",
         "reverse": "journal_entry.post_when_business_intent_requires_reposting"
       },
       "tests": {
@@ -9882,16 +9892,18 @@
             "tests/unit/test_document_lifecycle_writes_runtime.py",
             "tests/unit/test_core_writes_bridge.py",
             "tests/unit/test_core_write_cli.py",
-            "tests/unit/test_document_lifecycle_write_cli.py"
+            "tests/unit/test_document_lifecycle_write_cli.py",
+            "tests/unit/test_lifecycle_batch_contract.py"
           ],
-          "reason": "Unit tests cover the closed request, native state preconditions, configured-user ACL gates, target-state replay, bridge contract, and CLI dispatch."
+          "reason": "The existing unit tests continue to cover the singular request and native runtime behavior; the batch contract unit test covers batch-request normalization, full normalized-ID-set idempotency keys, bridge and capability contracts, explicit batch results, and CLI verification."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_document_lifecycle_write_batch_live.py"
+            "tests/integration/test_document_lifecycle_write_batch_live.py",
+            "tests/integration/test_batch_lifecycle_write_live.py"
           ],
-          "reason": "The guarded shared live smoke verifies the native reset-to-draft transition and target-state replay against both isolated database aliases."
+          "reason": "The existing integration smoke continues to cover singular native execution; the new live smoke covers dual-database batch execution, immediate replay, and rollback, plus a representative whole-batch invalid-ID no-op for invoice.post."
         },
         "golden": {
           "status": "planned",
@@ -9916,10 +9928,10 @@
         ],
         "aliases": {
           "zh_CN": [
-            "将总账分录重置为草稿"
+            "原子将单笔或 2–100 笔普通日记账分录重置为草稿"
           ],
           "en_US": [
-            "Reset a general journal entry to draft"
+            "Atomically reset one or a batch of 2–100 general journal entries to draft"
           ]
         },
         "not_for": {
@@ -12603,7 +12615,7 @@
       "handler_key": "core_write"
     },
     "payment.reset_to_draft": {
-      "summary": {"zh_CN": "将会计付款重置为草稿", "en_US": "Reset an accounting payment to draft"},
+      "summary": {"zh_CN": "原子将单笔或 2–100 笔会计付款重置为草稿", "en_US": "Atomically reset one or a batch of 2–100 accounting payments to draft"},
       "domain": "payments",
       "access": "write",
       "source": {
@@ -12621,21 +12633,21 @@
         "groups": ["account.group_account_invoice"],
         "acl": ["account.payment:read", "account.payment:write", "account.move:read", "account.move:write"]
       },
-      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_accounting_core_write_action_as_configured_business_user", "verify": "post_write_same_transaction_reread_and_response_schema_validation", "idempotency": "native_draft_state_and_result_replay", "reverse": "payment.post"},
+      "strategies": {"preview": "singular_or_2_to_100_distinct_ids_closed_validation_normalized_sorted_and_exact_capability_confirmation", "execute": "full_batch_record_scope_company_payment_type_and_state_preflight_then_single_transaction_all_or_nothing_native_reset_to_draft", "verify": "explicit_batch_result_with_exact_normalized_record_ids_target_states_same_transaction_reread_and_response_schema_validation", "idempotency": "capability_company_and_full_normalized_sorted_record_id_set_key_with_serial_target_state_replay", "reverse": "payment.post"},
       "tests": {
-        "unit": {"status": "implemented", "references": ["tests/unit/test_payment_bank_writes.py", "tests/unit/test_payment_bank_writes_runtime.py", "tests/unit/test_payment_bank_write_cli.py"], "reason": "Unit tests cover the closed request, exact confirmation, native reset path, replay, and CLI response contract."},
-        "integration": {"status": "implemented", "references": ["tests/integration/test_payment_bank_capability_batch_live.py"], "reason": "The shared live smoke verifies execution and rollback in both dedicated isolated database aliases."},
+        "unit": {"status": "implemented", "references": ["tests/unit/test_payment_bank_writes.py", "tests/unit/test_payment_bank_writes_runtime.py", "tests/unit/test_payment_bank_write_cli.py", "tests/unit/test_lifecycle_batch_contract.py"], "reason": "The existing unit tests continue to cover the singular request and native runtime behavior; the batch contract unit test covers batch-request normalization, full normalized-ID-set idempotency keys, bridge and capability contracts, explicit batch results, and CLI verification."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_payment_bank_capability_batch_live.py", "tests/integration/test_batch_lifecycle_write_live.py"], "reason": "The existing integration smoke continues to cover singular native execution; the new live smoke covers dual-database batch execution, immediate replay, and rollback, plus a representative whole-batch invalid-ID no-op for invoice.post."},
         "golden": {"status": "planned", "references": [], "reason": "The golden definition is frozen; implementation evidence is pending."},
         "e2e": {"status": "planned", "references": [], "reason": "The e2e definition is frozen; implementation evidence is pending."}
       },
       "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
-      "routing": {"object": "payment", "actions": ["reset_to_draft"], "aliases": {"zh_CN": ["将会计付款重置为草稿"], "en_US": ["Reset an accounting payment to draft"]}, "not_for": {"zh_CN": [], "en_US": []}, "required_slots": ["database", "company_id", "user_login"]},
+      "routing": {"object": "payment", "actions": ["reset_to_draft"], "aliases": {"zh_CN": ["原子将单笔或 2–100 笔会计付款重置为草稿"], "en_US": ["Atomically reset one or a batch of 2–100 accounting payments to draft"]}, "not_for": {"zh_CN": [], "en_US": []}, "required_slots": ["database", "company_id", "user_login"]},
       "handler_key": "core_write"
     },
     "payment.cancel": {
       "summary": {
-        "zh_CN": "取消并补偿会计付款",
-        "en_US": "Cancel and compensate an accounting payment"
+        "zh_CN": "原子取消并补偿单笔或 2–100 笔会计付款",
+        "en_US": "Atomically cancel and compensate one or a batch of 2–100 accounting payments"
       },
       "domain": "payments",
       "access": "write",
@@ -12680,10 +12692,10 @@
         ]
       },
       "strategies": {
-        "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_accounting_core_write_action_as_configured_business_user",
-        "verify": "post_write_same_transaction_reread_and_response_schema_validation",
-        "idempotency": "odoo_persisted_business_marker_and_result_replay",
+        "preview": "singular_or_2_to_100_distinct_ids_closed_validation_normalized_sorted_and_exact_capability_confirmation",
+        "execute": "full_batch_record_scope_company_payment_type_and_state_preflight_then_single_transaction_all_or_nothing_native_cancel",
+        "verify": "explicit_batch_result_with_exact_normalized_record_ids_target_states_same_transaction_reread_and_response_schema_validation",
+        "idempotency": "capability_company_and_full_normalized_sorted_record_id_set_key_with_serial_target_state_replay",
         "reverse": "register_a_new_correcting_payment"
       },
       "tests": {
@@ -12693,16 +12705,18 @@
             "tests/unit/test_core_writes.py",
             "tests/unit/test_core_writes_bridge.py",
             "tests/unit/test_core_writes_runtime.py",
-            "tests/unit/test_core_write_cli.py"
+            "tests/unit/test_core_write_cli.py",
+            "tests/unit/test_lifecycle_batch_contract.py"
           ],
-          "reason": "Unit tests cover the closed request, exact confirmation, fixed bridge action, Odoo-side execution, idempotent replay, and CLI response contract."
+          "reason": "The existing unit tests continue to cover the singular request and native runtime behavior; the batch contract unit test covers batch-request normalization, full normalized-ID-set idempotency keys, bridge and capability contracts, explicit batch results, and CLI verification."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_core_write_batch_live.py"
+            "tests/integration/test_core_write_batch_live.py",
+            "tests/integration/test_batch_lifecycle_write_live.py"
           ],
-          "reason": "The guarded live write smoke verified first execution and immediate idempotent replay against both dedicated isolated database aliases."
+          "reason": "The existing integration smoke continues to cover singular native execution; the new live smoke covers dual-database batch execution, immediate replay, and rollback, plus a representative whole-batch invalid-ID no-op for invoice.post."
         },
         "golden": {
           "status": "planned",
@@ -12727,10 +12741,10 @@
         ],
         "aliases": {
           "zh_CN": [
-            "取消并补偿会计付款"
+            "原子取消并补偿单笔或 2–100 笔会计付款"
           ],
           "en_US": [
-            "Cancel and compensate an accounting payment"
+            "Atomically cancel and compensate one or a batch of 2–100 accounting payments"
           ]
         },
         "not_for": {
@@ -12883,8 +12897,8 @@
     },
     "payment.post": {
       "summary": {
-        "zh_CN": "过账会计付款",
-        "en_US": "Post an accounting payment"
+        "zh_CN": "原子过账单笔或 2–100 笔会计付款",
+        "en_US": "Atomically post one or a batch of 2–100 accounting payments"
       },
       "domain": "payments",
       "access": "write",
@@ -12930,10 +12944,10 @@
         ]
       },
       "strategies": {
-        "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_accounting_core_write_action_as_configured_business_user",
-        "verify": "post_write_same_transaction_reread_and_response_schema_validation",
-        "idempotency": "odoo_persisted_business_marker_and_result_replay",
+        "preview": "singular_or_2_to_100_distinct_ids_closed_validation_normalized_sorted_and_exact_capability_confirmation",
+        "execute": "full_batch_record_scope_company_payment_type_and_state_preflight_then_single_transaction_all_or_nothing_native_post",
+        "verify": "explicit_batch_result_with_exact_normalized_record_ids_target_states_same_transaction_reread_and_response_schema_validation",
+        "idempotency": "capability_company_and_full_normalized_sorted_record_id_set_key_with_serial_target_state_replay",
         "reverse": "payment.cancel"
       },
       "tests": {
@@ -12943,16 +12957,18 @@
             "tests/unit/test_core_writes.py",
             "tests/unit/test_core_writes_bridge.py",
             "tests/unit/test_core_writes_runtime.py",
-            "tests/unit/test_core_write_cli.py"
+            "tests/unit/test_core_write_cli.py",
+            "tests/unit/test_lifecycle_batch_contract.py"
           ],
-          "reason": "Unit tests cover the closed request, exact confirmation, fixed bridge action, Odoo-side execution, idempotent replay, and CLI response contract."
+          "reason": "The existing unit tests continue to cover the singular request and native runtime behavior; the batch contract unit test covers batch-request normalization, full normalized-ID-set idempotency keys, bridge and capability contracts, explicit batch results, and CLI verification."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_core_write_batch_live.py"
+            "tests/integration/test_core_write_batch_live.py",
+            "tests/integration/test_batch_lifecycle_write_live.py"
           ],
-          "reason": "The guarded live write smoke verified first execution and immediate idempotent replay against both dedicated isolated database aliases."
+          "reason": "The existing integration smoke continues to cover singular native execution; the new live smoke covers dual-database batch execution, immediate replay, and rollback, plus a representative whole-batch invalid-ID no-op for invoice.post."
         },
         "golden": {
           "status": "planned",
@@ -12977,10 +12993,10 @@
         ],
         "aliases": {
           "zh_CN": [
-            "过账会计付款"
+            "原子过账单笔或 2–100 笔会计付款"
           ],
           "en_US": [
-            "Post an accounting payment"
+            "Atomically post one or a batch of 2–100 accounting payments"
           ]
         },
         "not_for": {

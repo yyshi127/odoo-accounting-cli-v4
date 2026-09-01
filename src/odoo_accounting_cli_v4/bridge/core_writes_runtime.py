@@ -208,6 +208,22 @@ _JOURNAL_ENTRY_LIFECYCLE_CAPABILITIES = frozenset(
         "journal_entry.reset_to_draft",
     }
 )
+_MOVE_BATCH_LIFECYCLE_CAPABILITIES = frozenset(
+    {
+        "invoice.post",
+        "invoice.cancel",
+        "invoice.reset_to_draft",
+        "journal_entry.post",
+        "journal_entry.cancel",
+        "journal_entry.reset_to_draft",
+    }
+)
+_PAYMENT_BATCH_LIFECYCLE_CAPABILITIES = frozenset(
+    {"payment.post", "payment.cancel", "payment.reset_to_draft"}
+)
+_BATCH_LIFECYCLE_CAPABILITIES = (
+    _MOVE_BATCH_LIFECYCLE_CAPABILITIES | _PAYMENT_BATCH_LIFECYCLE_CAPABILITIES
+)
 _ORDER_CREATE_CAPABILITIES = frozenset({"sale.order.create", "purchase.order.create"})
 _ORDER_UPDATE_CAPABILITIES = frozenset(
     {"sale.order.update_draft", "purchase.order.update_draft"}
@@ -581,17 +597,17 @@ _PARAMETER_KEYS = {
     },
     "invoice.update": {"move_id", "changes"},
     "invoice.lines.replace": {"move_id", "lines"},
-    "invoice.cancel": {"move_id"},
-    "invoice.reset_to_draft": {"move_id"},
-    "invoice.post": {"move_id"},
+    "invoice.cancel": {"move_id", "move_ids"},
+    "invoice.reset_to_draft": {"move_id", "move_ids"},
+    "invoice.post": {"move_id", "move_ids"},
     "invoice.duplicate": {"move_id"},
     "invoice.type.switch": {"move_id", "target_move_type"},
     "journal_entry.create": {"journal_id", "date", "lines", "reference"},
     "journal_entry.update": {"move_id", "changes"},
     "journal_entry.lines.replace": {"move_id", "lines"},
-    "journal_entry.cancel": {"move_id"},
-    "journal_entry.reset_to_draft": {"move_id"},
-    "journal_entry.post": {"move_id"},
+    "journal_entry.cancel": {"move_id", "move_ids"},
+    "journal_entry.reset_to_draft": {"move_id", "move_ids"},
+    "journal_entry.post": {"move_id", "move_ids"},
     "journal_entry.reverse": {"move_id", "date", "reason"},
     "receivable.payment.register": {
         "move_id",
@@ -614,10 +630,10 @@ _PARAMETER_KEYS = {
         "writeoff_label",
     },
     "reconciliation.apply": {"line_ids", "invoice_id", "outstanding_line_id"},
-    "payment.cancel": {"payment_id"},
+    "payment.cancel": {"payment_id", "payment_ids"},
     "customer_credit_note.create": {"move_id", "date", "reason", "lines"},
     "vendor_refund.create": {"move_id", "date", "reason", "lines"},
-    "payment.post": {"payment_id"},
+    "payment.post": {"payment_id", "payment_ids"},
     "reconciliation.undo": {
         "line_ids",
         "invoice_id",
@@ -675,7 +691,7 @@ _PARAMETER_KEYS = {
         "payment_reference",
     },
     "payment.update_draft": {"payment_id", "changes"},
-    "payment.reset_to_draft": {"payment_id"},
+    "payment.reset_to_draft": {"payment_id", "payment_ids"},
     "bank.transaction.update": {"transaction_id", "changes"},
     "bank.transaction.match": {"transaction_id", "candidate_line_ids"},
     "bank.transaction.unmatch": {"transaction_id"},
@@ -2545,6 +2561,15 @@ def _is_id(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
+def _valid_batch_ids(value: Any) -> bool:
+    return (
+        isinstance(value, list)
+        and 2 <= len(value) <= 100
+        and all(_is_id(item) for item in value)
+        and value == sorted(set(value))
+    )
+
+
 def _is_date(value: Any) -> bool:
     if not isinstance(value, str):
         return False
@@ -4216,7 +4241,9 @@ def _valid_parameters(
     parameter_keys = set(parameters)
     allowed_keys = _PARAMETER_KEYS[capability_id]
     required_keys = allowed_keys
-    if capability_id in {"customer_invoice.create", "vendor_bill.create"}:
+    if capability_id in _BATCH_LIFECYCLE_CAPABILITIES:
+        required_keys = frozenset()
+    elif capability_id in {"customer_invoice.create", "vendor_bill.create"}:
         required_keys = _DOCUMENT_CREATE_REQUIRED_KEYS
     elif capability_id == "journal_entry.create":
         required_keys = frozenset({"journal_id", "date", "lines"})
@@ -4255,6 +4282,17 @@ def _valid_parameters(
         required_keys = frozenset({"name"})
     if not required_keys <= parameter_keys <= allowed_keys:
         return False
+    if capability_id in _BATCH_LIFECYCLE_CAPABILITIES:
+        singular_field, batch_field = (
+            ("move_id", "move_ids")
+            if capability_id in _MOVE_BATCH_LIFECYCLE_CAPABILITIES
+            else ("payment_id", "payment_ids")
+        )
+        if parameter_keys == {singular_field}:
+            return _is_id(parameters[singular_field])
+        return parameter_keys == {batch_field} and _valid_batch_ids(
+            parameters[batch_field]
+        )
     if capability_id == _SALE_ORDER_INVOICE_CAPABILITY:
         return _is_id(parameters["order_id"])
     if capability_id in _STOCK_TRANSFER_CAPABILITIES:
@@ -4336,21 +4374,12 @@ def _valid_parameters(
         return _is_id(parameters["move_id"]) and _valid_entry_lines(
             parameters["lines"], minimum=1
         )
-    if capability_id in {
-        "invoice.cancel",
-        "invoice.reset_to_draft",
-        "journal_entry.cancel",
-        "journal_entry.reset_to_draft",
-    }:
-        return _is_id(parameters["move_id"])
     if capability_id == "invoice.duplicate":
         return _is_id(parameters["move_id"])
     if capability_id == "invoice.type.switch":
         return _is_id(parameters["move_id"]) and parameters[
             "target_move_type"
         ] in _DOCUMENT_TYPES
-    if capability_id in {"invoice.post", "journal_entry.post"}:
-        return _is_id(parameters["move_id"])
     if capability_id == "journal_entry.reverse" or capability_id in {
         "customer_credit_note.create",
         "vendor_refund.create",
@@ -4496,8 +4525,6 @@ def _valid_parameters(
         return _is_id(parameters["payment_id"]) and _valid_payment_fields(
             parameters["changes"], partial=True
         )
-    if capability_id == "payment.reset_to_draft":
-        return _is_id(parameters["payment_id"])
     if capability_id == "bank.transaction.update":
         return _is_id(parameters["transaction_id"]) and _valid_bank_update_changes(
             parameters["changes"]
@@ -4657,6 +4684,19 @@ def _validated_payload(
 def _deterministic_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in _BATCH_LIFECYCLE_CAPABILITIES and (
+        "move_ids" in parameters or "payment_ids" in parameters
+    ):
+        digest = hashlib.sha256(
+            json.dumps(
+                parameters,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()[:32]
+        return f"{capability_id}:{company_id}:{digest}"
     if capability_id in {
         "currency.rate.record",
         "account.group.create",
@@ -7669,6 +7709,30 @@ def _payment_result(
     return result
 
 
+def _batch_payments(
+    env: Any,
+    payment_ids: list[int],
+    company_id: int,
+    failure_type: type[Exception],
+) -> Any:
+    payments = _ensure_ids(
+        env,
+        "account.payment",
+        set(payment_ids),
+        [("company_id", "=", company_id)],
+        company_id,
+        failure_type,
+    )
+    return payments.sorted(lambda payment: payment.id)
+
+
+def _payment_batch_result(payments: Any, company_id: int) -> dict[str, Any]:
+    items = [
+        _payment_result(payment, company_id, source_id=None) for payment in payments
+    ]
+    return {"items": items, "processed_count": len(items)}
+
+
 def _bank_transaction_result(
     transaction: Any, company_id: int, failure_type: type[Exception]
 ) -> dict[str, Any]:
@@ -8151,6 +8215,43 @@ def _lifecycle_move(
     return move
 
 
+def _batch_lifecycle_moves(
+    env: Any,
+    capability_id: str,
+    move_ids: list[int],
+    company_id: int,
+    failure_type: type[Exception],
+) -> Any:
+    invoice_action = capability_id.startswith("invoice.")
+    move_types = _DOCUMENT_TYPES if invoice_action else ("entry",)
+    moves = _ensure_ids(
+        env,
+        "account.move",
+        set(move_ids),
+        [
+            ("company_id", "=", company_id),
+            ("move_type", "in", list(move_types)),
+        ],
+        company_id,
+        failure_type,
+    )
+    if not invoice_action and any(
+        not move.journal_id or move.journal_id.type != "general" for move in moves
+    ):
+        raise _fail(
+            failure_type,
+            "record_not_found",
+            "A requested accounting record was not found.",
+            exit_code=4,
+        )
+    return moves.sorted(lambda move: move.id)
+
+
+def _move_batch_result(moves: Any, company_id: int) -> dict[str, Any]:
+    items = [_move_result(move, company_id) for move in moves]
+    return {"items": items, "processed_count": len(items)}
+
+
 def _validate_invoice_update_references(
     env: Any,
     move: Any,
@@ -8625,6 +8726,40 @@ def _transition_move(
     company_id: int,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if "move_ids" in parameters:
+        moves = _batch_lifecycle_moves(
+            env,
+            capability_id,
+            parameters["move_ids"],
+            company_id,
+            failure_type,
+        )
+        cancel = capability_id.endswith(".cancel")
+        target_state = "cancel" if cancel else "draft"
+        allowed_states = {"draft", "posted", "cancel"}
+        if any(move.state not in allowed_states for move in moves):
+            raise _fail(
+                failure_type,
+                "state_conflict",
+                "An accounting move cannot make the requested state transition.",
+                exit_code=5,
+            )
+        pending = moves.filtered(lambda move: move.state != target_state)
+        replay = not pending
+        if pending:
+            if cancel:
+                pending.button_cancel()
+            else:
+                pending.button_draft()
+        if any(move.state != target_state for move in moves):
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not persist every requested accounting move state.",
+                exit_code=6,
+            )
+        return _move_batch_result(moves, company_id), replay
+
     move = _lifecycle_move(
         env, capability_id, parameters["move_id"], company_id, failure_type
     )
@@ -8815,6 +8950,34 @@ def _post_move(
     company_id: int,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if "move_ids" in parameters:
+        moves = _batch_lifecycle_moves(
+            env,
+            capability_id,
+            parameters["move_ids"],
+            company_id,
+            failure_type,
+        )
+        if any(move.state not in {"draft", "posted"} for move in moves):
+            raise _fail(
+                failure_type,
+                "state_conflict",
+                "Only draft accounting moves can be posted.",
+                exit_code=5,
+            )
+        pending = moves.filtered(lambda move: move.state != "posted")
+        replay = not pending
+        if pending:
+            pending.action_post()
+        if any(move.state != "posted" for move in moves):
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not post every requested accounting move.",
+                exit_code=6,
+            )
+        return _move_batch_result(moves, company_id), replay
+
     move_types: Any = _DOCUMENT_TYPES if capability_id == "invoice.post" else ("entry",)
     move = _search_one(
         env,
@@ -10094,6 +10257,34 @@ def _cancel_payment(
     company_id: int,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if "payment_ids" in parameters:
+        payments = _batch_payments(
+            env, parameters["payment_ids"], company_id, failure_type
+        )
+        if any(
+            payment.state not in {"draft", "in_process", "paid", "canceled"}
+            for payment in payments
+        ):
+            raise _fail(
+                failure_type,
+                "state_conflict",
+                "A payment cannot be canceled from its current state.",
+                exit_code=5,
+            )
+        pending = payments.filtered(lambda payment: payment.state != "canceled")
+        replay = not pending
+        if pending:
+            for payment in pending:
+                payment.action_cancel()
+        if any(payment.state != "canceled" for payment in payments):
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not cancel every requested payment.",
+                exit_code=6,
+            )
+        return _payment_batch_result(payments, company_id), replay
+
     payment = _search_one(
         env,
         "account.payment",
@@ -10130,6 +10321,38 @@ def _post_payment(
     company_id: int,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if "payment_ids" in parameters:
+        payments = _batch_payments(
+            env, parameters["payment_ids"], company_id, failure_type
+        )
+        if any(
+            payment.state not in {"draft", "in_process", "paid"}
+            for payment in payments
+        ):
+            raise _fail(
+                failure_type,
+                "state_conflict",
+                "Only draft payments can be posted.",
+                exit_code=5,
+            )
+        pending = payments.filtered(
+            lambda payment: payment.state not in {"in_process", "paid"}
+        )
+        replay = not pending
+        if pending:
+            for payment in pending:
+                payment.action_post()
+        if any(
+            payment.state not in {"in_process", "paid"} for payment in payments
+        ):
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not post every requested payment.",
+                exit_code=6,
+            )
+        return _payment_batch_result(payments, company_id), replay
+
     payment = _search_one(
         env,
         "account.payment",
@@ -10359,6 +10582,38 @@ def _reset_payment_to_draft(
     company_id: int,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if "payment_ids" in parameters:
+        payments = _batch_payments(
+            env, parameters["payment_ids"], company_id, failure_type
+        )
+        if any(
+            payment.state not in {"draft", "in_process", "paid", "canceled"}
+            for payment in payments
+        ):
+            raise _fail(
+                failure_type,
+                "state_conflict",
+                "A payment cannot be reset to draft from its current state.",
+                exit_code=5,
+            )
+        pending = payments.filtered(lambda payment: payment.state != "draft")
+        replay = not pending
+        if pending:
+            for payment in pending:
+                payment.action_draft()
+        if any(
+            payment.state != "draft"
+            or (payment.move_id and payment.move_id.state != "draft")
+            for payment in payments
+        ):
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not reset every requested payment to draft.",
+                exit_code=6,
+            )
+        return _payment_batch_result(payments, company_id), replay
+
     payment = _search_one(
         env,
         "account.payment",

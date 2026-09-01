@@ -11,7 +11,8 @@
         "data": {
           "oneOf": [
             {"type": "null"},
-            {"$ref": "core-write-result.schema.json"}
+            {"$ref": "core-write-result.schema.json"},
+            {"$ref": "core-write-batch-result.schema.json"}
           ]
         }
       }
@@ -21,7 +22,12 @@
       "then": {
         "properties": {
           "status": {"const": "verified"},
-          "data": {"$ref": "core-write-result.schema.json"},
+          "data": {
+            "oneOf": [
+              {"$ref": "core-write-result.schema.json"},
+              {"$ref": "core-write-batch-result.schema.json"}
+            ]
+          },
           "error": {"type": "null"}
         }
       }

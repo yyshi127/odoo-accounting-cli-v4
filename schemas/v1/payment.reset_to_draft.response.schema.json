@@ -5,7 +5,32 @@
   "type": "object",
   "allOf": [
     {"$ref": "response.schema.json"},
-    {"properties": {"capability": {"const": "payment.reset_to_draft"}, "data": {"oneOf": [{"type": "null"}, {"$ref": "core-write-result.schema.json"}]}}},
-    {"if": {"properties": {"success": {"const": true}}, "required": ["success"]}, "then": {"properties": {"status": {"const": "verified"}, "data": {"$ref": "core-write-result.schema.json"}, "error": {"type": "null"}}}}
+    {
+      "properties": {
+        "capability": {"const": "payment.reset_to_draft"},
+        "data": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "core-write-result.schema.json"},
+            {"$ref": "core-write-batch-result.schema.json"}
+          ]
+        }
+      }
+    },
+    {
+      "if": {"properties": {"success": {"const": true}}, "required": ["success"]},
+      "then": {
+        "properties": {
+          "status": {"const": "verified"},
+          "data": {
+            "oneOf": [
+              {"$ref": "core-write-result.schema.json"},
+              {"$ref": "core-write-batch-result.schema.json"}
+            ]
+          },
+          "error": {"type": "null"}
+        }
+      }
+    }
   ]
 }

@@ -1588,6 +1588,19 @@ _CAPABILITY_MODELS = {
     "stock.return_slip.pdf.export": "stock.picking",
     "localization.china.voucher.render": "account.move",
 }
+_BATCH_LIFECYCLE_CAPABILITY_IDS = frozenset(
+    {
+        "invoice.post",
+        "invoice.cancel",
+        "invoice.reset_to_draft",
+        "journal_entry.post",
+        "journal_entry.cancel",
+        "journal_entry.reset_to_draft",
+        "payment.post",
+        "payment.cancel",
+        "payment.reset_to_draft",
+    }
+)
 
 
 class CliError(RuntimeError):
@@ -2538,15 +2551,32 @@ def _execute_write_run(
             ) from exc
         return document
 
-    result_id = result["id"]
-    if capability_id in {
-        "deferred_expense.generate_entries",
-        "deferred_revenue.generate_entries",
-        "multicurrency.revaluation.generate_entries",
-    }:
-        record_ids = sorted({result["source_id"], result_id})
+    if capability_id in _BATCH_LIFECYCLE_CAPABILITY_IDS and "items" in result:
+        record_ids = [item["id"] for item in result["items"]]
+        result_model = _CAPABILITY_MODELS[capability_id]
+        verification = {
+            "processed_count": result["processed_count"],
+            "idempotent_replay": data["idempotent_replay"],
+        }
     else:
-        record_ids = [result_id] if isinstance(result_id, int) else result["line_ids"]
+        result_id = result["id"]
+        if capability_id in {
+            "deferred_expense.generate_entries",
+            "deferred_revenue.generate_entries",
+            "multicurrency.revaluation.generate_entries",
+        }:
+            record_ids = sorted({result["source_id"], result_id})
+        else:
+            record_ids = (
+                [result_id] if isinstance(result_id, int) else result["line_ids"]
+            )
+        result_model = result["model"]
+        verification = {
+            "company_id": result["company_id"],
+            "state": result["state"],
+            "reconciled": result["reconciled"],
+            "idempotent_replay": data["idempotent_replay"],
+        }
     warnings = []
     if descriptor["status"]["value"] == "degraded":
         warnings.append(
@@ -2555,12 +2585,6 @@ def _execute_write_run(
                 "reason_code": descriptor["status"]["reason_code"],
             }
         )
-    verification = {
-        "company_id": result["company_id"],
-        "state": result["state"],
-        "reconciled": result["reconciled"],
-        "idempotent_replay": data["idempotent_replay"],
-    }
     document = success_document(
         capability_id,
         data,
@@ -2569,7 +2593,7 @@ def _execute_write_run(
         database=context["database"],
         company_id=context["company_id"],
         user_id=getattr(port, "user_id", None),
-        model=result["model"],
+        model=result_model,
         record_ids=record_ids,
         idempotency_key=idempotency_key,
         verification=verification,
@@ -2587,7 +2611,7 @@ def _execute_write_run(
             database=context["database"],
             company_id=context["company_id"],
             user_id=_verified_port_user_id(port),
-            model=result["model"],
+            model=result_model,
             record_ids=record_ids,
             idempotency_key=idempotency_key,
         ) from exc
