@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/account.transfer_model.delete.request.schema.json",
+  "title": "account.transfer_model.delete request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "context", "parameters"],
+  "properties": {
+    "schema_version": {"const": "v1"},
+    "request_id": {"type": "string", "format": "uuid", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"},
+    "context": {"$ref": "request.schema.json#/$defs/context"},
+    "parameters": {"type": "object", "additionalProperties": false, "required": ["transfer_model_id"], "properties": {"transfer_model_id": {"type": "integer", "minimum": 1}}}
+  }
+}

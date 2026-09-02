@@ -55,6 +55,14 @@ CAPABILITIES = frozenset(
         "multicurrency.revaluation.generate_entries",
         "reconciliation.automatic.run",
         "period.transfer.run",
+        "account.transfer_model.create",
+        "account.transfer_model.update",
+        "account.transfer_model.duplicate",
+        "account.transfer_model.enable",
+        "account.transfer_model.disable",
+        "account.transfer_model.archive",
+        "account.transfer_model.restore",
+        "account.transfer_model.delete",
         "localization.china.period_transfer.run",
         "payment.create",
         "payment.update_draft",
@@ -364,6 +372,29 @@ _JOURNAL_GROUP_CAPABILITIES = frozenset(
 )
 _JOURNAL_GROUP_FIELDS = frozenset({"name", "sequence", "excluded_journal_ids"})
 _JOURNAL_GROUP_CREATE_DEFAULTS = {"sequence": 10, "excluded_journal_ids": []}
+_TRANSFER_MODEL_CAPABILITIES = frozenset(
+    {
+        "account.transfer_model.create",
+        "account.transfer_model.update",
+        "account.transfer_model.duplicate",
+        "account.transfer_model.enable",
+        "account.transfer_model.disable",
+        "account.transfer_model.archive",
+        "account.transfer_model.restore",
+        "account.transfer_model.delete",
+    }
+)
+_TRANSFER_MODEL_FIELDS = frozenset(
+    {
+        "name",
+        "journal_id",
+        "date_start",
+        "date_stop",
+        "frequency",
+        "origin_account_ids",
+        "destination_lines",
+    }
+)
 _PRODUCT_WRITE_CAPABILITIES = frozenset(
     {
         "product.create",
@@ -756,6 +787,14 @@ _PARAMETER_KEYS = {
     },
     "reconciliation.automatic.run": {"line_ids"},
     "period.transfer.run": {"transfer_model_id", "run_date"},
+    "account.transfer_model.create": set(_TRANSFER_MODEL_FIELDS),
+    "account.transfer_model.update": {"transfer_model_id", "changes"},
+    "account.transfer_model.duplicate": {"transfer_model_id", "name"},
+    "account.transfer_model.enable": {"transfer_model_id"},
+    "account.transfer_model.disable": {"transfer_model_id"},
+    "account.transfer_model.archive": {"transfer_model_id"},
+    "account.transfer_model.restore": {"transfer_model_id"},
+    "account.transfer_model.delete": {"transfer_model_id"},
     "localization.china.period_transfer.run": {"run_date"},
     "payment.create": {
         "payment_type",
@@ -998,6 +1037,14 @@ _GROUPS = {
     "multicurrency.revaluation.generate_entries": "account.group_account_user",
     "reconciliation.automatic.run": "account.group_account_user",
     "period.transfer.run": "account.group_account_user",
+    "account.transfer_model.create": "account.group_account_manager",
+    "account.transfer_model.update": "account.group_account_manager",
+    "account.transfer_model.duplicate": "account.group_account_manager",
+    "account.transfer_model.enable": "account.group_account_manager",
+    "account.transfer_model.disable": "account.group_account_manager",
+    "account.transfer_model.archive": "account.group_account_manager",
+    "account.transfer_model.restore": "account.group_account_manager",
+    "account.transfer_model.delete": "account.group_account_manager",
     "localization.china.period_transfer.run": "account.group_account_user",
     "payment.create": "account.group_account_invoice",
     "payment.update_draft": "account.group_account_invoice",
@@ -2636,6 +2683,59 @@ for _capability_id in _JOURNAL_GROUP_CAPABILITIES:
     }
 _ACCESS["journal.group.create"].add(("account.journal.group", "create"))
 _ACCESS["journal.group.update"].add(("account.journal.group", "write"))
+
+_TRANSFER_MODEL_BASE_MODELS = {
+    "res.company",
+    "account.journal",
+    "account.account",
+    "account.transfer.model",
+    "account.transfer.model.line",
+}
+_TRANSFER_MODEL_BASE_ACCESS = {
+    ("res.company", "read"),
+    ("account.journal", "read"),
+    ("account.account", "read"),
+    ("account.transfer.model", "read"),
+    ("account.transfer.model.line", "read"),
+}
+for _capability_id in _TRANSFER_MODEL_CAPABILITIES:
+    _MODELS[_capability_id] = set(_TRANSFER_MODEL_BASE_MODELS)
+    _ACCESS[_capability_id] = set(_TRANSFER_MODEL_BASE_ACCESS)
+for _capability_id in (
+    "account.transfer_model.create",
+    "account.transfer_model.duplicate",
+):
+    _ACCESS[_capability_id].update(
+        {
+            ("account.transfer.model", "create"),
+            ("account.transfer.model.line", "create"),
+        }
+    )
+_ACCESS["account.transfer_model.duplicate"].add(
+    ("account.transfer.model", "write")
+)
+_ACCESS["account.transfer_model.update"].update(
+    {
+        ("account.transfer.model", "write"),
+        ("account.transfer.model.line", "create"),
+        ("account.transfer.model.line", "write"),
+        ("account.transfer.model.line", "unlink"),
+    }
+)
+for _capability_id in (
+    "account.transfer_model.enable",
+    "account.transfer_model.disable",
+    "account.transfer_model.archive",
+    "account.transfer_model.restore",
+):
+    _ACCESS[_capability_id].add(("account.transfer.model", "write"))
+_MODELS["account.transfer_model.delete"].add("account.move")
+_ACCESS["account.transfer_model.delete"].update(
+    {
+        ("account.move", "read"),
+        ("account.transfer.model", "unlink"),
+    }
+)
 
 _MODELS["currency.rate.record"] = {
     "res.company",
@@ -4771,6 +4871,75 @@ def _valid_product_accounting_profile_values(
     )
 
 
+def _valid_transfer_model_values(values: Any, *, partial: bool) -> bool:
+    if (
+        not isinstance(values, dict)
+        or not values
+        or not set(values) <= _TRANSFER_MODEL_FIELDS
+        or (not partial and set(values) != _TRANSFER_MODEL_FIELDS)
+    ):
+        return False
+    if "name" in values and not _is_text(values["name"], maximum=256):
+        return False
+    if "journal_id" in values and not _is_id(values["journal_id"]):
+        return False
+    if "date_start" in values and not _is_date(values["date_start"]):
+        return False
+    if "date_stop" in values and not (
+        values["date_stop"] is None or _is_date(values["date_stop"])
+    ):
+        return False
+    if (
+        values.get("date_stop") is not None
+        and "date_start" in values
+        and values["date_stop"] < values["date_start"]
+    ):
+        return False
+    if "frequency" in values and values["frequency"] not in {
+        "month",
+        "quarter",
+        "year",
+    }:
+        return False
+    if "origin_account_ids" in values:
+        account_ids = values["origin_account_ids"]
+        if not (
+            isinstance(account_ids, list)
+            and 1 <= len(account_ids) <= 1000
+            and account_ids == sorted(set(account_ids))
+            and all(_is_id(item) for item in account_ids)
+        ):
+            return False
+    if "destination_lines" in values:
+        lines = values["destination_lines"]
+        if not isinstance(lines, list) or not 1 <= len(lines) <= 1000:
+            return False
+        destination_ids: list[int] = []
+        total = Decimal(0)
+        for line in lines:
+            if not isinstance(line, dict) or set(line) != {
+                "account_id",
+                "percentage",
+            }:
+                return False
+            percentage = _decimal(line["percentage"], positive=True)
+            if (
+                not _is_id(line["account_id"])
+                or percentage is None
+                or percentage > Decimal(100)
+                or percentage.as_tuple().exponent < -6
+                or _canonical_decimal_text(percentage) != line["percentage"]
+            ):
+                return False
+            destination_ids.append(line["account_id"])
+            total += percentage
+        if len(destination_ids) != len(set(destination_ids)) or not (
+            Decimal(0) < total <= Decimal(100)
+        ):
+            return False
+    return True
+
+
 def _valid_parameters(
     capability_id: str, parameters: Any, company_id: int | None = None
 ) -> bool:
@@ -4839,6 +5008,18 @@ def _valid_parameters(
         return _valid_stock_transfer_parameters(capability_id, parameters)
     if capability_id in _PURCHASE_BILL_CAPABILITIES:
         return _valid_purchase_bill_parameters(capability_id, parameters)
+    if capability_id in _TRANSFER_MODEL_CAPABILITIES:
+        if capability_id == "account.transfer_model.create":
+            return _valid_transfer_model_values(parameters, partial=False)
+        if capability_id == "account.transfer_model.update":
+            return _is_id(parameters["transfer_model_id"]) and (
+                _valid_transfer_model_values(parameters["changes"], partial=True)
+            )
+        if capability_id == "account.transfer_model.duplicate":
+            return _is_id(parameters["transfer_model_id"]) and _is_text(
+                parameters["name"], maximum=256
+            )
+        return _is_id(parameters["transfer_model_id"])
     if capability_id in _PAYMENT_TERM_CAPABILITIES:
         return company_id is not None and _valid_payment_term_parameters(
             capability_id, parameters, company_id
@@ -5312,6 +5493,33 @@ def _deterministic_key(
             ).encode("utf-8")
         ).hexdigest()[:32]
         return f"{capability_id}:{company_id}:{digest}"
+    if capability_id in {
+        "account.transfer_model.create",
+        "account.transfer_model.duplicate",
+    }:
+        digest = hashlib.sha256(
+            json.dumps(
+                parameters,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()[:32]
+        return f"{capability_id}:{company_id}:{digest}"
+    if capability_id == "account.transfer_model.update":
+        digest = hashlib.sha256(
+            json.dumps(
+                parameters["changes"],
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()[:32]
+        return f"{capability_id}:{parameters['transfer_model_id']}:{digest}"
+    if capability_id in _TRANSFER_MODEL_CAPABILITIES:
+        return f"{capability_id}:{parameters['transfer_model_id']}"
     if capability_id == "account.return.create":
         digest = hashlib.sha256(
             json.dumps(
@@ -13156,6 +13364,498 @@ def _append_move_marker(move: Any, marker: str, failure_type: type[Exception]) -
     move.write({"invoice_origin": value})
 
 
+def _transfer_model_result(
+    transfer_model: Any,
+    company_id: int,
+    *,
+    state: str | None = None,
+    source_id: int | None = None,
+) -> dict[str, Any]:
+    result = {
+        "model": "account.transfer.model",
+        "id": transfer_model.id,
+        "name": transfer_model.name or None,
+        "state": state
+        or (
+            transfer_model.state
+            if bool(transfer_model.active)
+            else "archived"
+        ),
+        "company_id": company_id,
+        "move_type": None,
+        "source_id": source_id,
+        "line_ids": _record_ids(transfer_model.line_ids),
+        "partial_reconcile_ids": [],
+        "full_reconcile_id": None,
+        "reconciled": False,
+    }
+    assert set(result) == _RESULT_KEYS
+    return result
+
+
+def _account_transfer_model(
+    env: Any,
+    transfer_model_id: int,
+    company_id: int,
+    failure_type: type[Exception],
+) -> Any:
+    return _search_one(
+        env,
+        "account.transfer.model",
+        [
+            ("id", "=", transfer_model_id),
+            ("company_id", "=", company_id),
+        ],
+        company_id,
+        failure_type,
+    )
+
+
+def _transfer_model_values(transfer_model: Any) -> dict[str, Any]:
+    lines = sorted(
+        transfer_model.line_ids,
+        key=lambda line: (line.sequence, line.id),
+    )
+    return {
+        "name": transfer_model.name,
+        "journal_id": _many2one_id(transfer_model.journal_id),
+        "date_start": str(transfer_model.date_start),
+        "date_stop": (
+            str(transfer_model.date_stop) if transfer_model.date_stop else None
+        ),
+        "frequency": transfer_model.frequency,
+        "origin_account_ids": _record_ids(transfer_model.account_ids),
+        "destination_lines": [
+            {
+                "account_id": _many2one_id(line.account_id),
+                "percentage": _canonical_decimal_text(line.percent),
+            }
+            for line in lines
+        ],
+    }
+
+
+def _transfer_model_write_values(
+    values: dict[str, Any], *, creating: bool
+) -> dict[str, Any]:
+    write_values = {
+        key: value
+        for key, value in values.items()
+        if key in {"name", "journal_id", "date_start", "frequency"}
+    }
+    if "date_stop" in values:
+        write_values["date_stop"] = values["date_stop"] or False
+    if "origin_account_ids" in values:
+        account_ids = values["origin_account_ids"]
+        write_values["account_ids"] = [(6, 0, account_ids)]
+        write_values["conditions"] = repr([("account_id", "in", account_ids)])
+    if "destination_lines" in values:
+        commands: list[tuple[Any, ...]] = [] if creating else [(5, 0, 0)]
+        commands.extend(
+            (
+                0,
+                0,
+                {
+                    "account_id": line["account_id"],
+                    "percent": float(Decimal(line["percentage"])),
+                    "sequence": sequence * 10,
+                },
+            )
+            for sequence, line in enumerate(
+                values["destination_lines"], start=1
+            )
+        )
+        write_values["line_ids"] = commands
+    return write_values
+
+
+def _validate_transfer_model_references(
+    env: Any,
+    values: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> None:
+    _search_one(
+        env,
+        "account.journal",
+        [
+            ("id", "=", values["journal_id"]),
+            ("company_id", "=", company_id),
+            ("type", "=", "general"),
+            ("active", "=", True),
+        ],
+        company_id,
+        failure_type,
+    )
+    account_ids = set(values["origin_account_ids"]) | {
+        line["account_id"] for line in values["destination_lines"]
+    }
+    _ensure_ids(
+        env,
+        "account.account",
+        account_ids,
+        [
+            ("company_ids", "in", [company_id]),
+            ("account_type", "!=", "off_balance"),
+        ],
+        company_id,
+        failure_type,
+    )
+    if values["date_stop"] is not None and (
+        values["date_stop"] < values["date_start"]
+    ):
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "The transfer stop date cannot precede its start date.",
+            exit_code=5,
+        )
+
+
+def _create_transfer_model(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    _validate_transfer_model_references(
+        env, parameters, company_id, failure_type
+    )
+    model = _scoped(env, "account.transfer.model", company_id)
+    existing = model.search(
+        [
+            ("company_id", "=", company_id),
+            ("name", "=", parameters["name"]),
+        ],
+        limit=2,
+    )
+    if existing:
+        if (
+            len(existing) == 1
+            and bool(existing.active)
+            and existing.state == "disabled"
+            and _transfer_model_values(existing) == parameters
+        ):
+            return _transfer_model_result(existing, company_id), True
+        raise _fail(
+            failure_type,
+            "idempotency_conflict",
+            "A transfer model already uses the requested company and name.",
+            exit_code=5,
+        )
+    transfer_model = model.create(
+        {
+            **_transfer_model_write_values(parameters, creating=True),
+            "active": True,
+            "state": "disabled",
+        }
+    )
+    transfer_model.invalidate_recordset(
+        [
+            "name",
+            "active",
+            "state",
+            "journal_id",
+            "company_id",
+            "date_start",
+            "date_stop",
+            "frequency",
+            "account_ids",
+            "line_ids",
+            "conditions",
+        ]
+    )
+    if (
+        _many2one_id(transfer_model.company_id) != company_id
+        or not bool(transfer_model.active)
+        or transfer_model.state != "disabled"
+        or _transfer_model_values(transfer_model) != parameters
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not create the requested transfer model.",
+            exit_code=6,
+        )
+    return _transfer_model_result(transfer_model, company_id), False
+
+
+def _update_transfer_model(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    transfer_model = _account_transfer_model(
+        env, parameters["transfer_model_id"], company_id, failure_type
+    )
+    if not bool(transfer_model.active) or transfer_model.state != "disabled":
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Only an active disabled transfer model can be updated.",
+            exit_code=5,
+        )
+    actual = _transfer_model_values(transfer_model)
+    target = {**actual, **parameters["changes"]}
+    _validate_transfer_model_references(env, target, company_id, failure_type)
+    if actual == target:
+        return _transfer_model_result(transfer_model, company_id), True
+    if "name" in parameters["changes"] and _scoped(
+        env, "account.transfer.model", company_id
+    ).search_count(
+        [
+            ("company_id", "=", company_id),
+            ("name", "=", target["name"]),
+            ("id", "!=", transfer_model.id),
+        ],
+        limit=1,
+    ):
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Another transfer model already uses the requested name.",
+            exit_code=5,
+        )
+    write_values = _transfer_model_write_values(
+        parameters["changes"], creating=False
+    )
+    transfer_model.write(write_values)
+    transfer_model.invalidate_recordset(
+        [
+            "name",
+            "active",
+            "state",
+            "journal_id",
+            "company_id",
+            "date_start",
+            "date_stop",
+            "frequency",
+            "account_ids",
+            "line_ids",
+            "conditions",
+        ]
+    )
+    if (
+        _many2one_id(transfer_model.company_id) != company_id
+        or not bool(transfer_model.active)
+        or transfer_model.state != "disabled"
+        or _transfer_model_values(transfer_model) != target
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not update the requested transfer model.",
+            exit_code=6,
+        )
+    return _transfer_model_result(transfer_model, company_id), False
+
+
+def _duplicate_transfer_model(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    source = _account_transfer_model(
+        env, parameters["transfer_model_id"], company_id, failure_type
+    )
+    expected = {
+        **_transfer_model_values(source),
+        "name": parameters["name"],
+    }
+    model = _scoped(env, "account.transfer.model", company_id)
+    existing = model.search(
+        [
+            ("company_id", "=", company_id),
+            ("name", "=", parameters["name"]),
+        ],
+        limit=2,
+    )
+    if existing:
+        if (
+            len(existing) == 1
+            and existing.id != source.id
+            and bool(existing.active)
+            and existing.state == "disabled"
+            and _transfer_model_values(existing) == expected
+        ):
+            return _transfer_model_result(
+                existing, company_id, source_id=source.id
+            ), True
+        raise _fail(
+            failure_type,
+            "idempotency_conflict",
+            "A transfer model already uses the requested duplicate name.",
+            exit_code=5,
+        )
+    duplicate = source.copy(
+        default={
+            "name": parameters["name"],
+            "active": True,
+            "state": "disabled",
+        }
+    )
+    duplicate.invalidate_recordset(
+        [
+            "name",
+            "active",
+            "state",
+            "journal_id",
+            "company_id",
+            "date_start",
+            "date_stop",
+            "frequency",
+            "account_ids",
+            "line_ids",
+        ]
+    )
+    if (
+        len(duplicate) != 1
+        or duplicate.id == source.id
+        or _many2one_id(duplicate.company_id) != company_id
+        or not bool(duplicate.active)
+        or duplicate.state != "disabled"
+        or _transfer_model_values(duplicate) != expected
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not duplicate the requested transfer model.",
+            exit_code=6,
+        )
+    return _transfer_model_result(
+        duplicate, company_id, source_id=source.id
+    ), False
+
+
+def _transition_transfer_model(
+    env: Any,
+    capability_id: str,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    transfer_model = _account_transfer_model(
+        env, parameters["transfer_model_id"], company_id, failure_type
+    )
+    active = bool(transfer_model.active)
+    if capability_id == "account.transfer_model.archive":
+        if not active:
+            return _transfer_model_result(transfer_model, company_id), True
+        transfer_model.action_archive()
+        transfer_model.invalidate_recordset(["active", "state"])
+        if bool(transfer_model.active) or transfer_model.state != "disabled":
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not archive and disable the transfer model.",
+                exit_code=6,
+            )
+        return _transfer_model_result(transfer_model, company_id), False
+    if capability_id == "account.transfer_model.restore":
+        if active:
+            if transfer_model.state != "disabled":
+                raise _fail(
+                    failure_type,
+                    "state_conflict",
+                    "An enabled transfer model cannot be restored.",
+                    exit_code=5,
+                )
+            return _transfer_model_result(transfer_model, company_id), True
+        transfer_model.action_unarchive()
+        transfer_model.invalidate_recordset(["active", "state"])
+        if not bool(transfer_model.active) or transfer_model.state != "disabled":
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not restore the transfer model as disabled.",
+                exit_code=6,
+            )
+        return _transfer_model_result(transfer_model, company_id), False
+    if not active:
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "An archived transfer model cannot change enabled state.",
+            exit_code=5,
+        )
+    target_state = (
+        "in_progress"
+        if capability_id == "account.transfer_model.enable"
+        else "disabled"
+    )
+    if capability_id == "account.transfer_model.enable":
+        values = _transfer_model_values(transfer_model)
+        total_percent = Decimal(str(transfer_model.total_percent))
+        if (
+            not values["origin_account_ids"]
+            or not values["destination_lines"]
+            or not Decimal(0) < total_percent <= Decimal(100)
+        ):
+            raise _fail(
+                failure_type,
+                "configuration_missing",
+                "The transfer model is not fully configured.",
+                exit_code=4,
+            )
+        _validate_transfer_model_references(
+            env, values, company_id, failure_type
+        )
+    if transfer_model.state == target_state:
+        return _transfer_model_result(transfer_model, company_id), True
+    if capability_id == "account.transfer_model.enable":
+        transfer_model.action_enable()
+    else:
+        transfer_model.action_disable()
+    transfer_model.invalidate_recordset(["active", "state"])
+    if not bool(transfer_model.active) or transfer_model.state != target_state:
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not change the transfer-model state.",
+            exit_code=6,
+        )
+    return _transfer_model_result(transfer_model, company_id), False
+
+
+def _delete_transfer_model(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    transfer_model = _account_transfer_model(
+        env, parameters["transfer_model_id"], company_id, failure_type
+    )
+    if (
+        not bool(transfer_model.active)
+        or transfer_model.state != "disabled"
+        or transfer_model.move_ids
+    ):
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Only an active disabled transfer model without generated moves can be deleted.",
+            exit_code=5,
+        )
+    result = _transfer_model_result(
+        transfer_model, company_id, state="deleted"
+    )
+    transfer_model_id = transfer_model.id
+    transfer_model.unlink()
+    if _scoped(env, "account.transfer.model", company_id).search_count(
+        [("id", "=", transfer_model_id)], limit=1
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not delete the requested transfer model.",
+            exit_code=6,
+        )
+    return result, False
+
+
 def _transfer_model(
     env: Any,
     capability_id: str,
@@ -16572,6 +17272,23 @@ def _dispatch_allowed(
         return _write_journal_group(
             env, capability_id, parameters, company_id, failure_type
         )
+    if capability_id == "account.transfer_model.create":
+        return _create_transfer_model(env, parameters, company_id, failure_type)
+    if capability_id == "account.transfer_model.update":
+        return _update_transfer_model(env, parameters, company_id, failure_type)
+    if capability_id == "account.transfer_model.duplicate":
+        return _duplicate_transfer_model(env, parameters, company_id, failure_type)
+    if capability_id in {
+        "account.transfer_model.enable",
+        "account.transfer_model.disable",
+        "account.transfer_model.archive",
+        "account.transfer_model.restore",
+    }:
+        return _transition_transfer_model(
+            env, capability_id, parameters, company_id, failure_type
+        )
+    if capability_id == "account.transfer_model.delete":
+        return _delete_transfer_model(env, parameters, company_id, failure_type)
     if capability_id in _ORDER_CREATE_CAPABILITIES:
         return _create_order(
             env,

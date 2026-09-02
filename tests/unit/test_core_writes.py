@@ -57,6 +57,16 @@ PRODUCT_ACCOUNTING_WRITES = {
     "product.restore",
     "product.update",
 }
+ACCOUNT_TRANSFER_MODEL_WRITES = {
+    "account.transfer_model.create",
+    "account.transfer_model.update",
+    "account.transfer_model.duplicate",
+    "account.transfer_model.enable",
+    "account.transfer_model.disable",
+    "account.transfer_model.archive",
+    "account.transfer_model.restore",
+    "account.transfer_model.delete",
+}
 
 
 def _invoice_parameters() -> dict:
@@ -750,6 +760,31 @@ PARAMETERS = {
         "category_id": 11,
         "changes": {"income_account_id": 31, "expense_account_id": None},
     },
+    "account.transfer_model.create": {
+        "name": "Monthly expense transfer",
+        "journal_id": 11,
+        "date_start": "2026-01-01",
+        "date_stop": None,
+        "frequency": "month",
+        "origin_account_ids": [31, 32],
+        "destination_lines": [
+            {"account_id": 41, "percentage": "60"},
+            {"account_id": 42, "percentage": "40"},
+        ],
+    },
+    "account.transfer_model.update": {
+        "transfer_model_id": 61,
+        "changes": {"frequency": "quarter"},
+    },
+    "account.transfer_model.duplicate": {
+        "transfer_model_id": 61,
+        "name": "Monthly expense transfer copy",
+    },
+    "account.transfer_model.enable": {"transfer_model_id": 61},
+    "account.transfer_model.disable": {"transfer_model_id": 61},
+    "account.transfer_model.archive": {"transfer_model_id": 61},
+    "account.transfer_model.restore": {"transfer_model_id": 61},
+    "account.transfer_model.delete": {"transfer_model_id": 61},
 }
 
 
@@ -807,6 +842,7 @@ def _key(capability_id: str) -> str:
         "analytic.line.update",
         "analytic.line.delete",
         *PRODUCT_ACCOUNTING_WRITES,
+        *ACCOUNT_TRANSFER_MODEL_WRITES,
     }:
         _, context, parameters = validate_core_write_request(
             capability_id, _request(capability_id)
@@ -1047,6 +1083,38 @@ def _key(capability_id: str) -> str:
 
 def _result(capability_id: str, **changes) -> dict:
     parameters = PARAMETERS[capability_id]
+    if capability_id in ACCOUNT_TRANSFER_MODEL_WRITES:
+        result = {
+            "model": "account.transfer.model",
+            "id": (
+                921
+                if capability_id
+                in {
+                    "account.transfer_model.create",
+                    "account.transfer_model.duplicate",
+                }
+                else parameters["transfer_model_id"]
+            ),
+            "name": "Monthly expense transfer",
+            "state": {
+                "account.transfer_model.enable": "in_progress",
+                "account.transfer_model.archive": "archived",
+                "account.transfer_model.delete": "deleted",
+            }.get(capability_id, "disabled"),
+            "company_id": 7,
+            "move_type": None,
+            "source_id": (
+                parameters["transfer_model_id"]
+                if capability_id == "account.transfer_model.duplicate"
+                else None
+            ),
+            "line_ids": [],
+            "partial_reconcile_ids": [],
+            "full_reconcile_id": None,
+            "reconciled": False,
+        }
+        result.update(changes)
+        return result
     if capability_id in PRODUCT_ACCOUNTING_WRITES:
         category = capability_id == "product.category.accounting_profile.update"
         result = {
@@ -1797,6 +1865,7 @@ def test_each_core_write_validates_and_calls_one_fixed_port_operation(
         or capability_id in ACCOUNTING_CONFIGURATION_EXPANSION_WRITES
         or capability_id in ACCOUNTING_MASTER_DATA_COMPLETION_WRITES
         or capability_id in PRODUCT_ACCOUNTING_WRITES
+        or capability_id in ACCOUNT_TRANSFER_MODEL_WRITES
     ):
         expected_parameters = validate_core_write_request(capability_id, request)[2]
     elif capability_id == "partner.create":

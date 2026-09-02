@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 390
-EXPECTED_ENABLED_CAPABILITY_COUNT = 375
+EXPECTED_CAPABILITY_COUNT = 398
+EXPECTED_ENABLED_CAPABILITY_COUNT = 383
 EXPECTED_IMPLEMENTED_READ_COUNT = 215
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 160
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 168
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 330
-EXPECTED_DEGRADED_CAPABILITY_COUNT = 45
-EXPECTED_SCHEMA_COUNT = 756
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 335
+EXPECTED_DEGRADED_CAPABILITY_COUNT = 48
+EXPECTED_SCHEMA_COUNT = 772
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "bb55de04032b66b931e4d84fa93ac7cda3ac5f01b6717ab0feef97cd16b1e52c"
+    "ff74667373c5ed4e3b2cbb8af933c130a7d51903d092aaed6d5486ff77fe55c4"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -309,6 +309,16 @@ PROCUREMENT_FOLLOWUP_WRITES = {
     "payment_term.restore",
     "period.accrual.generate",
 }
+ACCOUNT_TRANSFER_MODEL_WRITES = {
+    "account.transfer_model.create",
+    "account.transfer_model.update",
+    "account.transfer_model.duplicate",
+    "account.transfer_model.enable",
+    "account.transfer_model.disable",
+    "account.transfer_model.archive",
+    "account.transfer_model.restore",
+    "account.transfer_model.delete",
+}
 IMPLEMENTED_WRITES = {
     "account.group.create",
     "account.group.update",
@@ -453,7 +463,7 @@ IMPLEMENTED_WRITES = {
     "analytic.distribution_model.update",
     "journal.group.create",
     "journal.group.update",
-} | ORDER_DOCUMENT_WRITES
+} | ORDER_DOCUMENT_WRITES | ACCOUNT_TRANSFER_MODEL_WRITES
 ACCOUNTING_DELIVERY_WRITES = {
     "invoice.followup.update",
     "invoice.send",
@@ -2579,6 +2589,17 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             ],
         }
     )
+    extended_modules.update(
+        {
+            capability_id: [
+                "account_transfer",
+                "account_accountant",
+                "account",
+                "base",
+            ]
+            for capability_id in ACCOUNT_TRANSFER_MODEL_WRITES
+        }
+    )
 
     assert set(CORE_WRITE_MODELS) == IMPLEMENTED_WRITES
     assert set(CORE_WRITE_ACCESS) == IMPLEMENTED_WRITES
@@ -2666,6 +2687,8 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             "fiscal_year.create",
             "analytic.applicability.create",
             "analytic.distribution_model.create",
+            "account.transfer_model.create",
+            "account.transfer_model.duplicate",
         }:
             assert descriptor["status"]["value"] == "degraded"
             assert descriptor["status"]["reason_code"] == "concurrent_idempotency_limit"
@@ -2684,7 +2707,11 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
                 descriptor["status"]["reason_code"]
                 == "odoo_native_analytic_line_idempotency_field_unavailable"
             )
-        elif capability_id == "analytic.line.delete" or capability_id == "account.return.delete":
+        elif capability_id in {
+            "analytic.line.delete",
+            "account.return.delete",
+            "account.transfer_model.delete",
+        }:
             assert descriptor["status"]["value"] == "degraded"
             assert (
                 descriptor["status"]["reason_code"]
@@ -2894,6 +2921,17 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             assert descriptor["tests"]["integration"]["status"] == "implemented"
             assert descriptor["tests"]["integration"]["references"] == [
                 "tests/integration/test_product_accounting_write_batch_live.py"
+            ]
+            continue
+        if capability_id in ACCOUNT_TRANSFER_MODEL_WRITES:
+            assert descriptor["tests"]["unit"]["status"] == "implemented"
+            assert set(descriptor["tests"]["unit"]["references"]) == {
+                "tests/unit/test_account_transfer_model_writes_public.py",
+                "tests/unit/test_account_transfer_model_writes_runtime.py",
+            }
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == [
+                "tests/integration/test_account_transfer_model_write_batch_live.py"
             ]
             continue
         assert descriptor["tests"]["unit"]["status"] == "implemented"

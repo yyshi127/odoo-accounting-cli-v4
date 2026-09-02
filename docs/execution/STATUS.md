@@ -7,16 +7,52 @@ The active objective is capability-first accounting delivery in
 logistics are outside this phase; picking and physical-return commands are not
 accounting-core completion. Financial credit notes/refunds remain in scope.
 
-The current registry has 390 IDs, 375 enabled handlers (215 reads, 160 writes),
-and 756 schemas. Statuses are 330 `unconfigured`, 45 `degraded`, and 15 `disabled`.
+The current registry has 398 IDs, 383 enabled handlers (215 reads, 168 writes),
+and 772 schemas. Statuses are 335 `unconfigured`, 48 `degraded`, and 15 `disabled`.
 These are implementation totals including historical non-accounting extensions,
-not 390 accounting operations, a completion percentage, or proof that every
+not 398 accounting operations, a completion percentage, or proof that every
 configured user is authorized. Capability-ID-list SHA-256 is
-`bb55de04032b66b931e4d84fa93ac7cda3ac5f01b6717ab0feef97cd16b1e52c`;
+`ff74667373c5ed4e3b2cbb8af933c130a7d51903d092aaed6d5486ff77fe55c4`;
 canonical registry SHA-256 is
-`b55e75a5932ea9b14eda8024a965fffe2f913d5d962bbe074beb0e143fff9764`.
+`6edac2cefd98864db125ea697969dc88cb553535013a1d51ebd81bcc03dbadf0`.
 
-The latest batch adds eight product/accounting master-data writes:
+The latest batch adds eight account-transfer-model lifecycle writes:
+`account.transfer_model.create`, `account.transfer_model.update`,
+`account.transfer_model.duplicate`, `account.transfer_model.enable`,
+`account.transfer_model.disable`, `account.transfer_model.archive`,
+`account.transfer_model.restore`, and `account.transfer_model.delete`. They use
+the installed Odoo 19 `account_transfer` model and native lifecycle actions; they
+are not inventory transfers, pickings, or stock returns. Create and update expose
+only the fixed seven configuration fields, keep the hidden account condition in
+sync, and accept destination percentages with at most six decimal places.
+
+All eight commands require `account.group_account_manager`. The configured uid 5
+does not have that group by default, so the guarded smoke granted it only inside
+each outer transaction. Every command still ran as uid 5 with `su=False`; fresh
+cursors proved the transfer models, destination lines, generated moves, and group
+memberships absent afterward. The final server focused tests passed 49 cases, the
+central runtime/registry selections passed 180 plus 3 cases, and the final dual-
+alias smoke passed `1 passed in 10.45s`. Create and duplicate remain degraded for
+concurrent natural-key attribution; delete remains degraded because it has no
+persistent tombstone and is deliberately not replayed after success.
+
+The private evidence directory is
+`/opt/odoo-accounting-cli-v4/.tooling/account-transfer-model-writes-20260902-live1`.
+The final 26-file code/schema/registry/test archive is 280085 bytes with SHA-256
+`c314518c72367c93750a855ebd3b94650d8aa477feed557dd0c4272acad15860`.
+Final focused, central, registry-closure, live-smoke, and service-audit log SHA-256
+values are respectively
+`3c50b2e6e737700daf81470929a5fdbfe0af1172478c84de065a70f052dc5a0e`,
+`f3992702cf56622a3af3cde490a2050f2c634d5740922b5297424e2848c3072b`,
+`69df416240691d931fa3da18e7808c0058db581c4155cbbba4d3f6665922108e`,
+`c9479d29f201ce96b0e38dbf81fcef68563932f4d5cd2724f561b65d62bbb3fd`,
+and `5ea524f976faedcbb249d74b3139ab14e90d51d2b4e40a1218c653d9fd770f5d`.
+Odoo remained on PID `959127` with `NRestarts=1`; Nginx remained on PID
+`2193677` with `NRestarts=0`; PostgreSQL remained active. No service-control
+command was issued, no live worker remains, and root disk use is 96% with about
+3.6 GB free.
+
+The preceding product/accounting master-data batch added eight writes:
 `product.create`, `product.update`, `product.duplicate`, `product.archive`,
 `product.restore`, `product.cost.update`, `product.accounting_profile.update`,
 and `product.category.accounting_profile.update`. The fixed scope is a

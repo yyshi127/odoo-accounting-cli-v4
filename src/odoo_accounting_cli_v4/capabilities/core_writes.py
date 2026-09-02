@@ -170,6 +170,14 @@ CORE_WRITE_CAPABILITY_IDS = frozenset(
         "product.cost.update",
         "product.accounting_profile.update",
         "product.category.accounting_profile.update",
+        "account.transfer_model.create",
+        "account.transfer_model.update",
+        "account.transfer_model.duplicate",
+        "account.transfer_model.enable",
+        "account.transfer_model.disable",
+        "account.transfer_model.archive",
+        "account.transfer_model.restore",
+        "account.transfer_model.delete",
     }
 )
 
@@ -448,6 +456,18 @@ _PRODUCT_WRITE_CAPABILITIES = frozenset(
         "product.cost.update",
         "product.accounting_profile.update",
         "product.category.accounting_profile.update",
+    }
+)
+_TRANSFER_MODEL_WRITE_CAPABILITIES = frozenset(
+    {
+        "account.transfer_model.create",
+        "account.transfer_model.update",
+        "account.transfer_model.duplicate",
+        "account.transfer_model.enable",
+        "account.transfer_model.disable",
+        "account.transfer_model.archive",
+        "account.transfer_model.restore",
+        "account.transfer_model.delete",
     }
 )
 _CONTEXT_FIELDS = frozenset(
@@ -3819,6 +3839,131 @@ def _validate_account_return_parameters(
     return _validate_single_id(parameters, "return_id")
 
 
+_TRANSFER_MODEL_FIELDS = frozenset(
+    {
+        "name",
+        "journal_id",
+        "date_start",
+        "date_stop",
+        "frequency",
+        "origin_account_ids",
+        "destination_lines",
+    }
+)
+
+
+def _validate_transfer_model_destination_lines(lines: Any) -> list[dict[str, Any]]:
+    if not isinstance(lines, list) or not 1 <= len(lines) <= 1000:
+        raise _invalid("destination_lines must contain between 1 and 1000 lines.")
+    normalized: list[dict[str, Any]] = []
+    account_ids: set[int] = set()
+    total = Decimal(0)
+    for line in lines:
+        if not isinstance(line, dict) or set(line) != {"account_id", "percentage"}:
+            raise _invalid("Each destination line must use the fixed fields.")
+        account_id = line["account_id"]
+        if not _valid_id(account_id) or account_id in account_ids:
+            raise _invalid("Destination account IDs must be unique positive integers.")
+        percentage = _canonical_decimal(line["percentage"], signed=False)
+        if (
+            percentage is None
+            or percentage <= 0
+            or percentage > 100
+            or percentage.as_tuple().exponent < -6
+        ):
+            raise _invalid(
+                "Destination percentages must be canonical decimals above 0, at most 100, and use no more than 6 decimal places."
+            )
+        account_ids.add(account_id)
+        total += percentage
+        normalized.append(dict(line))
+    if total <= 0 or total > 100:
+        raise _invalid(
+            "Destination percentages must total more than 0 and at most 100."
+        )
+    return normalized
+
+
+def _validate_transfer_model_values(values: Any, *, partial: bool) -> dict[str, Any]:
+    if (
+        not isinstance(values, dict)
+        or (partial and (not values or not set(values) <= _TRANSFER_MODEL_FIELDS))
+        or (not partial and set(values) != _TRANSFER_MODEL_FIELDS)
+    ):
+        raise _invalid("Transfer-model values do not match the fixed contract.")
+    normalized = dict(values)
+    if "name" in normalized and not _is_bounded_text(normalized["name"], 256):
+        raise _invalid("name must be a trimmed 1-256 character string.")
+    if "journal_id" in normalized and not _valid_id(normalized["journal_id"]):
+        raise _invalid("journal_id must be a positive integer.")
+    if "date_start" in normalized and not _is_date(normalized["date_start"]):
+        raise _invalid("date_start must be a YYYY-MM-DD date.")
+    if "date_stop" in normalized and not (
+        normalized["date_stop"] is None or _is_date(normalized["date_stop"])
+    ):
+        raise _invalid("date_stop must be null or a YYYY-MM-DD date.")
+    if (
+        "date_start" in normalized
+        and "date_stop" in normalized
+        and normalized["date_stop"] is not None
+        and normalized["date_start"] > normalized["date_stop"]
+    ):
+        raise _invalid("date_start must not be after date_stop.")
+    if "frequency" in normalized and normalized["frequency"] not in {
+        "month",
+        "quarter",
+        "year",
+    }:
+        raise _invalid("frequency must be month, quarter, or year.")
+    if "origin_account_ids" in normalized:
+        account_ids = _validate_ids(normalized["origin_account_ids"])
+        if account_ids is None or not 1 <= len(account_ids) <= 1000:
+            raise _invalid(
+                "origin_account_ids must contain 1 to 1000 unique positive IDs."
+            )
+        normalized["origin_account_ids"] = sorted(account_ids)
+    if "destination_lines" in normalized:
+        normalized["destination_lines"] = _validate_transfer_model_destination_lines(
+            normalized["destination_lines"]
+        )
+    return normalized
+
+
+def _validate_transfer_model_parameters(
+    capability_id: str, parameters: Any
+) -> dict[str, Any]:
+    if capability_id == "account.transfer_model.create":
+        return _validate_transfer_model_values(parameters, partial=False)
+    if capability_id == "account.transfer_model.update":
+        if not isinstance(parameters, dict) or set(parameters) != {
+            "transfer_model_id",
+            "changes",
+        }:
+            raise _invalid("Transfer-model update parameters do not match the contract.")
+        if not _valid_id(parameters["transfer_model_id"]):
+            raise _invalid("parameters.transfer_model_id must be a positive integer.")
+        return {
+            "transfer_model_id": parameters["transfer_model_id"],
+            "changes": _validate_transfer_model_values(
+                parameters["changes"], partial=True
+            ),
+        }
+    if capability_id == "account.transfer_model.duplicate":
+        if not isinstance(parameters, dict) or set(parameters) != {
+            "transfer_model_id",
+            "name",
+        }:
+            raise _invalid(
+                "Transfer-model duplicate parameters do not match the contract."
+            )
+        if not _valid_id(parameters["transfer_model_id"]):
+            raise _invalid("parameters.transfer_model_id must be a positive integer.")
+        if not _is_bounded_text(parameters["name"], 256):
+            raise _invalid("parameters.name must be a trimmed 1-256 character string.")
+        return dict(parameters)
+    return _validate_single_id(parameters, "transfer_model_id")
+
+
 def _validate_product_basic_values(
     values: Any, *, partial: bool
 ) -> dict[str, Any]:
@@ -3970,6 +4115,8 @@ def validate_core_write_request(
     request_id, context, parameters = _validate_envelope(request)
     if capability_id in _ACCOUNT_RETURN_WRITE_CAPABILITIES:
         normalized = _validate_account_return_parameters(capability_id, parameters)
+    elif capability_id in _TRANSFER_MODEL_WRITE_CAPABILITIES:
+        normalized = _validate_transfer_model_parameters(capability_id, parameters)
     elif capability_id in _PRODUCT_WRITE_CAPABILITIES:
         normalized = _validate_product_parameters(capability_id, parameters)
     elif capability_id.startswith("purchase_bill.") or capability_id == (
@@ -4171,6 +4318,26 @@ def _expected_idempotency_key(
         )
     if capability_id in _ACCOUNT_RETURN_WRITE_CAPABILITIES:
         return f"{capability_id}:{parameters['return_id']}"
+    if capability_id in {
+        "account.transfer_model.create",
+        "account.transfer_model.duplicate",
+    }:
+        canonical = json.dumps(
+            parameters, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        return f"{capability_id}:{company_id}:{digest}"
+    if capability_id == "account.transfer_model.update":
+        canonical = json.dumps(
+            parameters["changes"],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        return f"{capability_id}:{parameters['transfer_model_id']}:{digest}"
+    if capability_id in _TRANSFER_MODEL_WRITE_CAPABILITIES:
+        return f"{capability_id}:{parameters['transfer_model_id']}"
     if capability_id in {"product.create", "product.duplicate"}:
         canonical = json.dumps(
             parameters, ensure_ascii=False, sort_keys=True, separators=(",", ":")
@@ -4816,6 +4983,48 @@ def _validate_result(
             or result["reconciled"]
         ):
             raise _failed("Odoo returned a mismatched account-return result.")
+        return deepcopy(result)
+
+    if capability_id in _TRANSFER_MODEL_WRITE_CAPABILITIES:
+        creates_record = capability_id in {
+            "account.transfer_model.create",
+            "account.transfer_model.duplicate",
+        }
+        expected_id = (
+            result["id"] if creates_record else parameters["transfer_model_id"]
+        )
+        expected_state = {
+            "account.transfer_model.create": "disabled",
+            "account.transfer_model.update": "disabled",
+            "account.transfer_model.duplicate": "disabled",
+            "account.transfer_model.enable": "in_progress",
+            "account.transfer_model.disable": "disabled",
+            "account.transfer_model.archive": "archived",
+            "account.transfer_model.restore": "disabled",
+            "account.transfer_model.delete": "deleted",
+        }[capability_id]
+        expected_source_id = (
+            parameters["transfer_model_id"]
+            if capability_id == "account.transfer_model.duplicate"
+            else None
+        )
+        if (
+            result["model"] != "account.transfer.model"
+            or result["id"] != expected_id
+            or not _valid_id(result["id"])
+            or (
+                capability_id == "account.transfer_model.duplicate"
+                and result["id"] == parameters["transfer_model_id"]
+            )
+            or not _is_text(result["name"])
+            or result["state"] != expected_state
+            or result["move_type"] is not None
+            or result["source_id"] != expected_source_id
+            or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None
+            or result["reconciled"]
+        ):
+            raise _failed("Odoo returned a mismatched transfer-model result.")
         return deepcopy(result)
 
     if capability_id in _PRODUCT_WRITE_CAPABILITIES:

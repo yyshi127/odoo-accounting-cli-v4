@@ -16,11 +16,20 @@ the Odoo source/add-on tree while building CLI capabilities.
 
 ## Current authoritative count
 
-- Registry: 390 capability IDs; 375 enabled handlers (215 reads and 160 writes)
+- Registry: 398 capability IDs; 383 enabled handlers (215 reads and 168 writes)
   and 15 disabled IDs.
-- Runtime status: 330 `unconfigured`, 45 `degraded`, and 15 `disabled`.
-- Versioned JSON Schema documents: 756.
-- The latest batch adds eight product/accounting master-data writes:
+- Runtime status: 335 `unconfigured`, 48 `degraded`, and 15 `disabled`.
+- Versioned JSON Schema documents: 772.
+- The latest batch adds eight account-transfer-model lifecycle writes:
+  `account.transfer_model.create`, `account.transfer_model.update`,
+  `account.transfer_model.duplicate`, `account.transfer_model.enable`,
+  `account.transfer_model.disable`, `account.transfer_model.archive`,
+  `account.transfer_model.restore`, and `account.transfer_model.delete`. The
+  final dual-alias rollback smoke passed all eight; uid 5 still lacks
+  `account.group_account_manager` in ordinary runtime. The exact contract,
+  replay limits, test evidence, and server state are recorded in the last
+  checkpoint below.
+- The preceding batch added eight product/accounting master-data writes:
   `product.create`, `product.update`, `product.duplicate`, `product.archive`,
   `product.restore`, `product.cost.update`, `product.accounting_profile.update`,
   and `product.category.accounting_profile.update`. They cover only
@@ -4077,3 +4086,105 @@ bounded 8-12-command batch. Do not count aliases as new commands, add a generic 
 dispatcher, or spend the next batch building heavy policy gates. The separate
 account-return package defect remains recorded and is not silently repaired by
 this product batch.
+
+## Account-transfer-model lifecycle checkpoint — 2026-09-02
+
+Starting from pushed baseline `d4949745285069c1e074e89f543c21e7a2d224ec`,
+this batch adds exactly eight commands:
+
+1. `account.transfer_model.create`
+2. `account.transfer_model.update`
+3. `account.transfer_model.duplicate`
+4. `account.transfer_model.enable`
+5. `account.transfer_model.disable`
+6. `account.transfer_model.archive`
+7. `account.transfer_model.restore`
+8. `account.transfer_model.delete`
+
+The registry now has 398 IDs and 383 enabled handlers (215 reads and 168 writes),
+772 schemas, and statuses of 335 `unconfigured`, 48 `degraded`, and 15 `disabled`.
+Capability-ID-list SHA-256 is
+`ff74667373c5ed4e3b2cbb8af933c130a7d51903d092aaed6d5486ff77fe55c4`;
+canonical registry SHA-256 is
+`6edac2cefd98864db125ea697969dc88cb553535013a1d51ebd81bcc03dbadf0`;
+the registry file SHA-256 is
+`cbb47da5d1881213e3d32dfe520022ebb47bda02d00b1277f1f66537c394bc8a`.
+
+### Fixed boundary
+
+- These commands configure Odoo 19 `account.transfer.model`; they are not stock
+  transfers, pickings, or physical returns. All eight require
+  `account.group_account_manager` and remain company scoped.
+- Create has exactly seven fields: name, general journal, start/optional stop date,
+  month/quarter/year frequency, nonempty origin-account IDs, and nonempty
+  destination lines. Update accepts a nonempty subset of those fields. Origin IDs
+  are sorted and unique; destination accounts are unique. Each percentage is a
+  canonical positive decimal no greater than 100, uses at most six decimal places,
+  and the batch total is positive and no greater than 100.
+- Updating origin accounts also rebuilds Odoo's hidden account-domain condition, so
+  later automatic transfers do not silently use stale source accounts. Journals
+  must be active general journals in the selected company; accounts must be visible
+  to that company and cannot be off-balance.
+- Enable/disable use native `action_enable()` / `action_disable()`. Archive uses the
+  native archive path, which first disables the model. Restore uses native
+  unarchive and deliberately returns an active but disabled model.
+- Delete is limited to an active, disabled model with no generated moves. It has no
+  persistent tombstone and is not replayed after success. Create and duplicate use
+  exact company/name/configuration rechecks but do not claim concurrent exactly-once
+  creation. Those three commands therefore remain honestly `degraded`; the other
+  five are `unconfigured` until a valid runtime context and manager authorization
+  are present.
+
+### Verification
+
+- The broad local `test_core_writes.py` run passed `527 passed in 1087.25s` before
+  the final two boundary corrections. After those corrections, the dedicated
+  public/runtime suite passed `49 passed in 56.76s`, the three affected registry
+  checks passed `3 passed in 35.10s`, and Ruff plus `git diff --check` passed.
+- On the synchronized server, the final dedicated suite passed `49 passed in
+  64.86s`. The central runtime/registry selection passed `180 passed in 22.42s`,
+  and final implemented-live registry closure passed `3 passed in 21.71s`.
+- The final explicit real-Odoo smoke passed `1 passed in 10.45s`. One pytest case
+  exercised both `v4-dev` / `odoo_cli_v4_dev` and `v4-e2e` /
+  `odoo_cli_v4_e2e`. Per alias it ran all eight commands as uid 5, company 1,
+  `su=False`, immediately replayed seven commands, and deliberately did not replay
+  delete because no tombstone exists.
+- Uid 5 does not have the accounting-manager group by default. Each worker granted
+  it only inside the same outer transaction as the created model and copy. After
+  rollback, a fresh cursor found zero marked transfer models, destination lines,
+  generated moves, or temporary group memberships in both databases.
+
+### Deployment and evidence
+
+Private evidence directory:
+`/opt/odoo-accounting-cli-v4/.tooling/account-transfer-model-writes-20260902-live1`.
+
+- Initial 26-file deployment archive: 279808 bytes, SHA-256
+  `4676ba954414ff1bb8a31b177ad564555d4dabba1df9440144079b9c5fb7b570`.
+- Six-file active-delete/percentage-precision correction: 116209 bytes, SHA-256
+  `448b70452ecc2050d1239b301869cba20163ff110b0ff5371c714bda299c03cc`.
+- Final 26-file code/schema/registry/test archive: 280085 bytes, SHA-256
+  `c314518c72367c93750a855ebd3b94650d8aa477feed557dd0c4272acad15860`.
+  The remote archive checksum was verified before extraction.
+- Pre-deployment, pre-correction, and pre-final backups have SHA-256 values
+  `6753dda0118a20f5e177581dad9a8fdded65e62cfc945186dbc84bf6c89c09d1`,
+  `19cd3e2b52abbe32089690d1c2859404e7ae3125bf038d662e1042f73ad6762f`,
+  and `68d69e73a9c1534c80724c16953c4ff9ea2ddb0cd73a789619a381630a10d02c`.
+- Final focused, central, registry, live, and service log SHA-256 values are
+  `3c50b2e6e737700daf81470929a5fdbfe0af1172478c84de065a70f052dc5a0e`,
+  `f3992702cf56622a3af3cde490a2050f2c634d5740922b5297424e2848c3072b`,
+  `69df416240691d931fa3da18e7808c0058db581c4155cbbba4d3f6665922108e`,
+  `c9479d29f201ce96b0e38dbf81fcef68563932f4d5cd2724f561b65d62bbb3fd`,
+  and `5ea524f976faedcbb249d74b3139ab14e90d51d2b4e40a1218c653d9fd770f5d`.
+
+No service-control command was issued. Odoo remained active on PID `959127` with
+`NRestarts=1`; Nginx remained on PID `2193677` with `NRestarts=0`; PostgreSQL
+remained active, and no live worker remains. Root disk use is 96%, with about
+3.6 GB free. SSH still has intermittent timeout/reset behavior, but it did not
+invalidate the persistent-session test results. Server Git remains intentionally
+old and dirty; continue with explicit allowlists and never pull, reset, or checkout
+there.
+
+Next work should select another bounded 8–12-command accounting capability batch.
+Do not count aliases as commands, add a generic ORM dispatcher, or divert the next
+batch into heavyweight approval/audit controls.
