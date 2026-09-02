@@ -93,6 +93,35 @@ def _summary(**overrides: Any) -> dict[str, Any]:
     return value
 
 
+def _analytic_summary(**overrides: Any) -> dict[str, Any]:
+    value = {
+        "company_id": 7,
+        "date_from": "2026-01-01",
+        "date_to": "2026-12-31",
+        "basis": "analytic_lines",
+        "group_by": "analytic_account",
+        "plan": {"id": 11, "name": "Projects"},
+        "company_currency": {"id": 6, "code": "CNY"},
+        "groups": [
+            {
+                "analytic_account": {"id": 21, "name": "Project A", "code": "A"},
+                "row_count": 2,
+                "amount": "10.5",
+                "unit_amount": "3",
+            },
+            {
+                "analytic_account": {"id": 22, "name": "Project B", "code": None},
+                "row_count": 1,
+                "amount": "-2",
+                "unit_amount": "0.5",
+            },
+        ],
+        "totals": {"row_count": 3, "amount": "8.5", "unit_amount": "3.5"},
+    }
+    value.update(overrides)
+    return value
+
+
 class FakePort:
     def __init__(self, page: dict[str, Any]) -> None:
         self.page = page
@@ -148,7 +177,6 @@ def test_accounting_date_resolution_is_a_closed_single_read() -> None:
         }
     ]
 
-
 def test_summary_accepts_only_ordered_groups_and_exact_totals() -> None:
     parameters = {
         "date_from": "2026-01-01",
@@ -181,6 +209,87 @@ def test_summary_accepts_only_ordered_groups_and_exact_totals() -> None:
         assert caught.value.code == "failed_validation"
 
 
+def test_analytic_summary_normalizes_optional_filter_and_fails_closed() -> None:
+    parameters = {
+        "date_from": "2026-01-01",
+        "date_to": "2026-12-31",
+        "plan_id": 11,
+    }
+    result = _analytic_summary()
+    port = FakePort(_page([result]))
+
+    assert read_journal_analysis(
+        port, "analytic.line.summary", _request(parameters)
+    ) == result
+    assert port.calls == [
+        {
+            "capability_id": "analytic.line.summary",
+            "company_id": 7,
+            "parameters": {**parameters, "analytic_account_id": None},
+        }
+    ]
+
+    explicit_null_port = FakePort(_page([result]))
+    assert read_journal_analysis(
+        explicit_null_port,
+        "analytic.line.summary",
+        _request({**parameters, "analytic_account_id": None}),
+    ) == result
+    assert explicit_null_port.calls[0]["parameters"] == {
+        **parameters,
+        "analytic_account_id": None,
+    }
+
+    invalid = [
+        _analytic_summary(groups=list(reversed(result["groups"]))),
+        _analytic_summary(totals={**result["totals"], "amount": "9"}),
+        _analytic_summary(plan={"id": 12, "name": "Other"}),
+        _analytic_summary(basis="posted_entries"),
+    ]
+    for value in invalid:
+        with pytest.raises(JournalAnalysisReadError) as caught:
+            read_journal_analysis(
+                FakePort(_page([value])),
+                "analytic.line.summary",
+                _request(parameters),
+            )
+        assert caught.value.code == "failed_validation"
+
+
+def test_analytic_summary_account_filter_allows_only_the_requested_group() -> None:
+    parameters = {
+        "date_from": "2026-01-01",
+        "date_to": "2026-12-31",
+        "plan_id": 11,
+        "analytic_account_id": 21,
+    }
+    group = _analytic_summary()["groups"][0]
+    result = _analytic_summary(
+        groups=[group],
+        totals={
+            "row_count": group["row_count"],
+            "amount": group["amount"],
+            "unit_amount": group["unit_amount"],
+        },
+    )
+    assert (
+        read_journal_analysis(
+            FakePort(_page([result])),
+            "analytic.line.summary",
+            _request(parameters),
+        )
+        == result
+    )
+
+    with pytest.raises(JournalAnalysisReadError) as caught:
+        read_journal_analysis(
+            FakePort(_page([_analytic_summary()])),
+            "analytic.line.summary",
+            _request(parameters),
+        )
+    assert caught.value.code == "failed_validation"
+
+
 @pytest.mark.parametrize(
     ("capability_id", "parameters"),
     [
@@ -206,6 +315,23 @@ def test_summary_accepts_only_ordered_groups_and_exact_totals() -> None:
                 "date_from": "2026-01-01",
                 "date_to": "2026-12-31",
                 "group_by": "partner",
+            },
+        ),
+        (
+            "analytic.line.summary",
+            {
+                "date_from": "2026-01-01",
+                "date_to": "2026-12-31",
+                "plan_id": 11,
+                "limit": 10,
+            },
+        ),
+        (
+            "analytic.line.summary",
+            {
+                "date_from": "2026-12-31",
+                "date_to": "2026-01-01",
+                "plan_id": 11,
             },
         ),
     ],

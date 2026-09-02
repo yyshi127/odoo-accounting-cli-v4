@@ -1,4 +1,4 @@
-"""Odoo-side runtime for two fixed journal-analysis reads."""
+"""Odoo-side runtime for fixed journal and analytic analysis reads."""
 
 from __future__ import annotations
 
@@ -8,7 +8,11 @@ from typing import Any
 
 ACTION = "accounting.journal_analysis.read"
 CAPABILITY_IDS = frozenset(
-    {"journal.accounting_date.resolve", "journal_item.analysis.summary"}
+    {
+        "analytic.line.summary",
+        "journal.accounting_date.resolve",
+        "journal_item.analysis.summary",
+    }
 )
 GROUP_BY_FIELDS = {"account": "account_id", "journal": "journal_id"}
 _AMOUNT_KEYS = ("debit", "credit", "balance")
@@ -23,6 +27,20 @@ _MOVE_LINE_FIELDS = {
     "debit",
     "credit",
     "balance",
+}
+_ANALYTIC_PLAN_FIELDS = {"name", "parent_id"}
+_ANALYTIC_ACCOUNT_FIELDS = {
+    "name",
+    "code",
+    "plan_id",
+    "root_plan_id",
+    "company_id",
+}
+_ANALYTIC_LINE_FIELDS = {
+    "company_id",
+    "date",
+    "amount",
+    "unit_amount",
 }
 
 
@@ -85,6 +103,19 @@ def _valid_parameters(capability_id: str, parameters: Any) -> bool:
             and _canonical_date(parameters["date"])
             and isinstance(parameters["has_tax"], bool)
         )
+    if capability_id == "analytic.line.summary":
+        required = {"date_from", "date_to", "plan_id", "analytic_account_id"}
+        return bool(
+            set(parameters) == required
+            and _canonical_date(parameters["date_from"])
+            and _canonical_date(parameters["date_to"])
+            and parameters["date_from"] <= parameters["date_to"]
+            and _positive_id(parameters["plan_id"])
+            and (
+                parameters["analytic_account_id"] is None
+                or _positive_id(parameters["analytic_account_id"])
+            )
+        )
     return bool(
         set(parameters) == {"date_from", "date_to", "group_by"}
         and _canonical_date(parameters["date_from"])
@@ -130,6 +161,14 @@ def _empty_page(
 def _required_models(capability_id: str, parameters: dict[str, Any]) -> tuple[str, ...]:
     if capability_id == "journal.accounting_date.resolve":
         return ("res.company", "account.journal")
+    if capability_id == "analytic.line.summary":
+        return (
+            "res.company",
+            "res.currency",
+            "account.analytic.plan",
+            "account.analytic.account",
+            "account.analytic.line",
+        )
     group_model = (
         "account.account" if parameters["group_by"] == "account" else "account.journal"
     )
@@ -146,6 +185,17 @@ def _field_shape_available(
 ) -> bool:
     if capability_id == "journal.accounting_date.resolve":
         return _JOURNAL_FIELDS <= set(getattr(env["account.journal"], "_fields", {}))
+    if capability_id == "analytic.line.summary":
+        return bool(
+            {"currency_id"} <= set(getattr(env["res.company"], "_fields", {}))
+            and {"name"} <= set(getattr(env["res.currency"], "_fields", {}))
+            and _ANALYTIC_PLAN_FIELDS
+            <= set(getattr(env["account.analytic.plan"], "_fields", {}))
+            and _ANALYTIC_ACCOUNT_FIELDS
+            <= set(getattr(env["account.analytic.account"], "_fields", {}))
+            and _ANALYTIC_LINE_FIELDS
+            <= set(getattr(env["account.analytic.line"], "_fields", {}))
+        )
     common = bool(
         {"currency_id"} <= set(getattr(env["res.company"], "_fields", {}))
         and {"name"} <= set(getattr(env["res.currency"], "_fields", {}))
@@ -235,6 +285,22 @@ def _currency(record: Any) -> dict[str, Any]:
     if len(code) > 3:
         raise ValueError("invalid currency code")
     return {"id": _record_id(record), "code": code}
+
+
+def _named_ref(record: Any) -> dict[str, Any]:
+    return {"id": _record_id(record), "name": _text(record.name)}
+
+
+def _analytic_account_ref(record: Any, company_id: int) -> dict[str, Any]:
+    record_company = getattr(record, "company_id", False)
+    if record_company and _record_id(record_company) != company_id:
+        raise ValueError("cross-company analytic account group")
+    code = getattr(record, "code", False)
+    if code is not False and code is not None:
+        code = _text(code)
+    else:
+        code = None
+    return {"id": _record_id(record), "name": _text(record.name), "code": code}
 
 
 def _decimal(value: Any) -> Decimal:
@@ -359,6 +425,96 @@ def _summary_item(
     }
 
 
+def _analytic_summary_item(
+    env: Any, company_id: int, parameters: dict[str, Any]
+) -> dict[str, Any] | None:
+    company = _one_company(env, company_id)
+    plan_records = _model(env, "account.analytic.plan", company_id).search(
+        [("id", "=", parameters["plan_id"])], limit=2
+    )
+    if len(plan_records) > 1:
+        raise ValueError("ambiguous analytic plan")
+    if not plan_records:
+        return None
+    plan = plan_records[0]
+    column_name = plan._column_name()
+    line_model = _model(env, "account.analytic.line", company_id)
+    field = getattr(line_model, "_fields", {}).get(column_name)
+    if (
+        not isinstance(column_name, str)
+        or field is None
+        or getattr(field, "comodel_name", None) != "account.analytic.account"
+    ):
+        raise ValueError("analytic plan column is unavailable")
+
+    account_id = parameters["analytic_account_id"]
+    if account_id is not None:
+        accounts = _model(env, "account.analytic.account", company_id).search(
+            [
+                ("id", "=", account_id),
+                ("plan_id", "child_of", parameters["plan_id"]),
+                ("company_id", "in", [False, company_id]),
+            ],
+            limit=2,
+        )
+        if len(accounts) != 1:
+            return None
+
+    domain: list[Any] = [
+        ("company_id", "=", company_id),
+        ("date", ">=", parameters["date_from"]),
+        ("date", "<=", parameters["date_to"]),
+        (f"{column_name}.plan_id", "child_of", parameters["plan_id"]),
+    ]
+    if account_id is not None:
+        domain.append((column_name, "=", account_id))
+    rows = line_model._read_group(
+        domain,
+        groupby=[column_name],
+        aggregates=["id:count", "amount:sum", "unit_amount:sum"],
+        order=f"{column_name} asc",
+    )
+    groups: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, (tuple, list)) or len(row) != 4:
+            raise ValueError("invalid analytic-line aggregate")
+        count = row[1]
+        if not _integer(count) or count <= 0:
+            raise ValueError("invalid analytic-line aggregate count")
+        groups.append(
+            {
+                "analytic_account": _analytic_account_ref(row[0], company_id),
+                "row_count": count,
+                "amount": _decimal_text(row[2]),
+                "unit_amount": _decimal_text(row[3]),
+            }
+        )
+    groups.sort(key=lambda item: item["analytic_account"]["id"])
+    ids = [item["analytic_account"]["id"] for item in groups]
+    if len(ids) != len(set(ids)):
+        raise ValueError("duplicate analytic account aggregate group")
+    totals = {
+        "row_count": sum(item["row_count"] for item in groups),
+        "amount": _decimal_text(
+            sum((_decimal(item["amount"]) for item in groups), Decimal(0))
+        ),
+        "unit_amount": _decimal_text(
+            sum((_decimal(item["unit_amount"]) for item in groups), Decimal(0))
+        ),
+    }
+    return {
+        "company_id": company_id,
+        "date_from": parameters["date_from"],
+        "date_to": parameters["date_to"],
+        "basis": "analytic_lines",
+        "group_by": "analytic_account",
+        "plan": _named_ref(plan),
+        "company_currency": _currency(company.currency_id),
+        "groups": groups,
+        "totals": totals,
+    }
+
+
 def dispatch(
     env: Any,
     payload: dict[str, Any],
@@ -377,6 +533,9 @@ def dispatch(
             return page
         if capability_id == "journal.accounting_date.resolve":
             item = _accounting_date_item(env, company_id, parameters)
+            items = [] if item is None else [item]
+        elif capability_id == "analytic.line.summary":
+            item = _analytic_summary_item(env, company_id, parameters)
             items = [] if item is None else [item]
         else:
             items = [_summary_item(env, company_id, parameters)]

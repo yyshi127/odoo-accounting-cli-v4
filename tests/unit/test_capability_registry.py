@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 366
-EXPECTED_ENABLED_CAPABILITY_COUNT = 351
-EXPECTED_IMPLEMENTED_READ_COUNT = 214
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 137
+EXPECTED_CAPABILITY_COUNT = 374
+EXPECTED_ENABLED_CAPABILITY_COUNT = 359
+EXPECTED_IMPLEMENTED_READ_COUNT = 215
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 144
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 314
-EXPECTED_DEGRADED_CAPABILITY_COUNT = 37
-EXPECTED_SCHEMA_COUNT = 708
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 318
+EXPECTED_DEGRADED_CAPABILITY_COUNT = 41
+EXPECTED_SCHEMA_COUNT = 724
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "72cc69c57422ee052477a86bdfa41b45276360a4755fdbb16dbb3df64c2f0ed8"
+    "ab1e11c994f6c3d27c4eaa310e04f4967c5c9c3f275a3fcde0dbf9f1c2ba0992"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -74,6 +74,7 @@ IMPLEMENTED_READS = {
     "analytic.distribution_model.list": "analytic_distribution_model_list",
     "analytic.line.get": "analytic_line_get",
     "analytic.line.search": "analytic_line_search",
+    "analytic.line.summary": "analytic_line_summary",
     "analytic.plan.get": "analytic_plan_get",
     "analytic.plan.list": "analytic_plan_list",
     "bank.get": "bank_get",
@@ -321,6 +322,13 @@ IMPLEMENTED_WRITES = {
     "account.account.update",
     "analytic.account.create",
     "analytic.account.update",
+    "analytic.account.archive",
+    "analytic.account.restore",
+    "analytic.line.create",
+    "analytic.line.update",
+    "analytic.line.delete",
+    "analytic.plan.create",
+    "analytic.plan.update",
     "asset.cancel",
     "asset.create",
     "asset.dispose",
@@ -481,8 +489,15 @@ PAYMENT_BANK_WRITES = {
     "reconciliation.write_off",
 }
 ANALYTIC_BUDGET_WRITES = {
+    "analytic.account.archive",
     "analytic.account.create",
+    "analytic.account.restore",
     "analytic.account.update",
+    "analytic.line.create",
+    "analytic.line.delete",
+    "analytic.line.update",
+    "analytic.plan.create",
+    "analytic.plan.update",
     "budget.cancel",
     "budget.confirm",
     "budget.create",
@@ -1071,6 +1086,10 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
         elif capability_id in PAYMENT_RECONCILIATION_BATCH_LIVE_READS:
             expected_live_test = (
                 "tests/integration/test_payment_reconciliation_read_batch_live.py"
+            )
+        elif capability_id == "analytic.line.summary":
+            expected_live_test = (
+                "tests/integration/test_analytic_budget_write_batch_live.py"
             )
         elif capability_id in ANALYTIC_BUDGET_BATCH_LIVE_READS:
             expected_live_test = (
@@ -2296,8 +2315,15 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
         "period.accrual.generate": {"account.accrued.orders.wizard"},
     }
     extended_modules = {
+        "analytic.account.archive": ["analytic", "account", "base"],
         "analytic.account.create": ["analytic", "account", "base"],
+        "analytic.account.restore": ["analytic", "account", "base"],
         "analytic.account.update": ["analytic", "account", "base"],
+        "analytic.line.create": ["analytic", "account", "base"],
+        "analytic.line.delete": ["analytic", "account", "base"],
+        "analytic.line.update": ["analytic", "account", "base"],
+        "analytic.plan.create": ["analytic", "account", "base"],
+        "analytic.plan.update": ["analytic", "account", "base"],
         "asset.cancel": ["account_asset"],
         "asset.dispose": ["account_asset"],
         "asset.pause": ["account_asset"],
@@ -2552,6 +2578,21 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             assert (
                 descriptor["status"]["reason_code"]
                 == "odoo_native_analytic_account_idempotency_field_unavailable"
+            )
+        elif capability_id in {"analytic.plan.create", "analytic.plan.update"}:
+            assert descriptor["status"]["value"] == "degraded"
+            assert descriptor["status"]["reason_code"] == "database_global_record_scope"
+        elif capability_id == "analytic.line.create":
+            assert descriptor["status"]["value"] == "degraded"
+            assert (
+                descriptor["status"]["reason_code"]
+                == "odoo_native_analytic_line_idempotency_field_unavailable"
+            )
+        elif capability_id == "analytic.line.delete":
+            assert descriptor["status"]["value"] == "degraded"
+            assert (
+                descriptor["status"]["reason_code"]
+                == "deleted_record_tombstone_unavailable"
             )
         elif capability_id == "budget.create":
             assert descriptor["status"]["value"] == "degraded"
@@ -2879,7 +2920,12 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             assert descriptor["tests"]["integration"]["references"] == [
                 "tests/integration/test_analytic_budget_write_batch_live.py"
             ]
-            assert "immediate replay" in descriptor["tests"]["integration"]["reason"]
+            integration_reason = descriptor["tests"]["integration"]["reason"]
+            if capability_id == "analytic.line.delete":
+                assert "record absence" in integration_reason
+                assert "immediate replay" not in integration_reason
+            else:
+                assert "immediate replay" in integration_reason
         elif capability_id in PAYMENT_BANK_WRITES:
             assert descriptor["tests"]["integration"]["status"] == "implemented"
             assert descriptor["tests"]["integration"]["references"] == [

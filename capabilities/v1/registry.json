@@ -639,6 +639,36 @@
       "routing": {"object": "account.tag", "actions": ["restore"], "aliases": {"zh_CN": ["恢复会计标签"], "en_US": ["Restore accounting tag"]}, "not_for": {"zh_CN": ["创建新会计标签"], "en_US": ["Creating a new accounting tag"]}, "required_slots": ["database", "company_id", "user_login"]},
       "handler_key": "core_write"
     },
+    "analytic.account.archive": {
+      "summary": {"zh_CN": "停用分析账户", "en_US": "Archive an analytic account"},
+      "domain": "accounting_master_data",
+      "access": "write",
+      "source": {
+        "modules": ["analytic", "account", "base"],
+        "models": ["res.company", "account.analytic.account", "account.analytic.plan"],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "analytic/models/analytic_account.py", "analytic/models/analytic_plan.py"]
+      },
+      "schemas": {"request": "schemas/v1/analytic.account.archive.request.schema.json", "response": "schemas/v1/analytic.account.archive.response.schema.json"},
+      "requirements": {
+        "modules": ["analytic", "account", "base"],
+        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "company": "required",
+        "groups": ["account.group_account_user"],
+        "acl": ["account.analytic.account:read", "account.analytic.account:write", "account.analytic.plan:read"]
+      },
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_scoped_analytic_account_archive", "verify": "same_transaction_inactive_state_reread_and_response_schema_validation", "idempotency": "target_active_state_recheck_without_operation_store", "reverse": "analytic.account.restore"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_analytic_budget_writes.py", "tests/unit/test_analytic_budget_writes_runtime.py", "tests/unit/test_analytic_budget_write_cli.py", "tests/unit/test_analytic_budget_write_registry.py"], "reason": "Focused unit tests cover the closed identifier contract, company scope, target-state replay, registry metadata, and schemas."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_analytic_budget_write_batch_live.py"], "reason": "The shared guarded transactional smoke verifies execution, immediate replay, and rollback in both dedicated isolated database aliases."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
+      "routing": {"object": "analytic.account", "actions": ["archive"], "aliases": {"zh_CN": ["停用分析账户"], "en_US": ["Archive an analytic account"]}, "not_for": {"zh_CN": [], "en_US": []}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
     "analytic.account.create": {
       "summary": {"zh_CN": "创建分析账户", "en_US": "Create an analytic account"},
       "domain": "accounting_master_data",
@@ -794,6 +824,36 @@
         ]
       },
       "handler_key": "analytic_account_get"
+    },
+    "analytic.account.restore": {
+      "summary": {"zh_CN": "恢复分析账户", "en_US": "Restore an analytic account"},
+      "domain": "accounting_master_data",
+      "access": "write",
+      "source": {
+        "modules": ["analytic", "account", "base"],
+        "models": ["res.company", "account.analytic.account", "account.analytic.plan"],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "analytic/models/analytic_account.py", "analytic/models/analytic_plan.py"]
+      },
+      "schemas": {"request": "schemas/v1/analytic.account.restore.request.schema.json", "response": "schemas/v1/analytic.account.restore.response.schema.json"},
+      "requirements": {
+        "modules": ["analytic", "account", "base"],
+        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "company": "required",
+        "groups": ["account.group_account_user"],
+        "acl": ["account.analytic.account:read", "account.analytic.account:write", "account.analytic.plan:read"]
+      },
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_scoped_analytic_account_restore", "verify": "same_transaction_active_state_reread_and_response_schema_validation", "idempotency": "target_active_state_recheck_without_operation_store", "reverse": "analytic.account.archive"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_analytic_budget_writes.py", "tests/unit/test_analytic_budget_writes_runtime.py", "tests/unit/test_analytic_budget_write_cli.py", "tests/unit/test_analytic_budget_write_registry.py"], "reason": "Focused unit tests cover the closed identifier contract, company scope, target-state replay, registry metadata, and schemas."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_analytic_budget_write_batch_live.py"], "reason": "The shared guarded transactional smoke verifies execution, immediate replay, and rollback in both dedicated isolated database aliases."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
+      "routing": {"object": "analytic.account", "actions": ["restore"], "aliases": {"zh_CN": ["恢复分析账户"], "en_US": ["Restore an analytic account"]}, "not_for": {"zh_CN": [], "en_US": []}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
     },
     "analytic.account.search": {
       "summary": {
@@ -1334,6 +1394,66 @@
       },
       "handler_key": "analytic_distribution_model_list"
     },
+    "analytic.line.create": {
+      "summary": {"zh_CN": "创建手工分析分录", "en_US": "Create a manual analytic line"},
+      "domain": "analytic_accounting",
+      "access": "write",
+      "source": {
+        "modules": ["analytic", "account", "base"],
+        "models": ["res.company", "account.analytic.plan", "account.analytic.account", "account.analytic.line"],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "analytic/models/analytic_plan.py", "analytic/models/analytic_account.py", "analytic/models/analytic_line.py"]
+      },
+      "schemas": {"request": "schemas/v1/analytic.line.create.request.schema.json", "response": "schemas/v1/analytic.line.create.response.schema.json"},
+      "requirements": {
+        "modules": ["analytic", "account", "base"],
+        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "company": "required",
+        "groups": ["account.group_account_user"],
+        "acl": ["account.analytic.plan:read", "account.analytic.account:read", "account.analytic.line:read", "account.analytic.line:create"]
+      },
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_scoped_manual_analytic_line_create", "verify": "same_transaction_manual_line_reread_and_response_schema_validation", "idempotency": "visible_odoo_analytic_line_name_marker_and_exact_parameter_replay_without_concurrent_exactly_once_guarantee", "reverse": "analytic.line.delete"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_analytic_budget_writes.py", "tests/unit/test_analytic_budget_writes_runtime.py", "tests/unit/test_analytic_budget_write_cli.py", "tests/unit/test_analytic_budget_write_registry.py"], "reason": "Focused unit tests cover the closed manual-line contract, company and account scope, marker replay, registry metadata, and schemas."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_analytic_budget_write_batch_live.py"], "reason": "The shared guarded transactional smoke verifies execution, immediate replay, and rollback in both dedicated isolated database aliases."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "degraded", "reason_code": "odoo_native_analytic_line_idempotency_field_unavailable", "reason": "The command is implemented, but Odoo has no native unique analytic-line idempotency field; V4 uses a visible deterministic name marker and cannot promise concurrent exactly-once creation."},
+      "routing": {"object": "analytic.line", "actions": ["create"], "aliases": {"zh_CN": ["创建手工分析分录"], "en_US": ["Create a manual analytic line"]}, "not_for": {"zh_CN": ["创建会计凭证产生的分析分录", "为非 Project 根计划创建分析分录"], "en_US": ["Creating accounting-generated analytic lines", "Creating lines for a non-Project root plan"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
+    "analytic.line.delete": {
+      "summary": {"zh_CN": "删除手工分析分录", "en_US": "Delete a manual analytic line"},
+      "domain": "analytic_accounting",
+      "access": "write",
+      "source": {
+        "modules": ["analytic", "account", "base"],
+        "models": ["res.company", "account.analytic.line", "account.analytic.account"],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "analytic/models/analytic_line.py", "analytic/models/analytic_account.py"]
+      },
+      "schemas": {"request": "schemas/v1/analytic.line.delete.request.schema.json", "response": "schemas/v1/analytic.line.delete.response.schema.json"},
+      "requirements": {
+        "modules": ["analytic", "account", "base"],
+        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "company": "required",
+        "groups": ["account.group_account_user"],
+        "acl": ["account.analytic.line:read", "account.analytic.line:unlink", "account.analytic.account:read"]
+      },
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_scoped_manual_analytic_line_delete", "verify": "same_transaction_record_absence_recheck_and_response_schema_validation", "idempotency": "record_absence_recheck_without_persistent_tombstone", "reverse": "recreate_the_manual_analytic_line"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_analytic_budget_writes.py", "tests/unit/test_analytic_budget_writes_runtime.py", "tests/unit/test_analytic_budget_write_cli.py", "tests/unit/test_analytic_budget_write_registry.py"], "reason": "Focused unit tests cover the closed identifier contract, manual-line restriction, company scope, absence verification, registry metadata, and schemas."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_analytic_budget_write_batch_live.py"], "reason": "The shared guarded transactional smoke verifies execution, record absence, and rollback in both dedicated isolated database aliases."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "degraded", "reason_code": "deleted_record_tombstone_unavailable", "reason": "The handler verifies record absence but keeps no persistent tombstone, so a later retry cannot distinguish its prior deletion from an unrelated disappearance."},
+      "routing": {"object": "analytic.line", "actions": ["delete"], "aliases": {"zh_CN": ["删除手工分析分录"], "en_US": ["Delete a manual analytic line"]}, "not_for": {"zh_CN": ["删除会计凭证产生的分析分录", "删除非 Project 根计划的分析分录"], "en_US": ["Deleting accounting-generated analytic lines", "Deleting lines for a non-Project root plan"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
     "analytic.line.get": {
       "summary": {
         "zh_CN": "获取分析分录详情",
@@ -1539,6 +1659,96 @@
         "required_slots": ["database", "company_id", "user_login"]
       },
       "handler_key": "analytic_line_search"
+    },
+    "analytic.line.summary": {
+      "summary": {"zh_CN": "按分析账户汇总分析分录", "en_US": "Summarize analytic lines by analytic account"},
+      "domain": "analytic_accounting",
+      "access": "read",
+      "source": {
+        "modules": ["analytic", "account", "base"],
+        "models": ["res.company", "res.currency", "account.analytic.plan", "account.analytic.account", "account.analytic.line"],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "_references/base/models/res_currency.py", "analytic/models/analytic_plan.py", "analytic/models/analytic_account.py", "analytic/models/analytic_line.py"]
+      },
+      "schemas": {"request": "schemas/v1/analytic.line.summary.request.schema.json", "response": "schemas/v1/analytic.line.summary.response.schema.json"},
+      "requirements": {
+        "modules": ["analytic", "account", "base"],
+        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "company": "required",
+        "groups": ["account.group_account_readonly"],
+        "acl": ["res.company:read", "res.currency:read", "account.analytic.plan:read", "account.analytic.account:read", "account.analytic.line:read"]
+      },
+      "strategies": {"preview": "not_applicable_read_only", "execute": "fixed_company_plan_and_date_scoped_analytic_line_summary", "verify": "same_transaction_acl_aggregate_and_response_schema_validation", "idempotency": "not_applicable_read_only", "reverse": "not_applicable_read_only"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_journal_analysis.py", "tests/unit/test_journal_analysis_runtime.py", "tests/unit/test_return_journal_analysis_cli.py"], "reason": "Focused unit tests cover the closed date, plan, and optional-account contract, fixed grouping, registry metadata, and schemas."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_analytic_budget_write_batch_live.py"], "reason": "The shared guarded transactional smoke verifies the fixed aggregate in both dedicated isolated database aliases."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
+      "routing": {"object": "analytic.line", "actions": ["summary"], "aliases": {"zh_CN": ["按分析账户汇总分析分录"], "en_US": ["Summarize analytic lines by analytic account"]}, "not_for": {"zh_CN": [], "en_US": []}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "analytic_line_summary"
+    },
+    "analytic.line.update": {
+      "summary": {"zh_CN": "更新手工分析分录", "en_US": "Update a manual analytic line"},
+      "domain": "analytic_accounting",
+      "access": "write",
+      "source": {
+        "modules": ["analytic", "account", "base"],
+        "models": ["res.company", "account.analytic.plan", "account.analytic.account", "account.analytic.line"],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "analytic/models/analytic_plan.py", "analytic/models/analytic_account.py", "analytic/models/analytic_line.py"]
+      },
+      "schemas": {"request": "schemas/v1/analytic.line.update.request.schema.json", "response": "schemas/v1/analytic.line.update.response.schema.json"},
+      "requirements": {
+        "modules": ["analytic", "account", "base"],
+        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "company": "required",
+        "groups": ["account.group_account_user"],
+        "acl": ["account.analytic.plan:read", "account.analytic.account:read", "account.analytic.line:read", "account.analytic.line:write"]
+      },
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_scoped_manual_analytic_line_update", "verify": "same_transaction_manual_line_reread_and_response_schema_validation", "idempotency": "target_state_recheck_without_operation_store", "reverse": "update_with_previous_values"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_analytic_budget_writes.py", "tests/unit/test_analytic_budget_writes_runtime.py", "tests/unit/test_analytic_budget_write_cli.py", "tests/unit/test_analytic_budget_write_registry.py"], "reason": "Focused unit tests cover the closed changes contract, manual-line restriction, company and account scope, target-state replay, registry metadata, and schemas."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_analytic_budget_write_batch_live.py"], "reason": "The shared guarded transactional smoke verifies execution, immediate replay, and rollback in both dedicated isolated database aliases."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
+      "routing": {"object": "analytic.line", "actions": ["update"], "aliases": {"zh_CN": ["更新手工分析分录"], "en_US": ["Update a manual analytic line"]}, "not_for": {"zh_CN": ["更新会计凭证产生的分析分录", "更新非 Project 根计划的分析分录"], "en_US": ["Updating accounting-generated analytic lines", "Updating lines for a non-Project root plan"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
+    "analytic.plan.create": {
+      "summary": {"zh_CN": "创建分析子计划", "en_US": "Create an analytic subplan"},
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": ["analytic", "account", "base"],
+        "models": ["res.company", "account.analytic.plan"],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "analytic/models/analytic_plan.py"]
+      },
+      "schemas": {"request": "schemas/v1/analytic.plan.create.request.schema.json", "response": "schemas/v1/analytic.plan.create.response.schema.json"},
+      "requirements": {
+        "modules": ["analytic", "account", "base"],
+        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "company": "required",
+        "groups": ["account.group_account_user"],
+        "acl": ["account.analytic.plan:read", "account.analytic.plan:create"]
+      },
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_database_global_child_analytic_plan_create", "verify": "same_transaction_child_plan_reread_and_response_schema_validation", "idempotency": "parent_and_normalized_name_natural_key_recheck_without_concurrent_exactly_once_guarantee", "reverse": "not_exposed_in_this_batch"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_analytic_budget_writes.py", "tests/unit/test_analytic_budget_writes_runtime.py", "tests/unit/test_analytic_budget_write_cli.py", "tests/unit/test_analytic_budget_write_registry.py"], "reason": "Focused unit tests cover the closed child-plan contract, root parent validation, database-global scope, registry metadata, and schemas."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_analytic_budget_write_batch_live.py"], "reason": "The shared guarded transactional smoke verifies execution, immediate replay, and rollback in both dedicated isolated database aliases."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "degraded", "reason_code": "database_global_record_scope", "reason": "Analytic plans are database-global rather than company-owned; creating a subplan can affect other companies in the same isolated database."},
+      "routing": {"object": "analytic.plan", "actions": ["create"], "aliases": {"zh_CN": ["创建分析子计划"], "en_US": ["Create an analytic subplan"]}, "not_for": {"zh_CN": ["创建根分析计划"], "en_US": ["Creating a root analytic plan"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
     },
     "analytic.plan.get": {
       "summary": {
@@ -1762,6 +1972,36 @@
         ]
       },
       "handler_key": "analytic_plan_list"
+    },
+    "analytic.plan.update": {
+      "summary": {"zh_CN": "更新分析子计划", "en_US": "Update an analytic subplan"},
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": ["analytic", "account", "base"],
+        "models": ["res.company", "account.analytic.plan"],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "analytic/models/analytic_plan.py"]
+      },
+      "schemas": {"request": "schemas/v1/analytic.plan.update.request.schema.json", "response": "schemas/v1/analytic.plan.update.response.schema.json"},
+      "requirements": {
+        "modules": ["analytic", "account", "base"],
+        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "company": "required",
+        "groups": ["account.group_account_user"],
+        "acl": ["account.analytic.plan:read", "account.analytic.plan:write"]
+      },
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_database_global_child_analytic_plan_update", "verify": "same_transaction_child_plan_reread_and_response_schema_validation", "idempotency": "target_state_recheck_without_operation_store", "reverse": "update_with_previous_values"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_analytic_budget_writes.py", "tests/unit/test_analytic_budget_writes_runtime.py", "tests/unit/test_analytic_budget_write_cli.py", "tests/unit/test_analytic_budget_write_registry.py"], "reason": "Focused unit tests cover the closed changes contract, child-plan restriction, database-global scope, target-state replay, registry metadata, and schemas."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_analytic_budget_write_batch_live.py"], "reason": "The shared guarded transactional smoke verifies execution, immediate replay, and rollback in both dedicated isolated database aliases."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "degraded", "reason_code": "database_global_record_scope", "reason": "Analytic plans are database-global rather than company-owned; updating a subplan can affect other companies in the same isolated database."},
+      "routing": {"object": "analytic.plan", "actions": ["update"], "aliases": {"zh_CN": ["更新分析子计划"], "en_US": ["Update an analytic subplan"]}, "not_for": {"zh_CN": ["移动分析计划的父级"], "en_US": ["Changing an analytic plan parent"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
     },
     "asset.cancel": {
       "summary": {

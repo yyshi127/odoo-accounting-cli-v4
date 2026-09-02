@@ -63,8 +63,15 @@ CAPABILITIES = frozenset(
         "bank.transaction.match",
         "bank.transaction.unmatch",
         "reconciliation.write_off",
+        "analytic.plan.create",
+        "analytic.plan.update",
         "analytic.account.create",
         "analytic.account.update",
+        "analytic.account.archive",
+        "analytic.account.restore",
+        "analytic.line.create",
+        "analytic.line.update",
+        "analytic.line.delete",
         "budget.create",
         "budget.update_draft",
         "budget.lines.replace",
@@ -439,7 +446,21 @@ _IDEMPOTENCY_KEY_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$")
 _ASSET_METHODS = frozenset({"linear", "degressive", "degressive_then_linear"})
 _ASSET_PRORATA_TYPES = frozenset({"none", "constant_periods", "daily_computation"})
 _ASSET_BASE_NAME_MAXIMUM = 426
+_ANALYTIC_APPLICABILITIES = frozenset({"optional", "mandatory", "unavailable"})
+_ANALYTIC_PLAN_UPDATE_KEYS = frozenset(
+    {"name", "color", "default_applicability"}
+)
 _ANALYTIC_ACCOUNT_UPDATE_KEYS = frozenset({"name", "code", "partner_id", "active"})
+_ANALYTIC_LINE_UPDATE_KEYS = frozenset(
+    {
+        "name",
+        "date",
+        "amount",
+        "analytic_account_id",
+        "reference",
+        "unit_amount",
+    }
+)
 _BUDGET_UPDATE_KEYS = frozenset({"name", "date_from", "date_to", "budget_type"})
 _BUDGET_TYPES = frozenset({"revenue", "expense", "both"})
 _VISIBLE_MARKER_SUFFIX = re.compile(r"( \[ODACV4:[0-9a-f]{64}\])$")
@@ -701,8 +722,27 @@ _PARAMETER_KEYS = {
         "label",
         "expected_residual_amount",
     },
+    "analytic.plan.create": {
+        "name",
+        "parent_plan_id",
+        "color",
+        "default_applicability",
+    },
+    "analytic.plan.update": {"plan_id", "changes"},
     "analytic.account.create": {"name", "plan_id", "code", "partner_id"},
     "analytic.account.update": {"analytic_account_id", "changes"},
+    "analytic.account.archive": {"analytic_account_id"},
+    "analytic.account.restore": {"analytic_account_id"},
+    "analytic.line.create": {
+        "name",
+        "date",
+        "amount",
+        "analytic_account_id",
+        "reference",
+        "unit_amount",
+    },
+    "analytic.line.update": {"analytic_line_id", "changes"},
+    "analytic.line.delete": {"analytic_line_id"},
     "budget.create": {"name", "date_from", "date_to", "budget_type"},
     "budget.update_draft": {"budget_id", "changes"},
     "budget.lines.replace": {"budget_id", "lines"},
@@ -893,8 +933,15 @@ _GROUPS = {
     "bank.transaction.match": "account.group_account_user",
     "bank.transaction.unmatch": "account.group_account_user",
     "reconciliation.write_off": "account.group_account_user",
+    "analytic.plan.create": "account.group_account_user",
+    "analytic.plan.update": "account.group_account_user",
     "analytic.account.create": "account.group_account_user",
     "analytic.account.update": "account.group_account_user",
+    "analytic.account.archive": "account.group_account_user",
+    "analytic.account.restore": "account.group_account_user",
+    "analytic.line.create": "account.group_account_user",
+    "analytic.line.update": "account.group_account_user",
+    "analytic.line.delete": "account.group_account_user",
     "budget.create": "account.group_account_user",
     "budget.update_draft": "account.group_account_user",
     "budget.lines.replace": "account.group_account_user",
@@ -1264,6 +1311,8 @@ _MODELS = {
         "account.partial.reconcile",
         "account.full.reconcile",
     },
+    "analytic.plan.create": {"res.company", "account.analytic.plan"},
+    "analytic.plan.update": {"res.company", "account.analytic.plan"},
     "analytic.account.create": {
         "res.company",
         "res.partner",
@@ -1275,6 +1324,33 @@ _MODELS = {
         "res.partner",
         "account.analytic.plan",
         "account.analytic.account",
+    },
+    "analytic.account.archive": {
+        "res.company",
+        "account.analytic.plan",
+        "account.analytic.account",
+    },
+    "analytic.account.restore": {
+        "res.company",
+        "account.analytic.plan",
+        "account.analytic.account",
+    },
+    "analytic.line.create": {
+        "res.company",
+        "account.analytic.plan",
+        "account.analytic.account",
+        "account.analytic.line",
+    },
+    "analytic.line.update": {
+        "res.company",
+        "account.analytic.plan",
+        "account.analytic.account",
+        "account.analytic.line",
+    },
+    "analytic.line.delete": {
+        "res.company",
+        "account.analytic.account",
+        "account.analytic.line",
     },
     "budget.create": {"res.company", "budget.analytic", "budget.line"},
     "budget.update_draft": {"res.company", "budget.analytic", "budget.line"},
@@ -1746,6 +1822,14 @@ _ACCESS = {
         ("account.partial.reconcile", "create"),
         ("account.full.reconcile", "read"),
     },
+    "analytic.plan.create": {
+        ("account.analytic.plan", "read"),
+        ("account.analytic.plan", "create"),
+    },
+    "analytic.plan.update": {
+        ("account.analytic.plan", "read"),
+        ("account.analytic.plan", "write"),
+    },
     "analytic.account.create": {
         ("res.partner", "read"),
         ("account.analytic.plan", "read"),
@@ -1757,6 +1841,33 @@ _ACCESS = {
         ("account.analytic.plan", "read"),
         ("account.analytic.account", "read"),
         ("account.analytic.account", "write"),
+    },
+    "analytic.account.archive": {
+        ("account.analytic.plan", "read"),
+        ("account.analytic.account", "read"),
+        ("account.analytic.account", "write"),
+    },
+    "analytic.account.restore": {
+        ("account.analytic.plan", "read"),
+        ("account.analytic.account", "read"),
+        ("account.analytic.account", "write"),
+    },
+    "analytic.line.create": {
+        ("account.analytic.plan", "read"),
+        ("account.analytic.account", "read"),
+        ("account.analytic.line", "read"),
+        ("account.analytic.line", "create"),
+    },
+    "analytic.line.update": {
+        ("account.analytic.plan", "read"),
+        ("account.analytic.account", "read"),
+        ("account.analytic.line", "read"),
+        ("account.analytic.line", "write"),
+    },
+    "analytic.line.delete": {
+        ("account.analytic.account", "read"),
+        ("account.analytic.line", "read"),
+        ("account.analytic.line", "unlink"),
     },
     "budget.create": {
         ("budget.analytic", "read"),
@@ -3087,6 +3198,70 @@ def _valid_analytic_account_changes(changes: Any) -> bool:
     ):
         return False
     return "active" not in changes or isinstance(changes["active"], bool)
+
+
+def _valid_analytic_plan_values(values: Any, *, partial: bool) -> bool:
+    if (
+        not isinstance(values, dict)
+        or (partial and not values)
+        or not set(values) <= _ANALYTIC_PLAN_UPDATE_KEYS
+    ):
+        return False
+    if "name" in values and (
+        not _is_text(values["name"], maximum=200)
+        or "[ODACV4:" in values["name"]
+    ):
+        return False
+    if "color" in values:
+        color = values["color"]
+        if color is None:
+            if partial:
+                return False
+        elif (
+            not isinstance(color, int)
+            or isinstance(color, bool)
+            or color < 0
+        ):
+            return False
+    if "default_applicability" in values:
+        applicability = values["default_applicability"]
+        if applicability is None:
+            return not partial
+        return applicability in _ANALYTIC_APPLICABILITIES
+    return True
+
+
+def _valid_analytic_line_values(values: Any, *, partial: bool) -> bool:
+    if (
+        not isinstance(values, dict)
+        or (partial and not values)
+        or not set(values) <= _ANALYTIC_LINE_UPDATE_KEYS
+    ):
+        return False
+    if "name" in values and (
+        not _is_text(values["name"], maximum=200)
+        or "[ODACV4:" in values["name"]
+    ):
+        return False
+    if "date" in values and not _is_date(values["date"]):
+        return False
+    for field_name in ("amount", "unit_amount"):
+        if field_name in values:
+            parsed = _signed_decimal(values[field_name])
+            if (
+                parsed is None
+                or _canonical_decimal_text(parsed) != values[field_name]
+            ):
+                return False
+    if "analytic_account_id" in values and not _is_id(
+        values["analytic_account_id"]
+    ):
+        return False
+    return (
+        "reference" not in values
+        or values["reference"] is None
+        or _is_text(values["reference"], maximum=200)
+    )
 
 
 def _valid_budget_changes(changes: Any) -> bool:
@@ -4549,6 +4724,15 @@ def _valid_parameters(
             and expected is not None
             and expected != 0
         )
+    if capability_id == "analytic.plan.create":
+        return _is_id(parameters["parent_plan_id"]) and _valid_analytic_plan_values(
+            {key: value for key, value in parameters.items() if key != "parent_plan_id"},
+            partial=False,
+        )
+    if capability_id == "analytic.plan.update":
+        return _is_id(parameters["plan_id"]) and _valid_analytic_plan_values(
+            parameters["changes"], partial=True
+        )
     if capability_id == "analytic.account.create":
         return bool(
             _is_text(parameters["name"], maximum=200)
@@ -4563,6 +4747,16 @@ def _valid_parameters(
         return _is_id(parameters["analytic_account_id"]) and (
             _valid_analytic_account_changes(parameters["changes"])
         )
+    if capability_id in {"analytic.account.archive", "analytic.account.restore"}:
+        return _is_id(parameters["analytic_account_id"])
+    if capability_id == "analytic.line.create":
+        return _valid_analytic_line_values(parameters, partial=False)
+    if capability_id == "analytic.line.update":
+        return _is_id(parameters["analytic_line_id"]) and _valid_analytic_line_values(
+            parameters["changes"], partial=True
+        )
+    if capability_id == "analytic.line.delete":
+        return _is_id(parameters["analytic_line_id"])
     if capability_id == "budget.create":
         return bool(
             _is_text(parameters["name"], maximum=200)
@@ -4857,7 +5051,9 @@ def _deterministic_key(
         "bank.transaction.record",
         "asset.create",
         "payment.create",
+        "analytic.plan.create",
         "analytic.account.create",
+        "analytic.line.create",
         "budget.create",
         "account.account.create",
         "journal.create",
@@ -5001,6 +5197,16 @@ def _deterministic_key(
         return f"{capability_id}:{parameters['transaction_id']}:{digest}"
     if capability_id == "bank.transaction.unmatch":
         return f"bank.transaction.unmatch:{parameters['transaction_id']}"
+    if capability_id == "analytic.plan.update":
+        canonical = json.dumps(
+            parameters["changes"],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        return f"analytic.plan.update:{parameters['plan_id']}:{digest}"
     if capability_id == "analytic.account.update":
         canonical = json.dumps(
             parameters["changes"],
@@ -5011,6 +5217,20 @@ def _deterministic_key(
         ).encode("utf-8")
         digest = hashlib.sha256(canonical).hexdigest()[:32]
         return f"analytic.account.update:{parameters['analytic_account_id']}:{digest}"
+    if capability_id in {"analytic.account.archive", "analytic.account.restore"}:
+        return f"{capability_id}:{parameters['analytic_account_id']}"
+    if capability_id == "analytic.line.update":
+        canonical = json.dumps(
+            parameters["changes"],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        return f"analytic.line.update:{parameters['analytic_line_id']}:{digest}"
+    if capability_id == "analytic.line.delete":
+        return f"analytic.line.delete:{parameters['analytic_line_id']}"
     if capability_id in {"budget.update_draft", "budget.lines.replace"}:
         content = (
             parameters["changes"]
@@ -5623,6 +5843,24 @@ def _relation_id(value: Any) -> int | None:
     return record_id if _is_id(record_id) else None
 
 
+def _analytic_plan_result(plan: Any, company_id: int) -> dict[str, Any]:
+    result = {
+        "model": "account.analytic.plan",
+        "id": plan.id,
+        "name": plan.name or None,
+        "state": "active",
+        "company_id": company_id,
+        "move_type": None,
+        "source_id": _relation_id(plan.parent_id),
+        "line_ids": [],
+        "partial_reconcile_ids": [],
+        "full_reconcile_id": None,
+        "reconciled": False,
+    }
+    assert set(result) == _RESULT_KEYS
+    return result
+
+
 def _analytic_account_result(account: Any, company_id: int) -> dict[str, Any]:
     result = {
         "model": "account.analytic.account",
@@ -5632,6 +5870,26 @@ def _analytic_account_result(account: Any, company_id: int) -> dict[str, Any]:
         "company_id": company_id,
         "move_type": None,
         "source_id": account.plan_id.id,
+        "line_ids": [],
+        "partial_reconcile_ids": [],
+        "full_reconcile_id": None,
+        "reconciled": False,
+    }
+    assert set(result) == _RESULT_KEYS
+    return result
+
+
+def _analytic_line_result(
+    line: Any, company_id: int, *, state: str = "manual"
+) -> dict[str, Any]:
+    result = {
+        "model": "account.analytic.line",
+        "id": line.id,
+        "name": line.name or None,
+        "state": state,
+        "company_id": company_id,
+        "move_type": None,
+        "source_id": _relation_id(line.account_id),
         "line_ids": [],
         "partial_reconcile_ids": [],
         "full_reconcile_id": None,
@@ -5688,6 +5946,120 @@ def _analytic_plan(
             exit_code=4,
         )
     return plan
+
+
+def _analytic_plan_values(plan: Any) -> dict[str, Any]:
+    return {
+        "name": plan.name,
+        "color": plan.color,
+        "default_applicability": plan.default_applicability,
+    }
+
+
+def _analytic_plan_matches_create(
+    plan: Any,
+    parameters: dict[str, Any],
+    full_name: str,
+) -> bool:
+    return bool(
+        plan.name == full_name
+        and _relation_id(plan.parent_id) == parameters["parent_plan_id"]
+        and (
+            parameters["color"] is None
+            or plan.color == parameters["color"]
+        )
+        and (
+            parameters["default_applicability"] is None
+            or plan.default_applicability == parameters["default_applicability"]
+        )
+    )
+
+
+def _create_analytic_plan(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    key: str,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    parent = _analytic_plan(
+        env, parameters["parent_plan_id"], company_id, failure_type
+    )
+    suffix = _asset_marker_suffix(company_id, key)
+    full_name = f"{parameters['name']} {suffix}"
+    existing = _scoped(env, "account.analytic.plan", company_id).search(
+        [("name", "=like", f"% {suffix}")], limit=2
+    )
+    if existing:
+        if len(existing) != 1 or not _analytic_plan_matches_create(
+            existing, parameters, full_name
+        ):
+            raise _fail(
+                failure_type,
+                "idempotency_conflict",
+                "The analytic-plan marker already has different parameters.",
+                exit_code=5,
+            )
+        _analytic_plan(
+            env, _relation_id(existing.parent_id), company_id, failure_type
+        )
+        return _analytic_plan_result(existing, company_id), True
+
+    values: dict[str, Any] = {
+        "name": full_name,
+        "parent_id": parent.id,
+    }
+    for field_name in ("color", "default_applicability"):
+        if parameters[field_name] is not None:
+            values[field_name] = parameters[field_name]
+    plan = _scoped(env, "account.analytic.plan", company_id).create(values)
+    if (
+        len(plan) != 1
+        or not _analytic_plan_matches_create(plan, parameters, full_name)
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo returned an invalid analytic subplan.",
+            exit_code=6,
+        )
+    return _analytic_plan_result(plan, company_id), False
+
+
+def _update_analytic_plan(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    plan = _analytic_plan(env, parameters["plan_id"], company_id, failure_type)
+    if _relation_id(plan.parent_id) is None:
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Only an existing analytic subplan can be updated.",
+            exit_code=5,
+        )
+    actual = _analytic_plan_values(plan)
+    changes = dict(parameters["changes"])
+    if "name" in changes:
+        changes["name"] = _name_with_preserved_marker(plan.name, changes["name"])
+    target = {**actual, **changes}
+    if actual == target:
+        return _analytic_plan_result(plan, company_id), True
+    plan.write(changes)
+    plan.invalidate_recordset(list(changes))
+    if (
+        _relation_id(plan.parent_id) is None
+        or _analytic_plan_values(plan) != target
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not apply the analytic-subplan update.",
+            exit_code=6,
+        )
+    return _analytic_plan_result(plan, company_id), False
 
 
 def _validate_analytic_references(
@@ -5841,6 +6213,242 @@ def _update_analytic_account(
             exit_code=6,
         )
     return _analytic_account_result(account, company_id), False
+
+
+def _transition_analytic_account(
+    env: Any,
+    capability_id: str,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    account = _search_one(
+        env,
+        "account.analytic.account",
+        [
+            ("id", "=", parameters["analytic_account_id"]),
+            ("company_id", "=", company_id),
+        ],
+        company_id,
+        failure_type,
+    )
+    _analytic_plan(env, account.plan_id.id, company_id, failure_type)
+    target_active = capability_id == "analytic.account.restore"
+    if bool(account.active) is target_active:
+        return _analytic_account_result(account, company_id), True
+    account.write({"active": target_active})
+    account.invalidate_recordset(["active"])
+    if bool(account.active) is not target_active:
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not apply the analytic-account archive state.",
+            exit_code=6,
+        )
+    return _analytic_account_result(account, company_id), False
+
+
+def _analytic_line_account(
+    env: Any,
+    analytic_account_id: int,
+    company_id: int,
+    failure_type: type[Exception],
+) -> Any:
+    account = _search_one(
+        env,
+        "account.analytic.account",
+        [
+            ("id", "=", analytic_account_id),
+            ("company_id", "=", company_id),
+        ],
+        company_id,
+        failure_type,
+    )
+    root_plan = account.root_plan_id
+    if _relation_id(root_plan) is None or root_plan._column_name() != "account_id":
+        raise _fail(
+            failure_type,
+            "business_rule_error",
+            "Manual analytic lines currently support only the Project root plan.",
+            exit_code=6,
+        )
+    return account
+
+
+def _manual_analytic_line(
+    env: Any,
+    analytic_line_id: int,
+    company_id: int,
+    failure_type: type[Exception],
+) -> Any:
+    return _search_one(
+        env,
+        "account.analytic.line",
+        [
+            ("id", "=", analytic_line_id),
+            ("company_id", "=", company_id),
+            ("category", "=", "other"),
+            ("move_line_id", "=", False),
+            ("account_id", "!=", False),
+        ],
+        company_id,
+        failure_type,
+    )
+
+
+def _analytic_line_values(line: Any) -> dict[str, Any]:
+    return {
+        "name": line.name,
+        "date": str(line.date),
+        "amount": _canonical_decimal_text(line.amount),
+        "analytic_account_id": _relation_id(line.account_id),
+        "reference": line.ref or None,
+        "unit_amount": _canonical_decimal_text(line.unit_amount),
+    }
+
+
+def _analytic_line_write_values(values: dict[str, Any]) -> dict[str, Any]:
+    mapped: dict[str, Any] = {}
+    for field_name, value in values.items():
+        target_name = {
+            "analytic_account_id": "account_id",
+            "reference": "ref",
+        }.get(field_name, field_name)
+        if field_name in {"amount", "unit_amount"}:
+            mapped[target_name] = Decimal(value)
+        elif field_name == "reference" and value is None:
+            mapped[target_name] = False
+        else:
+            mapped[target_name] = value
+    return mapped
+
+
+def _create_analytic_line(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    key: str,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    _analytic_line_account(
+        env, parameters["analytic_account_id"], company_id, failure_type
+    )
+    suffix = _asset_marker_suffix(company_id, key)
+    full_name = f"{parameters['name']} {suffix}"
+    expected = {**parameters, "name": full_name}
+    existing = _scoped(env, "account.analytic.line", company_id).search(
+        [
+            ("company_id", "=", company_id),
+            ("name", "=like", f"% {suffix}"),
+        ],
+        limit=2,
+    )
+    if existing:
+        if (
+            len(existing) != 1
+            or existing.category != "other"
+            or existing.move_line_id
+            or _analytic_line_values(existing) != expected
+        ):
+            raise _fail(
+                failure_type,
+                "idempotency_conflict",
+                "The analytic-line marker already has different parameters.",
+                exit_code=5,
+            )
+        return _analytic_line_result(existing, company_id), True
+
+    values = _analytic_line_write_values(expected)
+    values.update(
+        {
+            "company_id": company_id,
+            "category": "other",
+            "move_line_id": False,
+        }
+    )
+    line = _scoped(env, "account.analytic.line", company_id).create(values)
+    if (
+        len(line) != 1
+        or line.company_id.id != company_id
+        or line.category != "other"
+        or line.move_line_id
+        or _analytic_line_values(line) != expected
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo returned an invalid manual analytic line.",
+            exit_code=6,
+        )
+    return _analytic_line_result(line, company_id), False
+
+
+def _update_analytic_line(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    line = _manual_analytic_line(
+        env, parameters["analytic_line_id"], company_id, failure_type
+    )
+    actual = _analytic_line_values(line)
+    changes = dict(parameters["changes"])
+    if "name" in changes:
+        changes["name"] = _name_with_preserved_marker(line.name, changes["name"])
+    target = {**actual, **changes}
+    _analytic_line_account(
+        env, target["analytic_account_id"], company_id, failure_type
+    )
+    if actual == target:
+        return _analytic_line_result(line, company_id), True
+    line.write(_analytic_line_write_values(changes))
+    line.invalidate_recordset(
+        [
+            {
+                "analytic_account_id": "account_id",
+                "reference": "ref",
+            }.get(field_name, field_name)
+            for field_name in changes
+        ]
+    )
+    if (
+        line.company_id.id != company_id
+        or line.category != "other"
+        or line.move_line_id
+        or _analytic_line_values(line) != target
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not apply the manual analytic-line update.",
+            exit_code=6,
+        )
+    return _analytic_line_result(line, company_id), False
+
+
+def _delete_analytic_line(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    line = _manual_analytic_line(
+        env, parameters["analytic_line_id"], company_id, failure_type
+    )
+    result = _analytic_line_result(line, company_id, state="deleted")
+    line_id = line.id
+    line.unlink()
+    if _scoped(env, "account.analytic.line", company_id).search_count(
+        [("id", "=", line_id)], limit=1
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not delete the manual analytic line.",
+            exit_code=6,
+        )
+    return result, False
 
 
 def _budget_values(budget: Any) -> dict[str, Any]:
@@ -14590,10 +15198,24 @@ def _dispatch_allowed(
         return _transition_partner_bank(
             env, capability_id, parameters, company_id, failure_type
         )
+    if capability_id == "analytic.plan.create":
+        return _create_analytic_plan(env, parameters, company_id, key, failure_type)
+    if capability_id == "analytic.plan.update":
+        return _update_analytic_plan(env, parameters, company_id, failure_type)
     if capability_id == "analytic.account.create":
         return _create_analytic_account(env, parameters, company_id, key, failure_type)
     if capability_id == "analytic.account.update":
         return _update_analytic_account(env, parameters, company_id, failure_type)
+    if capability_id in {"analytic.account.archive", "analytic.account.restore"}:
+        return _transition_analytic_account(
+            env, capability_id, parameters, company_id, failure_type
+        )
+    if capability_id == "analytic.line.create":
+        return _create_analytic_line(env, parameters, company_id, key, failure_type)
+    if capability_id == "analytic.line.update":
+        return _update_analytic_line(env, parameters, company_id, failure_type)
+    if capability_id == "analytic.line.delete":
+        return _delete_analytic_line(env, parameters, company_id, failure_type)
     if capability_id == "budget.create":
         return _create_budget(env, parameters, company_id, key, failure_type)
     if capability_id == "budget.update_draft":

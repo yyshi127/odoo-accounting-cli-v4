@@ -1,32 +1,32 @@
 # Execution status
 
-## Current accounting phase — 2026-09-01
+## Current accounting phase — 2026-09-02
 
 The active objective is capability-first accounting delivery in
 [GOAL_SUMMARY.md](GOAL_SUMMARY.md). Historical sales, purchasing and inventory
 logistics are outside this phase; picking and physical-return commands are not
 accounting-core completion. Financial credit notes/refunds remain in scope.
 
-The current registry has 366 IDs, 351 enabled handlers (214 reads, 137 writes),
-and 708 schemas. Statuses are 314 `unconfigured`, 37 `degraded`, and 15 `disabled`.
+The current registry has 374 IDs, 359 enabled handlers (215 reads, 144 writes),
+and 724 schemas. Statuses are 318 `unconfigured`, 41 `degraded`, and 15 `disabled`.
 These are implementation totals including historical non-accounting extensions,
-not 366 accounting operations, a coverage percentage, or proof that all workflows
+not 374 accounting operations, a coverage percentage, or proof that all workflows
 pass for the configured user. There are 16 `stock.*` IDs, but other historical
 sales/purchase extensions also remain; subtracting 16 does not establish a
 pure-accounting count or a coverage denominator. Registry SHA-256:
-`4a80f295b9b0008fee915af6d7612e8f7a2067099009fc40bd3e0e8d1b71f7df`.
+`ab1e11c994f6c3d27c4eaa310e04f4967c5c9c3f275a3fcde0dbf9f1c2ba0992`.
 
-The latest batch adds no capability ID or handler. It deepens nine existing
-lifecycle commands: `invoice.post/cancel/reset_to_draft`,
-`journal_entry.post/cancel/reset_to_draft`, and
-`payment.post/cancel/reset_to_draft`. Their singular `move_id` or `payment_id`
-contracts remain available; plural requests accept 2-100 distinct positive IDs,
-normalize them into sorted order, bind the complete normalized set into the
-deterministic key, preflight the complete record/company/type/state scope, and
-return explicit sorted `items` plus `processed_count`. All transitions share one
-outer database transaction. Payment actions run per singleton only after the full
-preflight because the installed `exchange_currency_rate` add-on has a confirmed
-multi-record `account.move` constraint defect; the add-on itself was not changed.
+The latest batch adds eight real analytic-accounting commands:
+`analytic.plan.create/update`, `analytic.account.archive/restore`,
+`analytic.line.create/update/delete`, and `analytic.line.summary`. Plan writes are
+limited to child plans. Manual line writes use the Project root plan and exclude
+accounting-generated lines; the summary follows Odoo 19's dynamic plan column and
+can filter by plan and analytic account. Decimal inputs are canonical signed
+strings, delete is honestly degraded because no tombstone exists, and the batch
+reuses the existing analytic/budget runtime and one shared transactional smoke.
+
+The preceding batch added no capability ID or handler. It deepened nine existing
+invoice, journal-entry and payment post/cancel/reset commands with plural forms.
 
 Final local scope, payment-runtime, lifecycle-contract and registry verification
 passed 181 cases in 332.51 seconds. The server had already passed 286 focused cases
@@ -1237,3 +1237,56 @@ command was issued. Root filesystem use remains 96%, with about 3.6 GB free.
 This checkpoint proves one positive, untaxed, full-settlement USD/CNY workflow;
 it does not prove partial settlement, early-payment discount, write-off,
 multi-company, arbitrary currencies, or complete accounting coverage.
+
+## Analytic plan, account, and manual-line lifecycle checkpoint — 2026-09-02
+
+Starting from pushed baseline `b8eda33b0b6f6caeedd2f616216ad5e968bdfcbe`,
+this batch adds eight capabilities: `analytic.plan.create/update`,
+`analytic.account.archive/restore`, `analytic.line.create/update/delete`, and
+`analytic.line.summary`. The authoritative totals are now 374 IDs, 359 enabled
+handlers (215 reads and 144 writes), 724 schemas, 318 `unconfigured`, 41
+`degraded`, and 15 `disabled`. The capability-ID-list SHA-256 is
+`ab1e11c994f6c3d27c4eaa310e04f4967c5c9c3f275a3fcde0dbf9f1c2ba0992`;
+the canonical registry digest is
+`77325bffca94023803ce765b6a30d8fb3d2b913d2f43b91ab9986d30fcce25bc`.
+
+Plan writes only create or update child plans. Account state changes are company
+scoped. Manual line writes are restricted to the Project root plan,
+`category=other`, and `move_line_id=False`; they do not mutate accounting-generated
+lines. Summary reads use Odoo 19's dynamic analytic-plan column and aggregate
+canonical amount and unit-amount strings by analytic account. Create uses a
+visible deterministic marker without claiming concurrent exactly-once behavior.
+Delete verifies absence but has no tombstone, so later retries honestly return
+`record_not_found` instead of pretending to replay.
+
+Final local selections passed 119 core/public/runtime cases, 28 CLI cases, and
+11 affected schema/contract cases; Ruff, Python compilation, and `git diff
+--check` passed. On the synchronized server, collect-only found one guarded live
+case, the final fast selection passed `148 passed in 148.17s`, and the slow
+registry/schema closure passed `4 passed in 186.80s`. The shared real-ORM test
+passed both `v4-dev` / `odoo_cli_v4_dev` and `v4-e2e` / `odoo_cli_v4_e2e` in one
+pytest case: `1 passed in 10.64s`. Per alias it exercised all eight new commands
+inside the existing 17-capability analytic/budget chain as uid 5, company 1, and
+`su=False`. A savepoint proved that line deletion rolls back to a restored row;
+the outer transaction then rolled back and a fresh cursor proved all marked plan,
+account, line, budget, and budget-line records absent.
+
+Private evidence directory:
+`/opt/odoo-accounting-cli-v4/.tooling/analytic-lifecycle-20260902-W54c2yQO`.
+The 35-file deployment archive is 2652160 bytes with SHA-256
+`b38659ebdccfe04ee923c1f3806aeb0b420c347fb24144f1642fef8dc405c7f3`;
+all deployed files were rehashed unchanged after acceptance. The pre-sync backup
+contains 19 existing files. Fast, registry, collect, and live log SHA-256 values
+are respectively
+`9416afd3ec73a8c2a55436c18f8e8d1455fc5f7d7cd40c0df8c7dfa9b06b045a`,
+`450ab25e22f875a58368c7b4e52cc16aaa65c9da1021a922c12c1b760cb97adb`,
+`0ef55d33e8e19da0af221a2572360fd4e639bbf56d0c1b6755728213b82dba18`,
+and `f81b8b08942e88c5bdf8ce7e89f2bd10fd5e96c512d37a7395f767a97d68564a`.
+
+No service-control command was issued. Odoo nevertheless exited automatically at
+10:25:36 with the server's existing `ModuleNotFoundError: passlib` environment
+problem and systemd restarted it at 10:25:46. That event happened before live
+acceptance and is not attributed to this CLI batch. Live-before, live-after, and
+final snapshots are byte-identical: Odoo PID `959127`, `NRestarts=1`, with Odoo,
+Nginx, and PostgreSQL active. No live worker remains. Root disk use remains 96%
+with about 3.5 GB free.

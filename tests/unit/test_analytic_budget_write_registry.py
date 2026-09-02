@@ -17,8 +17,15 @@ from odoo_accounting_cli_v4.bridge.core_writes_runtime import (
 from odoo_accounting_cli_v4.registry import InstanceValidationError, load_registry
 
 BATCH_IDS = {
+    "analytic.plan.create",
+    "analytic.plan.update",
     "analytic.account.create",
     "analytic.account.update",
+    "analytic.account.archive",
+    "analytic.account.restore",
+    "analytic.line.create",
+    "analytic.line.update",
+    "analytic.line.delete",
     "budget.cancel",
     "budget.confirm",
     "budget.create",
@@ -27,13 +34,21 @@ BATCH_IDS = {
     "budget.reset_to_draft",
     "budget.update_draft",
 }
+ANALYTIC_LIFECYCLE_IDS = {
+    "analytic.plan.create",
+    "analytic.plan.update",
+    "analytic.account.archive",
+    "analytic.account.restore",
+    "analytic.line.create",
+    "analytic.line.update",
+    "analytic.line.delete",
+}
 LIFECYCLE_IDS = {
     "budget.cancel",
     "budget.confirm",
     "budget.mark_done",
     "budget.reset_to_draft",
 }
-CREATE_IDS = {"analytic.account.create", "budget.create"}
 UNIT_REFERENCES = [
     "tests/unit/test_analytic_budget_writes.py",
     "tests/unit/test_analytic_budget_writes_runtime.py",
@@ -42,9 +57,13 @@ UNIT_REFERENCES = [
 ]
 INTEGRATION_REFERENCE = "tests/integration/test_analytic_budget_write_batch_live.py"
 DEGRADED_REASON_CODES = {
+    "analytic.plan.create": "database_global_record_scope",
+    "analytic.plan.update": "database_global_record_scope",
     "analytic.account.create": (
         "odoo_native_analytic_account_idempotency_field_unavailable"
     ),
+    "analytic.line.create": "odoo_native_analytic_line_idempotency_field_unavailable",
+    "analytic.line.delete": "deleted_record_tombstone_unavailable",
     "budget.create": "odoo_native_budget_idempotency_field_unavailable",
 }
 
@@ -80,13 +99,13 @@ def _assert_invalid(capability_id: str, parameters: dict[str, object]) -> None:
 def test_batch_registry_metadata_and_cumulative_counts_are_exact() -> None:
     registry = load_registry()
 
-    assert len(registry.ids()) == 366
+    assert len(registry.ids()) == 374
     assert (
         sum(
             registry.describe(capability_id)["handler_key"] is not None
             for capability_id in registry.ids()
         )
-        == 351
+        == 359
     )
     assert (
         sum(
@@ -94,7 +113,7 @@ def test_batch_registry_metadata_and_cumulative_counts_are_exact() -> None:
             and registry.describe(capability_id)["access"] == "read"
             for capability_id in registry.ids()
         )
-        == 214
+        == 215
     )
     assert (
         sum(
@@ -102,7 +121,7 @@ def test_batch_registry_metadata_and_cumulative_counts_are_exact() -> None:
             and registry.describe(capability_id)["access"] == "write"
             for capability_id in registry.ids()
         )
-        == 137
+        == 144
     )
     assert (
         sum(
@@ -116,34 +135,46 @@ def test_batch_registry_metadata_and_cumulative_counts_are_exact() -> None:
             registry.describe(capability_id)["status"]["value"] == "unconfigured"
             for capability_id in registry.ids()
         )
-        == 314
+        == 318
     )
     assert (
         sum(
             registry.describe(capability_id)["status"]["value"] == "degraded"
             for capability_id in registry.ids()
         )
-        == 37
+        == 41
     )
 
     for capability_id in BATCH_IDS:
         descriptor = registry.describe(capability_id)
         assert descriptor["access"] == "write"
         assert descriptor["handler_key"] == "core_write"
-        if capability_id in CREATE_IDS:
+        if capability_id in DEGRADED_REASON_CODES:
             assert descriptor["status"]["value"] == "degraded"
             assert (
                 descriptor["status"]["reason_code"]
                 == DEGRADED_REASON_CODES[capability_id]
             )
-            assert "visible deterministic name suffix" in descriptor["status"]["reason"]
-            assert "concurrent exactly-once" in descriptor["status"]["reason"]
-            assert "visible_odoo_" in descriptor["strategies"]["idempotency"]
+            if capability_id in {
+                "analytic.account.create",
+                "analytic.line.create",
+                "budget.create",
+            }:
+                assert "concurrent exactly-once" in descriptor["status"]["reason"]
+                assert "visible_odoo_" in descriptor["strategies"]["idempotency"]
+            elif capability_id.startswith("analytic.plan."):
+                assert "database-global" in descriptor["status"]["reason"]
+            else:
+                assert "tombstone" in descriptor["status"]["reason"]
         else:
             assert descriptor["status"]["value"] == "unconfigured"
             assert descriptor["status"]["reason_code"] == "runtime_context_required"
             assert "result_replay" not in descriptor["strategies"]["idempotency"]
-            assert "current_" in descriptor["strategies"]["idempotency"]
+            idempotency = descriptor["strategies"]["idempotency"]
+            if capability_id in ANALYTIC_LIFECYCLE_IDS:
+                assert idempotency.startswith("target_")
+            else:
+                assert "current_" in idempotency
         assert descriptor["requirements"]["groups"] == [
             CORE_WRITE_GROUPS[capability_id]
         ]
@@ -156,23 +187,35 @@ def test_batch_registry_metadata_and_cumulative_counts_are_exact() -> None:
             "request": f"schemas/v1/{capability_id}.request.schema.json",
             "response": f"schemas/v1/{capability_id}.response.schema.json",
         }
-        assert descriptor["tests"]["unit"] == {
-            "status": "implemented",
-            "references": UNIT_REFERENCES,
-            "reason": "Unit tests cover the closed public contract, fixed runtime execution, deterministic idempotency, visible marker behavior, registry schemas, and CLI dispatch.",
-        }
+        unit_evidence = descriptor["tests"]["unit"]
+        assert unit_evidence["status"] == "implemented"
+        assert unit_evidence["references"] == UNIT_REFERENCES
+        if capability_id in ANALYTIC_LIFECYCLE_IDS:
+            assert "Focused unit tests" in unit_evidence["reason"]
+            assert "registry metadata" in unit_evidence["reason"]
+        else:
+            assert unit_evidence["reason"] == (
+                "Unit tests cover the closed public contract, fixed runtime execution, "
+                "deterministic idempotency, visible marker behavior, registry schemas, "
+                "and CLI dispatch."
+            )
         assert descriptor["tests"]["integration"]["status"] == "implemented"
         assert descriptor["tests"]["integration"]["references"] == [
             INTEGRATION_REFERENCE
         ]
-        assert "immediate replay" in descriptor["tests"]["integration"]["reason"]
+        integration_reason = descriptor["tests"]["integration"]["reason"]
+        if capability_id == "analytic.line.delete":
+            assert "record absence" in integration_reason
+            assert "immediate replay" not in integration_reason
+        else:
+            assert "immediate replay" in integration_reason
 
 
-def test_batch_has_exactly_eighteen_closed_public_schema_files() -> None:
+def test_batch_has_closed_public_schema_files() -> None:
     registry = load_registry()
     schema_root = Path(__file__).resolve().parents[2] / "schemas" / "v1"
 
-    assert len(list(schema_root.glob("*.schema.json"))) == 708
+    assert len(list(schema_root.glob("*.schema.json"))) == 724
     for capability_id in BATCH_IDS:
         descriptor = registry.describe(capability_id)
         request_schema = registry.load_schema(descriptor["schemas"]["request"])
@@ -243,6 +286,91 @@ def test_analytic_account_request_schemas_freeze_exact_fields() -> None:
             "analytic.account.update",
             {"analytic_account_id": 7, "changes": changes},
         )
+
+
+def test_analytic_plan_account_state_and_manual_line_schemas_are_closed() -> None:
+    _validate(
+        "analytic.plan.create",
+        {
+            "name": "Delivery",
+            "parent_plan_id": 3,
+            "color": 4,
+            "default_applicability": "mandatory",
+        },
+    )
+    _validate(
+        "analytic.plan.update",
+        {"plan_id": 7, "changes": {"name": "Delivery East", "color": 5}},
+    )
+    for capability_id in ("analytic.account.archive", "analytic.account.restore"):
+        _validate(capability_id, {"analytic_account_id": 9})
+    _validate(
+        "analytic.line.create",
+        {
+            "name": "Manual adjustment",
+            "date": "2026-09-01",
+            "amount": "-10.5",
+            "analytic_account_id": 9,
+            "reference": None,
+            "unit_amount": "2.5",
+        },
+    )
+    _validate(
+        "analytic.line.update",
+        {
+            "analytic_line_id": 17,
+            "changes": {
+                "amount": "10",
+                "analytic_account_id": 10,
+                "reference": "Correction",
+            },
+        },
+    )
+    _validate("analytic.line.delete", {"analytic_line_id": 17})
+
+    invalid = [
+        ("analytic.plan.create", {"name": "Root", "parent_plan_id": 0}),
+        ("analytic.plan.update", {"plan_id": 7, "changes": {}}),
+        (
+            "analytic.account.archive",
+            {"analytic_account_id": 9, "force": True},
+        ),
+        (
+            "analytic.line.create",
+            {
+                "name": "Manual",
+                "date": "2026-09-01",
+                "amount": 10,
+                "analytic_account_id": 9,
+            },
+        ),
+        (
+            "analytic.line.update",
+            {"analytic_line_id": 17, "changes": {"amount": "1e2"}},
+        ),
+        (
+            "analytic.line.update",
+            {"analytic_line_id": 17, "changes": {"amount": "1.0"}},
+        ),
+        (
+            "analytic.line.update",
+            {"analytic_line_id": 17, "changes": {"unit_amount": "-0"}},
+        ),
+        ("analytic.line.delete", {"analytic_line_id": True}),
+    ]
+    for capability_id, parameters in invalid:
+        _assert_invalid(capability_id, parameters)
+
+
+def test_analytic_line_summary_schema_accepts_omitted_or_null_account_filter() -> None:
+    parameters = {
+        "date_from": "2026-09-01",
+        "date_to": "2026-09-30",
+        "plan_id": 3,
+    }
+    _validate("analytic.line.summary", parameters)
+    _validate("analytic.line.summary", {**parameters, "analytic_account_id": None})
+    _assert_invalid("analytic.line.summary", {**parameters, "analytic_account_id": 0})
 
 
 def test_budget_create_update_and_lines_schemas_freeze_exact_fields() -> None:

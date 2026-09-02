@@ -9,7 +9,11 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 
 JOURNAL_ANALYSIS_CAPABILITY_IDS = frozenset(
-    {"journal.accounting_date.resolve", "journal_item.analysis.summary"}
+    {
+        "analytic.line.summary",
+        "journal.accounting_date.resolve",
+        "journal_item.analysis.summary",
+    }
 )
 GROUP_BY_VALUES = frozenset({"account", "journal"})
 _DECIMAL_PATTERN = re.compile(r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
@@ -159,6 +163,27 @@ def validate_journal_analysis_request(
             )
         return request_id, context, dict(parameters)
 
+    if capability_id == "analytic.line.summary":
+        required = {"date_from", "date_to", "plan_id"}
+        if (
+            not required <= set(parameters) <= required | {"analytic_account_id"}
+            or not _canonical_date(parameters.get("date_from"))
+            or not _canonical_date(parameters.get("date_to"))
+            or parameters["date_from"] > parameters["date_to"]
+            or not _positive_id(parameters.get("plan_id"))
+            or (
+                parameters.get("analytic_account_id") is not None
+                and not _positive_id(parameters["analytic_account_id"])
+            )
+        ):
+            raise _invalid(
+                "parameters must contain an ordered date range, plan_id, and optional analytic_account_id."
+            )
+        return request_id, context, {
+            **parameters,
+            "analytic_account_id": parameters.get("analytic_account_id"),
+        }
+
     if (
         set(parameters) != {"date_from", "date_to", "group_by"}
         or not _canonical_date(parameters.get("date_from"))
@@ -274,7 +299,9 @@ def _valid_resolution(
     )
 
 
-def _valid_summary(value: Any, *, company_id: int, parameters: dict[str, Any]) -> bool:
+def _valid_journal_summary(
+    value: Any, *, company_id: int, parameters: dict[str, Any]
+) -> bool:
     if not isinstance(value, dict) or set(value) != {
         "company_id",
         "date_from",
@@ -329,6 +356,94 @@ def _valid_summary(value: Any, *, company_id: int, parameters: dict[str, Any]) -
     return all(amounts[key] == _decimal(totals[key]) for key in _AMOUNT_KEYS)
 
 
+def _named_ref(value: Any) -> bool:
+    return bool(
+        isinstance(value, dict)
+        and set(value) == {"id", "name"}
+        and _positive_id(value["id"])
+        and _text(value["name"])
+    )
+
+
+def _analytic_account_ref(value: Any) -> bool:
+    return bool(
+        isinstance(value, dict)
+        and set(value) == {"id", "name", "code"}
+        and _positive_id(value["id"])
+        and _text(value["name"])
+        and (value["code"] is None or _text(value["code"]))
+    )
+
+
+def _valid_analytic_summary(
+    value: Any, *, company_id: int, parameters: dict[str, Any]
+) -> bool:
+    if not isinstance(value, dict) or set(value) != {
+        "company_id",
+        "date_from",
+        "date_to",
+        "basis",
+        "group_by",
+        "plan",
+        "company_currency",
+        "groups",
+        "totals",
+    }:
+        return False
+    groups = value["groups"]
+    totals = value["totals"]
+    if not (
+        value["company_id"] == company_id
+        and value["date_from"] == parameters["date_from"]
+        and value["date_to"] == parameters["date_to"]
+        and value["basis"] == "analytic_lines"
+        and value["group_by"] == "analytic_account"
+        and _named_ref(value["plan"])
+        and value["plan"]["id"] == parameters["plan_id"]
+        and _currency(value["company_currency"])
+        and isinstance(groups, list)
+        and isinstance(totals, dict)
+        and set(totals) == {"row_count", "amount", "unit_amount"}
+        and _integer(totals["row_count"])
+        and totals["row_count"] >= 0
+        and _decimal(totals["amount"]) is not None
+        and _decimal(totals["unit_amount"]) is not None
+    ):
+        return False
+
+    ids: list[int] = []
+    row_count = 0
+    amount = Decimal(0)
+    unit_amount = Decimal(0)
+    for group in groups:
+        if not (
+            isinstance(group, dict)
+            and set(group)
+            == {"analytic_account", "row_count", "amount", "unit_amount"}
+            and _analytic_account_ref(group["analytic_account"])
+            and _integer(group["row_count"])
+            and group["row_count"] > 0
+            and _decimal(group["amount"]) is not None
+            and _decimal(group["unit_amount"]) is not None
+        ):
+            return False
+        ids.append(group["analytic_account"]["id"])
+        row_count += group["row_count"]
+        amount += _decimal(group["amount"]) or Decimal(0)
+        unit_amount += _decimal(group["unit_amount"]) or Decimal(0)
+    if ids != sorted(set(ids)) or row_count != totals["row_count"]:
+        return False
+    if parameters["analytic_account_id"] is not None and ids not in (
+        [],
+        [parameters["analytic_account_id"]],
+    ):
+        return False
+    return bool(
+        amount == _decimal(totals["amount"])
+        and unit_amount == _decimal(totals["unit_amount"])
+    )
+
+
 def read_journal_analysis(
     port: JournalAnalysisPort, capability_id: str, request: Any
 ) -> dict[str, Any]:
@@ -359,7 +474,20 @@ def read_journal_analysis(
             raise _failed("Odoo returned an invalid accounting-date resolution.")
         return page["items"][0]
 
-    if not page["items"] or not _valid_summary(
+    if capability_id == "analytic.line.summary":
+        if not page["items"]:
+            raise JournalAnalysisReadError(
+                "record_not_found",
+                "The requested analytic plan or account was not found.",
+                exit_code=4,
+            )
+        if not _valid_analytic_summary(
+            page["items"][0], company_id=context["company_id"], parameters=parameters
+        ):
+            raise _failed("Odoo returned an invalid analytic-line summary.")
+        return page["items"][0]
+
+    if not page["items"] or not _valid_journal_summary(
         page["items"][0], company_id=context["company_id"], parameters=parameters
     ):
         raise _failed("Odoo returned an invalid journal-item analysis summary.")

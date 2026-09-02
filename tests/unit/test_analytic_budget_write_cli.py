@@ -9,6 +9,7 @@ import pytest
 
 from odoo_accounting_cli_v4 import cli
 from odoo_accounting_cli_v4.bridge.core_writes import OdooCoreWritePort
+from odoo_accounting_cli_v4.registry import load_registry
 
 CAPABILITIES = {
     "analytic.account.create",
@@ -57,6 +58,16 @@ BUDGET_STATES = {
     "budget.reset_to_draft": "draft",
     "budget.cancel": "canceled",
     "budget.mark_done": "done",
+}
+
+ANALYTIC_LIFECYCLE_MODELS = {
+    "analytic.plan.create": "account.analytic.plan",
+    "analytic.plan.update": "account.analytic.plan",
+    "analytic.account.archive": "account.analytic.account",
+    "analytic.account.restore": "account.analytic.account",
+    "analytic.line.create": "account.analytic.line",
+    "analytic.line.update": "account.analytic.line",
+    "analytic.line.delete": "account.analytic.line",
 }
 
 
@@ -197,3 +208,32 @@ def test_configured_factory_routes_analytic_budget_writes_to_core_port(
     port = cli._configured_port_factory(capability_id, _request(capability_id))
     assert type(port) is OdooCoreWritePort
     assert port._client is client
+
+
+def test_cli_wires_each_analytic_lifecycle_write_to_the_core_port(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = load_registry()
+    target = object()
+    client = object()
+
+    class RuntimeConfig:
+        def resolve(self, database: str, company_id: int, user_login: str) -> object:
+            assert (database, company_id, user_login) == (
+                "odoo_cli_v4_dev",
+                7,
+                "v4-agent",
+            )
+            return target
+
+    monkeypatch.setattr(cli, "load_runtime_config", lambda _path: RuntimeConfig())
+    monkeypatch.setattr(cli, "OdooBridgeClient", lambda *_args, **_kwargs: client)
+    request = _request("analytic.account.create")
+
+    for capability_id, model in ANALYTIC_LIFECYCLE_MODELS.items():
+        descriptor = registry.describe(capability_id)
+        assert descriptor["handler_key"] == "core_write"
+        assert cli._CAPABILITY_MODELS[capability_id] == model
+        port = cli._configured_port_factory(capability_id, request)
+        assert type(port) is OdooCoreWritePort
+        assert port._client is client

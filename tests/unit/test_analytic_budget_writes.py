@@ -62,6 +62,37 @@ BUDGET_STATES = {
     "budget.mark_done": "done",
 }
 
+ANALYTIC_LIFECYCLE_PARAMETERS = {
+    "analytic.plan.create": {"name": "Delivery", "parent_plan_id": 11},
+    "analytic.plan.update": {
+        "plan_id": 12,
+        "changes": {
+            "name": "Delivery East",
+            "color": 4,
+            "default_applicability": "mandatory",
+        },
+    },
+    "analytic.account.archive": {"analytic_account_id": 21},
+    "analytic.account.restore": {"analytic_account_id": 21},
+    "analytic.line.create": {
+        "name": "Manual adjustment",
+        "date": "2026-09-01",
+        "amount": "-10.5",
+        "analytic_account_id": 21,
+    },
+    "analytic.line.update": {
+        "analytic_line_id": 31,
+        "changes": {
+            "name": "Manual adjustment revised",
+            "amount": "10",
+            "unit_amount": "2.5",
+            "analytic_account_id": 22,
+            "reference": None,
+        },
+    },
+    "analytic.line.delete": {"analytic_line_id": 31},
+}
+
 
 def _request(capability_id: str) -> dict:
     return {
@@ -349,3 +380,156 @@ def test_budget_confirm_accepts_revised_state() -> None:
         capability_id,
     )
     assert data["result"]["state"] == "revised"
+
+
+def _analytic_lifecycle_request(capability_id: str) -> dict:
+    request = _request("analytic.account.create")
+    request["parameters"] = deepcopy(ANALYTIC_LIFECYCLE_PARAMETERS[capability_id])
+    return request
+
+
+def _analytic_lifecycle_key(capability_id: str) -> str:
+    parameters = ANALYTIC_LIFECYCLE_PARAMETERS[capability_id]
+    if capability_id in {"analytic.plan.create", "analytic.line.create"}:
+        return f"{capability_id}:client-request-0001"
+    if capability_id == "analytic.plan.update":
+        return f"{capability_id}:12:{_digest(parameters['changes'])}"
+    if capability_id.startswith("analytic.account."):
+        return f"{capability_id}:21"
+    if capability_id == "analytic.line.update":
+        return f"{capability_id}:31:{_digest(parameters['changes'])}"
+    return f"{capability_id}:31"
+
+
+def _analytic_lifecycle_result(capability_id: str) -> dict:
+    if capability_id.startswith("analytic.plan."):
+        model = "account.analytic.plan"
+        record_id = 901 if capability_id.endswith("create") else 12
+        name = "Delivery" if capability_id.endswith("create") else "Delivery East"
+        state = "active"
+        source_id = 11
+    elif capability_id.startswith("analytic.account."):
+        model = "account.analytic.account"
+        record_id = 21
+        name = "Project A"
+        state = "archived" if capability_id.endswith("archive") else "active"
+        source_id = 11
+    else:
+        model = "account.analytic.line"
+        record_id = 902 if capability_id.endswith("create") else 31
+        name = (
+            "Manual adjustment revised"
+            if capability_id.endswith("update")
+            else "Manual adjustment"
+        )
+        state = "deleted" if capability_id.endswith("delete") else "manual"
+        source_id = 22 if capability_id.endswith("update") else 21
+    return {
+        "model": model,
+        "id": record_id,
+        "name": name,
+        "state": state,
+        "company_id": 7,
+        "move_type": None,
+        "source_id": source_id,
+        "line_ids": [],
+        "partial_reconcile_ids": [],
+        "full_reconcile_id": None,
+        "reconciled": False,
+    }
+
+
+class AnalyticLifecyclePort:
+    user_id = 42
+
+    def __init__(self, capability_id: str) -> None:
+        self.capability_id = capability_id
+        self.calls: list[dict] = []
+
+    def execute(self, **kwargs) -> dict:
+        self.calls.append(deepcopy(kwargs))
+        return {
+            "user_id": 42,
+            "company_visible": True,
+            "module_installed": True,
+            "access_allowed": True,
+            "idempotent_replay": False,
+            "result": _analytic_lifecycle_result(self.capability_id),
+        }
+
+
+@pytest.mark.parametrize("capability_id", sorted(ANALYTIC_LIFECYCLE_PARAMETERS))
+def test_analytic_lifecycle_contract_normalizes_and_dispatches(
+    capability_id: str,
+) -> None:
+    assert capability_id in CORE_WRITE_CAPABILITY_IDS
+    request = _analytic_lifecycle_request(capability_id)
+    _, _, normalized = validate_core_write_request(capability_id, request)
+    if capability_id == "analytic.plan.create":
+        assert normalized == {
+            "parent_plan_id": 11,
+            "name": "Delivery",
+            "color": None,
+            "default_applicability": None,
+        }
+    if capability_id == "analytic.line.create":
+        assert normalized == {
+            **ANALYTIC_LIFECYCLE_PARAMETERS[capability_id],
+            "reference": None,
+            "unit_amount": "0",
+        }
+
+    port = AnalyticLifecyclePort(capability_id)
+    data = execute_core_write(
+        port,
+        capability_id,
+        request,
+        _analytic_lifecycle_key(capability_id),
+        capability_id,
+    )
+    assert data == {
+        "idempotent_replay": False,
+        "result": _analytic_lifecycle_result(capability_id),
+    }
+    assert port.calls[0]["parameters"] == normalized
+    assert port.calls[0]["company_id"] == 7
+
+
+@pytest.mark.parametrize(
+    ("capability_id", "parameters"),
+    [
+        ("analytic.plan.create", {"name": "Root", "parent_plan_id": None}),
+        ("analytic.plan.update", {"plan_id": 12, "changes": {}}),
+        ("analytic.account.archive", {"analytic_account_id": 21, "force": True}),
+        (
+            "analytic.line.create",
+            {
+                "name": "Manual",
+                "date": "2026-09-01",
+                "amount": 10,
+                "analytic_account_id": 21,
+            },
+        ),
+        (
+            "analytic.line.update",
+            {"analytic_line_id": 31, "changes": {"amount": "1e2"}},
+        ),
+        (
+            "analytic.line.update",
+            {"analytic_line_id": 31, "changes": {"amount": "1.0"}},
+        ),
+        (
+            "analytic.line.update",
+            {"analytic_line_id": 31, "changes": {"unit_amount": "-0"}},
+        ),
+        ("analytic.line.delete", {"analytic_line_id": True}),
+    ],
+)
+def test_analytic_lifecycle_contract_is_closed(
+    capability_id: str, parameters: dict
+) -> None:
+    request = _analytic_lifecycle_request(capability_id)
+    request["parameters"] = parameters
+    with pytest.raises(CoreWriteError) as caught:
+        validate_core_write_request(capability_id, request)
+    assert caught.value.code == "invalid_request"

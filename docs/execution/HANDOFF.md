@@ -1,6 +1,6 @@
 # Odoo Accounting CLI V4 handoff
 
-Updated: 2026-09-01 (Asia/Shanghai)
+Updated: 2026-09-02 (Asia/Shanghai)
 
 ## Objective and working rule
 
@@ -16,11 +16,18 @@ the Odoo source/add-on tree while building CLI capabilities.
 
 ## Current authoritative count
 
-- Registry: 366 capability IDs; 351 enabled handlers (214 reads and 137 writes)
+- Registry: 374 capability IDs; 359 enabled handlers (215 reads and 144 writes)
   and 15 disabled IDs.
-- Runtime status: 314 `unconfigured`, 37 `degraded`, and 15 `disabled`.
-- Versioned JSON Schema documents: 708.
-- The latest batch adds no command ID or handler. It extends nine existing
+- Runtime status: 318 `unconfigured`, 41 `degraded`, and 15 `disabled`.
+- Versioned JSON Schema documents: 724.
+- The latest batch adds eight analytic-accounting commands:
+  `analytic.plan.create/update`, `analytic.account.archive/restore`,
+  `analytic.line.create/update/delete`, and `analytic.line.summary`. The write
+  scope is child plans, company-scoped accounts, and Project-root manual lines;
+  summary reads use Odoo 19 dynamic analytic-plan columns. Delete has no
+  tombstone and is therefore explicitly degraded rather than claiming replay.
+  The exact server acceptance is recorded in the current checkpoint below.
+- The preceding batch added no command ID or handler. It extends nine existing
   invoice, journal-entry and payment post/cancel/reset commands with a closed
   2-100-ID batch form while preserving every singular request. Full-scope
   preflight, deterministic full-set keys, sorted explicit results, serial replay
@@ -3761,3 +3768,70 @@ accounts, and CRUD/summarize manual analytic lines. Keep manual lines restricted
 to `move_line_id=False` and `category=other`; do not expose root-plan creation,
 plan deletion, or edits that propagate back into posted accounting entries. This
 candidate has not been implemented or accepted yet.
+
+## Analytic lifecycle capability checkpoint — 2026-09-02
+
+The analytic candidate above is now implemented and accepted; do not treat it as
+pending. Starting from pushed baseline
+`b8eda33b0b6f6caeedd2f616216ad5e968bdfcbe`, the batch adds exactly eight commands:
+
+1. `analytic.plan.create`
+2. `analytic.plan.update`
+3. `analytic.account.archive`
+4. `analytic.account.restore`
+5. `analytic.line.create`
+6. `analytic.line.update`
+7. `analytic.line.delete`
+8. `analytic.line.summary`
+
+The registry now has 374 IDs and 359 enabled handlers (215 reads and 144 writes),
+724 schemas, and statuses of 318 `unconfigured`, 41 `degraded`, and 15 `disabled`.
+Capability-ID-list SHA-256 is
+`ab1e11c994f6c3d27c4eaa310e04f4967c5c9c3f275a3fcde0dbf9f1c2ba0992`;
+canonical registry digest is
+`77325bffca94023803ce765b6a30d8fb3d2b913d2f43b91ab9986d30fcce25bc`.
+
+The fixed scope is deliberately small: only child plans can be created or
+updated; accounts are company scoped; line writes accept only Project-root manual
+lines and never accounting-generated lines. Summary can use any valid Odoo 19
+plan column and optionally narrow to one analytic account. Amount and unit amount
+are canonical signed decimal strings. `analytic.line.delete` has no persistent
+tombstone, is marked degraded, executes only once in the live smoke, verifies
+absence, and returns `record_not_found` on a later retry.
+
+Verification evidence:
+
+- Local: 119 core/public/runtime cases, 28 CLI cases, and 11 affected
+  schema/contract cases passed; Ruff, compilation, and `git diff --check` passed.
+- Server: one live case collected; `148 passed in 148.17s` for the final fast
+  selection and `4 passed in 186.80s` for the registry/schema closure.
+- Real Odoo: `1 passed in 10.64s` across both `odoo_cli_v4_dev` and
+  `odoo_cli_v4_e2e`, as uid 5/company 1/`su=False`, with all eight new commands in
+  the shared 17-capability analytic/budget chain.
+- Delete rollback was independently observable through a forced savepoint
+  rollback that restored the line. The final outer rollback and fresh-cursor
+  checks found no marked plan, account, line, budget, or budget-line residue.
+
+Private evidence directory:
+`/opt/odoo-accounting-cli-v4/.tooling/analytic-lifecycle-20260902-W54c2yQO`.
+The 35-file deployment archive SHA-256 is
+`b38659ebdccfe04ee923c1f3806aeb0b420c347fb24144f1642fef8dc405c7f3`;
+the 19 overwritten files have a separate pre-sync backup. Fast, registry,
+collect, and live logs have SHA-256 values
+`9416afd3ec73a8c2a55436c18f8e8d1455fc5f7d7cd40c0df8c7dfa9b06b045a`,
+`450ab25e22f875a58368c7b4e52cc16aaa65c9da1021a922c12c1b760cb97adb`,
+`0ef55d33e8e19da0af221a2572360fd4e639bbf56d0c1b6755728213b82dba18`,
+and `f81b8b08942e88c5bdf8ce7e89f2bd10fd5e96c512d37a7395f767a97d68564a`.
+
+No service-control command was issued. During the observation window, before the
+live run, Odoo automatically exited on the server's pre-existing missing
+`passlib` environment problem at 10:25:36 and systemd restarted it at 10:25:46.
+Live-before, live-after, and final service snapshots are identical at PID
+`959127`, `NRestarts=1`; Odoo, Nginx, and PostgreSQL are active, and no live worker
+remains. Root disk use is 96% with about 3.5 GB free. The server Git tree remains
+intentionally old and dirty; deploy by explicit allowlist only, never by pull,
+reset, or checkout.
+
+Next work should return to the capability-first gap audit and choose another
+bounded 8-12-command accounting batch. Do not spend the next batch adding generic
+ORM dispatch, duplicate commands, or heavy policy gates.

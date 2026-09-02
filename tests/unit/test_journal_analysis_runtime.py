@@ -26,7 +26,11 @@ def _matches(row: Any, domain: list[tuple[str, str, Any]]) -> bool:
         actual = _record_id(getattr(row, field))
         if operator == "=" and actual != expected:
             return False
-        if operator not in {"="}:
+        if operator == "in" and actual not in expected:
+            return False
+        if operator == "child_of" and actual != expected:
+            return False
+        if operator not in {"=", "in", "child_of"}:
             raise AssertionError(f"unsupported fake operator: {operator}")
     return True
 
@@ -142,6 +146,34 @@ def _fixture() -> tuple[Env, dict[str, Any]]:
     )
     cash = SimpleNamespace(id=101, code="1001", name="Cash", company_ids=[company])
     bank = SimpleNamespace(id=102, code="1002", name="Bank", company_ids=[company])
+    plan = SimpleNamespace(
+        id=11,
+        name="Projects",
+        parent_id=False,
+        _column_name=lambda: "x_plan1_id",
+    )
+    project_a = SimpleNamespace(
+        id=21,
+        name="Project A",
+        code="A",
+        plan_id=plan,
+        root_plan_id=plan,
+        company_id=company,
+    )
+    project_b = SimpleNamespace(
+        id=22,
+        name="Project B",
+        code=False,
+        plan_id=plan,
+        root_plan_id=plan,
+        company_id=False,
+    )
+    analytic_line_model = Model(
+        fields=set(journal._ANALYTIC_LINE_FIELDS) | {"x_plan1_id"}
+    )
+    analytic_line_model._fields["x_plan1_id"] = SimpleNamespace(
+        comodel_name="account.analytic.account"
+    )
     models = {
         "res.company": Model([company, other_company], fields={"currency_id"}),
         "res.currency": Model([currency], fields={"name"}),
@@ -150,6 +182,13 @@ def _fixture() -> tuple[Env, dict[str, Any]]:
         ),
         "account.account": Model([cash, bank], fields={"code", "name", "company_ids"}),
         "account.move.line": Model(fields=set(journal._MOVE_LINE_FIELDS)),
+        "account.analytic.plan": Model(
+            [plan], fields=set(journal._ANALYTIC_PLAN_FIELDS)
+        ),
+        "account.analytic.account": Model(
+            [project_a, project_b], fields=set(journal._ANALYTIC_ACCOUNT_FIELDS)
+        ),
+        "account.analytic.line": analytic_line_model,
     }
     return Env(models), {
         "company": company,
@@ -157,6 +196,9 @@ def _fixture() -> tuple[Env, dict[str, Any]]:
         "bank_journal": bank_journal,
         "cash": cash,
         "bank": bank,
+        "plan": plan,
+        "project_a": project_a,
+        "project_b": project_b,
     }
 
 
@@ -299,6 +341,96 @@ def test_journal_summary_and_empty_summary_have_fixed_shapes() -> None:
         "credit": "0",
         "balance": "0",
     }
+
+
+def test_analytic_summary_uses_dynamic_plan_column_and_company_scope() -> None:
+    env, records = _fixture()
+    env.models["account.analytic.line"].aggregates = [
+        (records["project_b"], 1, Decimal(-2), Decimal("0.5")),
+        (records["project_a"], 2, Decimal("10.500"), Decimal(3)),
+    ]
+    parameters = {
+        "date_from": "2026-01-01",
+        "date_to": "2026-12-31",
+        "plan_id": 11,
+        "analytic_account_id": None,
+    }
+
+    item = _dispatch(env, "analytic.line.summary", parameters)["items"][0]
+
+    assert item == {
+        "company_id": 7,
+        "date_from": "2026-01-01",
+        "date_to": "2026-12-31",
+        "basis": "analytic_lines",
+        "group_by": "analytic_account",
+        "plan": {"id": 11, "name": "Projects"},
+        "company_currency": {"id": 6, "code": "CNY"},
+        "groups": [
+            {
+                "analytic_account": {"id": 21, "name": "Project A", "code": "A"},
+                "row_count": 2,
+                "amount": "10.5",
+                "unit_amount": "3",
+            },
+            {
+                "analytic_account": {
+                    "id": 22,
+                    "name": "Project B",
+                    "code": None,
+                },
+                "row_count": 1,
+                "amount": "-2",
+                "unit_amount": "0.5",
+            },
+        ],
+        "totals": {"row_count": 3, "amount": "8.5", "unit_amount": "3.5"},
+    }
+    assert env.models["account.analytic.line"].calls[-1] == (
+        "_read_group",
+        [
+            ("company_id", "=", 7),
+            ("date", ">=", "2026-01-01"),
+            ("date", "<=", "2026-12-31"),
+            ("x_plan1_id.plan_id", "child_of", 11),
+        ],
+        ["x_plan1_id"],
+        ["id:count", "amount:sum", "unit_amount:sum"],
+        "x_plan1_id asc",
+    )
+
+
+def test_analytic_summary_filters_account_and_rejects_cross_company_group() -> None:
+    env, records = _fixture()
+    parameters = {
+        "date_from": "2026-01-01",
+        "date_to": "2026-12-31",
+        "plan_id": 11,
+        "analytic_account_id": 21,
+    }
+    env.models["account.analytic.line"].aggregates = [(records["project_a"], 1, 4, 1)]
+
+    item = _dispatch(env, "analytic.line.summary", parameters)["items"][0]
+    assert item["groups"][0]["analytic_account"]["id"] == 21
+    assert env.models["account.analytic.line"].calls[-1][1][-1] == (
+        "x_plan1_id",
+        "=",
+        21,
+    )
+
+    other_company = env.models["res.company"].rows[1]
+    foreign = SimpleNamespace(
+        id=99,
+        name="Foreign",
+        code=None,
+        plan_id=records["plan"],
+        root_plan_id=records["plan"],
+        company_id=other_company,
+    )
+    env.models["account.analytic.line"].aggregates = [(foreign, 1, 1, 0)]
+    with pytest.raises(Failure) as caught:
+        _dispatch(env, "analytic.line.summary", parameters)
+    assert caught.value.code == "odoo_runtime_error"
 
 
 @pytest.mark.parametrize(

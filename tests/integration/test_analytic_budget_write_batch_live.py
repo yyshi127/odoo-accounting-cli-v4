@@ -1,4 +1,4 @@
-"""Transactional dual-database smoke for analytic-account and budget writes."""
+"""Transactional dual-database smoke for analytic and budget capabilities."""
 
 from __future__ import annotations
 
@@ -31,8 +31,16 @@ _COMPANY_ID = 1
 _USER_ID = 5
 _USER_LOGIN = "odacv4_g5_accountant"
 _CAPABILITIES = (
+    "analytic.plan.create",
+    "analytic.plan.update",
     "analytic.account.create",
     "analytic.account.update",
+    "analytic.account.archive",
+    "analytic.account.restore",
+    "analytic.line.create",
+    "analytic.line.update",
+    "analytic.line.summary",
+    "analytic.line.delete",
     "budget.create",
     "budget.update_draft",
     "budget.lines.replace",
@@ -41,6 +49,10 @@ _CAPABILITIES = (
     "budget.cancel",
     "budget.mark_done",
 )
+
+
+class _RollbackDelete(Exception):
+    """Force the delete-only savepoint to roll back after verification."""
 
 
 def _root() -> Path:
@@ -192,6 +204,13 @@ def _key(
             f"{capability_id}:{parameters['analytic_account_id']}:"
             f"{_digest(parameters['changes'])}"
         )
+    if capability_id in {"analytic.plan.update", "analytic.line.update"}:
+        target_id = parameters.get("plan_id", parameters.get("analytic_line_id"))
+        return f"{capability_id}:{target_id}:{_digest(parameters['changes'])}"
+    if capability_id in {"analytic.account.archive", "analytic.account.restore"}:
+        return f"{capability_id}:{parameters['analytic_account_id']}"
+    if capability_id == "analytic.line.delete":
+        return f"{capability_id}:{parameters['analytic_line_id']}"
     if capability_id == "budget.update_draft":
         return (
             f"{capability_id}:{parameters['budget_id']}:"
@@ -253,6 +272,7 @@ def _write(
     parameters: dict[str, Any],
     *,
     explicit_key: str | None = None,
+    replay: bool = True,
 ) -> dict[str, Any]:
     from odoo_accounting_cli_v4.capabilities.core_writes import execute_core_write
 
@@ -262,10 +282,54 @@ def _write(
     first = execute_core_write(port, capability_id, request, key, capability_id)
     if first["idempotent_replay"] is not False:
         raise RuntimeError(f"{capability_id} replayed its first execution")
+    if not replay:
+        return first["result"]
     second = execute_core_write(port, capability_id, request, key, capability_id)
     if second["idempotent_replay"] is not True or second["result"] != first["result"]:
         raise RuntimeError(f"{capability_id} did not replay deterministically")
     return first["result"]
+
+
+class _JournalAnalysisPort:
+    def __init__(self, env: Any) -> None:
+        self.env = env
+
+    @property
+    def user_id(self) -> int:
+        return self.env.uid
+
+    def read(self, **payload: Any) -> dict[str, Any]:
+        from odoo_accounting_cli_v4.bridge.journal_analysis_runtime import dispatch
+        from odoo_accounting_cli_v4.bridge.runtime import RuntimeFailure
+
+        return dispatch(
+            self.env,
+            payload,
+            payload["company_id"],
+            failure_type=RuntimeFailure,
+        )
+
+
+def _analytic_summary(
+    env: Any,
+    alias: str,
+    run_id: uuid.UUID,
+    parameters: dict[str, Any],
+) -> dict[str, Any]:
+    from odoo_accounting_cli_v4.capabilities.journal_analysis import (
+        read_journal_analysis,
+    )
+
+    request = _request(
+        alias,
+        run_id,
+        "analytic.line.summary",
+        parameters,
+        "read",
+    )
+    return read_journal_analysis(
+        _JournalAnalysisPort(env), "analytic.line.summary", request
+    )
 
 
 def _exercise(
@@ -273,12 +337,36 @@ def _exercise(
     alias: str,
     run_id: uuid.UUID,
     marker: str,
-) -> tuple[int, int, int, list[int]]:
-    plan = env["account.analytic.plan"].search(
-        [("parent_id", "=", False)], order="id", limit=1
-    )
-    if len(plan) != 1:
+) -> tuple[int, int, int, int, int, list[int]]:
+    root_plan, _other_plans = env["account.analytic.plan"]._get_all_plans()
+    if len(root_plan) != 1:
         raise RuntimeError("no root analytic plan is available")
+
+    plan = _write(
+        env,
+        alias,
+        run_id,
+        "analytic.plan.create",
+        {
+            "name": f"{marker} Plan",
+            "parent_plan_id": root_plan.id,
+            "color": 0,
+            "default_applicability": "optional",
+        },
+        explicit_key=f"analytic-plan-create-{run_id.hex}-{alias}",
+    )
+    plan_id = plan["id"]
+    if plan["state"] != "active" or plan["source_id"] != root_plan.id:
+        raise RuntimeError("analytic.plan.create returned the wrong parent or state")
+    updated_plan = _write(
+        env,
+        alias,
+        run_id,
+        "analytic.plan.update",
+        {"plan_id": plan_id, "changes": {"color": 1}},
+    )
+    if updated_plan["id"] != plan_id or updated_plan["state"] != "active":
+        raise RuntimeError("analytic.plan.update returned the wrong record")
 
     analytic = _write(
         env,
@@ -287,14 +375,14 @@ def _exercise(
         "analytic.account.create",
         {
             "name": f"{marker} Analytic",
-            "plan_id": plan.id,
+            "plan_id": plan_id,
             "code": None,
             "partner_id": None,
         },
         explicit_key=f"analytic-create-{run_id.hex}-{alias}",
     )
     analytic_id = analytic["id"]
-    if analytic["state"] != "active" or analytic["source_id"] != plan.id:
+    if analytic["state"] != "active" or analytic["source_id"] != plan_id:
         raise RuntimeError("analytic.account.create returned the wrong plan or state")
     updated_analytic = _write(
         env,
@@ -308,6 +396,93 @@ def _exercise(
     )
     if updated_analytic["id"] != analytic_id or updated_analytic["state"] != "active":
         raise RuntimeError("analytic.account.update returned the wrong record")
+
+    archived = _write(
+        env,
+        alias,
+        run_id,
+        "analytic.account.archive",
+        {"analytic_account_id": analytic_id},
+    )
+    if archived["state"] != "archived":
+        raise RuntimeError("analytic.account.archive left the account active")
+    restored = _write(
+        env,
+        alias,
+        run_id,
+        "analytic.account.restore",
+        {"analytic_account_id": analytic_id},
+    )
+    if restored["state"] != "active":
+        raise RuntimeError("analytic.account.restore left the account archived")
+
+    analytic_line = _write(
+        env,
+        alias,
+        run_id,
+        "analytic.line.create",
+        {
+            "name": f"{marker} Manual",
+            "date": "2026-08-15",
+            "amount": "-125.5",
+            "analytic_account_id": analytic_id,
+            "reference": marker,
+            "unit_amount": "2",
+        },
+        explicit_key=f"analytic-line-create-{run_id.hex}-{alias}",
+    )
+    analytic_line_id = analytic_line["id"]
+    updated_line = _write(
+        env,
+        alias,
+        run_id,
+        "analytic.line.update",
+        {
+            "analytic_line_id": analytic_line_id,
+            "changes": {"amount": "-150", "unit_amount": "3"},
+        },
+    )
+    if updated_line["id"] != analytic_line_id or updated_line["state"] != "manual":
+        raise RuntimeError("analytic.line.update returned the wrong record")
+    summary = _analytic_summary(
+        env,
+        alias,
+        run_id,
+        {
+            "date_from": "2026-08-01",
+            "date_to": "2026-08-31",
+            "plan_id": plan_id,
+            "analytic_account_id": analytic_id,
+        },
+    )
+    if summary["totals"] != {
+        "row_count": 1,
+        "amount": "-150",
+        "unit_amount": "3",
+    }:
+        raise RuntimeError("analytic.line.summary returned the wrong totals")
+    try:
+        with env.cr.savepoint():
+            deleted = _write(
+                env,
+                alias,
+                run_id,
+                "analytic.line.delete",
+                {"analytic_line_id": analytic_line_id},
+                replay=False,
+            )
+            if deleted["id"] != analytic_line_id or deleted["state"] != "deleted":
+                raise RuntimeError("analytic.line.delete returned the wrong record")
+            if env["account.analytic.line"].search_count(
+                [("id", "=", analytic_line_id)], limit=1
+            ):
+                raise RuntimeError("analytic.line.delete left the record visible")
+            raise _RollbackDelete
+    except _RollbackDelete:
+        env.invalidate_all()
+    restored_line = env["account.analytic.line"].browse(analytic_line_id).exists()
+    if len(restored_line) != 1:
+        raise RuntimeError("analytic.line.delete did not roll back at the savepoint")
 
     main = _write(
         env,
@@ -367,7 +542,7 @@ def _exercise(
     if len(line_ids) != 1:
         raise RuntimeError("budget.lines.replace did not create exactly one line")
     line = env["budget.line"].browse(line_ids[0]).exists()
-    column = plan._column_name()
+    column = root_plan._column_name()
     if (
         len(line) != 1
         or str(line.budget_amount) != "1250.5"
@@ -390,13 +565,15 @@ def _exercise(
     )
     if canceled_result["state"] != "canceled":
         raise RuntimeError("budget.cancel did not cancel the draft budget")
-    return analytic_id, main_id, canceled_id, line_ids
+    return plan_id, analytic_id, analytic_line_id, main_id, canceled_id, line_ids
 
 
 def _verify_rollback(
     registry: Any,
     *,
+    plan_id: int,
     analytic_id: int,
+    analytic_line_id: int,
     budget_ids: tuple[int, int],
     line_ids: list[int],
     marker: str,
@@ -411,8 +588,14 @@ def _verify_rollback(
             {"allowed_company_ids": [_COMPANY_ID], "active_test": False},
         )
         remaining = {
+            "plan_id": env["account.analytic.plan"].search_count(
+                [("id", "=", plan_id)], limit=1
+            ),
             "analytic_id": env["account.analytic.account"].search_count(
                 [("id", "=", analytic_id)], limit=1
+            ),
+            "analytic_line_id": env["account.analytic.line"].search_count(
+                [("id", "=", analytic_line_id)], limit=1
             ),
             "budget_ids": env["budget.analytic"].search_count(
                 [("id", "in", list(budget_ids))], limit=1
@@ -421,6 +604,12 @@ def _verify_rollback(
                 [("id", "in", line_ids)], limit=1
             ),
             "analytic_marker": env["account.analytic.account"].search_count(
+                [("name", "ilike", marker)], limit=1
+            ),
+            "plan_marker": env["account.analytic.plan"].search_count(
+                [("name", "ilike", marker)], limit=1
+            ),
+            "line_marker": env["account.analytic.line"].search_count(
                 [("name", "ilike", marker)], limit=1
             ),
             "budget_marker": env["budget.analytic"].search_count(
@@ -456,7 +645,7 @@ def _live_worker(argv: list[str] | None = None) -> int:
     registry = Registry(args.database)
     cursor = registry.cursor()
     marker = f"ODACV4-AN-BUD-{args.alias}-{args.run_id.hex}"
-    created: tuple[int, int, int, list[int]] | None = None
+    created: tuple[int, int, int, int, int, list[int]] | None = None
     failure: Exception | None = None
     try:
         env = api.Environment(
@@ -486,10 +675,12 @@ def _live_worker(argv: list[str] | None = None) -> int:
         cursor.close()
 
     if created is not None:
-        analytic_id, main_id, canceled_id, line_ids = created
+        plan_id, analytic_id, analytic_line_id, main_id, canceled_id, line_ids = created
         _verify_rollback(
             registry,
+            plan_id=plan_id,
             analytic_id=analytic_id,
+            analytic_line_id=analytic_line_id,
             budget_ids=(main_id, canceled_id),
             line_ids=line_ids,
             marker=marker,

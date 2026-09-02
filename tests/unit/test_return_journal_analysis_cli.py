@@ -33,7 +33,7 @@ def _run(capability_id: str, parameters: dict, port: object) -> dict:
         stderr=stderr,
         port_factory=lambda selected, parsed: port,
     )
-    assert exit_code == 0
+    assert exit_code == 0, (json.loads(stdout.getvalue()), stderr.getvalue())
     assert stderr.getvalue() == ""
     return json.loads(stdout.getvalue())
 
@@ -154,6 +154,29 @@ class _JournalAnalysisPort:
                 "accounting_date": "2025-12-31",
                 "adjusted": False,
             }
+        elif capability_id == "analytic.line.summary":
+            item = {
+                "company_id": 7,
+                "date_from": "2025-01-01",
+                "date_to": "2025-12-31",
+                "basis": "analytic_lines",
+                "group_by": "analytic_account",
+                "plan": {"id": 11, "name": "Projects"},
+                "company_currency": {"id": 6, "code": "CNY"},
+                "groups": [
+                    {
+                        "analytic_account": {
+                            "id": 21,
+                            "name": "Project A",
+                            "code": "A",
+                        },
+                        "row_count": 2,
+                        "amount": "100",
+                        "unit_amount": "4",
+                    }
+                ],
+                "totals": {"row_count": 2, "amount": "100", "unit_amount": "4"},
+            }
         else:
             item = {
                 "company_id": 7,
@@ -202,6 +225,15 @@ class _JournalAnalysisPort:
                 "date_from": "2025-01-01",
                 "date_to": "2025-12-31",
                 "group_by": "journal",
+            },
+            [],
+        ),
+        (
+            "analytic.line.summary",
+            {
+                "date_from": "2025-01-01",
+                "date_to": "2025-12-31",
+                "plan_id": 11,
             },
             [],
         ),

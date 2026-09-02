@@ -314,6 +314,9 @@ _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
     "analytic_plan_list": partial(read_core_object, "analytic.plan.list"),
     "analytic_line_search": partial(read_core_object, "analytic.line.search"),
     "analytic_line_get": partial(read_core_object, "analytic.line.get"),
+    "analytic_line_summary": lambda port, request: read_journal_analysis(
+        port, "analytic.line.summary", request
+    ),
     "analytic_distribution_model_list": partial(
         read_core_object, "analytic.distribution_model.list"
     ),
@@ -763,6 +766,9 @@ _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     ),
     "analytic_line_get": partial(
         validate_core_object_read_request, "analytic.line.get"
+    ),
+    "analytic_line_summary": partial(
+        validate_journal_analysis_request, "analytic.line.summary"
     ),
     "analytic_distribution_model_list": partial(
         validate_core_object_read_request, "analytic.distribution_model.list"
@@ -1266,6 +1272,7 @@ _CAPABILITY_MODELS = {
     "analytic.plan.list": "account.analytic.plan",
     "analytic.line.search": "account.analytic.line",
     "analytic.line.get": "account.analytic.line",
+    "analytic.line.summary": "account.analytic.line",
     "analytic.distribution_model.list": "account.analytic.distribution.model",
     "analytic.distribution_model.get": "account.analytic.distribution.model",
     "analytic.applicability.list": "account.analytic.applicability",
@@ -1559,8 +1566,15 @@ _CAPABILITY_MODELS = {
     "bank.transaction.match": "account.bank.statement.line",
     "bank.transaction.unmatch": "account.bank.statement.line",
     "reconciliation.write_off": "account.bank.statement.line",
+    "analytic.plan.create": "account.analytic.plan",
+    "analytic.plan.update": "account.analytic.plan",
     "analytic.account.create": "account.analytic.account",
     "analytic.account.update": "account.analytic.account",
+    "analytic.account.archive": "account.analytic.account",
+    "analytic.account.restore": "account.analytic.account",
+    "analytic.line.create": "account.analytic.line",
+    "analytic.line.update": "account.analytic.line",
+    "analytic.line.delete": "account.analytic.line",
     "budget.create": "budget.analytic",
     "budget.update_draft": "budget.analytic",
     "budget.lines.replace": "budget.analytic",
@@ -2163,6 +2177,7 @@ def _execute_read(
                 or capability_id
                 in {
                     "invoice.analysis.summary",
+                    "analytic.line.summary",
                     "account.return.summary",
                     "journal_item.analysis.summary",
                     "inventory.on_hand.summary",
@@ -2684,6 +2699,7 @@ def _configured_port_factory(capability_id: str, request: dict[str, Any]) -> obj
     }:
         return OdooJournalEntryPort(client)
     if capability_id in {
+        "analytic.line.summary",
         "journal.accounting_date.resolve",
         "journal_item.analysis.summary",
     }:

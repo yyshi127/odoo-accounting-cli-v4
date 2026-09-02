@@ -67,6 +67,10 @@ class Records:
         for record in list(self.records):
             record.unlink()
 
+    def invalidate_recordset(self, fields: list[str]) -> None:
+        for record in self.records:
+            record.invalidate_recordset(fields)
+
 
 class Record:
     def __init__(self, model: Model, record_id: int, **values: Any) -> None:
@@ -151,12 +155,24 @@ class Model:
     def _create_one(self, values: dict[str, Any]) -> Record:
         self.env.next_id += 1
         resolved = self._resolved(values)
-        if self.name == "account.analytic.account":
+        if self.name == "account.analytic.plan":
+            parent = resolved.get("parent_id", False)
+            resolved.setdefault("company_id", False)
+            resolved.setdefault("color", 0)
+            resolved.setdefault("default_applicability", "optional")
+            resolved["root_plan_id"] = parent.root_plan_id if parent else False
+        elif self.name == "account.analytic.account":
             plan = resolved["plan_id"]
             resolved.setdefault("active", True)
             resolved.setdefault("code", False)
             resolved.setdefault("partner_id", False)
             resolved["root_plan_id"] = plan.root_plan_id
+        elif self.name == "account.analytic.line":
+            resolved["amount"] = Decimal(str(resolved["amount"]))
+            resolved["unit_amount"] = Decimal(str(resolved["unit_amount"]))
+            resolved.setdefault("ref", False)
+            resolved.setdefault("category", "other")
+            resolved.setdefault("move_line_id", False)
         elif self.name == "budget.analytic":
             resolved.setdefault("state", "draft")
             resolved["budget_line_ids"] = Records(self.env.models["budget.line"])
@@ -180,6 +196,7 @@ class Model:
         relations = {
             "company_id": "res.company",
             "partner_id": "res.partner",
+            "parent_id": "account.analytic.plan",
             "plan_id": "account.analytic.plan",
             "user_id": "res.users",
             "budget_analytic_id": "budget.analytic",
@@ -216,6 +233,8 @@ def _matches(record: Record, domain: list[Any]) -> bool:
         if actual in (None, False):
             actual = False
         if operator == "=" and actual != _record_id(expected):
+            return False
+        if operator == "!=" and actual == _record_id(expected):
             return False
         if operator == "in" and actual not in [_record_id(item) for item in expected]:
             return False
@@ -260,6 +279,7 @@ class Env:
                 "res.users",
                 "account.analytic.plan",
                 "account.analytic.account",
+                "account.analytic.line",
                 "budget.analytic",
                 "budget.line",
             )
@@ -283,6 +303,8 @@ class Env:
             name="Projects",
             parent_id=False,
             company_id=False,
+            color=0,
+            default_applicability="optional",
         )
         self.root_plan.root_plan_id = self.root_plan
         self.root_plan._column_name = lambda: "account_id"
@@ -293,6 +315,8 @@ class Env:
             parent_id=self.root_plan,
             root_plan_id=self.root_plan,
             company_id=False,
+            color=0,
+            default_applicability="optional",
         )
         self.second_root = self.add(
             "account.analytic.plan",
@@ -300,6 +324,8 @@ class Env:
             name="Departments",
             parent_id=False,
             company_id=False,
+            color=0,
+            default_applicability="optional",
         )
         self.second_root.root_plan_id = self.second_root
         self.second_root._column_name = lambda: "x_plan2_id"
@@ -309,6 +335,8 @@ class Env:
             name="Foreign",
             parent_id=False,
             company_id=self.other_company,
+            color=0,
+            default_applicability="optional",
         )
         self.foreign_plan.root_plan_id = self.foreign_plan
         self.foreign_plan._column_name = lambda: "x_foreign_id"
@@ -360,6 +388,29 @@ class Env:
             user_id=self.responsible,
             budget_line_ids=Records(self.models["budget.line"]),
             children_ids=[],
+        )
+
+    def add_analytic_line(
+        self,
+        record_id: int,
+        *,
+        account: Record | None = None,
+        company: Any | None = None,
+        category: str = "other",
+        move_line_id: Any = False,
+    ) -> Record:
+        return self.add(
+            "account.analytic.line",
+            record_id,
+            name=f"Manual line {record_id}",
+            date="2026-09-01",
+            amount=Decimal(10),
+            unit_amount=Decimal(1),
+            ref=False,
+            account_id=account or self.account,
+            company_id=company or self.company,
+            category=category,
+            move_line_id=move_line_id,
         )
 
 
@@ -477,6 +528,134 @@ def test_analytic_references_are_visible_and_company_scoped() -> None:
         _dispatch(env, "analytic.account.create", parameters)
     assert caught.value.code == "record_not_found"
     assert not any(call[:2] == ("create", "account.analytic.account") for call in env.calls)
+
+
+def test_analytic_subplan_create_replays_and_root_update_is_forbidden() -> None:
+    env = Env()
+    parameters = {
+        "name": "Delivery East",
+        "parent_plan_id": env.root_plan.id,
+        "color": None,
+        "default_applicability": None,
+    }
+
+    first = _dispatch(env, "analytic.plan.create", parameters)
+    replay = _dispatch(env, "analytic.plan.create", parameters)
+
+    assert first["result"]["model"] == "account.analytic.plan"
+    assert first["result"]["source_id"] == env.root_plan.id
+    assert first["result"]["name"].startswith("Delivery East [ODACV4:")
+    assert replay["idempotent_replay"] is True
+    creates = [
+        call for call in env.calls if call[:2] == ("create", "account.analytic.plan")
+    ]
+    assert len(creates) == 1
+
+    update = {
+        "plan_id": first["result"]["id"],
+        "changes": {"name": "Delivery West", "color": 5},
+    }
+    changed = _dispatch(env, "analytic.plan.update", update)
+    unchanged = _dispatch(env, "analytic.plan.update", update)
+    assert changed["result"]["name"].startswith("Delivery West [ODACV4:")
+    assert unchanged["idempotent_replay"] is True
+
+    with pytest.raises(Failure) as caught:
+        _dispatch(
+            env,
+            "analytic.plan.update",
+            {"plan_id": env.root_plan.id, "changes": {"name": "No"}},
+        )
+    assert caught.value.code == "state_conflict"
+
+
+def test_analytic_account_archive_restore_replay_and_company_scope() -> None:
+    env = Env()
+    parameters = {"analytic_account_id": env.account.id}
+
+    archived = _dispatch(env, "analytic.account.archive", parameters)
+    archived_replay = _dispatch(env, "analytic.account.archive", parameters)
+    restored = _dispatch(env, "analytic.account.restore", parameters)
+    restored_replay = _dispatch(env, "analytic.account.restore", parameters)
+
+    assert archived["result"]["state"] == "archived"
+    assert archived_replay["idempotent_replay"] is True
+    assert restored["result"]["state"] == "active"
+    assert restored_replay["idempotent_replay"] is True
+
+    with pytest.raises(Failure) as caught:
+        _dispatch(
+            env,
+            "analytic.account.archive",
+            {"analytic_account_id": env.foreign_account.id},
+        )
+    assert caught.value.code == "record_not_found"
+
+
+def test_manual_analytic_line_lifecycle_and_generated_line_boundary() -> None:
+    env = Env()
+    parameters = {
+        "name": "Manual adjustment",
+        "date": "2026-09-01",
+        "amount": "-10.5",
+        "analytic_account_id": env.account.id,
+        "reference": None,
+        "unit_amount": "2.5",
+    }
+
+    created = _dispatch(env, "analytic.line.create", parameters)
+    replay = _dispatch(env, "analytic.line.create", parameters)
+    assert created["result"]["state"] == "manual"
+    assert created["result"]["source_id"] == env.account.id
+    assert replay["idempotent_replay"] is True
+
+    line_id = created["result"]["id"]
+    update = {
+        "analytic_line_id": line_id,
+        "changes": {
+            "amount": "10",
+            "analytic_account_id": env.same_root_account.id,
+            "reference": "Correction",
+        },
+    }
+    changed = _dispatch(env, "analytic.line.update", update)
+    unchanged = _dispatch(env, "analytic.line.update", update)
+    assert changed["result"]["source_id"] == env.same_root_account.id
+    assert unchanged["idempotent_replay"] is True
+
+    deleted = _dispatch(env, "analytic.line.delete", {"analytic_line_id": line_id})
+    assert deleted["result"]["state"] == "deleted"
+    assert not env.models["account.analytic.line"].browse(line_id)
+    with pytest.raises(Failure) as absent:
+        _dispatch(env, "analytic.line.delete", {"analytic_line_id": line_id})
+    assert absent.value.code == "record_not_found"
+
+    generated = env.add_analytic_line(81, move_line_id=SimpleNamespace(id=501))
+    with pytest.raises(Failure) as protected:
+        _dispatch(
+            env,
+            "analytic.line.update",
+            {"analytic_line_id": generated.id, "changes": {"amount": "1"}},
+        )
+    assert protected.value.code == "record_not_found"
+    assert generated.amount == Decimal(10)
+
+
+def test_manual_analytic_line_is_company_scoped() -> None:
+    env = Env()
+    foreign = env.add_analytic_line(
+        82,
+        account=env.foreign_account,
+        company=env.other_company,
+    )
+    with pytest.raises(Failure) as caught:
+        _dispatch(
+            env,
+            "analytic.line.delete",
+            {"analytic_line_id": foreign.id},
+        )
+    assert caught.value.code == "record_not_found"
+    assert env.models["account.analytic.line"].browse(foreign.id)
 
 
 def test_budget_create_and_draft_update_preserve_marker_and_replay() -> None:

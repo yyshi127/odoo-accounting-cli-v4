@@ -58,8 +58,15 @@ CORE_WRITE_CAPABILITY_IDS = frozenset(
         "bank.transaction.match",
         "bank.transaction.unmatch",
         "reconciliation.write_off",
+        "analytic.plan.create",
+        "analytic.plan.update",
         "analytic.account.create",
         "analytic.account.update",
+        "analytic.account.archive",
+        "analytic.account.restore",
+        "analytic.line.create",
+        "analytic.line.update",
+        "analytic.line.delete",
         "budget.create",
         "budget.update_draft",
         "budget.lines.replace",
@@ -158,7 +165,9 @@ _CREATE_CAPABILITIES = frozenset(
         "bank.transaction.record",
         "asset.create",
         "payment.create",
+        "analytic.plan.create",
         "analytic.account.create",
+        "analytic.line.create",
         "budget.create",
         "sale.order.create",
         "purchase.order.create",
@@ -290,8 +299,19 @@ _BANK_RECONCILIATION_WRITE_CAPABILITIES = frozenset(
         "reconciliation.write_off",
     }
 )
+_ANALYTIC_PLAN_WRITE_CAPABILITIES = frozenset(
+    {"analytic.plan.create", "analytic.plan.update"}
+)
 _ANALYTIC_ACCOUNT_WRITE_CAPABILITIES = frozenset(
-    {"analytic.account.create", "analytic.account.update"}
+    {
+        "analytic.account.create",
+        "analytic.account.update",
+        "analytic.account.archive",
+        "analytic.account.restore",
+    }
+)
+_ANALYTIC_LINE_WRITE_CAPABILITIES = frozenset(
+    {"analytic.line.create", "analytic.line.update", "analytic.line.delete"}
 )
 _BUDGET_WRITE_CAPABILITIES = frozenset(
     {
@@ -1441,6 +1461,134 @@ def _validate_analytic_account_update_parameters(parameters: Any) -> dict[str, A
         "analytic_account_id": parameters["analytic_account_id"],
         "changes": dict(changes),
     }
+
+
+def _validate_analytic_plan_values(values: Any, *, partial: bool) -> dict[str, Any]:
+    allowed = {"name", "color", "default_applicability"}
+    if (
+        not isinstance(values, dict)
+        or (partial and (not values or not set(values) <= allowed))
+        or (not partial and not ({"name"} <= set(values) <= allowed))
+    ):
+        raise _invalid("Analytic-plan values do not match the fixed contract.")
+    if "name" in values and (
+        not _is_bounded_text(values["name"], 200)
+        or "[ODACV4:" in values["name"]
+    ):
+        raise _invalid(
+            "name must be a trimmed business name without the reserved marker."
+        )
+    if "color" in values and (
+        not _is_integer(values["color"]) or values["color"] < 0
+    ):
+        raise _invalid("color must be a nonnegative integer.")
+    if "default_applicability" in values and values["default_applicability"] not in {
+        "optional",
+        "mandatory",
+        "unavailable",
+    }:
+        raise _invalid(
+            "default_applicability must be optional, mandatory, or unavailable."
+        )
+    return dict(values)
+
+
+def _validate_analytic_plan_parameters(
+    capability_id: str, parameters: Any
+) -> dict[str, Any]:
+    if capability_id == "analytic.plan.create":
+        if (
+            not isinstance(parameters, dict)
+            or "parent_plan_id" not in parameters
+            or not set(parameters)
+            <= {"name", "parent_plan_id", "color", "default_applicability"}
+            or not _valid_id(parameters["parent_plan_id"])
+        ):
+            raise _invalid("Analytic-plan creation parameters are invalid.")
+        values = _validate_analytic_plan_values(
+            {key: value for key, value in parameters.items() if key != "parent_plan_id"},
+            partial=False,
+        )
+        values.setdefault("color", None)
+        values.setdefault("default_applicability", None)
+        return {"parent_plan_id": parameters["parent_plan_id"], **values}
+    if not isinstance(parameters, dict) or set(parameters) != {"plan_id", "changes"}:
+        raise _invalid("Analytic-plan update parameters are invalid.")
+    if not _valid_id(parameters["plan_id"]):
+        raise _invalid("parameters.plan_id must be a positive integer.")
+    return {
+        "plan_id": parameters["plan_id"],
+        "changes": _validate_analytic_plan_values(
+            parameters["changes"], partial=True
+        ),
+    }
+
+
+def _validate_analytic_line_values(values: Any, *, partial: bool) -> dict[str, Any]:
+    allowed = {
+        "name",
+        "date",
+        "amount",
+        "analytic_account_id",
+        "reference",
+        "unit_amount",
+    }
+    required = {"name", "date", "amount", "analytic_account_id"}
+    if (
+        not isinstance(values, dict)
+        or (partial and (not values or not set(values) <= allowed))
+        or (not partial and not (required <= set(values) <= allowed))
+    ):
+        raise _invalid("Analytic-line values do not match the fixed contract.")
+    if "name" in values and (
+        not _is_bounded_text(values["name"], 200)
+        or "[ODACV4:" in values["name"]
+    ):
+        raise _invalid(
+            "name must be a trimmed business name without the reserved marker."
+        )
+    if "date" in values and not _is_date(values["date"]):
+        raise _invalid("date must be a YYYY-MM-DD date.")
+    if "amount" in values and _canonical_decimal(values["amount"], signed=True) is None:
+        raise _invalid("amount must be a canonical signed decimal string.")
+    if "analytic_account_id" in values and not _valid_id(
+        values["analytic_account_id"]
+    ):
+        raise _invalid("analytic_account_id must be a positive integer.")
+    if "reference" in values and not _is_nullable_bounded_text(
+        values["reference"], 200
+    ):
+        raise _invalid("reference must be null or a trimmed 1-200 character string.")
+    if "unit_amount" in values and _canonical_decimal(
+        values["unit_amount"], signed=True
+    ) is None:
+        raise _invalid("unit_amount must be a canonical signed decimal string.")
+    return dict(values)
+
+
+def _validate_analytic_line_parameters(
+    capability_id: str, parameters: Any
+) -> dict[str, Any]:
+    if capability_id == "analytic.line.create":
+        normalized = _validate_analytic_line_values(parameters, partial=False)
+        normalized.setdefault("reference", None)
+        normalized.setdefault("unit_amount", "0")
+        return normalized
+    if capability_id == "analytic.line.update":
+        if not isinstance(parameters, dict) or set(parameters) != {
+            "analytic_line_id",
+            "changes",
+        }:
+            raise _invalid("Analytic-line update parameters are invalid.")
+        if not _valid_id(parameters["analytic_line_id"]):
+            raise _invalid("parameters.analytic_line_id must be a positive integer.")
+        return {
+            "analytic_line_id": parameters["analytic_line_id"],
+            "changes": _validate_analytic_line_values(
+                parameters["changes"], partial=True
+            ),
+        }
+    return _validate_single_id(parameters, "analytic_line_id")
 
 
 def _validate_budget_fields(values: Any, *, partial: bool) -> dict[str, Any]:
@@ -3706,10 +3854,16 @@ def validate_core_write_request(
         normalized = _validate_single_id(parameters, "transaction_id")
     elif capability_id == "reconciliation.write_off":
         normalized = _validate_write_off_parameters(parameters)
+    elif capability_id in _ANALYTIC_PLAN_WRITE_CAPABILITIES:
+        normalized = _validate_analytic_plan_parameters(capability_id, parameters)
     elif capability_id == "analytic.account.create":
         normalized = _validate_analytic_account_create_parameters(parameters)
     elif capability_id == "analytic.account.update":
         normalized = _validate_analytic_account_update_parameters(parameters)
+    elif capability_id in {"analytic.account.archive", "analytic.account.restore"}:
+        normalized = _validate_single_id(parameters, "analytic_account_id")
+    elif capability_id in _ANALYTIC_LINE_WRITE_CAPABILITIES:
+        normalized = _validate_analytic_line_parameters(capability_id, parameters)
     elif capability_id == "budget.create":
         normalized = _validate_budget_fields(parameters, partial=False)
     elif capability_id == "budget.update_draft":
@@ -4117,7 +4271,9 @@ def _expected_idempotency_key(
     if capability_id == "payment.reset_to_draft":
         return f"payment.reset_to_draft:{parameters['payment_id']}"
     if capability_id in {
+        "analytic.plan.update",
         "analytic.account.update",
+        "analytic.line.update",
         "budget.update_draft",
         "budget.lines.replace",
     }:
@@ -4133,8 +4289,21 @@ def _expected_idempotency_key(
             separators=(",", ":"),
         ).encode("utf-8")
         digest = hashlib.sha256(canonical).hexdigest()[:32]
-        primary = parameters.get("analytic_account_id", parameters.get("budget_id"))
+        primary = parameters.get(
+            "plan_id",
+            parameters.get(
+                "analytic_account_id",
+                parameters.get("analytic_line_id", parameters.get("budget_id")),
+            ),
+        )
         return f"{capability_id}:{primary}:{digest}"
+    if capability_id in {
+        "analytic.account.archive",
+        "analytic.account.restore",
+    }:
+        return f"{capability_id}:{parameters['analytic_account_id']}"
+    if capability_id == "analytic.line.delete":
+        return f"analytic.line.delete:{parameters['analytic_line_id']}"
     if capability_id in {
         "budget.confirm",
         "budget.reset_to_draft",
@@ -4949,6 +5118,35 @@ def _validate_result(
         ):
             raise _failed("Odoo returned a mismatched partner bank-account result.")
         return deepcopy(result)
+    if capability_id in _ANALYTIC_PLAN_WRITE_CAPABILITIES:
+        expected_id = (
+            result["id"]
+            if capability_id == "analytic.plan.create"
+            else parameters["plan_id"]
+        )
+        expected_source = (
+            parameters["parent_plan_id"]
+            if capability_id == "analytic.plan.create"
+            else None
+        )
+        if (
+            result["model"] != "account.analytic.plan"
+            or result["id"] != expected_id
+            or not _is_text(result["name"])
+            or result["state"] != "active"
+            or result["move_type"] is not None
+            or (
+                result["source_id"] != expected_source
+                if expected_source is not None
+                else not _valid_id(result["source_id"])
+            )
+            or result["line_ids"]
+            or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None
+            or result["reconciled"]
+        ):
+            raise _failed("Odoo returned a mismatched analytic-plan result.")
+        return deepcopy(result)
     if capability_id in _ANALYTIC_ACCOUNT_WRITE_CAPABILITIES:
         expected_id = (
             result["id"]
@@ -4960,17 +5158,20 @@ def _validate_result(
             if capability_id == "analytic.account.create"
             else _valid_id(result["source_id"])
         )
-        allowed_states = (
-            {"active", "archived"}
-            if capability_id == "analytic.account.create" and idempotent_replay
-            else {"active"}
-            if capability_id == "analytic.account.create"
-            else (
+        if capability_id == "analytic.account.archive":
+            allowed_states = {"archived"}
+        elif capability_id == "analytic.account.restore":
+            allowed_states = {"active"}
+        elif capability_id == "analytic.account.create":
+            allowed_states = (
+                {"active", "archived"} if idempotent_replay else {"active"}
+            )
+        else:
+            allowed_states = (
                 {"active" if parameters["changes"]["active"] else "archived"}
                 if "active" in parameters["changes"]
                 else {"active", "archived"}
             )
-        )
         if (
             result["model"] != "account.analytic.account"
             or result["id"] != expected_id
@@ -4984,6 +5185,29 @@ def _validate_result(
             or result["reconciled"]
         ):
             raise _failed("Odoo returned a mismatched analytic-account result.")
+        return deepcopy(result)
+    if capability_id in _ANALYTIC_LINE_WRITE_CAPABILITIES:
+        expected_id = (
+            result["id"]
+            if capability_id == "analytic.line.create"
+            else parameters["analytic_line_id"]
+        )
+        expected_state = (
+            "deleted" if capability_id == "analytic.line.delete" else "manual"
+        )
+        if (
+            result["model"] != "account.analytic.line"
+            or result["id"] != expected_id
+            or not _is_text(result["name"])
+            or result["state"] != expected_state
+            or result["move_type"] is not None
+            or not _valid_id(result["source_id"])
+            or result["line_ids"]
+            or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None
+            or result["reconciled"]
+        ):
+            raise _failed("Odoo returned a mismatched analytic-line result.")
         return deepcopy(result)
     if capability_id in _BUDGET_WRITE_CAPABILITIES:
         expected_id = (

@@ -6,7 +6,11 @@ from typing import Any, Protocol
 
 ACTION = "accounting.journal_analysis.read"
 CAPABILITY_IDS = frozenset(
-    {"journal.accounting_date.resolve", "journal_item.analysis.summary"}
+    {
+        "analytic.line.summary",
+        "journal.accounting_date.resolve",
+        "journal_item.analysis.summary",
+    }
 )
 
 
