@@ -16,11 +16,19 @@ the Odoo source/add-on tree while building CLI capabilities.
 
 ## Current authoritative count
 
-- Registry: 374 capability IDs; 359 enabled handlers (215 reads and 144 writes)
+- Registry: 382 capability IDs; 367 enabled handlers (215 reads and 152 writes)
   and 15 disabled IDs.
-- Runtime status: 318 `unconfigured`, 41 `degraded`, and 15 `disabled`.
-- Versioned JSON Schema documents: 724.
-- The latest batch adds eight analytic-accounting commands:
+- Runtime status: 324 `unconfigured`, 43 `degraded`, and 15 `disabled`.
+- Versioned JSON Schema documents: 740.
+- The latest batch adds eight manual account-return lifecycle commands:
+  `account.return.create`, `account.return.checks.refresh`,
+  `account.return.check.result.update`, `account.return.validate`,
+  `account.return.mark_submitted`, `account.return.archive`,
+  `account.return.restore`, and `account.return.delete`. The exact scope and the
+  server's missing-view compatibility fixture are recorded in the final
+  checkpoint below. Do not describe that fixture-backed run as an unmodified
+  Odoo-environment pass.
+- The preceding batch added eight analytic-accounting commands:
   `analytic.plan.create/update`, `analytic.account.archive/restore`,
   `analytic.line.create/update/delete`, and `analytic.line.summary`. The write
   scope is child plans, company-scoped accounts, and Project-root manual lines;
@@ -3835,3 +3843,113 @@ reset, or checkout.
 Next work should return to the capability-first gap audit and choose another
 bounded 8-12-command accounting batch. Do not spend the next batch adding generic
 ORM dispatch, duplicate commands, or heavy policy gates.
+
+## Manual account-return lifecycle checkpoint — 2026-09-02
+
+Starting from pushed baseline `25f6815003f9fd378e4195b8e33dc9275c36c2e7`,
+this batch adds exactly eight commands:
+
+1. `account.return.create`
+2. `account.return.checks.refresh`
+3. `account.return.check.result.update`
+4. `account.return.validate`
+5. `account.return.mark_submitted`
+6. `account.return.archive`
+7. `account.return.restore`
+8. `account.return.delete`
+
+The registry now has 382 IDs and 367 enabled handlers (215 reads and 152 writes),
+740 schemas, and statuses of 324 `unconfigured`, 43 `degraded`, and 15 `disabled`.
+Capability-ID-list SHA-256 is
+`e72188eb3fae0df6b67afd41b7a8b5671b04c41ec8d02d37ba9ec7d20715d064`;
+canonical registry SHA-256 is
+`99cbd280f04184fea14911aaa6db9d0d1f52fed32bb70a09d39c5d409f909a76`.
+
+### Fixed boundary
+
+- Creation uses Odoo 19's `account.return.creation.wizard` and accepts only a
+  standalone root company. The runtime uses Odoo's sudo-backed
+  `_all_branches_selected()` helper so a business user's company record rule
+  cannot hide a child branch and cause cross-company return creation.
+- The selected dates must equal exactly one period returned by the native
+  `account.return.type._get_period_boundaries(company, date)` method.
+- The return type must be reportless, category `account_return`, and use
+  `generic_state_review_submit`. Audit returns and report-bound tax closing are
+  not exposed by this batch.
+- Check-result update accepts only `todo` and `reviewed`, and only on a current,
+  unsupervised check belonging to an active new manual return.
+- Validate, submit, archive, restore, and delete call the corresponding native
+  Odoo actions. `mark_submitted` means Odoo's internal submitted/completed state;
+  it is not evidence of filing with a tax authority.
+- Archive/restore are limited to new incomplete returns. Delete is limited to an
+  active new manual return, has no tombstone, is not replayed after deletion, and
+  is honestly marked degraded. Creation is also degraded because its natural key
+  does not prove concurrent exactly-once creation. The other six commands remain
+  `unconfigured` until a runtime context is selected.
+- Write results deliberately return `line_ids=[]`; callers use the existing
+  `account.return.check.list/get` reads for check IDs. Public validation rejects a
+  nonempty write-result line list.
+
+### Verification
+
+- Final local changed-path regression: `44 passed, 471 deselected`; metadata and
+  protected-integration selection: `3 passed, 2 skipped`. Ruff, compilation,
+  JSON/schema validation, and `git diff --check` passed.
+- Server focused regression: `111 passed, 649 deselected in 119.74s`.
+  Registry/protected-integration closure: `2 passed, 2 skipped in 14.55s`.
+- Final explicitly authorized real-Odoo run: `2 passed in 8.93s`. Each of
+  `v4-dev` / `odoo_cli_v4_dev` and `v4-e2e` / `odoo_cli_v4_e2e` ran as uid 5,
+  company 1 and reported 16 positive results: the existing eight return/journal
+  reads plus all eight new writes. Immediate replay was required except for delete.
+- Fresh-cursor verification found zero persistent `account.return` rows, zero
+  marked checks, zero temporary compatibility views, and zero temporary XML IDs in
+  both databases. PostgreSQL sequence increments do not roll back, so this is a
+  no-persistent-row guarantee, not a bit-for-bit unchanged-database claim.
+
+### Server environment defect and acceptance qualification
+
+The first authorized run failed identically in both isolated databases before an
+account return could be accepted. The server's custom `account_reports` manifest
+comments out `views/account_move_views.xml`, but annual-closing checks still call
+`env.ref('account_reports.view_draft_entries_tree')`. The source XML defines that
+view, yet both databases lack its XML ID. The other annual-closing report and
+expression XML IDs were checked and are present.
+
+The final smoke therefore creates the exact missing `account.move` primary list
+view and its XML ID inside the same outer test transaction, reports it as
+`environment_fixtures=["account_reports.view_draft_entries_tree"]`, and verifies
+both rows disappear after rollback. This is valid evidence that all 16 public
+paths execute under a rollback-only compatibility fixture. It is not evidence that
+the unmodified server package is healthy. Ordinary runtime creation/check refresh
+can still fail until the Odoo package manifest/data mismatch is repaired. Do not
+silently add the XML ID to a business database or modify the protected Odoo source
+tree within the CLI capability task; that requires a separately authorized server
+maintenance change.
+
+### Deployment and evidence
+
+Private evidence directory:
+`/opt/odoo-accounting-cli-v4/.tooling/account-return-lifecycle-20260902-114136`.
+
+- Final 27-file code/schema/registry/test archive: 2652160 bytes, SHA-256
+  `3bcf94eee2d20407c8ceb39ecd8afecf6a21dcd801c86a0199c9e4e2a9522978`;
+  every deployed target matched it byte-for-byte.
+- Ten pre-existing targets have an exact backup; 17 targets were new. The two
+  later integration-test revisions also have separate round-two/round-three
+  backups.
+- Focused-test, protected-integration, final-live, direct-worker JSON, and final
+  residual-count log SHA-256 values are
+  `71c480ea7ee339df7be973370b0434c106b424876cc8c9386101205fcdd22965`,
+  `ba542d686d806cbd854089c968c184cb0ec1956e2bc54bfee15d6433750ae73c`,
+  `3ea42ee6ab3f5a259dde99221524f0b85ee4bf5ea4984c2cac61aa1b5caddedc`,
+  `13ca14ab6f4f2246165aa21125848c4206adcb767cabd5c1a2ac122b57d253af`,
+  and `3e21136938b846ab8296a501fab08b4004900c9aafd8743a52ed0a8554a464ac`.
+- No service-control command was issued. Odoo remained on PID `959127` with
+  `NRestarts=1`; no live worker remains. Root filesystem use remains 96% with
+  about 3.5 GB free. Server Git is intentionally old/dirty; continue using an
+  explicit allowlist and never pull, reset, or checkout there.
+
+The next action is a choice, not an assumption: either authorize a separate,
+carefully scoped repair of the protected Odoo package so these return commands run
+without the compatibility fixture, or leave that environment defect recorded and
+select the next bounded 8-12-command accounting capability batch.

@@ -1432,6 +1432,14 @@ def test_public_action_and_closed_capability_batch_are_exact() -> None:
         "stock.transfer.validate",
         "stock.transfer.unreserve",
         "stock.transfer.cancel",
+        "account.return.create",
+        "account.return.checks.refresh",
+        "account.return.check.result.update",
+        "account.return.validate",
+        "account.return.mark_submitted",
+        "account.return.archive",
+        "account.return.restore",
+        "account.return.delete",
     }
 
 

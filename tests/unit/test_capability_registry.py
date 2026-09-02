@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 374
-EXPECTED_ENABLED_CAPABILITY_COUNT = 359
+EXPECTED_CAPABILITY_COUNT = 382
+EXPECTED_ENABLED_CAPABILITY_COUNT = 367
 EXPECTED_IMPLEMENTED_READ_COUNT = 215
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 144
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 152
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 318
-EXPECTED_DEGRADED_CAPABILITY_COUNT = 41
-EXPECTED_SCHEMA_COUNT = 724
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 324
+EXPECTED_DEGRADED_CAPABILITY_COUNT = 43
+EXPECTED_SCHEMA_COUNT = 740
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "ab1e11c994f6c3d27c4eaa310e04f4967c5c9c3f275a3fcde0dbf9f1c2ba0992"
+    "e72188eb3fae0df6b67afd41b7a8b5671b04c41ec8d02d37ba9ec7d20715d064"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -320,6 +320,14 @@ IMPLEMENTED_WRITES = {
     "account.account.create",
     "account.account.restore",
     "account.account.update",
+    "account.return.archive",
+    "account.return.check.result.update",
+    "account.return.checks.refresh",
+    "account.return.create",
+    "account.return.delete",
+    "account.return.mark_submitted",
+    "account.return.restore",
+    "account.return.validate",
     "analytic.account.create",
     "analytic.account.update",
     "analytic.account.archive",
@@ -505,6 +513,16 @@ ANALYTIC_BUDGET_WRITES = {
     "budget.mark_done",
     "budget.reset_to_draft",
     "budget.update_draft",
+}
+ACCOUNT_RETURN_WRITES = {
+    "account.return.archive",
+    "account.return.check.result.update",
+    "account.return.checks.refresh",
+    "account.return.create",
+    "account.return.delete",
+    "account.return.mark_submitted",
+    "account.return.restore",
+    "account.return.validate",
 }
 PARTNER_MASTER_DATA_READS = {
     "partner.get",
@@ -2278,6 +2296,11 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
         "tests/unit/test_analytic_budget_write_cli.py",
         "tests/unit/test_analytic_budget_write_registry.py",
     }
+    account_return_unit_tests = {
+        "tests/unit/test_account_returns.py",
+        "tests/unit/test_account_return_writes_runtime.py",
+        "tests/unit/test_return_journal_analysis_cli.py",
+    }
     order_document_unit_tests = {
         "tests/unit/test_order_document_writes.py",
         "tests/unit/test_order_document_writes_runtime.py",
@@ -2313,8 +2336,25 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
         "payable.payment.register": {"account.payment.register"},
         "vendor_refund.create": {"account.move.reversal"},
         "period.accrual.generate": {"account.accrued.orders.wizard"},
+        "account.return.create": {"account.return.creation.wizard"},
     }
     extended_modules = {
+        "account.return.archive": ["account_reports", "account", "base"],
+        "account.return.check.result.update": [
+            "account_reports",
+            "account",
+            "base",
+        ],
+        "account.return.checks.refresh": ["account_reports", "account", "base"],
+        "account.return.create": ["account_reports", "account", "base"],
+        "account.return.delete": ["account_reports", "account", "base"],
+        "account.return.mark_submitted": [
+            "account_reports",
+            "account",
+            "base",
+        ],
+        "account.return.restore": ["account_reports", "account", "base"],
+        "account.return.validate": ["account_reports", "account", "base"],
         "analytic.account.archive": ["analytic", "account", "base"],
         "analytic.account.create": ["analytic", "account", "base"],
         "analytic.account.restore": ["analytic", "account", "base"],
@@ -2547,7 +2587,7 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             f"{model}:{operation}"
             for model, operation in CORE_WRITE_ACCESS[capability_id]
         }
-        if capability_id in PARTNER_MASTER_DATA_WRITES:
+        if capability_id in PARTNER_MASTER_DATA_WRITES | ACCOUNT_RETURN_WRITES:
             expected_acl.add("res.company:read")
         expected_acl -= runtime_support_acl.get(capability_id, set())
         assert set(descriptor["requirements"]["acl"]) == expected_acl
@@ -2563,6 +2603,7 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             assert descriptor["status"]["reason_code"] == "database_global_record_scope"
         elif capability_id in {
             "account.account.create",
+            "account.return.create",
             "account.group.create",
             "reconciliation.model.create",
             "tax.group.create",
@@ -2588,7 +2629,7 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
                 descriptor["status"]["reason_code"]
                 == "odoo_native_analytic_line_idempotency_field_unavailable"
             )
-        elif capability_id == "analytic.line.delete":
+        elif capability_id == "analytic.line.delete" or capability_id == "account.return.delete":
             assert descriptor["status"]["value"] == "degraded"
             assert (
                 descriptor["status"]["reason_code"]
@@ -2794,18 +2835,22 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             set(stock_transfer_unit_tests)
             if capability_id in stock_transfer_batch_writes
             else (
-                set(order_document_unit_tests)
-                if capability_id in ORDER_DOCUMENT_WRITES
+                set(account_return_unit_tests)
+                if capability_id in ACCOUNT_RETURN_WRITES
                 else (
-                    set(analytic_budget_unit_tests)
-                    if capability_id in ANALYTIC_BUDGET_WRITES
+                    set(order_document_unit_tests)
+                    if capability_id in ORDER_DOCUMENT_WRITES
                     else (
-                        set(payment_bank_unit_tests)
-                        if capability_id in PAYMENT_BANK_WRITES
+                        set(analytic_budget_unit_tests)
+                        if capability_id in ANALYTIC_BUDGET_WRITES
                         else (
-                            set(document_lifecycle_unit_tests)
-                            if capability_id in DOCUMENT_LIFECYCLE_WRITES
-                            else set(core_unit_tests)
+                            set(payment_bank_unit_tests)
+                            if capability_id in PAYMENT_BANK_WRITES
+                            else (
+                                set(document_lifecycle_unit_tests)
+                                if capability_id in DOCUMENT_LIFECYCLE_WRITES
+                                else set(core_unit_tests)
+                            )
                         )
                     )
                 )
@@ -2926,6 +2971,17 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
                 assert "immediate replay" not in integration_reason
             else:
                 assert "immediate replay" in integration_reason
+        elif capability_id in ACCOUNT_RETURN_WRITES:
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == [
+                "tests/integration/test_return_journal_analysis_batch_live.py"
+            ]
+            integration_reason = descriptor["tests"]["integration"]["reason"]
+            if capability_id == "account.return.delete":
+                assert any(
+                    term in integration_reason for term in ("deletion", "absence")
+                )
+                assert "replay" not in integration_reason
         elif capability_id in PAYMENT_BANK_WRITES:
             assert descriptor["tests"]["integration"]["status"] == "implemented"
             assert descriptor["tests"]["integration"]["references"] == [

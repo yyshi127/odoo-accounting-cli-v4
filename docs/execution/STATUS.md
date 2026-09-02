@@ -7,25 +7,59 @@ The active objective is capability-first accounting delivery in
 logistics are outside this phase; picking and physical-return commands are not
 accounting-core completion. Financial credit notes/refunds remain in scope.
 
-The current registry has 374 IDs, 359 enabled handlers (215 reads, 144 writes),
-and 724 schemas. Statuses are 318 `unconfigured`, 41 `degraded`, and 15 `disabled`.
+The current registry has 382 IDs, 367 enabled handlers (215 reads, 152 writes),
+and 740 schemas. Statuses are 324 `unconfigured`, 43 `degraded`, and 15 `disabled`.
 These are implementation totals including historical non-accounting extensions,
-not 374 accounting operations, a coverage percentage, or proof that all workflows
+not 382 accounting operations, a coverage percentage, or proof that all workflows
 pass for the configured user. There are 16 `stock.*` IDs, but other historical
 sales/purchase extensions also remain; subtracting 16 does not establish a
-pure-accounting count or a coverage denominator. Registry SHA-256:
-`ab1e11c994f6c3d27c4eaa310e04f4967c5c9c3f275a3fcde0dbf9f1c2ba0992`.
+pure-accounting count or a coverage denominator. Capability-ID-list SHA-256 is
+`e72188eb3fae0df6b67afd41b7a8b5671b04c41ec8d02d37ba9ec7d20715d064`;
+canonical registry SHA-256 is
+`99cbd280f04184fea14911aaa6db9d0d1f52fed32bb70a09d39c5d409f909a76`.
 
-The latest batch adds eight real analytic-accounting commands:
+The latest batch adds eight manual account-return lifecycle commands:
+`account.return.create`, `account.return.checks.refresh`,
+`account.return.check.result.update`, `account.return.validate`,
+`account.return.mark_submitted`, `account.return.archive`,
+`account.return.restore`, and `account.return.delete`. Creation is restricted to a
+standalone root company, a reportless `account_return` type using Odoo's generic
+review/submit workflow, and exactly one native return period. `mark_submitted`
+changes Odoo's internal return state; it does not claim external tax filing.
+Delete has no tombstone and is therefore degraded. Check IDs remain available
+through the existing read commands rather than being duplicated in write results.
+
+Final server regression passed 111 focused cases; registry closure passed two
+cases, and the protected live suite skipped both aliases until explicitly
+authorized. The final explicit dual-alias run passed `2 passed in 8.93s`. Each
+worker exercised the existing eight return/journal reads plus all eight new writes
+as uid 5/company 1, reported 16 positive results, and verified rollback with a fresh
+cursor. Both databases finished with no persistent account-return, marked-check,
+temporary-view, or temporary-XML-ID rows. PostgreSQL sequences are not transactional,
+so this is a no-persistent-row claim, not a bit-for-bit unchanged-database claim.
+
+The server package has a confirmed Odoo source/data defect: its
+`account_reports` manifest comments out `views/account_move_views.xml`, while the
+annual-closing check still references `account_reports.view_draft_entries_tree`.
+Both isolated databases therefore fail natively at that reference. The acceptance
+smoke disclosed and installed an exact rollback-only compatibility view/XML-ID in
+the same transaction. This proves the CLI path under that fixture; it does not
+claim the unmodified server environment is healthy. Repairing the Odoo package is
+outside this CLI batch and remains required before ordinary runtime use.
+
+The private evidence directory is
+`/opt/odoo-accounting-cli-v4/.tooling/account-return-lifecycle-20260902-114136`.
+The final 27-file archive is 2652160 bytes with SHA-256
+`3bcf94eee2d20407c8ceb39ecd8afecf6a21dcd801c86a0199c9e4e2a9522978`;
+all targets matched it byte-for-byte. Ten existing files have pre-deployment
+backups and 17 files were new. Odoo stayed on PID `959127` with `NRestarts=1`;
+no service-control command was issued and no live worker remains.
+
+The preceding analytic-accounting batch added eight commands:
 `analytic.plan.create/update`, `analytic.account.archive/restore`,
-`analytic.line.create/update/delete`, and `analytic.line.summary`. Plan writes are
-limited to child plans. Manual line writes use the Project root plan and exclude
-accounting-generated lines; the summary follows Odoo 19's dynamic plan column and
-can filter by plan and analytic account. Decimal inputs are canonical signed
-strings, delete is honestly degraded because no tombstone exists, and the batch
-reuses the existing analytic/budget runtime and one shared transactional smoke.
+`analytic.line.create/update/delete`, and `analytic.line.summary`.
 
-The preceding batch added no capability ID or handler. It deepened nine existing
+The earlier batch added no capability ID or handler. It deepened nine existing
 invoice, journal-entry and payment post/cancel/reset commands with plural forms.
 
 Final local scope, payment-runtime, lifecycle-contract and registry verification

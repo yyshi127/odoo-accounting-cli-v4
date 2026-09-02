@@ -154,6 +154,14 @@ CORE_WRITE_CAPABILITY_IDS = frozenset(
         "stock.transfer.validate",
         "stock.transfer.unreserve",
         "stock.transfer.cancel",
+        "account.return.create",
+        "account.return.checks.refresh",
+        "account.return.check.result.update",
+        "account.return.validate",
+        "account.return.mark_submitted",
+        "account.return.archive",
+        "account.return.restore",
+        "account.return.delete",
     }
 )
 
@@ -408,6 +416,18 @@ _ACCOUNTING_RULE_WRITE_CAPABILITIES = frozenset(
         "analytic.applicability.update",
         "analytic.distribution_model.create",
         "analytic.distribution_model.update",
+    }
+)
+_ACCOUNT_RETURN_WRITE_CAPABILITIES = frozenset(
+    {
+        "account.return.create",
+        "account.return.checks.refresh",
+        "account.return.check.result.update",
+        "account.return.validate",
+        "account.return.mark_submitted",
+        "account.return.archive",
+        "account.return.restore",
+        "account.return.delete",
     }
 )
 _CONTEXT_FIELDS = frozenset(
@@ -3745,6 +3765,40 @@ def _validate_transfer_parameters(
     return dict(parameters)
 
 
+def _validate_account_return_parameters(
+    capability_id: str, parameters: Any
+) -> dict[str, Any]:
+    if capability_id == "account.return.create":
+        expected = {"return_type_id", "date_from", "date_to"}
+        if not isinstance(parameters, dict) or set(parameters) != expected:
+            raise _invalid(
+                "Account-return create parameters do not match the fixed contract."
+            )
+        if not _valid_id(parameters["return_type_id"]):
+            raise _invalid("parameters.return_type_id must be a positive integer.")
+        if not _is_date(parameters["date_from"]) or not _is_date(parameters["date_to"]):
+            raise _invalid(
+                "parameters.date_from and parameters.date_to must be YYYY-MM-DD dates."
+            )
+        if parameters["date_from"] > parameters["date_to"]:
+            raise _invalid("parameters.date_from must not be after parameters.date_to.")
+        return dict(parameters)
+    if capability_id == "account.return.check.result.update":
+        if not isinstance(parameters, dict) or set(parameters) != {
+            "check_id",
+            "result",
+        }:
+            raise _invalid(
+                "Account-return check-result parameters do not match the fixed contract."
+            )
+        if not _valid_id(parameters["check_id"]):
+            raise _invalid("parameters.check_id must be a positive integer.")
+        if parameters["result"] not in {"todo", "reviewed"}:
+            raise _invalid("parameters.result must be todo or reviewed.")
+        return dict(parameters)
+    return _validate_single_id(parameters, "return_id")
+
+
 def validate_core_write_request(
     capability_id: str, request: Any
 ) -> tuple[str, dict[str, Any], dict[str, Any]]:
@@ -3756,7 +3810,9 @@ def validate_core_write_request(
             code="capability_unavailable",
         )
     request_id, context, parameters = _validate_envelope(request)
-    if capability_id.startswith("purchase_bill.") or capability_id == (
+    if capability_id in _ACCOUNT_RETURN_WRITE_CAPABILITIES:
+        normalized = _validate_account_return_parameters(capability_id, parameters)
+    elif capability_id.startswith("purchase_bill.") or capability_id == (
         "purchase.order.bill.create"
     ):
         normalized = _validate_purchase_bill_parameters(capability_id, parameters)
@@ -3942,6 +3998,19 @@ def _expected_idempotency_key(
         ).encode("utf-8")
         digest = hashlib.sha256(canonical).hexdigest()[:32]
         return f"{capability_id}:{company_id}:{digest}"
+    if capability_id == "account.return.create":
+        canonical = json.dumps(
+            parameters, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        return f"account.return.create:{company_id}:{digest}"
+    if capability_id == "account.return.check.result.update":
+        return (
+            f"account.return.check.result.update:{parameters['check_id']}:"
+            f"{parameters['result']}"
+        )
+    if capability_id in _ACCOUNT_RETURN_WRITE_CAPABILITIES:
+        return f"{capability_id}:{parameters['return_id']}"
     if capability_id in {
         "account.tag.create",
         "tax.group.create",
@@ -4512,6 +4581,55 @@ def _validate_result(
 ) -> dict[str, Any]:
     if not _valid_result_shape(result) or result["company_id"] != company_id:
         raise _failed("Odoo returned a malformed or out-of-scope core-write result.")
+
+    if capability_id in _ACCOUNT_RETURN_WRITE_CAPABILITIES:
+        check_update = capability_id == "account.return.check.result.update"
+        expected_id = (
+            parameters["check_id"]
+            if check_update
+            else result["id"]
+            if capability_id == "account.return.create"
+            else parameters["return_id"]
+        )
+        expected_states = {
+            "account.return.create": (
+                {"new", "reviewed", "submitted", "archived"}
+                if idempotent_replay
+                else {"new"}
+            ),
+            "account.return.checks.refresh": {"new"},
+            "account.return.check.result.update": {parameters.get("result")},
+            "account.return.validate": (
+                {"reviewed", "submitted"}
+                if idempotent_replay
+                else {"reviewed"}
+            ),
+            "account.return.mark_submitted": {"submitted"},
+            "account.return.archive": {"archived"},
+            "account.return.restore": {"new"},
+            "account.return.delete": {"deleted"},
+        }[capability_id]
+        source_matches = (
+            result["source_id"] == parameters["return_type_id"]
+            if capability_id == "account.return.create"
+            else _valid_id(result["source_id"])
+        )
+        if (
+            result["model"]
+            != ("account.return.check" if check_update else "account.return")
+            or result["id"] != expected_id
+            or not _valid_id(result["id"])
+            or not _is_text(result["name"])
+            or result["state"] not in expected_states
+            or result["move_type"] is not None
+            or not source_matches
+            or result["line_ids"]
+            or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None
+            or result["reconciled"]
+        ):
+            raise _failed("Odoo returned a mismatched account-return result.")
+        return deepcopy(result)
 
     if capability_id == "reconciliation.apply":
         invoice_mode = "invoice_id" in parameters

@@ -1,8 +1,9 @@
-"""Shared rollback smoke for six return and two journal-analysis reads."""
+"""Shared rollback smoke for return reads, writes, and journal analysis."""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -27,6 +28,7 @@ _PHYSICAL_DATABASES = {
 }
 _COMPANY_ID = 1
 _USER_LOGIN = "odacv4_g5_accountant"
+_DRAFT_ENTRIES_VIEW_XMLID = "account_reports.view_draft_entries_tree"
 _CAPABILITY_IDS = (
     "account.return.search",
     "account.return.get",
@@ -36,7 +38,16 @@ _CAPABILITY_IDS = (
     "account.return.check.get",
     "journal.accounting_date.resolve",
     "journal_item.analysis.summary",
+    "account.return.create",
+    "account.return.checks.refresh",
+    "account.return.check.result.update",
+    "account.return.validate",
+    "account.return.mark_submitted",
+    "account.return.archive",
+    "account.return.restore",
+    "account.return.delete",
 )
+_WRITE_CAPABILITY_IDS = frozenset(_CAPABILITY_IDS[-8:])
 
 
 def _project_root() -> Path:
@@ -135,11 +146,16 @@ def _run_worker(
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert len(completed.stdout.splitlines()) == 1
     result = json.loads(completed.stdout)
+    assert result["environment_fixtures"] in (
+        [],
+        [_DRAFT_ENTRIES_VIEW_XMLID],
+    )
     assert result == {
         "alias": alias,
         "capabilities": list(_CAPABILITY_IDS),
         "company_id": _COMPANY_ID,
         "database": _PHYSICAL_DATABASES[alias],
+        "environment_fixtures": result["environment_fixtures"],
         "positive_results": len(_CAPABILITY_IDS),
         "rollback_verified": True,
         "user_id": result["user_id"],
@@ -195,9 +211,18 @@ def _request(
     capability_id: str,
     parameters: dict[str, Any],
 ) -> dict[str, Any]:
+    canonical_parameters = json.dumps(
+        parameters,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
     return {
         "schema_version": "v1",
-        "request_id": str(uuid.uuid5(run_id, capability_id)),
+        "request_id": str(
+            uuid.uuid5(run_id, f"{capability_id}:{canonical_parameters}")
+        ),
         "context": {
             "database": alias,
             "company_id": _COMPANY_ID,
@@ -209,6 +234,60 @@ def _request(
     }
 
 
+def _write_key(capability_id: str, parameters: dict[str, Any]) -> str:
+    if capability_id == "account.return.create":
+        canonical = json.dumps(
+            parameters,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        return f"{capability_id}:{_COMPANY_ID}:{digest}"
+    if capability_id == "account.return.check.result.update":
+        return (
+            f"{capability_id}:{parameters['check_id']}:{parameters['result']}"
+        )
+    return f"{capability_id}:{parameters['return_id']}"
+
+
+def _invoke_write(
+    env: Any,
+    alias: str,
+    run_id: uuid.UUID,
+    capability_id: str,
+    parameters: dict[str, Any],
+    *,
+    replay: bool = True,
+    expected_first_replay: bool | None = False,
+) -> dict[str, Any]:
+    from odoo_accounting_cli_v4.bridge.core_writes import OdooCoreWritePort
+    from odoo_accounting_cli_v4.capabilities.core_writes import execute_core_write
+
+    if capability_id not in _WRITE_CAPABILITY_IDS:
+        raise RuntimeError(f"{capability_id} is not in the return-write smoke")
+    key = _write_key(capability_id, parameters)
+    request = _request(alias, run_id, capability_id, parameters)
+    port = OdooCoreWritePort(_DirectClient(env))
+    first = execute_core_write(port, capability_id, request, key, capability_id)
+    if (
+        expected_first_replay is not None
+        and first["idempotent_replay"] is not expected_first_replay
+    ):
+        raise RuntimeError(
+            f"{capability_id} returned an unexpected first replay flag"
+        )
+    if not replay:
+        return first["result"]
+    second = execute_core_write(port, capability_id, request, key, capability_id)
+    if second["idempotent_replay"] is not True:
+        raise RuntimeError(f"{capability_id} did not replay its target state")
+    if second["result"] != first["result"]:
+        raise RuntimeError(f"{capability_id} changed during immediate replay")
+    return first["result"]
+
+
 def _invoke_capability(
     env: Any,
     alias: str,
@@ -217,12 +296,11 @@ def _invoke_capability(
     parameters: dict[str, Any],
 ) -> dict[str, Any]:
     from odoo_accounting_cli_v4.bridge.account_returns import OdooAccountReturnPort
-    from odoo_accounting_cli_v4.capabilities.account_returns import (
-        read_account_return,
-    )
-
     from odoo_accounting_cli_v4.bridge.journal_analysis import (
         OdooJournalAnalysisPort,
+    )
+    from odoo_accounting_cli_v4.capabilities.account_returns import (
+        read_account_return,
     )
     from odoo_accounting_cli_v4.capabilities.journal_analysis import (
         read_journal_analysis,
@@ -245,12 +323,16 @@ def _invoke_capability(
 
 def _setup_return_fixture(admin_env: Any, marker: str) -> tuple[int, int, int, str]:
     return_type = admin_env["account.return.type"].search(
-        [("category", "=", "account_return")],
+        [
+            ("category", "=", "account_return"),
+            ("report_id", "=", False),
+            ("states_workflow", "=", "generic_state_review_submit"),
+        ],
         order="id",
         limit=1,
     )
-    if not return_type or return_type.category == "audit":
-        raise RuntimeError("no non-Audit account-return type is available")
+    if not return_type:
+        raise RuntimeError("no reportless submit-workflow return type is available")
     account_return = admin_env["account.return"].create(
         {
             "name": marker,
@@ -283,6 +365,67 @@ def _setup_return_fixture(admin_env: Any, marker: str) -> tuple[int, int, int, s
         return_type.id,
         account_return.date_deadline.isoformat(),
     )
+
+
+def _ensure_draft_entries_view_fixture(
+    admin_env: Any, marker: str
+) -> tuple[list[int], list[int], list[str]]:
+    existing_data = admin_env["ir.model.data"].search(
+        [
+            ("module", "=", "account_reports"),
+            ("name", "=", "view_draft_entries_tree"),
+        ],
+        limit=2,
+    )
+    existing_view = admin_env.ref(
+        _DRAFT_ENTRIES_VIEW_XMLID, raise_if_not_found=False
+    )
+    if existing_data or existing_view:
+        if (
+            len(existing_data) != 1
+            or not existing_view
+            or existing_data.model != "ir.ui.view"
+            or existing_data.res_id != existing_view.id
+        ):
+            raise RuntimeError("the draft-entries external ID is inconsistent")
+        return [], [], []
+    view = admin_env["ir.ui.view"].create(
+        {
+            "name": f"{marker} draft entries list",
+            "model": "account.move",
+            "inherit_id": admin_env.ref("account.view_invoice_tree").id,
+            "mode": "primary",
+            "arch": """
+                <xpath expr="//field[@name='date']" position="attributes">
+                    <attribute name="optional">show</attribute>
+                </xpath>
+            """,
+        }
+    )
+    external_id = admin_env["ir.model.data"].create(
+        {
+            "module": "account_reports",
+            "name": "view_draft_entries_tree",
+            "model": "ir.ui.view",
+            "res_id": view.id,
+            "noupdate": True,
+        }
+    )
+    admin_env.flush_all()
+    if (
+        admin_env.ref(_DRAFT_ENTRIES_VIEW_XMLID) != view
+        or view.model != "account.move"
+        or view.inherit_id != admin_env.ref("account.view_invoice_tree")
+        or view.mode != "primary"
+        or view.type != "list"
+        or external_id.module != "account_reports"
+        or external_id.name != "view_draft_entries_tree"
+        or external_id.model != "ir.ui.view"
+        or external_id.res_id != view.id
+        or not external_id.noupdate
+    ):
+        raise RuntimeError("the rollback-only draft-entries view fixture is unavailable")
+    return [view.id], [external_id.id], [_DRAFT_ENTRIES_VIEW_XMLID]
 
 
 def _posted_journal_and_date(env: Any) -> tuple[int, str]:
@@ -411,7 +554,157 @@ def _exercise_batch(
         raise RuntimeError("journal_item.analysis.summary missed live posted entries")
 
 
-def _verify_rollback(registry: Any, marker: str) -> None:
+def _exercise_write_batch(
+    env: Any,
+    alias: str,
+    run_id: uuid.UUID,
+    marker: str,
+    type_id: int,
+) -> tuple[list[int], list[int]]:
+    main_parameters = {
+        "return_type_id": type_id,
+        "date_from": "2095-01-01",
+        "date_to": "2095-12-31",
+    }
+    created = _invoke_write(
+        env,
+        alias,
+        run_id,
+        "account.return.create",
+        main_parameters,
+    )
+    main_id = created["id"]
+    if created["state"] != "new" or created["source_id"] != type_id:
+        raise RuntimeError("account.return.create returned the wrong type or state")
+
+    refreshed = _invoke_write(
+        env,
+        alias,
+        run_id,
+        "account.return.checks.refresh",
+        {"return_id": main_id},
+        expected_first_replay=None,
+    )
+    if refreshed["id"] != main_id or refreshed["state"] != "new":
+        raise RuntimeError("account.return.checks.refresh returned the wrong return")
+
+    checks = env["account.return.check"].search(
+        [
+            ("return_id", "=", main_id),
+            ("state", "=", "new"),
+            ("result", "in", ["todo", "anomaly"]),
+        ],
+        order="id",
+    )
+    if not checks:
+        checks = env["account.return.check"].create(
+            {
+                "return_id": main_id,
+                "code": f"{marker}-WRITE-CHECK",
+                "name": f"{marker} write check",
+            }
+        )
+    check_ids = sorted(checks.ids)
+    for check_id in check_ids:
+        updated = _invoke_write(
+            env,
+            alias,
+            run_id,
+            "account.return.check.result.update",
+            {"check_id": check_id, "result": "reviewed"},
+        )
+        if (
+            updated["id"] != check_id
+            or updated["state"] != "reviewed"
+            or updated["source_id"] != main_id
+        ):
+            raise RuntimeError(
+                "account.return.check.result.update returned the wrong check"
+            )
+
+    validated = _invoke_write(
+        env,
+        alias,
+        run_id,
+        "account.return.validate",
+        {"return_id": main_id},
+    )
+    if validated["state"] != "reviewed":
+        raise RuntimeError("account.return.validate did not enter reviewed state")
+    submitted = _invoke_write(
+        env,
+        alias,
+        run_id,
+        "account.return.mark_submitted",
+        {"return_id": main_id},
+    )
+    main_return = env["account.return"].browse(main_id).exists()
+    if (
+        submitted["state"] != "submitted"
+        or len(main_return) != 1
+        or main_return.state != "submitted"
+        or not main_return.is_completed
+    ):
+        raise RuntimeError(
+            "account.return.mark_submitted did not complete the internal state"
+        )
+
+    disposable_parameters = {
+        "return_type_id": type_id,
+        "date_from": "2098-01-01",
+        "date_to": "2098-12-31",
+    }
+    disposable = _invoke_write(
+        env,
+        alias,
+        run_id,
+        "account.return.create",
+        disposable_parameters,
+    )
+    disposable_id = disposable["id"]
+    archived = _invoke_write(
+        env,
+        alias,
+        run_id,
+        "account.return.archive",
+        {"return_id": disposable_id},
+    )
+    if archived["state"] != "archived":
+        raise RuntimeError("account.return.archive left the return active")
+    restored = _invoke_write(
+        env,
+        alias,
+        run_id,
+        "account.return.restore",
+        {"return_id": disposable_id},
+    )
+    if restored["state"] != "new":
+        raise RuntimeError("account.return.restore changed the business state")
+    deleted = _invoke_write(
+        env,
+        alias,
+        run_id,
+        "account.return.delete",
+        {"return_id": disposable_id},
+        replay=False,
+    )
+    if deleted["id"] != disposable_id or deleted["state"] != "deleted":
+        raise RuntimeError("account.return.delete returned the wrong record")
+    if env["account.return"].with_context(active_test=False).search_count(
+        [("id", "=", disposable_id)], limit=1
+    ):
+        raise RuntimeError("account.return.delete left the record visible")
+    return [main_id, disposable_id], check_ids
+
+
+def _verify_rollback(
+    registry: Any,
+    marker: str,
+    return_ids: list[int],
+    check_ids: list[int],
+    fixture_view_ids: list[int],
+    fixture_xmlid_ids: list[int],
+) -> None:
     from odoo import SUPERUSER_ID, api
 
     cursor = registry.cursor()
@@ -429,7 +722,35 @@ def _verify_rollback(registry: Any, marker: str) -> None:
             [("code", "=", marker)],
             limit=1,
         )
-        if remaining_returns or remaining_checks:
+        remaining_ids = env["account.return"].search_count(
+            [("id", "in", return_ids)], limit=1
+        )
+        remaining_check_ids = env["account.return.check"].search_count(
+            [("id", "in", check_ids)], limit=1
+        )
+        remaining_view_ids = env["ir.ui.view"].search_count(
+            [("id", "in", fixture_view_ids)], limit=1
+        )
+        remaining_xmlid_ids = env["ir.model.data"].search_count(
+            [("id", "in", fixture_xmlid_ids)], limit=1
+        )
+        remaining_fixture_xmlid = bool(
+            fixture_xmlid_ids
+            and env.ref(_DRAFT_ENTRIES_VIEW_XMLID, raise_if_not_found=False)
+        )
+        remaining_fixture_views = env["ir.ui.view"].search_count(
+            [("name", "=", f"{marker} draft entries list")], limit=1
+        )
+        if (
+            remaining_returns
+            or remaining_checks
+            or remaining_ids
+            or remaining_check_ids
+            or remaining_view_ids
+            or remaining_xmlid_ids
+            or remaining_fixture_xmlid
+            or remaining_fixture_views
+        ):
             raise RuntimeError("an account-return fixture survived rollback")
     finally:
         cursor.rollback()
@@ -459,6 +780,11 @@ def _live_worker(argv: list[str] | None = None) -> int:
     cursor = registry.cursor()
     marker = f"ODACV4-RETURN-JOURNAL-{args.alias}-{args.run_id.hex}"
     user_id: int | None = None
+    created_return_ids: list[int] = []
+    created_check_ids: list[int] = []
+    fixture_view_ids: list[int] = []
+    fixture_xmlid_ids: list[int] = []
+    environment_fixtures: list[str] = []
     try:
         context = {
             "allowed_company_ids": [_COMPANY_ID],
@@ -475,14 +801,25 @@ def _live_worker(argv: list[str] | None = None) -> int:
         )
         if (
             not company
+            or company.parent_id
+            or company.child_ids
             or not user
             or not user.active
             or company not in user.company_ids
         ):
-            raise RuntimeError("the configured company or user is unavailable")
+            raise RuntimeError(
+                "the configured standalone company or user is unavailable"
+            )
+        (
+            fixture_view_ids,
+            fixture_xmlid_ids,
+            environment_fixtures,
+        ) = _ensure_draft_entries_view_fixture(admin_env, marker)
         return_id, check_id, type_id, deadline = _setup_return_fixture(
             admin_env, marker
         )
+        created_return_ids.append(return_id)
+        created_check_ids.append(check_id)
         user_id = user.id
         business_env = api.Environment(cursor, user_id, context)
         _exercise_batch(
@@ -494,11 +831,27 @@ def _live_worker(argv: list[str] | None = None) -> int:
             type_id,
             deadline,
         )
+        write_return_ids, write_check_ids = _exercise_write_batch(
+            business_env,
+            args.alias,
+            args.run_id,
+            marker,
+            type_id,
+        )
+        created_return_ids.extend(write_return_ids)
+        created_check_ids.extend(write_check_ids)
     finally:
         cursor.rollback()
         cursor.close()
 
-    _verify_rollback(registry, marker)
+    _verify_rollback(
+        registry,
+        marker,
+        created_return_ids,
+        created_check_ids,
+        fixture_view_ids,
+        fixture_xmlid_ids,
+    )
     sys.stdout.write(
         json.dumps(
             {
@@ -506,6 +859,7 @@ def _live_worker(argv: list[str] | None = None) -> int:
                 "capabilities": list(_CAPABILITY_IDS),
                 "company_id": _COMPANY_ID,
                 "database": args.database,
+                "environment_fixtures": environment_fixtures,
                 "positive_results": len(_CAPABILITY_IDS),
                 "rollback_verified": True,
                 "user_id": user_id,

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from copy import deepcopy
 
 import pytest
@@ -9,8 +11,40 @@ from odoo_accounting_cli_v4.capabilities.account_returns import (
     read_account_return,
     validate_account_return_request,
 )
+from odoo_accounting_cli_v4.capabilities.core_writes import (
+    CORE_WRITE_CAPABILITY_IDS,
+    CoreWriteError,
+    execute_core_write,
+    validate_core_write_request,
+)
 
 REQUEST_ID = "7bc39413-0d69-4092-9319-795d33f3167c"
+
+ACCOUNT_RETURN_WRITE_PARAMETERS = {
+    "account.return.create": {
+        "return_type_id": 17,
+        "date_from": "2027-01-01",
+        "date_to": "2027-12-31",
+    },
+    "account.return.checks.refresh": {"return_id": 61},
+    "account.return.check.result.update": {"check_id": 71, "result": "reviewed"},
+    "account.return.validate": {"return_id": 61},
+    "account.return.mark_submitted": {"return_id": 61},
+    "account.return.archive": {"return_id": 61},
+    "account.return.restore": {"return_id": 61},
+    "account.return.delete": {"return_id": 61},
+}
+
+ACCOUNT_RETURN_WRITE_STATES = {
+    "account.return.create": "new",
+    "account.return.checks.refresh": "new",
+    "account.return.check.result.update": "reviewed",
+    "account.return.validate": "reviewed",
+    "account.return.mark_submitted": "submitted",
+    "account.return.archive": "archived",
+    "account.return.restore": "new",
+    "account.return.delete": "deleted",
+}
 
 
 def _request(parameters: dict, *, company_id: int = 7) -> dict:
@@ -364,3 +398,283 @@ def test_result_shape_company_order_and_counts_fail_closed() -> None:
         with pytest.raises(AccountReturnReadError) as caught:
             read_account_return(FakePort(items), capability_id, _request(parameters))
         assert caught.value.code == "failed_validation"
+
+
+def _write_key(capability_id: str) -> str:
+    parameters = ACCOUNT_RETURN_WRITE_PARAMETERS[capability_id]
+    if capability_id == "account.return.create":
+        canonical = json.dumps(
+            parameters,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        return f"{capability_id}:7:{digest}"
+    if capability_id == "account.return.check.result.update":
+        return f"{capability_id}:71:reviewed"
+    return f"{capability_id}:61"
+
+
+def _write_result(capability_id: str, **changes: object) -> dict:
+    is_check = capability_id == "account.return.check.result.update"
+    result = {
+        "model": "account.return.check" if is_check else "account.return",
+        "id": 901
+        if capability_id == "account.return.create"
+        else 71
+        if is_check
+        else 61,
+        "name": "Review the return" if is_check else "Corporate Tax 2027",
+        "state": ACCOUNT_RETURN_WRITE_STATES[capability_id],
+        "company_id": 7,
+        "move_type": None,
+        "source_id": 61 if is_check else 17,
+        "line_ids": [],
+        "partial_reconcile_ids": [],
+        "full_reconcile_id": None,
+        "reconciled": False,
+    }
+    result.update(changes)
+    return result
+
+
+_DEFAULT_WRITE_RESULT = object()
+
+
+class FakeWritePort:
+    user_id = 42
+
+    def __init__(
+        self,
+        capability_id: str,
+        *,
+        result: object = _DEFAULT_WRITE_RESULT,
+        idempotent_replay: bool = False,
+    ) -> None:
+        self.result = deepcopy(
+            _write_result(capability_id)
+            if result is _DEFAULT_WRITE_RESULT
+            else result
+        )
+        self.idempotent_replay = idempotent_replay
+        self.calls: list[dict] = []
+
+    def execute(self, **kwargs: object) -> dict:
+        self.calls.append(deepcopy(kwargs))
+        return {
+            "user_id": self.user_id,
+            "company_visible": True,
+            "module_installed": True,
+            "access_allowed": True,
+            "idempotent_replay": self.idempotent_replay,
+            "result": deepcopy(self.result),
+        }
+
+
+@pytest.mark.parametrize(
+    "capability_id", sorted(ACCOUNT_RETURN_WRITE_PARAMETERS)
+)
+def test_account_return_write_contract_confirmation_and_dispatch(
+    capability_id: str,
+) -> None:
+    assert capability_id in CORE_WRITE_CAPABILITY_IDS
+    parameters = ACCOUNT_RETURN_WRITE_PARAMETERS[capability_id]
+    request = _request(parameters)
+    _, _, normalized = validate_core_write_request(capability_id, request)
+    assert normalized == parameters
+
+    port = FakeWritePort(capability_id)
+    data = execute_core_write(
+        port,
+        capability_id,
+        request,
+        _write_key(capability_id),
+        capability_id,
+    )
+
+    assert data == {
+        "idempotent_replay": False,
+        "result": _write_result(capability_id),
+    }
+    assert port.calls == [
+        {
+            "capability_id": capability_id,
+            "company_id": 7,
+            "idempotency_key": _write_key(capability_id),
+            "confirmation": capability_id,
+            "parameters": parameters,
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    ("capability_id", "parameters"),
+    [
+        (
+            "account.return.create",
+            {
+                "return_type_id": True,
+                "date_from": "2027-01-01",
+                "date_to": "2027-12-31",
+            },
+        ),
+        (
+            "account.return.create",
+            {
+                "return_type_id": 17,
+                "date_from": "2027/01/01",
+                "date_to": "2027-12-31",
+            },
+        ),
+        (
+            "account.return.create",
+            {
+                "return_type_id": 17,
+                "date_from": "2027-12-31",
+                "date_to": "2027-01-01",
+            },
+        ),
+        (
+            "account.return.create",
+            {
+                "return_type_id": 17,
+                "date_from": "2027-01-01",
+                "date_to": "2027-12-31",
+                "name": "expanded contract",
+            },
+        ),
+        (
+            "account.return.check.result.update",
+            {"check_id": 71, "result": "passed"},
+        ),
+        (
+            "account.return.check.result.update",
+            {"check_id": False, "result": "reviewed"},
+        ),
+        (
+            "account.return.check.result.update",
+            {"check_id": 71, "result": "reviewed", "note": "expanded"},
+        ),
+        ("account.return.checks.refresh", {"return_id": 0}),
+        ("account.return.validate", {"return_id": True}),
+        ("account.return.mark_submitted", {"return_id": -1}),
+        ("account.return.archive", {"return_id": 61, "active": False}),
+        ("account.return.restore", {}),
+        ("account.return.delete", {"return_id": 61, "force": True}),
+    ],
+)
+def test_account_return_write_parameters_are_closed(
+    capability_id: str, parameters: dict
+) -> None:
+    with pytest.raises(CoreWriteError) as caught:
+        validate_core_write_request(capability_id, _request(parameters))
+    assert caught.value.code == "invalid_request"
+
+
+@pytest.mark.parametrize(
+    "capability_id", sorted(ACCOUNT_RETURN_WRITE_PARAMETERS)
+)
+def test_account_return_write_requires_exact_key_and_confirmation(
+    capability_id: str,
+) -> None:
+    request = _request(ACCOUNT_RETURN_WRITE_PARAMETERS[capability_id])
+    port = FakeWritePort(capability_id)
+    with pytest.raises(CoreWriteError) as caught:
+        execute_core_write(
+            port,
+            capability_id,
+            request,
+            "account.return:wrong-key",
+            capability_id,
+        )
+    assert caught.value.code == "invalid_idempotency_key"
+    assert port.calls == []
+
+    with pytest.raises(CoreWriteError) as caught:
+        execute_core_write(
+            port,
+            capability_id,
+            request,
+            _write_key(capability_id),
+            "account.return.confirm",
+        )
+    assert caught.value.code == "confirmation_required"
+    assert port.calls == []
+
+
+@pytest.mark.parametrize(
+    ("capability_id", "changes"),
+    [
+        ("account.return.create", {"source_id": 18}),
+        ("account.return.checks.refresh", {"state": "reviewed"}),
+        ("account.return.check.result.update", {"model": "account.return"}),
+        ("account.return.validate", {"id": 62}),
+        ("account.return.mark_submitted", {"state": "completed"}),
+        ("account.return.archive", {"source_id": None}),
+        ("account.return.restore", {"state": "active"}),
+        ("account.return.delete", {"state": "archived"}),
+    ],
+)
+def test_account_return_write_results_fail_closed(
+    capability_id: str, changes: dict
+) -> None:
+    with pytest.raises(CoreWriteError) as caught:
+        execute_core_write(
+            FakeWritePort(
+                capability_id,
+                result=_write_result(capability_id, **changes),
+            ),
+            capability_id,
+            _request(ACCOUNT_RETURN_WRITE_PARAMETERS[capability_id]),
+            _write_key(capability_id),
+            capability_id,
+        )
+    assert caught.value.code == "failed_validation"
+
+
+def test_account_return_create_replay_may_observe_a_later_internal_state() -> None:
+    capability_id = "account.return.create"
+    data = execute_core_write(
+        FakeWritePort(
+            capability_id,
+            result=_write_result(capability_id, state="submitted"),
+            idempotent_replay=True,
+        ),
+        capability_id,
+        _request(ACCOUNT_RETURN_WRITE_PARAMETERS[capability_id]),
+        _write_key(capability_id),
+        capability_id,
+    )
+    assert data["idempotent_replay"] is True
+    assert data["result"]["state"] == "submitted"
+
+
+def test_account_return_validate_replay_may_observe_submitted_state() -> None:
+    capability_id = "account.return.validate"
+    data = execute_core_write(
+        FakeWritePort(
+            capability_id,
+            result=_write_result(capability_id, state="submitted"),
+            idempotent_replay=True,
+        ),
+        capability_id,
+        _request(ACCOUNT_RETURN_WRITE_PARAMETERS[capability_id]),
+        _write_key(capability_id),
+        capability_id,
+    )
+    assert data["idempotent_replay"] is True
+    assert data["result"]["state"] == "submitted"
+
+
+def test_account_return_delete_has_no_successful_replay_without_a_tombstone() -> None:
+    capability_id = "account.return.delete"
+    with pytest.raises(CoreWriteError) as caught:
+        execute_core_write(
+            FakeWritePort(capability_id, result=None),
+            capability_id,
+            _request(ACCOUNT_RETURN_WRITE_PARAMETERS[capability_id]),
+            _write_key(capability_id),
+            capability_id,
+        )
+    assert caught.value.code == "record_not_found"

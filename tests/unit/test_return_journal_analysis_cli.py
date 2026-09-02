@@ -1,11 +1,44 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 
 import pytest
 
+from odoo_accounting_cli_v4 import cli
+from odoo_accounting_cli_v4.bridge.core_writes import OdooCoreWritePort
 from odoo_accounting_cli_v4.cli import main
+from odoo_accounting_cli_v4.registry import load_registry
+
+_ACCOUNT_RETURN_WRITE_PARAMETERS = {
+    "account.return.create": {
+        "return_type_id": 17,
+        "date_from": "2027-01-01",
+        "date_to": "2027-12-31",
+    },
+    "account.return.checks.refresh": {"return_id": 61},
+    "account.return.check.result.update": {"check_id": 71, "result": "reviewed"},
+    "account.return.validate": {"return_id": 61},
+    "account.return.mark_submitted": {"return_id": 61},
+    "account.return.archive": {"return_id": 61},
+    "account.return.restore": {"return_id": 61},
+    "account.return.delete": {"return_id": 61},
+}
+
+_ACCOUNT_RETURN_WRITE_MODELS = {
+    capability_id: (
+        "account.return.check"
+        if capability_id == "account.return.check.result.update"
+        else "account.return"
+    )
+    for capability_id in _ACCOUNT_RETURN_WRITE_PARAMETERS
+}
+
+
+@pytest.fixture(scope="module")
+def account_return_registry() -> object:
+    return load_registry()
 
 
 def _request(parameters: dict) -> dict:
@@ -246,3 +279,137 @@ def test_cli_dispatches_journal_analysis_reads(
 
     assert document["capability"] == capability_id
     assert document["odoo"]["record_ids"] == record_ids
+
+
+def _write_key(capability_id: str) -> str:
+    parameters = _ACCOUNT_RETURN_WRITE_PARAMETERS[capability_id]
+    if capability_id == "account.return.create":
+        canonical = json.dumps(
+            parameters,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        return f"{capability_id}:7:{digest}"
+    if capability_id == "account.return.check.result.update":
+        return f"{capability_id}:71:reviewed"
+    return f"{capability_id}:61"
+
+
+class _AccountReturnWritePort:
+    user_id = 42
+
+    def __init__(self, capability_id: str) -> None:
+        self.capability_id = capability_id
+
+    def execute(self, **kwargs: object) -> dict:
+        parameters = _ACCOUNT_RETURN_WRITE_PARAMETERS[self.capability_id]
+        assert kwargs == {
+            "capability_id": self.capability_id,
+            "company_id": 7,
+            "idempotency_key": _write_key(self.capability_id),
+            "confirmation": self.capability_id,
+            "parameters": parameters,
+        }
+        is_check = self.capability_id == "account.return.check.result.update"
+        return {
+            "user_id": self.user_id,
+            "company_visible": True,
+            "module_installed": True,
+            "access_allowed": True,
+            "idempotent_replay": False,
+            "result": {
+                "model": _ACCOUNT_RETURN_WRITE_MODELS[self.capability_id],
+                "id": 901
+                if self.capability_id == "account.return.create"
+                else 71
+                if is_check
+                else 61,
+                "name": "Review the return" if is_check else "Corporate Tax 2027",
+                "state": {
+                    "account.return.create": "new",
+                    "account.return.checks.refresh": "new",
+                    "account.return.check.result.update": "reviewed",
+                    "account.return.validate": "reviewed",
+                    "account.return.mark_submitted": "submitted",
+                    "account.return.archive": "archived",
+                    "account.return.restore": "new",
+                    "account.return.delete": "deleted",
+                }[self.capability_id],
+                "company_id": 7,
+                "move_type": None,
+                "source_id": 61 if is_check else 17,
+                "line_ids": [],
+                "partial_reconcile_ids": [],
+                "full_reconcile_id": None,
+                "reconciled": False,
+            },
+        }
+
+
+@pytest.mark.parametrize(
+    "capability_id", sorted(_ACCOUNT_RETURN_WRITE_PARAMETERS)
+)
+def test_cli_runs_each_account_return_write(
+    capability_id: str,
+    account_return_registry: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cli, "load_registry", lambda: account_return_registry)
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    exit_code = main(
+        [
+            "write",
+            "run",
+            capability_id,
+            "--request",
+            "-",
+            "--idempotency-key",
+            _write_key(capability_id),
+            "--confirm",
+            capability_id,
+        ],
+        stdin=io.StringIO(
+            json.dumps(_request(_ACCOUNT_RETURN_WRITE_PARAMETERS[capability_id]))
+        ),
+        stdout=stdout,
+        stderr=stderr,
+        port_factory=lambda selected, _request: _AccountReturnWritePort(selected),
+    )
+
+    document = json.loads(stdout.getvalue())
+    assert exit_code == 0, (document, stderr.getvalue())
+    assert stderr.getvalue() == ""
+    assert document["capability"] == capability_id
+    assert document["success"] is True
+    assert document["odoo"]["model"] == _ACCOUNT_RETURN_WRITE_MODELS[capability_id]
+
+
+def test_account_return_writes_route_to_the_core_write_port(
+    monkeypatch: pytest.MonkeyPatch,
+    account_return_registry: object,
+) -> None:
+    registry = account_return_registry
+    target = object()
+    client = object()
+
+    class RuntimeConfig:
+        def resolve(self, database: str, company_id: int, user_login: str) -> object:
+            assert (database, company_id, user_login) == ("v4-dev", 7, "v4-agent")
+            return target
+
+    monkeypatch.setattr(cli, "load_runtime_config", lambda _path: RuntimeConfig())
+    monkeypatch.setattr(cli, "OdooBridgeClient", lambda *_args, **_kwargs: client)
+
+    for capability_id, model in _ACCOUNT_RETURN_WRITE_MODELS.items():
+        descriptor = registry.describe(capability_id)
+        assert descriptor["handler_key"] == "core_write"
+        assert cli._CAPABILITY_MODELS[capability_id] == model
+        port = cli._configured_port_factory(
+            capability_id,
+            _request(_ACCOUNT_RETURN_WRITE_PARAMETERS[capability_id]),
+        )
+        assert type(port) is OdooCoreWritePort
+        assert port._client is client

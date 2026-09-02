@@ -72,6 +72,14 @@ CAPABILITIES = frozenset(
         "analytic.line.create",
         "analytic.line.update",
         "analytic.line.delete",
+        "account.return.create",
+        "account.return.checks.refresh",
+        "account.return.check.result.update",
+        "account.return.validate",
+        "account.return.mark_submitted",
+        "account.return.archive",
+        "account.return.restore",
+        "account.return.delete",
         "budget.create",
         "budget.update_draft",
         "budget.lines.replace",
@@ -743,6 +751,14 @@ _PARAMETER_KEYS = {
     },
     "analytic.line.update": {"analytic_line_id", "changes"},
     "analytic.line.delete": {"analytic_line_id"},
+    "account.return.create": {"return_type_id", "date_from", "date_to"},
+    "account.return.checks.refresh": {"return_id"},
+    "account.return.check.result.update": {"check_id", "result"},
+    "account.return.validate": {"return_id"},
+    "account.return.mark_submitted": {"return_id"},
+    "account.return.archive": {"return_id"},
+    "account.return.restore": {"return_id"},
+    "account.return.delete": {"return_id"},
     "budget.create": {"name", "date_from", "date_to", "budget_type"},
     "budget.update_draft": {"budget_id", "changes"},
     "budget.lines.replace": {"budget_id", "lines"},
@@ -942,6 +958,14 @@ _GROUPS = {
     "analytic.line.create": "account.group_account_user",
     "analytic.line.update": "account.group_account_user",
     "analytic.line.delete": "account.group_account_user",
+    "account.return.create": "account.group_account_user",
+    "account.return.checks.refresh": "account.group_account_user",
+    "account.return.check.result.update": "account.group_account_user",
+    "account.return.validate": "account.group_account_user",
+    "account.return.mark_submitted": "account.group_account_user",
+    "account.return.archive": "account.group_account_user",
+    "account.return.restore": "account.group_account_user",
+    "account.return.delete": "account.group_account_user",
     "budget.create": "account.group_account_user",
     "budget.update_draft": "account.group_account_user",
     "budget.lines.replace": "account.group_account_user",
@@ -1351,6 +1375,52 @@ _MODELS = {
         "res.company",
         "account.analytic.account",
         "account.analytic.line",
+    },
+    "account.return.create": {
+        "res.company",
+        "account.return.type",
+        "account.return",
+        "account.return.check",
+        "account.return.creation.wizard",
+    },
+    "account.return.checks.refresh": {
+        "res.company",
+        "account.return.type",
+        "account.return",
+        "account.return.check",
+    },
+    "account.return.check.result.update": {
+        "res.company",
+        "account.return.type",
+        "account.return",
+        "account.return.check",
+    },
+    "account.return.validate": {
+        "res.company",
+        "account.return.type",
+        "account.return",
+        "account.return.check",
+    },
+    "account.return.mark_submitted": {
+        "res.company",
+        "account.return.type",
+        "account.return",
+        "account.return.check",
+    },
+    "account.return.archive": {
+        "res.company",
+        "account.return.type",
+        "account.return",
+    },
+    "account.return.restore": {
+        "res.company",
+        "account.return.type",
+        "account.return",
+    },
+    "account.return.delete": {
+        "res.company",
+        "account.return.type",
+        "account.return",
     },
     "budget.create": {"res.company", "budget.analytic", "budget.line"},
     "budget.update_draft": {"res.company", "budget.analytic", "budget.line"},
@@ -1868,6 +1938,57 @@ _ACCESS = {
         ("account.analytic.account", "read"),
         ("account.analytic.line", "read"),
         ("account.analytic.line", "unlink"),
+    },
+    "account.return.create": {
+        ("account.return.type", "read"),
+        ("account.return", "read"),
+        ("account.return", "create"),
+        ("account.return.check", "read"),
+        ("account.return.check", "create"),
+        ("account.return.check", "write"),
+        ("account.return.creation.wizard", "create"),
+    },
+    "account.return.checks.refresh": {
+        ("account.return.type", "read"),
+        ("account.return", "read"),
+        ("account.return.check", "read"),
+        ("account.return.check", "create"),
+        ("account.return.check", "write"),
+    },
+    "account.return.check.result.update": {
+        ("account.return.type", "read"),
+        ("account.return", "read"),
+        ("account.return.check", "read"),
+        ("account.return.check", "write"),
+    },
+    "account.return.validate": {
+        ("account.return.type", "read"),
+        ("account.return", "read"),
+        ("account.return", "write"),
+        ("account.return.check", "read"),
+        ("account.return.check", "create"),
+        ("account.return.check", "write"),
+    },
+    "account.return.mark_submitted": {
+        ("account.return.type", "read"),
+        ("account.return", "read"),
+        ("account.return", "write"),
+        ("account.return.check", "read"),
+    },
+    "account.return.archive": {
+        ("account.return.type", "read"),
+        ("account.return", "read"),
+        ("account.return", "write"),
+    },
+    "account.return.restore": {
+        ("account.return.type", "read"),
+        ("account.return", "read"),
+        ("account.return", "write"),
+    },
+    "account.return.delete": {
+        ("account.return.type", "read"),
+        ("account.return", "read"),
+        ("account.return", "unlink"),
     },
     "budget.create": {
         ("budget.analytic", "read"),
@@ -4757,6 +4878,27 @@ def _valid_parameters(
         )
     if capability_id == "analytic.line.delete":
         return _is_id(parameters["analytic_line_id"])
+    if capability_id == "account.return.create":
+        return bool(
+            _is_id(parameters["return_type_id"])
+            and _is_date(parameters["date_from"])
+            and _is_date(parameters["date_to"])
+            and parameters["date_from"] <= parameters["date_to"]
+        )
+    if capability_id == "account.return.check.result.update":
+        return _is_id(parameters["check_id"]) and parameters["result"] in {
+            "todo",
+            "reviewed",
+        }
+    if capability_id in {
+        "account.return.checks.refresh",
+        "account.return.validate",
+        "account.return.mark_submitted",
+        "account.return.archive",
+        "account.return.restore",
+        "account.return.delete",
+    }:
+        return _is_id(parameters["return_id"])
     if capability_id == "budget.create":
         return bool(
             _is_text(parameters["name"], maximum=200)
@@ -4891,6 +5033,30 @@ def _deterministic_key(
             ).encode("utf-8")
         ).hexdigest()[:32]
         return f"{capability_id}:{company_id}:{digest}"
+    if capability_id == "account.return.create":
+        digest = hashlib.sha256(
+            json.dumps(
+                parameters,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()[:32]
+        return f"{capability_id}:{company_id}:{digest}"
+    if capability_id == "account.return.check.result.update":
+        return (
+            f"{capability_id}:{parameters['check_id']}:{parameters['result']}"
+        )
+    if capability_id in {
+        "account.return.checks.refresh",
+        "account.return.validate",
+        "account.return.mark_submitted",
+        "account.return.archive",
+        "account.return.restore",
+        "account.return.delete",
+    }:
+        return f"{capability_id}:{parameters['return_id']}"
     if capability_id in {
         "currency.rate.record",
         "account.group.create",
@@ -6446,6 +6612,405 @@ def _delete_analytic_line(
             failure_type,
             "odoo_write_error",
             "Odoo did not delete the manual analytic line.",
+            exit_code=6,
+        )
+    return result, False
+
+
+def _compatible_account_return_type(
+    env: Any,
+    return_type_id: int,
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[Any, Any]:
+    company = _search_one(
+        env,
+        "res.company",
+        [("id", "=", company_id)],
+        company_id,
+        failure_type,
+    )
+    if getattr(company, "parent_id", False) or not company._all_branches_selected():
+        raise _fail(
+            failure_type,
+            "configuration_missing",
+            "Manual account-return creation requires a standalone root company.",
+            exit_code=4,
+        )
+    return_type = _search_one(
+        env,
+        "account.return.type",
+        [("id", "=", return_type_id)],
+        company_id,
+        failure_type,
+    )
+    fiscal_country_id = _relation_id(
+        getattr(company, "account_fiscal_country_id", False)
+    )
+    return_country_id = _relation_id(getattr(return_type, "country_id", False))
+    if (
+        return_type.category != "account_return"
+        or return_type.report_id
+        or return_type.states_workflow != "generic_state_review_submit"
+        or return_country_id not in {None, fiscal_country_id}
+    ):
+        raise _fail(
+            failure_type,
+            "record_not_found",
+            "The return type is unavailable for this manual company workflow.",
+            exit_code=4,
+        )
+    return company, return_type
+
+
+def _manual_account_return(
+    env: Any,
+    return_id: int,
+    company_id: int,
+    failure_type: type[Exception],
+) -> Any:
+    account_return = _search_one(
+        env,
+        "account.return",
+        [("id", "=", return_id), ("company_id", "=", company_id)],
+        company_id,
+        failure_type,
+    )
+    return_type = account_return.type_id
+    if (
+        not account_return.manually_created
+        or return_type.category != "account_return"
+        or return_type.report_id
+        or return_type.states_workflow != "generic_state_review_submit"
+    ):
+        raise _fail(
+            failure_type,
+            "record_not_found",
+            "The requested manual account return is unavailable in this workflow.",
+            exit_code=4,
+        )
+    return account_return
+
+
+def _account_return_result(
+    account_return: Any,
+    company_id: int,
+    *,
+    state: str | None = None,
+) -> dict[str, Any]:
+    active = bool(getattr(account_return, "active", True))
+    result = {
+        "model": "account.return",
+        "id": account_return.id,
+        "name": account_return.name or None,
+        "state": state or (account_return.state if active else "archived"),
+        "company_id": company_id,
+        "move_type": None,
+        "source_id": _relation_id(account_return.type_id),
+        "line_ids": [],
+        "partial_reconcile_ids": [],
+        "full_reconcile_id": None,
+        "reconciled": False,
+    }
+    assert set(result) == _RESULT_KEYS
+    return result
+
+
+def _account_return_check_result(check: Any, company_id: int) -> dict[str, Any]:
+    result = {
+        "model": "account.return.check",
+        "id": check.id,
+        "name": check.name or None,
+        "state": check.result,
+        "company_id": company_id,
+        "move_type": None,
+        "source_id": _relation_id(check.return_id),
+        "line_ids": [],
+        "partial_reconcile_ids": [],
+        "full_reconcile_id": None,
+        "reconciled": False,
+    }
+    assert set(result) == _RESULT_KEYS
+    return result
+
+
+def _create_account_return(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    company, return_type = _compatible_account_return_type(
+        env, parameters["return_type_id"], company_id, failure_type
+    )
+    period_from, period_to = return_type._get_period_boundaries(
+        company, date.fromisoformat(parameters["date_from"])
+    )
+    if (
+        str(period_from) != parameters["date_from"]
+        or str(period_to) != parameters["date_to"]
+    ):
+        raise _fail(
+            failure_type,
+            "business_rule_error",
+            "The selected range must equal exactly one native return period.",
+            exit_code=6,
+        )
+    model = _scoped(env, "account.return", company_id)
+    natural_domain = [
+        ("company_id", "=", company_id),
+        ("type_id", "=", return_type.id),
+        ("date_from", "=", parameters["date_from"]),
+        ("date_to", "=", parameters["date_to"]),
+    ]
+    existing = model.search(natural_domain, limit=2)
+    if existing:
+        if len(existing) == 1 and existing.manually_created:
+            return _account_return_result(existing, company_id), True
+        raise _fail(
+            failure_type,
+            "idempotency_conflict",
+            "Another account return already uses this company, type, and period.",
+            exit_code=5,
+        )
+
+    wizard = _scoped(env, "account.return.creation.wizard", company_id).create(
+        {
+            "company_id": company.id,
+            "category": "account_return",
+            "return_type_id": return_type.id,
+            "date_from": parameters["date_from"],
+            "date_to": parameters["date_to"],
+        }
+    )
+    if (
+        _relation_id(wizard.company_id) != company_id
+        or _relation_id(wizard.return_type_id) != return_type.id
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not retain the requested account-return creation scope.",
+            exit_code=6,
+        )
+    wizard.action_create_manual_account_returns()
+    created = model.search(natural_domain, limit=2)
+    if (
+        len(created) != 1
+        or not created.manually_created
+        or created.state != "new"
+        or not bool(getattr(created, "active", True))
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not create exactly one requested manual account return.",
+            exit_code=6,
+        )
+    return _account_return_result(created, company_id), False
+
+
+def _account_return_check_fingerprint(account_return: Any) -> list[tuple[Any, ...]]:
+    return sorted(
+        (
+            check.id,
+            check.code,
+            check.state,
+            check.result,
+            bool(check.refresh_result),
+            check.records_count,
+        )
+        for check in account_return.check_ids
+    )
+
+
+def _refresh_account_return_checks(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    account_return = _manual_account_return(
+        env, parameters["return_id"], company_id, failure_type
+    )
+    if (
+        not bool(getattr(account_return, "active", True))
+        or account_return.state != "new"
+        or account_return.is_completed
+    ):
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Only an active new account return can refresh its checks.",
+            exit_code=5,
+        )
+    before = _account_return_check_fingerprint(account_return)
+    account_return.refresh_checks()
+    account_return.invalidate_recordset(["check_ids"])
+    account_return.check_ids.invalidate_recordset(
+        ["code", "state", "result", "refresh_result", "records_count"]
+    )
+    after = _account_return_check_fingerprint(account_return)
+    return _account_return_result(account_return, company_id), before == after
+
+
+def _update_account_return_check_result(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    check = _search_one(
+        env,
+        "account.return.check",
+        [("id", "=", parameters["check_id"])],
+        company_id,
+        failure_type,
+    )
+    account_return = _manual_account_return(
+        env, _relation_id(check.return_id) or 0, company_id, failure_type
+    )
+    if (
+        not bool(getattr(account_return, "active", True))
+        or account_return.state != "new"
+        or account_return.is_completed
+        or check.state != "new"
+        or check.result == "supervised"
+    ):
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Only a current unsupervised check on an active new return can change.",
+            exit_code=5,
+        )
+    if check.result == parameters["result"]:
+        return _account_return_check_result(check, company_id), True
+    check.write({"result": parameters["result"]})
+    check.invalidate_recordset(["result"])
+    if check.result != parameters["result"]:
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not update the requested account-return check result.",
+            exit_code=6,
+        )
+    return _account_return_check_result(check, company_id), False
+
+
+def _transition_account_return(
+    env: Any,
+    capability_id: str,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    account_return = _manual_account_return(
+        env, parameters["return_id"], company_id, failure_type
+    )
+    active = bool(getattr(account_return, "active", True))
+    if capability_id == "account.return.validate":
+        if active and account_return.state in {"reviewed", "submitted"}:
+            return _account_return_result(account_return, company_id), True
+        if not active or account_return.state != "new" or account_return.is_completed:
+            raise _fail(
+                failure_type,
+                "state_conflict",
+                "Only an active new account return can be validated.",
+                exit_code=5,
+            )
+        account_return.action_validate()
+        account_return.invalidate_recordset(["state", "date_lock"])
+        if account_return.state != "reviewed" or not account_return.date_lock:
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not validate the requested account return.",
+                exit_code=6,
+            )
+        return _account_return_result(account_return, company_id), False
+
+    if capability_id == "account.return.mark_submitted":
+        if active and account_return.state == "submitted" and account_return.is_completed:
+            return _account_return_result(account_return, company_id), True
+        if not active or account_return.state != "reviewed" or account_return.is_completed:
+            raise _fail(
+                failure_type,
+                "state_conflict",
+                "Only an active reviewed account return can be marked submitted.",
+                exit_code=5,
+            )
+        account_return.action_submit()
+        account_return.invalidate_recordset(
+            ["state", "date_submission", "is_completed"]
+        )
+        if (
+            account_return.state != "submitted"
+            or not account_return.date_submission
+            or not account_return.is_completed
+        ):
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not mark the requested account return as submitted.",
+                exit_code=6,
+            )
+        return _account_return_result(account_return, company_id), False
+
+    if account_return.state != "new" or account_return.is_completed:
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Only a new incomplete account return can change archive state.",
+            exit_code=5,
+        )
+    target_active = capability_id == "account.return.restore"
+    if active == target_active:
+        return _account_return_result(account_return, company_id), True
+    if target_active:
+        account_return.action_unarchive()
+    else:
+        account_return.action_archive()
+    account_return.invalidate_recordset(["active"])
+    if bool(account_return.active) != target_active:
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not change the requested account-return archive state.",
+            exit_code=6,
+        )
+    return _account_return_result(account_return, company_id), False
+
+
+def _delete_account_return(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    account_return = _manual_account_return(
+        env, parameters["return_id"], company_id, failure_type
+    )
+    if (
+        not bool(getattr(account_return, "active", True))
+        or account_return.state != "new"
+        or account_return.is_completed
+    ):
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Only an active new manual account return can be deleted.",
+            exit_code=5,
+        )
+    result = _account_return_result(account_return, company_id, state="deleted")
+    return_id = account_return.id
+    account_return.action_delete()
+    if _scoped(env, "account.return", company_id).search_count(
+        [("id", "=", return_id)], limit=1
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not delete the requested manual account return.",
             exit_code=6,
         )
     return result, False
@@ -15216,6 +15781,27 @@ def _dispatch_allowed(
         return _update_analytic_line(env, parameters, company_id, failure_type)
     if capability_id == "analytic.line.delete":
         return _delete_analytic_line(env, parameters, company_id, failure_type)
+    if capability_id == "account.return.create":
+        return _create_account_return(env, parameters, company_id, failure_type)
+    if capability_id == "account.return.checks.refresh":
+        return _refresh_account_return_checks(
+            env, parameters, company_id, failure_type
+        )
+    if capability_id == "account.return.check.result.update":
+        return _update_account_return_check_result(
+            env, parameters, company_id, failure_type
+        )
+    if capability_id in {
+        "account.return.validate",
+        "account.return.mark_submitted",
+        "account.return.archive",
+        "account.return.restore",
+    }:
+        return _transition_account_return(
+            env, capability_id, parameters, company_id, failure_type
+        )
+    if capability_id == "account.return.delete":
+        return _delete_account_return(env, parameters, company_id, failure_type)
     if capability_id == "budget.create":
         return _create_budget(env, parameters, company_id, key, failure_type)
     if capability_id == "budget.update_draft":

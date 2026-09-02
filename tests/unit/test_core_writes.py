@@ -228,6 +228,35 @@ PARAMETERS = {
         "analytic_account_id": 128,
         "changes": {"code": "ALPHA", "partner_id": None, "active": False},
     },
+    "analytic.plan.create": {
+        "name": "Delivery",
+        "parent_plan_id": 11,
+        "color": 0,
+        "default_applicability": "optional",
+    },
+    "analytic.plan.update": {
+        "plan_id": 12,
+        "changes": {"name": "Delivery East", "color": 4},
+    },
+    "analytic.account.archive": {"analytic_account_id": 128},
+    "analytic.account.restore": {"analytic_account_id": 128},
+    "analytic.line.create": {
+        "name": "Manual adjustment",
+        "date": "2026-09-01",
+        "amount": "-10.5",
+        "analytic_account_id": 21,
+        "reference": None,
+        "unit_amount": "0",
+    },
+    "analytic.line.update": {
+        "analytic_line_id": 31,
+        "changes": {
+            "amount": "10",
+            "unit_amount": "2.5",
+            "analytic_account_id": 22,
+        },
+    },
+    "analytic.line.delete": {"analytic_line_id": 31},
     "budget.create": {
         "name": "FY 2027",
         "date_from": "2027-01-01",
@@ -667,6 +696,18 @@ PARAMETERS = {
             "analytic_distribution": None,
         },
     },
+    "account.return.create": {
+        "return_type_id": 17,
+        "date_from": "2027-01-01",
+        "date_to": "2027-12-31",
+    },
+    "account.return.checks.refresh": {"return_id": 61},
+    "account.return.check.result.update": {"check_id": 71, "result": "reviewed"},
+    "account.return.validate": {"return_id": 61},
+    "account.return.mark_submitted": {"return_id": 61},
+    "account.return.archive": {"return_id": 61},
+    "account.return.restore": {"return_id": 61},
+    "account.return.delete": {"return_id": 61},
 }
 
 
@@ -710,6 +751,19 @@ def _key(capability_id: str) -> str:
         *ACCOUNTING_CONFIGURATION_EXPANSION_WRITES,
         *ACCOUNTING_MASTER_DATA_COMPLETION_WRITES,
         *ACCOUNTING_RULES_FISCAL_YEAR_WRITES,
+        "account.return.create",
+        "account.return.checks.refresh",
+        "account.return.check.result.update",
+        "account.return.validate",
+        "account.return.mark_submitted",
+        "account.return.archive",
+        "account.return.restore",
+        "account.return.delete",
+        "analytic.plan.update",
+        "analytic.account.archive",
+        "analytic.account.restore",
+        "analytic.line.update",
+        "analytic.line.delete",
     }:
         _, context, parameters = validate_core_write_request(
             capability_id, _request(capability_id)
@@ -739,7 +793,9 @@ def _key(capability_id: str) -> str:
         "bank.transaction.record",
         "asset.create",
         "payment.create",
+        "analytic.plan.create",
         "analytic.account.create",
+        "analytic.line.create",
         "budget.create",
     }:
         return f"smoke:{capability_id}:0001"
@@ -948,6 +1004,77 @@ def _key(capability_id: str) -> str:
 
 def _result(capability_id: str, **changes) -> dict:
     parameters = PARAMETERS[capability_id]
+    if capability_id.startswith("analytic.plan."):
+        result = {
+            "model": "account.analytic.plan",
+            "id": 917
+            if capability_id == "analytic.plan.create"
+            else parameters["plan_id"],
+            "name": "Delivery",
+            "state": "active",
+            "company_id": 7,
+            "move_type": None,
+            "source_id": parameters.get("parent_plan_id", 11),
+            "line_ids": [],
+            "partial_reconcile_ids": [],
+            "full_reconcile_id": None,
+            "reconciled": False,
+        }
+        result.update(changes)
+        return result
+    if capability_id.startswith("analytic.line."):
+        result = {
+            "model": "account.analytic.line",
+            "id": 918
+            if capability_id == "analytic.line.create"
+            else parameters["analytic_line_id"],
+            "name": "Manual adjustment",
+            "state": "deleted"
+            if capability_id == "analytic.line.delete"
+            else "manual",
+            "company_id": 7,
+            "move_type": None,
+            "source_id": parameters.get(
+                "analytic_account_id",
+                parameters.get("changes", {}).get("analytic_account_id", 21),
+            ),
+            "line_ids": [],
+            "partial_reconcile_ids": [],
+            "full_reconcile_id": None,
+            "reconciled": False,
+        }
+        result.update(changes)
+        return result
+    if capability_id.startswith("account.return."):
+        is_check = capability_id == "account.return.check.result.update"
+        result = {
+            "model": "account.return.check" if is_check else "account.return",
+            "id": 916
+            if capability_id == "account.return.create"
+            else parameters["check_id"]
+            if is_check
+            else parameters["return_id"],
+            "name": "Review the return" if is_check else "Corporate Tax 2027",
+            "state": {
+                "account.return.create": "new",
+                "account.return.checks.refresh": "new",
+                "account.return.check.result.update": parameters.get("result"),
+                "account.return.validate": "reviewed",
+                "account.return.mark_submitted": "submitted",
+                "account.return.archive": "archived",
+                "account.return.restore": "new",
+                "account.return.delete": "deleted",
+            }[capability_id],
+            "company_id": 7,
+            "move_type": None,
+            "source_id": 61 if is_check else 17,
+            "line_ids": [],
+            "partial_reconcile_ids": [],
+            "full_reconcile_id": None,
+            "reconciled": False,
+        }
+        result.update(changes)
+        return result
     if capability_id == "sale.order.invoice.create":
         result = {
             "model": "account.move",
@@ -1445,7 +1572,10 @@ def _result(capability_id: str, **changes) -> dict:
             ),
             name="Project Alpha [ODACV4:fixture]",
             state=(
-                "active" if capability_id == "analytic.account.create" else "archived"
+                "archived"
+                if capability_id == "analytic.account.archive"
+                or capability_id == "analytic.account.update"
+                else "active"
             ),
             move_type=None,
             source_id=parameters.get("plan_id", 11),
@@ -1999,6 +2129,28 @@ def test_malformed_or_mismatched_results_fail_closed(change: dict) -> None:
             _request("invoice.post"),
             _key("invoice.post"),
             "invoice.post",
+        )
+    assert caught.value.code == "failed_validation"
+    assert caught.value.exit_code == 8
+
+
+@pytest.mark.parametrize(
+    "capability_id",
+    sorted(
+        capability_id
+        for capability_id in CORE_WRITE_CAPABILITY_IDS
+        if capability_id.startswith("account.return.")
+    ),
+)
+def test_account_return_results_reject_non_empty_line_ids(capability_id: str) -> None:
+    result = _result(capability_id, line_ids=[999])
+    with pytest.raises(CoreWriteError) as caught:
+        execute_core_write(
+            FakePort(capability_id, result=result),
+            capability_id,
+            _request(capability_id),
+            _key(capability_id),
+            capability_id,
         )
     assert caught.value.code == "failed_validation"
     assert caught.value.exit_code == 8
