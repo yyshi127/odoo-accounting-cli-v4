@@ -1440,6 +1440,14 @@ def test_public_action_and_closed_capability_batch_are_exact() -> None:
         "account.return.archive",
         "account.return.restore",
         "account.return.delete",
+        "product.create",
+        "product.update",
+        "product.duplicate",
+        "product.archive",
+        "product.restore",
+        "product.cost.update",
+        "product.accounting_profile.update",
+        "product.category.accounting_profile.update",
     }
 
 

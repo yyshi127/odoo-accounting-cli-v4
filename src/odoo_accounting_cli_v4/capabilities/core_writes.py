@@ -162,6 +162,14 @@ CORE_WRITE_CAPABILITY_IDS = frozenset(
         "account.return.archive",
         "account.return.restore",
         "account.return.delete",
+        "product.create",
+        "product.update",
+        "product.duplicate",
+        "product.archive",
+        "product.restore",
+        "product.cost.update",
+        "product.accounting_profile.update",
+        "product.category.accounting_profile.update",
     }
 )
 
@@ -428,6 +436,18 @@ _ACCOUNT_RETURN_WRITE_CAPABILITIES = frozenset(
         "account.return.archive",
         "account.return.restore",
         "account.return.delete",
+    }
+)
+_PRODUCT_WRITE_CAPABILITIES = frozenset(
+    {
+        "product.create",
+        "product.update",
+        "product.duplicate",
+        "product.archive",
+        "product.restore",
+        "product.cost.update",
+        "product.accounting_profile.update",
+        "product.category.accounting_profile.update",
     }
 )
 _CONTEXT_FIELDS = frozenset(
@@ -3799,6 +3819,144 @@ def _validate_account_return_parameters(
     return _validate_single_id(parameters, "return_id")
 
 
+def _validate_product_basic_values(
+    values: Any, *, partial: bool
+) -> dict[str, Any]:
+    required = {"name", "default_code", "product_type", "category_id", "uom_id"}
+    allowed = required | {"barcode", "sale_ok", "purchase_ok", "list_price"}
+    if (
+        not isinstance(values, dict)
+        or (partial and (not values or not set(values) <= allowed))
+        or (not partial and not (required <= set(values) <= allowed))
+    ):
+        raise _invalid("Product values do not match the fixed contract.")
+    for field, maximum in (("name", 256), ("default_code", 64)):
+        if field in values and not _is_bounded_text(values[field], maximum):
+            raise _invalid(f"{field} must be a trimmed 1-{maximum} character string.")
+    if "product_type" in values and values["product_type"] not in {
+        "consu",
+        "service",
+    }:
+        raise _invalid("product_type must be consu or service.")
+    for field in ("category_id", "uom_id"):
+        if field in values and not _valid_id(values[field]):
+            raise _invalid(f"{field} must be a positive integer.")
+    if "barcode" in values and not _is_nullable_bounded_text(values["barcode"], 64):
+        raise _invalid("barcode must be null or a trimmed 1-64 character string.")
+    for field in ("sale_ok", "purchase_ok"):
+        if field in values and not isinstance(values[field], bool):
+            raise _invalid(f"{field} must be a boolean.")
+    if "list_price" in values and _canonical_decimal(
+        values["list_price"], signed=False
+    ) is None:
+        raise _invalid("list_price must be a canonical nonnegative decimal string.")
+    return dict(values)
+
+
+def _validate_product_accounting_changes(
+    changes: Any, *, category: bool
+) -> dict[str, Any]:
+    allowed = (
+        {"income_account_id", "expense_account_id"}
+        if category
+        else {
+            "income_account_id",
+            "expense_account_id",
+            "sale_tax_ids",
+            "purchase_tax_ids",
+        }
+    )
+    if not isinstance(changes, dict) or not changes or not set(changes) <= allowed:
+        raise _invalid("Product accounting changes do not match the fixed contract.")
+    for field in ("income_account_id", "expense_account_id"):
+        if field in changes and not _valid_optional_id(changes[field]):
+            raise _invalid(f"changes.{field} must be null or a positive integer.")
+    normalized = dict(changes)
+    for field in ("sale_tax_ids", "purchase_tax_ids"):
+        if field not in changes:
+            continue
+        ids = _validate_ids(changes[field])
+        if ids is None:
+            raise _invalid(f"changes.{field} must contain unique positive IDs.")
+        normalized[field] = sorted(ids)
+    return normalized
+
+
+def _validate_product_parameters(
+    capability_id: str, parameters: Any
+) -> dict[str, Any]:
+    if capability_id == "product.create":
+        normalized = _validate_product_basic_values(parameters, partial=False)
+        normalized.setdefault("barcode", None)
+        normalized.setdefault("sale_ok", True)
+        normalized.setdefault("purchase_ok", True)
+        normalized.setdefault("list_price", "0")
+        return normalized
+    if capability_id == "product.update":
+        if not isinstance(parameters, dict) or set(parameters) != {
+            "product_id",
+            "changes",
+        }:
+            raise _invalid("Product update parameters do not match the fixed contract.")
+        if not _valid_id(parameters["product_id"]):
+            raise _invalid("parameters.product_id must be a positive integer.")
+        return {
+            "product_id": parameters["product_id"],
+            "changes": _validate_product_basic_values(
+                parameters["changes"], partial=True
+            ),
+        }
+    if capability_id == "product.duplicate":
+        if not isinstance(parameters, dict) or set(parameters) != {
+            "product_id",
+            "name",
+            "default_code",
+        }:
+            raise _invalid(
+                "Product duplicate parameters do not match the fixed contract."
+            )
+        if not _valid_id(parameters["product_id"]):
+            raise _invalid("parameters.product_id must be a positive integer.")
+        if not _is_bounded_text(parameters["name"], 256):
+            raise _invalid("parameters.name must be a trimmed 1-256 character string.")
+        if not _is_bounded_text(parameters["default_code"], 64):
+            raise _invalid(
+                "parameters.default_code must be a trimmed 1-64 character string."
+            )
+        return dict(parameters)
+    if capability_id in {"product.archive", "product.restore"}:
+        return _validate_single_id(parameters, "product_id")
+    if capability_id == "product.cost.update":
+        if not isinstance(parameters, dict) or set(parameters) != {
+            "product_id",
+            "standard_price",
+        }:
+            raise _invalid(
+                "Product cost parameters do not match the fixed contract."
+            )
+        if not _valid_id(parameters["product_id"]):
+            raise _invalid("parameters.product_id must be a positive integer.")
+        if _canonical_decimal(parameters["standard_price"], signed=False) is None:
+            raise _invalid(
+                "parameters.standard_price must be a canonical nonnegative decimal string."
+            )
+        return dict(parameters)
+    category = capability_id == "product.category.accounting_profile.update"
+    id_field = "category_id" if category else "product_id"
+    if not isinstance(parameters, dict) or set(parameters) != {id_field, "changes"}:
+        raise _invalid(
+            "Product accounting-profile parameters do not match the fixed contract."
+        )
+    if not _valid_id(parameters[id_field]):
+        raise _invalid(f"parameters.{id_field} must be a positive integer.")
+    return {
+        id_field: parameters[id_field],
+        "changes": _validate_product_accounting_changes(
+            parameters["changes"], category=category
+        ),
+    }
+
+
 def validate_core_write_request(
     capability_id: str, request: Any
 ) -> tuple[str, dict[str, Any], dict[str, Any]]:
@@ -3812,6 +3970,8 @@ def validate_core_write_request(
     request_id, context, parameters = _validate_envelope(request)
     if capability_id in _ACCOUNT_RETURN_WRITE_CAPABILITIES:
         normalized = _validate_account_return_parameters(capability_id, parameters)
+    elif capability_id in _PRODUCT_WRITE_CAPABILITIES:
+        normalized = _validate_product_parameters(capability_id, parameters)
     elif capability_id.startswith("purchase_bill.") or capability_id == (
         "purchase.order.bill.create"
     ):
@@ -4011,6 +4171,33 @@ def _expected_idempotency_key(
         )
     if capability_id in _ACCOUNT_RETURN_WRITE_CAPABILITIES:
         return f"{capability_id}:{parameters['return_id']}"
+    if capability_id in {"product.create", "product.duplicate"}:
+        canonical = json.dumps(
+            parameters, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        return f"{capability_id}:{company_id}:{digest}"
+    if capability_id in {
+        "product.update",
+        "product.cost.update",
+        "product.accounting_profile.update",
+        "product.category.accounting_profile.update",
+    }:
+        target = (
+            {"standard_price": parameters["standard_price"]}
+            if capability_id == "product.cost.update"
+            else parameters["changes"]
+        )
+        canonical = json.dumps(
+            target, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        primary = parameters.get("product_id", parameters.get("category_id"))
+        if capability_id == "product.category.accounting_profile.update":
+            return f"{capability_id}:{company_id}:{primary}:{digest}"
+        return f"{capability_id}:{primary}:{digest}"
+    if capability_id in {"product.archive", "product.restore"}:
+        return f"{capability_id}:{parameters['product_id']}"
     if capability_id in {
         "account.tag.create",
         "tax.group.create",
@@ -4629,6 +4816,41 @@ def _validate_result(
             or result["reconciled"]
         ):
             raise _failed("Odoo returned a mismatched account-return result.")
+        return deepcopy(result)
+
+    if capability_id in _PRODUCT_WRITE_CAPABILITIES:
+        category = capability_id == "product.category.accounting_profile.update"
+        creates_variant = capability_id in {"product.create", "product.duplicate"}
+        expected_id = (
+            parameters["category_id"]
+            if category
+            else result["id"]
+            if creates_variant
+            else parameters["product_id"]
+        )
+        expected_state = "archived" if capability_id == "product.archive" else "active"
+        if (
+            result["model"] != ("product.category" if category else "product.product")
+            or result["id"] != expected_id
+            or not _valid_id(result["id"])
+            or (
+                capability_id == "product.duplicate"
+                and result["id"] == parameters["product_id"]
+            )
+            or not _is_text(result["name"])
+            or result["state"] != expected_state
+            or result["move_type"] is not None
+            or (
+                result["source_id"] is not None
+                if category
+                else not _valid_id(result["source_id"])
+            )
+            or result["line_ids"]
+            or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None
+            or result["reconciled"]
+        ):
+            raise _failed("Odoo returned a mismatched product result.")
         return deepcopy(result)
 
     if capability_id == "reconciliation.apply":

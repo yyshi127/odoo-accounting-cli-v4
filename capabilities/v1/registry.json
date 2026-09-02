@@ -14444,6 +14444,216 @@
       },
       "handler_key": "product_accounting_profile_get"
     },
+    "product.accounting_profile.update": {
+      "summary": {"zh_CN": "更新产品会计配置", "en_US": "Update a product accounting profile"},
+      "domain": "accounting_master_data",
+      "access": "write",
+      "source": {
+        "modules": ["base", "product", "account"],
+        "models": ["res.company", "account.account", "account.tax", "product.template", "product.product"],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "_references/product/models/product_product.py", "_references/product/models/product_template.py", "account/models/product.py"]
+      },
+      "schemas": {"request": "schemas/v1/product.accounting_profile.update.request.schema.json", "response": "schemas/v1/product.accounting_profile.update.response.schema.json"},
+      "requirements": {
+        "modules": ["base", "product", "account"],
+        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "company": "required",
+        "groups": ["product.group_product_manager"],
+        "acl": ["res.company:read", "account.account:read", "account.tax:read", "product.template:read", "product.template:write", "product.product:read"]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_specific_single_variant_product_accounting_profile_update",
+        "verify": "same_transaction_company_relative_product_reread_and_response_schema_validation",
+        "idempotency": "deterministic_product_target_and_changes_digest32_request_key_with_current_target_state_recheck_without_operation_store_or_intermediate_change_protection",
+        "reverse": "product.accounting_profile.update_with_prior_values"
+      },
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_product_accounting_write_public.py", "tests/unit/test_product_accounting_writes_runtime.py"], "reason": "Focused tests cover the closed public contract, fixed company and single-variant runtime scope, result validation, registry schemas, and CLI dispatch."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_product_accounting_write_batch_live.py"], "reason": "The guarded shared transactional smoke passed both isolated database aliases as uid 5 with su=False, verifying execution and immediate replay for all eight writes plus rollback of business data and temporary product-manager/stock-manager grants."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is registered; availability depends on runtime configuration, company-scoped product data, and product-manager access."},
+      "routing": {
+        "object": "product.accounting_profile",
+        "actions": ["update"],
+        "aliases": {"zh_CN": ["更新产品会计配置"], "en_US": ["Update a product accounting profile"]},
+        "not_for": {"zh_CN": ["库存计价账户或计价方法", "物流路由或库存操作", "多变体产品模板"], "en_US": ["Stock-valuation accounts or costing methods", "Logistics routes or inventory operations", "Multi-variant product templates"]},
+        "required_slots": ["database", "company_id", "user_login"]
+      },
+      "handler_key": "core_write"
+    },
+    "product.archive": {
+      "summary": {"zh_CN": "归档产品", "en_US": "Archive a product"},
+      "domain": "accounting_master_data",
+      "access": "write",
+      "source": {
+        "modules": ["base", "product", "stock"],
+        "models": ["res.company", "product.template", "product.product", "stock.warehouse.orderpoint"],
+        "wizards": [], "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "_references/product/models/product_product.py", "_references/product/models/product_template.py", "stock/models/product.py", "stock/models/stock_orderpoint.py", "stock/security/ir.model.access.csv"]
+      },
+      "schemas": {"request": "schemas/v1/product.archive.request.schema.json", "response": "schemas/v1/product.archive.response.schema.json"},
+      "requirements": {
+        "modules": ["base", "product", "stock"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required",
+        "groups": ["product.group_product_manager", "stock.group_stock_manager"],
+        "acl": ["res.company:read", "product.template:read", "product.template:write", "product.product:read", "product.product:write", "stock.warehouse.orderpoint:read", "stock.warehouse.orderpoint:write"]
+      },
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_specific_single_variant_product_archive", "verify": "same_transaction_archived_product_reread_and_response_schema_validation", "idempotency": "deterministic_product_target_request_key_with_current_archived_state_recheck_without_operation_store", "reverse": "product.restore"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_product_accounting_write_public.py", "tests/unit/test_product_accounting_writes_runtime.py"], "reason": "Focused tests cover the closed public contract, fixed company and single-variant runtime scope, result validation, registry schemas, and CLI dispatch."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_product_accounting_write_batch_live.py"], "reason": "The guarded shared transactional smoke passed both isolated database aliases as uid 5 with su=False, verifying execution and immediate replay for all eight writes, including an attached orderpoint during archive/restore, plus rollback of business data and temporary product-manager/stock-manager grants."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is registered; Odoo's stock extension reads and writes warehouse orderpoints during product archiving, so availability additionally depends on stock being installed and the configured user holding both product-manager and stock-manager access."},
+      "routing": {"object": "product", "actions": ["archive"], "aliases": {"zh_CN": ["归档产品"], "en_US": ["Archive a product"]}, "not_for": {"zh_CN": ["库存计价或计价方法", "物流或库存操作", "多变体产品模板"], "en_US": ["Stock valuation or costing methods", "Logistics or inventory operations", "Multi-variant product templates"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
+    "product.category.accounting_profile.update": {
+      "summary": {"zh_CN": "更新产品类别会计配置", "en_US": "Update a product category accounting profile"},
+      "domain": "accounting_master_data",
+      "access": "write",
+      "source": {
+        "modules": ["base", "product", "account"],
+        "models": ["res.company", "account.account", "product.category"],
+        "wizards": [], "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "_references/product/models/product_category.py", "account/models/product.py"]
+      },
+      "schemas": {"request": "schemas/v1/product.category.accounting_profile.update.request.schema.json", "response": "schemas/v1/product.category.accounting_profile.update.response.schema.json"},
+      "requirements": {
+        "modules": ["base", "product", "account"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required",
+        "groups": ["product.group_product_manager"],
+        "acl": ["res.company:read", "account.account:read", "product.category:read", "product.category:write"]
+      },
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_specific_product_category_accounting_profile_update", "verify": "same_transaction_company_relative_category_reread_and_response_schema_validation", "idempotency": "deterministic_company_category_target_and_changes_digest32_request_key_with_current_target_state_recheck_without_operation_store_or_intermediate_change_protection", "reverse": "product.category.accounting_profile.update_with_prior_values"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_product_accounting_write_public.py", "tests/unit/test_product_accounting_writes_runtime.py"], "reason": "Focused tests cover the closed public contract, fixed company-relative runtime scope, result validation, registry schemas, and CLI dispatch."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_product_accounting_write_batch_live.py"], "reason": "The guarded shared transactional smoke passed both isolated database aliases as uid 5 with su=False, verifying execution and immediate replay for all eight writes plus rollback of business data and temporary product-manager/stock-manager grants."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is registered; availability depends on runtime configuration, company-relative category data, and product-manager access."},
+      "routing": {"object": "product.category.accounting_profile", "actions": ["update"], "aliases": {"zh_CN": ["更新产品类别会计配置"], "en_US": ["Update a product category accounting profile"]}, "not_for": {"zh_CN": ["库存计价账户或计价方法", "物流或库存操作"], "en_US": ["Stock-valuation accounts or costing methods", "Logistics or inventory operations"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
+    "product.cost.update": {
+      "summary": {"zh_CN": "更新产品成本", "en_US": "Update a product cost"},
+      "domain": "accounting_master_data",
+      "access": "write",
+      "source": {
+        "modules": ["base", "product"],
+        "models": ["res.company", "product.template", "product.product"],
+        "wizards": [], "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "_references/product/models/product_product.py", "_references/product/models/product_template.py"]
+      },
+      "schemas": {"request": "schemas/v1/product.cost.update.request.schema.json", "response": "schemas/v1/product.cost.update.response.schema.json"},
+      "requirements": {
+        "modules": ["base", "product"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required",
+        "groups": ["product.group_product_manager"],
+        "acl": ["res.company:read", "product.template:read", "product.product:read", "product.product:write"]
+      },
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_specific_single_variant_standard_price_update", "verify": "same_transaction_company_relative_product_cost_reread_and_response_schema_validation", "idempotency": "deterministic_product_target_and_standard_price_digest32_request_key_with_current_target_state_recheck_without_operation_store_or_intermediate_change_protection", "reverse": "product.cost.update_with_prior_value"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_product_accounting_write_public.py", "tests/unit/test_product_accounting_writes_runtime.py"], "reason": "Focused tests cover canonical decimal input, fixed company and single-variant runtime scope, result validation, registry schemas, and CLI dispatch."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_product_accounting_write_batch_live.py"], "reason": "The guarded shared transactional smoke passed both isolated database aliases as uid 5 with su=False, verifying execution and immediate replay for all eight writes plus rollback of business data and temporary product-manager/stock-manager grants."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is registered; availability depends on runtime configuration, company-specific cost data, and product-manager access."},
+      "routing": {"object": "product.cost", "actions": ["update"], "aliases": {"zh_CN": ["更新产品成本"], "en_US": ["Update a product cost"]}, "not_for": {"zh_CN": ["更改库存计价方法或自动计价分录", "物流或库存操作", "多变体产品模板"], "en_US": ["Changing stock-valuation costing methods or generating automated valuation entries", "Logistics or inventory operations", "Multi-variant product templates"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
+    "product.create": {
+      "summary": {"zh_CN": "创建产品", "en_US": "Create a product"},
+      "domain": "accounting_master_data",
+      "access": "write",
+      "source": {
+        "modules": ["base", "product", "uom"],
+        "models": ["res.company", "product.category", "uom.uom", "product.template", "product.product"],
+        "wizards": [], "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "_references/product/models/product_product.py", "_references/product/models/product_template.py", "_references/product/models/product_category.py", "uom/models/uom_uom.py"]
+      },
+      "schemas": {"request": "schemas/v1/product.create.request.schema.json", "response": "schemas/v1/product.create.response.schema.json"},
+      "requirements": {
+        "modules": ["base", "product", "uom"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required",
+        "groups": ["product.group_product_manager"],
+        "acl": ["res.company:read", "product.category:read", "uom.uom:read", "product.template:read", "product.template:create", "product.product:read", "product.product:create"]
+      },
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_specific_single_variant_product_create", "verify": "same_transaction_created_variant_and_template_reread_and_response_schema_validation", "idempotency": "full_normalized_parameters_digest32_request_key_and_company_code_natural_key_recheck_with_preexisting_exact_match_attribution_and_concurrent_uniqueness_limits", "reverse": "product.archive"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_product_accounting_write_public.py", "tests/unit/test_product_accounting_writes_runtime.py"], "reason": "Focused tests cover the closed normalized create contract, fixed company and single-variant runtime scope, result validation, registry schemas, and CLI dispatch."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_product_accounting_write_batch_live.py"], "reason": "The guarded shared transactional smoke passed both isolated database aliases as uid 5 with su=False, verifying execution and immediate replay for all eight writes plus rollback of business data and temporary product-manager/stock-manager grants."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "degraded", "reason_code": "natural_key_replay_attribution_limit", "reason": "An exact pre-existing company product code and field match is treated as a serial replay because Odoo exposes neither a request marker nor a matching request uniqueness constraint; unrelated exact matches and concurrent creates cannot be distinguished."},
+      "routing": {"object": "product", "actions": ["create"], "aliases": {"zh_CN": ["创建产品"], "en_US": ["Create a product"]}, "not_for": {"zh_CN": ["库存计价或计价方法", "物流或库存操作", "多变体产品模板"], "en_US": ["Stock valuation or costing methods", "Logistics or inventory operations", "Multi-variant product templates"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
+    "product.duplicate": {
+      "summary": {"zh_CN": "复制产品", "en_US": "Duplicate a product"},
+      "domain": "accounting_master_data", "access": "write",
+      "source": {
+        "modules": ["base", "product", "uom"],
+        "models": ["res.company", "product.category", "uom.uom", "product.template", "product.product"],
+        "wizards": [], "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "_references/product/models/product_product.py", "_references/product/models/product_template.py", "_references/product/models/product_category.py", "uom/models/uom_uom.py"]
+      },
+      "schemas": {"request": "schemas/v1/product.duplicate.request.schema.json", "response": "schemas/v1/product.duplicate.response.schema.json"},
+      "requirements": {
+        "modules": ["base", "product", "uom"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required",
+        "groups": ["product.group_product_manager"],
+        "acl": ["res.company:read", "product.category:read", "uom.uom:read", "product.template:read", "product.template:create", "product.product:read", "product.product:create"]
+      },
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_specific_single_variant_product_duplicate", "verify": "same_transaction_duplicated_variant_and_template_reread_and_response_schema_validation", "idempotency": "source_and_parameters_digest32_request_key_and_company_code_natural_key_recheck_with_preexisting_exact_match_attribution_and_concurrent_uniqueness_limits", "reverse": "product.archive"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_product_accounting_write_public.py", "tests/unit/test_product_accounting_writes_runtime.py"], "reason": "Focused tests cover the exact duplicate contract, fixed company and single-variant runtime scope, result validation, registry schemas, and CLI dispatch."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_product_accounting_write_batch_live.py"], "reason": "The guarded shared transactional smoke passed both isolated database aliases as uid 5 with su=False, verifying execution and immediate replay for all eight writes plus rollback of business data and temporary product-manager/stock-manager grants."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "degraded", "reason_code": "natural_key_replay_attribution_limit", "reason": "An exact pre-existing company product code and copied-field match is treated as a serial replay because Odoo exposes neither a request marker nor a matching request uniqueness constraint; unrelated exact matches and concurrent copies cannot be distinguished."},
+      "routing": {"object": "product", "actions": ["duplicate"], "aliases": {"zh_CN": ["复制产品"], "en_US": ["Duplicate a product"]}, "not_for": {"zh_CN": ["库存计价或计价方法", "物流或库存操作", "多变体产品模板"], "en_US": ["Stock valuation or costing methods", "Logistics or inventory operations", "Multi-variant product templates"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
+    "product.restore": {
+      "summary": {"zh_CN": "恢复产品", "en_US": "Restore a product"},
+      "domain": "accounting_master_data", "access": "write",
+      "source": {"modules": ["base", "product", "stock"], "models": ["res.company", "product.template", "product.product", "stock.warehouse.orderpoint"], "wizards": [], "report_handlers": [], "locations": ["_references/base/models/res_company.py", "_references/product/models/product_product.py", "_references/product/models/product_template.py", "stock/models/product.py", "stock/models/stock_orderpoint.py", "stock/security/ir.model.access.csv"]},
+      "schemas": {"request": "schemas/v1/product.restore.request.schema.json", "response": "schemas/v1/product.restore.response.schema.json"},
+      "requirements": {"modules": ["base", "product", "stock"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["product.group_product_manager", "stock.group_stock_manager"], "acl": ["res.company:read", "product.template:read", "product.template:write", "product.product:read", "product.product:write", "stock.warehouse.orderpoint:read", "stock.warehouse.orderpoint:write"]},
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_specific_single_variant_product_restore", "verify": "same_transaction_active_product_reread_and_response_schema_validation", "idempotency": "deterministic_product_target_request_key_with_current_active_state_recheck_without_operation_store", "reverse": "product.archive"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_product_accounting_write_public.py", "tests/unit/test_product_accounting_writes_runtime.py"], "reason": "Focused tests cover the closed public contract, fixed company and single-variant runtime scope, result validation, registry schemas, and CLI dispatch."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_product_accounting_write_batch_live.py"], "reason": "The guarded shared transactional smoke passed both isolated database aliases as uid 5 with su=False, verifying execution and immediate replay for all eight writes, including an attached orderpoint during archive/restore, plus rollback of business data and temporary product-manager/stock-manager grants."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is registered; Odoo's stock extension reads and writes warehouse orderpoints during product restoration, so availability additionally depends on stock being installed and the configured user holding both product-manager and stock-manager access."},
+      "routing": {"object": "product", "actions": ["restore"], "aliases": {"zh_CN": ["恢复产品"], "en_US": ["Restore a product"]}, "not_for": {"zh_CN": ["库存计价或计价方法", "物流或库存操作", "多变体产品模板"], "en_US": ["Stock valuation or costing methods", "Logistics or inventory operations", "Multi-variant product templates"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
+    "product.update": {
+      "summary": {"zh_CN": "更新产品", "en_US": "Update a product"},
+      "domain": "accounting_master_data", "access": "write",
+      "source": {"modules": ["base", "product", "uom"], "models": ["res.company", "product.category", "uom.uom", "product.template", "product.product"], "wizards": [], "report_handlers": [], "locations": ["_references/base/models/res_company.py", "_references/product/models/product_product.py", "_references/product/models/product_template.py", "_references/product/models/product_category.py", "uom/models/uom_uom.py"]},
+      "schemas": {"request": "schemas/v1/product.update.request.schema.json", "response": "schemas/v1/product.update.response.schema.json"},
+      "requirements": {"modules": ["base", "product", "uom"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["product.group_product_manager"], "acl": ["res.company:read", "product.category:read", "uom.uom:read", "product.template:read", "product.template:write", "product.product:read", "product.product:write"]},
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_specific_single_variant_product_update", "verify": "same_transaction_updated_variant_and_template_reread_and_response_schema_validation", "idempotency": "deterministic_product_target_and_changes_digest32_request_key_with_current_target_state_recheck_without_operation_store_or_intermediate_change_protection", "reverse": "product.update_with_prior_values"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_product_accounting_write_public.py", "tests/unit/test_product_accounting_writes_runtime.py"], "reason": "Focused tests cover the nonempty basic-field update contract, fixed company and single-variant runtime scope, result validation, registry schemas, and CLI dispatch."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_product_accounting_write_batch_live.py"], "reason": "The guarded shared transactional smoke passed both isolated database aliases as uid 5 with su=False, verifying execution and immediate replay for all eight writes plus rollback of business data and temporary product-manager/stock-manager grants."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is registered; availability depends on runtime configuration, company-scoped product data, and product-manager access."},
+      "routing": {"object": "product", "actions": ["update"], "aliases": {"zh_CN": ["更新产品"], "en_US": ["Update a product"]}, "not_for": {"zh_CN": ["修改成本、会计科目或税", "库存计价或计价方法", "物流或库存操作", "多变体产品模板"], "en_US": ["Changing cost, accounting accounts, or taxes", "Stock valuation or costing methods", "Logistics or inventory operations", "Multi-variant product templates"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
     "purchase_bill.match": {
       "summary": {
         "zh_CN": "匹配采购行和供应商账单",

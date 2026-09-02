@@ -47,6 +47,16 @@ ACCOUNTING_RULES_FISCAL_YEAR_WRITES = {
     "analytic.distribution_model.create",
     "analytic.distribution_model.update",
 }
+PRODUCT_ACCOUNTING_WRITES = {
+    "product.accounting_profile.update",
+    "product.archive",
+    "product.category.accounting_profile.update",
+    "product.cost.update",
+    "product.create",
+    "product.duplicate",
+    "product.restore",
+    "product.update",
+}
 
 
 def _invoice_parameters() -> dict:
@@ -708,6 +718,38 @@ PARAMETERS = {
     "account.return.archive": {"return_id": 61},
     "account.return.restore": {"return_id": 61},
     "account.return.delete": {"return_id": 61},
+    "product.create": {
+        "name": "Consulting service",
+        "default_code": "CONSULT-01",
+        "product_type": "service",
+        "category_id": 11,
+        "uom_id": 1,
+    },
+    "product.update": {
+        "product_id": 61,
+        "changes": {"name": "Consulting service 2027", "list_price": "1250.5"},
+    },
+    "product.duplicate": {
+        "product_id": 61,
+        "name": "Consulting service copy",
+        "default_code": "CONSULT-02",
+    },
+    "product.archive": {"product_id": 61},
+    "product.restore": {"product_id": 61},
+    "product.cost.update": {"product_id": 61, "standard_price": "700.25"},
+    "product.accounting_profile.update": {
+        "product_id": 61,
+        "changes": {
+            "income_account_id": 31,
+            "expense_account_id": None,
+            "sale_tax_ids": [41, 42],
+            "purchase_tax_ids": [],
+        },
+    },
+    "product.category.accounting_profile.update": {
+        "category_id": 11,
+        "changes": {"income_account_id": 31, "expense_account_id": None},
+    },
 }
 
 
@@ -764,6 +806,7 @@ def _key(capability_id: str) -> str:
         "analytic.account.restore",
         "analytic.line.update",
         "analytic.line.delete",
+        *PRODUCT_ACCOUNTING_WRITES,
     }:
         _, context, parameters = validate_core_write_request(
             capability_id, _request(capability_id)
@@ -1004,6 +1047,29 @@ def _key(capability_id: str) -> str:
 
 def _result(capability_id: str, **changes) -> dict:
     parameters = PARAMETERS[capability_id]
+    if capability_id in PRODUCT_ACCOUNTING_WRITES:
+        category = capability_id == "product.category.accounting_profile.update"
+        result = {
+            "model": "product.category" if category else "product.product",
+            "id": (
+                parameters["category_id"]
+                if category
+                else 919
+                if capability_id in {"product.create", "product.duplicate"}
+                else parameters["product_id"]
+            ),
+            "name": "Consulting service",
+            "state": "archived" if capability_id == "product.archive" else "active",
+            "company_id": 7,
+            "move_type": None,
+            "source_id": None if category else 920,
+            "line_ids": [],
+            "partial_reconcile_ids": [],
+            "full_reconcile_id": None,
+            "reconciled": False,
+        }
+        result.update(changes)
+        return result
     if capability_id.startswith("analytic.plan."):
         result = {
             "model": "account.analytic.plan",
@@ -1730,6 +1796,7 @@ def test_each_core_write_validates_and_calls_one_fixed_port_operation(
         capability_id.startswith(("fiscal_position.", "journal.group."))
         or capability_id in ACCOUNTING_CONFIGURATION_EXPANSION_WRITES
         or capability_id in ACCOUNTING_MASTER_DATA_COMPLETION_WRITES
+        or capability_id in PRODUCT_ACCOUNTING_WRITES
     ):
         expected_parameters = validate_core_write_request(capability_id, request)[2]
     elif capability_id == "partner.create":

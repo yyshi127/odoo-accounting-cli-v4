@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 382
-EXPECTED_ENABLED_CAPABILITY_COUNT = 367
+EXPECTED_CAPABILITY_COUNT = 390
+EXPECTED_ENABLED_CAPABILITY_COUNT = 375
 EXPECTED_IMPLEMENTED_READ_COUNT = 215
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 152
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 160
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 324
-EXPECTED_DEGRADED_CAPABILITY_COUNT = 43
-EXPECTED_SCHEMA_COUNT = 740
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 330
+EXPECTED_DEGRADED_CAPABILITY_COUNT = 45
+EXPECTED_SCHEMA_COUNT = 756
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "e72188eb3fae0df6b67afd41b7a8b5671b04c41ec8d02d37ba9ec7d20715d064"
+    "bb55de04032b66b931e4d84fa93ac7cda3ac5f01b6717ab0feef97cd16b1e52c"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -396,6 +396,14 @@ IMPLEMENTED_WRITES = {
     "payment.reset_to_draft",
     "payment.update_draft",
     "period.transfer.run",
+    "product.accounting_profile.update",
+    "product.archive",
+    "product.category.accounting_profile.update",
+    "product.cost.update",
+    "product.create",
+    "product.duplicate",
+    "product.restore",
+    "product.update",
     "receivable.payment.register",
     "reconciliation.apply",
     "reconciliation.automatic.run",
@@ -523,6 +531,16 @@ ACCOUNT_RETURN_WRITES = {
     "account.return.mark_submitted",
     "account.return.restore",
     "account.return.validate",
+}
+PRODUCT_ACCOUNTING_WRITES = {
+    "product.accounting_profile.update",
+    "product.archive",
+    "product.category.accounting_profile.update",
+    "product.cost.update",
+    "product.create",
+    "product.duplicate",
+    "product.restore",
+    "product.update",
 }
 PARTNER_MASTER_DATA_READS = {
     "partner.get",
@@ -2425,6 +2443,22 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
     )
     extended_modules.update(
         {
+            "product.create": ["base", "product", "uom"],
+            "product.update": ["base", "product", "uom"],
+            "product.duplicate": ["base", "product", "uom"],
+            "product.archive": ["base", "product", "stock"],
+            "product.restore": ["base", "product", "stock"],
+            "product.cost.update": ["base", "product"],
+            "product.accounting_profile.update": ["base", "product", "account"],
+            "product.category.accounting_profile.update": [
+                "base",
+                "product",
+                "account",
+            ],
+        }
+    )
+    extended_modules.update(
+        {
             "currency.rate.record": ["account", "base"],
             "account.group.create": ["account", "base"],
             "account.group.update": ["account", "base"],
@@ -2582,12 +2616,27 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
         expected_groups = [CORE_WRITE_GROUPS[capability_id]]
         if capability_id == "partner.accounting.update":
             expected_groups.append("base.group_partner_manager")
+        if capability_id in {"product.archive", "product.restore"}:
+            expected_groups.append("stock.group_stock_manager")
+            assert {
+                "stock/models/product.py",
+                "stock/models/stock_orderpoint.py",
+                "stock/security/ir.model.access.csv",
+            } <= set(descriptor["source"]["locations"])
+            assert "stock extension reads and writes warehouse orderpoints" in descriptor[
+                "status"
+            ]["reason"]
+            assert "stock-manager access" in descriptor["status"]["reason"]
         assert descriptor["requirements"]["groups"] == expected_groups
         expected_acl = {
             f"{model}:{operation}"
             for model, operation in CORE_WRITE_ACCESS[capability_id]
         }
-        if capability_id in PARTNER_MASTER_DATA_WRITES | ACCOUNT_RETURN_WRITES:
+        if capability_id in (
+            PARTNER_MASTER_DATA_WRITES
+            | ACCOUNT_RETURN_WRITES
+            | PRODUCT_ACCOUNTING_WRITES
+        ):
             expected_acl.add("res.company:read")
         expected_acl -= runtime_support_acl.get(capability_id, set())
         assert set(descriptor["requirements"]["acl"]) == expected_acl
@@ -2601,6 +2650,12 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
         }:
             assert descriptor["status"]["value"] == "degraded"
             assert descriptor["status"]["reason_code"] == "database_global_record_scope"
+        elif capability_id in {"product.create", "product.duplicate"}:
+            assert descriptor["status"]["value"] == "degraded"
+            assert (
+                descriptor["status"]["reason_code"]
+                == "natural_key_replay_attribution_limit"
+            )
         elif capability_id in {
             "account.account.create",
             "account.return.create",
@@ -2828,6 +2883,17 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             assert descriptor["tests"]["integration"]["status"] == "implemented"
             assert descriptor["tests"]["integration"]["references"] == [
                 "tests/integration/test_accounting_followup_write_batch_live.py"
+            ]
+            continue
+        if capability_id in PRODUCT_ACCOUNTING_WRITES:
+            assert descriptor["tests"]["unit"]["status"] == "implemented"
+            assert descriptor["tests"]["unit"]["references"] == [
+                "tests/unit/test_product_accounting_write_public.py",
+                "tests/unit/test_product_accounting_writes_runtime.py",
+            ]
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == [
+                "tests/integration/test_product_accounting_write_batch_live.py"
             ]
             continue
         assert descriptor["tests"]["unit"]["status"] == "implemented"

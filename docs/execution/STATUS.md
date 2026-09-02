@@ -7,55 +7,71 @@ The active objective is capability-first accounting delivery in
 logistics are outside this phase; picking and physical-return commands are not
 accounting-core completion. Financial credit notes/refunds remain in scope.
 
-The current registry has 382 IDs, 367 enabled handlers (215 reads, 152 writes),
-and 740 schemas. Statuses are 324 `unconfigured`, 43 `degraded`, and 15 `disabled`.
+The current registry has 390 IDs, 375 enabled handlers (215 reads, 160 writes),
+and 756 schemas. Statuses are 330 `unconfigured`, 45 `degraded`, and 15 `disabled`.
 These are implementation totals including historical non-accounting extensions,
-not 382 accounting operations, a coverage percentage, or proof that all workflows
-pass for the configured user. There are 16 `stock.*` IDs, but other historical
-sales/purchase extensions also remain; subtracting 16 does not establish a
-pure-accounting count or a coverage denominator. Capability-ID-list SHA-256 is
-`e72188eb3fae0df6b67afd41b7a8b5671b04c41ec8d02d37ba9ec7d20715d064`;
+not 390 accounting operations, a completion percentage, or proof that every
+configured user is authorized. Capability-ID-list SHA-256 is
+`bb55de04032b66b931e4d84fa93ac7cda3ac5f01b6717ab0feef97cd16b1e52c`;
 canonical registry SHA-256 is
-`99cbd280f04184fea14911aaa6db9d0d1f52fed32bb70a09d39c5d409f909a76`.
+`b55e75a5932ea9b14eda8024a965fffe2f913d5d962bbe074beb0e143fff9764`.
 
-The latest batch adds eight manual account-return lifecycle commands:
-`account.return.create`, `account.return.checks.refresh`,
-`account.return.check.result.update`, `account.return.validate`,
-`account.return.mark_submitted`, `account.return.archive`,
-`account.return.restore`, and `account.return.delete`. Creation is restricted to a
-standalone root company, a reportless `account_return` type using Odoo's generic
-review/submit workflow, and exactly one native return period. `mark_submitted`
-changes Odoo's internal return state; it does not claim external tax filing.
-Delete has no tombstone and is therefore degraded. Check IDs remain available
-through the existing read commands rather than being duplicated in write results.
+The latest batch adds eight product/accounting master-data writes:
+`product.create`, `product.update`, `product.duplicate`, `product.archive`,
+`product.restore`, `product.cost.update`, `product.accounting_profile.update`,
+and `product.category.accounting_profile.update`. The fixed scope is a
+company-specific, single-variant, non-storable product. It does not expose picking,
+physical returns, routes, costing methods, or stock-valuation workflows. Create and
+duplicate remain honestly `degraded`: an exact pre-existing natural-key match can
+be treated as a replay because this batch deliberately adds no operation store.
 
-Final server regression passed 111 focused cases; registry closure passed two
-cases, and the protected live suite skipped both aliases until explicitly
-authorized. The final explicit dual-alias run passed `2 passed in 8.93s`. Each
-worker exercised the existing eight return/journal reads plus all eight new writes
-as uid 5/company 1, reported 16 positive results, and verified rollback with a fresh
-cursor. Both databases finished with no persistent account-return, marked-check,
-temporary-view, or temporary-XML-ID rows. PostgreSQL sequences are not transactional,
-so this is a no-persistent-row claim, not a bit-for-bit unchanged-database claim.
+All eight commands require `product.group_product_manager`. On this Odoo 19 server,
+archive and restore additionally require `stock.group_stock_manager` plus read and
+write access to `stock.warehouse.orderpoint`, because the installed stock extension
+updates attached orderpoints while changing a variant's active state. The configured
+uid 5 has neither required group by default. The guarded smoke granted both only
+inside each outer test transaction; every capability call still ran as uid 5 with
+`su=False`, and fresh cursors verified both grants were rolled back. Therefore the
+commands are implemented and live-tested, but they are not available to uid 5 in
+ordinary runtime until an administrator grants the documented groups.
 
-The server package has a confirmed Odoo source/data defect: its
-`account_reports` manifest comments out `views/account_move_views.xml`, while the
-annual-closing check still references `account_reports.view_draft_entries_tree`.
-Both isolated databases therefore fail natively at that reference. The acceptance
-smoke disclosed and installed an exact rollback-only compatibility view/XML-ID in
-the same transaction. This proves the CLI path under that fixture; it does not
-claim the unmodified server environment is healthy. Repairing the Odoo package is
-outside this CLI batch and remains required before ordinary runtime use.
+The final local selection passed `206 passed in 62.12s`; the synchronized server
+selection passed `206 passed in 93.55s`. The explicit dual-alias real-Odoo run passed
+`1 passed in 8.95s`; each alias executed all eight writes and eight immediate
+replays, attached a real orderpoint, verified its archived/restored state, exercised
+the existing product reads, and verified rollback. Final database audits found zero
+marked templates, variants, orderpoints, or temporary group memberships in both
+isolated databases. Earlier attempts remain as diagnostics: they found the stock
+relation dependency and the correct native variant-restore path. A later independent
+review then found that read-only stock-user access did not cover a nonempty
+orderpoint; the final stock-manager/write-ACL smoke above supersedes the earlier
+empty-orderpoint acceptance.
 
 The private evidence directory is
-`/opt/odoo-accounting-cli-v4/.tooling/account-return-lifecycle-20260902-114136`.
-The final 27-file archive is 2652160 bytes with SHA-256
-`3bcf94eee2d20407c8ceb39ecd8afecf6a21dcd801c86a0199c9e4e2a9522978`;
-all targets matched it byte-for-byte. Ten existing files have pre-deployment
-backups and 17 files were new. Odoo stayed on PID `959127` with `NRestarts=1`;
-no service-control command was issued and no live worker remains.
+`/opt/odoo-accounting-cli-v4/.tooling/product-accounting-writes-20260902-8f2b73c1`.
+The initial 26-file deployment archive SHA-256 is
+`70f7d176951f5faccad05274bd95b2c6568c1d05e9e7497b34e1e04dc8021e9b`;
+the two focused correction archives are
+`2067b590f2ee6852640d746f1416e485fb886d8e67213df9be167c701fdbefba`
+and `2dd560d001052ff5c5f1782552e5de5157e94d38339173fb3c54326006d6d4f0`.
+The pre-fix4 registry-evidence archive SHA-256 is
+`626be98fb84df6c4d14f7871485659e0f7123786ff785ce20836f3fed1798640`.
+The final six-file orderpoint-write correction archive SHA-256 is
+`1ff6e1f2a25818754821003d98995501c1dcf4bef6e0d18d2f4bcaa747b45ff6`;
+its pre-change backup is
+`28fb7a4d4af5c19088c33fa48880671bb9bd7a2bfc41d10aaa1090485bf46d09`.
+The final server 206-test, `odoo`-identity live-smoke, and rollback/service-audit
+log SHA-256 values are respectively
+`b43427f3e0636260dd1d66bed62f939c9f3c5c14e984889cf5d469abcabd8c2a`,
+`8329b54d0192be6ae54369acf70f1effd9ab451cd6deee41e27ad5bbe3d1e0c0`,
+and `a23afe6358e4b9e7fbf0666c68b8f1100047e31c4f672d096c8ac00a78f7cfdb`.
+Odoo stayed on PID `959127` with `NRestarts=1`; no service-control command was
+issued, no live worker remains, and root disk use remains 96% with about 3.5 GB free.
 
-The preceding analytic-accounting batch added eight commands:
+The preceding manual account-return batch added eight commands and retains its
+separate compatibility-fixture qualification in the detailed checkpoint below.
+
+The earlier analytic-accounting batch added eight commands:
 `analytic.plan.create/update`, `analytic.account.archive/restore`,
 `analytic.line.create/update/delete`, and `analytic.line.summary`.
 

@@ -16,11 +16,19 @@ the Odoo source/add-on tree while building CLI capabilities.
 
 ## Current authoritative count
 
-- Registry: 382 capability IDs; 367 enabled handlers (215 reads and 152 writes)
+- Registry: 390 capability IDs; 375 enabled handlers (215 reads and 160 writes)
   and 15 disabled IDs.
-- Runtime status: 324 `unconfigured`, 43 `degraded`, and 15 `disabled`.
-- Versioned JSON Schema documents: 740.
-- The latest batch adds eight manual account-return lifecycle commands:
+- Runtime status: 330 `unconfigured`, 45 `degraded`, and 15 `disabled`.
+- Versioned JSON Schema documents: 756.
+- The latest batch adds eight product/accounting master-data writes:
+  `product.create`, `product.update`, `product.duplicate`, `product.archive`,
+  `product.restore`, `product.cost.update`, `product.accounting_profile.update`,
+  and `product.category.accounting_profile.update`. They cover only
+  company-specific, single-variant, non-storable products. The final dual-alias
+  rollback smoke passed; uid 5 still lacks the required product-manager and
+  stock-manager groups in ordinary runtime. The exact scope, diagnostic history,
+  orderpoint-backed acceptance, and server evidence are recorded below.
+- The preceding batch added eight manual account-return lifecycle commands:
   `account.return.create`, `account.return.checks.refresh`,
   `account.return.check.result.update`, `account.return.validate`,
   `account.return.mark_submitted`, `account.return.archive`,
@@ -3953,3 +3961,119 @@ The next action is a choice, not an assumption: either authorize a separate,
 carefully scoped repair of the protected Odoo package so these return commands run
 without the compatibility fixture, or leave that environment defect recorded and
 select the next bounded 8-12-command accounting capability batch.
+
+## Product/accounting master-data write checkpoint — 2026-09-02
+
+Starting from pushed baseline `0d8b95d0afbd35a36b65214792a9792fe5707e53`,
+this batch adds exactly eight commands:
+
+1. `product.create`
+2. `product.update`
+3. `product.duplicate`
+4. `product.archive`
+5. `product.restore`
+6. `product.cost.update`
+7. `product.accounting_profile.update`
+8. `product.category.accounting_profile.update`
+
+The registry now has 390 IDs and 375 enabled handlers (215 reads and 160 writes),
+756 schemas, and statuses of 330 `unconfigured`, 45 `degraded`, and 15 `disabled`.
+Capability-ID-list SHA-256 is
+`bb55de04032b66b931e4d84fa93ac7cda3ac5f01b6717ab0feef97cd16b1e52c`;
+canonical registry digest is
+`b55e75a5932ea9b14eda8024a965fffe2f913d5d962bbe074beb0e143fff9764`.
+
+### Fixed boundary
+
+- Products must be company-specific, single-variant, non-storable, non-combo,
+  and have no attribute lines. This batch is accounting master data, not picking,
+  stock-return, route, costing-method, or inventory-valuation workflow support.
+- Create/update cover basic product fields only. Cost has its own canonical-decimal
+  command. Product and category accounting profiles have their own closed account
+  and tax contracts; tax IDs are normalized to sorted unique IDs. The category
+  profile idempotency key includes company because those properties are
+  company-dependent.
+- Create and duplicate use a company/code natural-key recheck and are marked
+  `degraded`. Without an operation store, an unrelated exact pre-existing match
+  can be attributed as a serial replay, and concurrent exactly-once creation is
+  not claimed.
+- `product.cost.update` does not require the optional `product.value` model.
+  The live rollback check compares those rows only when that stock-account model
+  exists.
+- All eight commands require `product.group_product_manager`. Archive and restore
+  also require `stock.group_stock_manager` plus
+  `stock.warehouse.orderpoint:read` and `stock.warehouse.orderpoint:write`: Odoo
+  19's installed stock extension reads and updates attached orderpoints while
+  changing product active state. Restore calls the native
+  `product.product.action_unarchive()` path so the variant is restored before Odoo
+  reactivates its template.
+
+### Verification and diagnostic history
+
+- Final local focused selection: `206 passed in 62.12s`; Ruff, integration collection,
+  JSON/schema loading, and `git diff --check` passed.
+- Final synchronized server selection: `206 passed in 93.55s`. Final registry
+  closure separately passed two cases and reports all eight integration statuses
+  as `implemented`.
+- Explicit real-Odoo acceptance: `1 passed in 8.95s`. One pytest case ran both
+  `v4-dev` / `odoo_cli_v4_dev` and `v4-e2e` / `odoo_cli_v4_e2e`. Each worker ran
+  all eight writes and eight immediate replays as uid 5, company 1, and `su=False`,
+  attached one real orderpoint, verified it followed archive and restore, then used
+  a fresh cursor to verify rollback.
+- The configured uid 5 has neither required product/stock group by default. The
+  test linked both groups inside the same outer transaction and verified both
+  direct memberships absent afterward. Final SQL audit found zero marked product
+  templates, zero marked variants, zero marked orderpoints, and zero temporary
+  memberships in both databases. No ordinary business database was used.
+- Attempt 1 is not acceptance evidence. It failed at archive because the initial
+  contract omitted stock-user access. Its rollback path completed, and direct SQL
+  found zero product or group residue. The resulting minimal fix added the real
+  stock module/model/group/ACL dependency.
+- Attempt 2 is also not acceptance evidence. Archive then succeeded, but restore
+  exposed that `product.template.action_unarchive()` leaves its archived variant
+  inactive in Odoo 19. Its rollback and direct SQL audit were clean. The runtime
+  now uses the native variant unarchive path.
+- Attempt 3 passed the empty-orderpoint path, but a final independent source review
+  found that `product.product.write(active=...)` writes every attached orderpoint.
+  Stock-user read access was therefore incomplete. Fix4 requires stock-manager
+  access and orderpoint write ACL, and the acceptance run above supersedes attempt 3
+  by exercising an actual attached orderpoint. A separate root-launched harness run
+  was rejected by PostgreSQL peer authentication before any Odoo transaction; the
+  recorded `odoo`-identity run is the acceptance evidence.
+
+### Deployment and evidence
+
+Private evidence directory:
+`/opt/odoo-accounting-cli-v4/.tooling/product-accounting-writes-20260902-8f2b73c1`.
+
+- Initial 26-file archive: 278911 bytes, SHA-256
+  `70f7d176951f5faccad05274bd95b2c6568c1d05e9e7497b34e1e04dc8021e9b`.
+- Six-file stock-access correction: 192910 bytes, SHA-256
+  `2067b590f2ee6852640d746f1416e485fb886d8e67213df9be167c701fdbefba`.
+- Two-file restore correction: 80900 bytes, SHA-256
+  `2dd560d001052ff5c5f1782552e5de5157e94d38339173fb3c54326006d6d4f0`.
+- Pre-fix4 two-file registry-evidence archive: 102804 bytes, SHA-256
+  `626be98fb84df6c4d14f7871485659e0f7123786ff785ce20836f3fed1798640`.
+- Final six-file orderpoint-write correction: 192813 bytes, SHA-256
+  `1ff6e1f2a25818754821003d98995501c1dcf4bef6e0d18d2f4bcaa747b45ff6`;
+  pre-change backup SHA-256 is
+  `28fb7a4d4af5c19088c33fa48880671bb9bd7a2bfc41d10aaa1090485bf46d09`.
+  Every deployment round has its own pre-change backup in the same directory.
+- Final server 206-test, `odoo`-identity live-smoke, and rollback/service-audit log
+  SHA-256 values are
+  `b43427f3e0636260dd1d66bed62f939c9f3c5c14e984889cf5d469abcabd8c2a`,
+  `8329b54d0192be6ae54369acf70f1effd9ab451cd6deee41e27ad5bbe3d1e0c0`,
+  and `a23afe6358e4b9e7fbf0666c68b8f1100047e31c4f672d096c8ac00a78f7cfdb`.
+  Earlier failed-attempt logs and their independent rollback audits are retained.
+
+No service-control command was issued. Odoo remained active on PID `959127` with
+`NRestarts=1`; Nginx remained on PID `2193677` with `NRestarts=0`, PostgreSQL
+remained active, and no live worker remains. Root disk use is still 96%, with about
+3.5 GB free. Server Git is intentionally old and dirty; continue deploying only an
+explicit allowlist and never pull, reset, or checkout there.
+
+Next work should return to the accounting capability-gap audit and select another
+bounded 8-12-command batch. Do not count aliases as new commands, add a generic ORM
+dispatcher, or spend the next batch building heavy policy gates. The separate
+account-return package defect remains recorded and is not silently repaired by
+this product batch.

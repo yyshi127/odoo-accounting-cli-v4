@@ -80,6 +80,14 @@ CAPABILITIES = frozenset(
         "account.return.archive",
         "account.return.restore",
         "account.return.delete",
+        "product.create",
+        "product.update",
+        "product.duplicate",
+        "product.archive",
+        "product.restore",
+        "product.cost.update",
+        "product.accounting_profile.update",
+        "product.category.accounting_profile.update",
         "budget.create",
         "budget.update_draft",
         "budget.lines.replace",
@@ -356,6 +364,47 @@ _JOURNAL_GROUP_CAPABILITIES = frozenset(
 )
 _JOURNAL_GROUP_FIELDS = frozenset({"name", "sequence", "excluded_journal_ids"})
 _JOURNAL_GROUP_CREATE_DEFAULTS = {"sequence": 10, "excluded_journal_ids": []}
+_PRODUCT_WRITE_CAPABILITIES = frozenset(
+    {
+        "product.create",
+        "product.update",
+        "product.duplicate",
+        "product.archive",
+        "product.restore",
+        "product.cost.update",
+        "product.accounting_profile.update",
+        "product.category.accounting_profile.update",
+    }
+)
+_PRODUCT_ARCHIVE_CAPABILITIES = frozenset({"product.archive", "product.restore"})
+_PRODUCT_ARCHIVE_ADDITIONAL_GROUP = "stock.group_stock_manager"
+_PRODUCT_BASIC_FIELDS = frozenset(
+    {
+        "name",
+        "default_code",
+        "product_type",
+        "category_id",
+        "uom_id",
+        "barcode",
+        "sale_ok",
+        "purchase_ok",
+        "list_price",
+    }
+)
+_PRODUCT_CREATE_REQUIRED_FIELDS = frozenset(
+    {"name", "default_code", "product_type", "category_id", "uom_id"}
+)
+_PRODUCT_ACCOUNTING_PROFILE_FIELDS = frozenset(
+    {
+        "income_account_id",
+        "expense_account_id",
+        "sale_tax_ids",
+        "purchase_tax_ids",
+    }
+)
+_PRODUCT_CATEGORY_ACCOUNTING_PROFILE_FIELDS = frozenset(
+    {"income_account_id", "expense_account_id"}
+)
 _ACCOUNTING_REFERENCE_WRITE_CAPABILITIES = frozenset(
     {
         "currency.rate.record",
@@ -759,6 +808,14 @@ _PARAMETER_KEYS = {
     "account.return.archive": {"return_id"},
     "account.return.restore": {"return_id"},
     "account.return.delete": {"return_id"},
+    "product.create": set(_PRODUCT_BASIC_FIELDS),
+    "product.update": {"product_id", "changes"},
+    "product.duplicate": {"product_id", "name", "default_code"},
+    "product.archive": {"product_id"},
+    "product.restore": {"product_id"},
+    "product.cost.update": {"product_id", "standard_price"},
+    "product.accounting_profile.update": {"product_id", "changes"},
+    "product.category.accounting_profile.update": {"category_id", "changes"},
     "budget.create": {"name", "date_from", "date_to", "budget_type"},
     "budget.update_draft": {"budget_id", "changes"},
     "budget.lines.replace": {"budget_id", "lines"},
@@ -966,6 +1023,14 @@ _GROUPS = {
     "account.return.archive": "account.group_account_user",
     "account.return.restore": "account.group_account_user",
     "account.return.delete": "account.group_account_user",
+    "product.create": "product.group_product_manager",
+    "product.update": "product.group_product_manager",
+    "product.duplicate": "product.group_product_manager",
+    "product.archive": "product.group_product_manager",
+    "product.restore": "product.group_product_manager",
+    "product.cost.update": "product.group_product_manager",
+    "product.accounting_profile.update": "product.group_product_manager",
+    "product.category.accounting_profile.update": "product.group_product_manager",
     "budget.create": "account.group_account_user",
     "budget.update_draft": "account.group_account_user",
     "budget.lines.replace": "account.group_account_user",
@@ -1421,6 +1486,56 @@ _MODELS = {
         "res.company",
         "account.return.type",
         "account.return",
+    },
+    "product.create": {
+        "res.company",
+        "product.category",
+        "uom.uom",
+        "product.template",
+        "product.product",
+    },
+    "product.update": {
+        "res.company",
+        "product.category",
+        "uom.uom",
+        "product.template",
+        "product.product",
+    },
+    "product.duplicate": {
+        "res.company",
+        "product.category",
+        "uom.uom",
+        "product.template",
+        "product.product",
+    },
+    "product.archive": {
+        "res.company",
+        "product.template",
+        "product.product",
+        "stock.warehouse.orderpoint",
+    },
+    "product.restore": {
+        "res.company",
+        "product.template",
+        "product.product",
+        "stock.warehouse.orderpoint",
+    },
+    "product.cost.update": {
+        "res.company",
+        "product.template",
+        "product.product",
+    },
+    "product.accounting_profile.update": {
+        "res.company",
+        "account.account",
+        "account.tax",
+        "product.template",
+        "product.product",
+    },
+    "product.category.accounting_profile.update": {
+        "res.company",
+        "account.account",
+        "product.category",
     },
     "budget.create": {"res.company", "budget.analytic", "budget.line"},
     "budget.update_draft": {"res.company", "budget.analytic", "budget.line"},
@@ -1989,6 +2104,63 @@ _ACCESS = {
         ("account.return.type", "read"),
         ("account.return", "read"),
         ("account.return", "unlink"),
+    },
+    "product.create": {
+        ("product.category", "read"),
+        ("uom.uom", "read"),
+        ("product.template", "read"),
+        ("product.template", "create"),
+        ("product.product", "read"),
+        ("product.product", "create"),
+    },
+    "product.update": {
+        ("product.category", "read"),
+        ("uom.uom", "read"),
+        ("product.template", "read"),
+        ("product.template", "write"),
+        ("product.product", "read"),
+        ("product.product", "write"),
+    },
+    "product.duplicate": {
+        ("product.category", "read"),
+        ("uom.uom", "read"),
+        ("product.template", "read"),
+        ("product.template", "create"),
+        ("product.product", "read"),
+        ("product.product", "create"),
+    },
+    "product.archive": {
+        ("product.template", "read"),
+        ("product.template", "write"),
+        ("product.product", "read"),
+        ("product.product", "write"),
+        ("stock.warehouse.orderpoint", "read"),
+        ("stock.warehouse.orderpoint", "write"),
+    },
+    "product.restore": {
+        ("product.template", "read"),
+        ("product.template", "write"),
+        ("product.product", "read"),
+        ("product.product", "write"),
+        ("stock.warehouse.orderpoint", "read"),
+        ("stock.warehouse.orderpoint", "write"),
+    },
+    "product.cost.update": {
+        ("product.template", "read"),
+        ("product.product", "read"),
+        ("product.product", "write"),
+    },
+    "product.accounting_profile.update": {
+        ("account.account", "read"),
+        ("account.tax", "read"),
+        ("product.template", "read"),
+        ("product.template", "write"),
+        ("product.product", "read"),
+    },
+    "product.category.accounting_profile.update": {
+        ("account.account", "read"),
+        ("product.category", "read"),
+        ("product.category", "write"),
     },
     "budget.create": {
         ("budget.analytic", "read"),
@@ -4529,6 +4701,76 @@ def _valid_cash_rounding_values(values: Any, *, partial: bool) -> bool:
     )
 
 
+def _valid_product_basic_values(values: Any, *, partial: bool) -> bool:
+    if not isinstance(values, dict) or (partial and not values):
+        return False
+    if not set(values) <= _PRODUCT_BASIC_FIELDS:
+        return False
+    if not partial and not _PRODUCT_CREATE_REQUIRED_FIELDS <= set(values):
+        return False
+    list_price = (
+        _decimal(values["list_price"])
+        if "list_price" in values
+        else Decimal(0)
+    )
+    return bool(
+        ("name" not in values or _is_text(values["name"], maximum=256))
+        and (
+            "default_code" not in values
+            or _is_text(values["default_code"], maximum=64)
+        )
+        and (
+            "product_type" not in values
+            or values["product_type"] in {"consu", "service"}
+        )
+        and ("category_id" not in values or _is_id(values["category_id"]))
+        and ("uom_id" not in values or _is_id(values["uom_id"]))
+        and (
+            "barcode" not in values
+            or values["barcode"] is None
+            or _is_text(values["barcode"], maximum=64)
+        )
+        and (
+            "sale_ok" not in values or isinstance(values["sale_ok"], bool)
+        )
+        and (
+            "purchase_ok" not in values
+            or isinstance(values["purchase_ok"], bool)
+        )
+        and (
+            "list_price" not in values
+            or list_price is not None
+            and list_price >= 0
+            and _canonical_decimal_text(list_price) == values["list_price"]
+        )
+    )
+
+
+def _valid_product_accounting_profile_values(
+    values: Any, *, category: bool
+) -> bool:
+    allowed = (
+        _PRODUCT_CATEGORY_ACCOUNTING_PROFILE_FIELDS
+        if category
+        else _PRODUCT_ACCOUNTING_PROFILE_FIELDS
+    )
+    if not isinstance(values, dict) or not values or not set(values) <= allowed:
+        return False
+    if any(
+        values[field_name] is not None and not _is_id(values[field_name])
+        for field_name in ("income_account_id", "expense_account_id")
+        if field_name in values
+    ):
+        return False
+    return all(
+        isinstance(values[field_name], list)
+        and values[field_name] == sorted(set(values[field_name]))
+        and all(_is_id(item) for item in values[field_name])
+        for field_name in ("sale_tax_ids", "purchase_tax_ids")
+        if field_name in values
+    )
+
+
 def _valid_parameters(
     capability_id: str, parameters: Any, company_id: int | None = None
 ) -> bool:
@@ -4576,6 +4818,8 @@ def _valid_parameters(
         )
     elif capability_id in {"fiscal_position.create", "journal.group.create"}:
         required_keys = frozenset({"name"})
+    elif capability_id == "product.create":
+        required_keys = _PRODUCT_CREATE_REQUIRED_FIELDS
     if not required_keys <= parameter_keys <= allowed_keys:
         return False
     if capability_id in _BATCH_LIFECYCLE_CAPABILITIES:
@@ -4899,6 +5143,41 @@ def _valid_parameters(
         "account.return.delete",
     }:
         return _is_id(parameters["return_id"])
+    if capability_id == "product.create":
+        return _valid_product_basic_values(parameters, partial=False)
+    if capability_id == "product.update":
+        return _is_id(parameters["product_id"]) and _valid_product_basic_values(
+            parameters["changes"], partial=True
+        )
+    if capability_id == "product.duplicate":
+        return bool(
+            _is_id(parameters["product_id"])
+            and _is_text(parameters["name"], maximum=256)
+            and _is_text(parameters["default_code"], maximum=64)
+        )
+    if capability_id in {"product.archive", "product.restore"}:
+        return _is_id(parameters["product_id"])
+    if capability_id == "product.cost.update":
+        standard_price = _decimal(parameters["standard_price"])
+        return bool(
+            _is_id(parameters["product_id"])
+            and standard_price is not None
+            and standard_price >= 0
+            and _canonical_decimal_text(standard_price)
+            == parameters["standard_price"]
+        )
+    if capability_id == "product.accounting_profile.update":
+        return _is_id(
+            parameters["product_id"]
+        ) and _valid_product_accounting_profile_values(
+            parameters["changes"], category=False
+        )
+    if capability_id == "product.category.accounting_profile.update":
+        return _is_id(
+            parameters["category_id"]
+        ) and _valid_product_accounting_profile_values(
+            parameters["changes"], category=True
+        )
     if capability_id == "budget.create":
         return bool(
             _is_text(parameters["name"], maximum=200)
@@ -5057,6 +5336,52 @@ def _deterministic_key(
         "account.return.delete",
     }:
         return f"{capability_id}:{parameters['return_id']}"
+    if capability_id in {"product.create", "product.duplicate"}:
+        canonical_parameters = (
+            _normalized_product_create_values(parameters)
+            if capability_id == "product.create"
+            else parameters
+        )
+        digest = hashlib.sha256(
+            json.dumps(
+                canonical_parameters,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()[:32]
+        return f"{capability_id}:{company_id}:{digest}"
+    if capability_id in {
+        "product.update",
+        "product.cost.update",
+        "product.accounting_profile.update",
+        "product.category.accounting_profile.update",
+    }:
+        target_id = parameters[
+            "category_id"
+            if capability_id == "product.category.accounting_profile.update"
+            else "product_id"
+        ]
+        content = (
+            {"standard_price": parameters["standard_price"]}
+            if capability_id == "product.cost.update"
+            else parameters["changes"]
+        )
+        digest = hashlib.sha256(
+            json.dumps(
+                content,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()[:32]
+        if capability_id == "product.category.accounting_profile.update":
+            return f"{capability_id}:{company_id}:{target_id}:{digest}"
+        return f"{capability_id}:{target_id}:{digest}"
+    if capability_id in {"product.archive", "product.restore"}:
+        return f"{capability_id}:{parameters['product_id']}"
     if capability_id in {
         "currency.rate.record",
         "account.group.create",
@@ -5561,7 +5886,12 @@ def _gate(env: Any, capability_id: str, company_id: int) -> tuple[bool, bool, bo
     )
     module_installed = all(installed.values())
     group_allowed = bool(
-        module_installed and env.user.has_group(_GROUPS[capability_id])
+        module_installed
+        and env.user.has_group(_GROUPS[capability_id])
+        and (
+            capability_id not in _PRODUCT_ARCHIVE_CAPABILITIES
+            or env.user.has_group(_PRODUCT_ARCHIVE_ADDITIONAL_GROUP)
+        )
     )
     access_allowed = bool(
         company_visible
@@ -7014,6 +7344,552 @@ def _delete_account_return(
             exit_code=6,
         )
     return result, False
+
+
+def _product_result(template: Any, product: Any, company_id: int) -> dict[str, Any]:
+    active = bool(getattr(template, "active", True)) and bool(
+        getattr(product, "active", True)
+    )
+    result = {
+        "model": "product.product",
+        "id": product.id,
+        "name": template.name or None,
+        "state": "active" if active else "archived",
+        "company_id": company_id,
+        "move_type": None,
+        "source_id": template.id,
+        "line_ids": [],
+        "partial_reconcile_ids": [],
+        "full_reconcile_id": None,
+        "reconciled": False,
+    }
+    assert set(result) == _RESULT_KEYS
+    return result
+
+
+def _product_category_result(category: Any, company_id: int) -> dict[str, Any]:
+    result = {
+        "model": "product.category",
+        "id": category.id,
+        "name": category.complete_name or category.name or None,
+        "state": "active",
+        "company_id": company_id,
+        "move_type": None,
+        "source_id": None,
+        "line_ids": [],
+        "partial_reconcile_ids": [],
+        "full_reconcile_id": None,
+        "reconciled": False,
+    }
+    assert set(result) == _RESULT_KEYS
+    return result
+
+
+def _fixed_product(
+    env: Any,
+    product_id: int,
+    company_id: int,
+    failure_type: type[Exception],
+    *,
+    require_active: bool | None = True,
+) -> tuple[Any, Any]:
+    product = _search_one(
+        env,
+        "product.product",
+        [("id", "=", product_id), ("company_id", "=", company_id)],
+        company_id,
+        failure_type,
+    )
+    template = product.product_tmpl_id
+    variants = template.with_context(
+        active_test=False, allowed_company_ids=[company_id]
+    ).product_variant_ids
+    template_active = bool(getattr(template, "active", True))
+    product_active = bool(getattr(product, "active", True))
+    active = template_active and product_active
+    if (
+        _relation_id(template.company_id) != company_id
+        or template.type == "combo"
+        or bool(getattr(template, "is_storable", False))
+        or bool(template.attribute_line_ids)
+        or len(variants) != 1
+        or variants.id != product.id
+        or template_active is not product_active
+        or require_active is not None
+        and active is not require_active
+    ):
+        raise _fail(
+            failure_type,
+            "record_not_found" if require_active is not False else "state_conflict",
+            "The requested simple company product is unavailable.",
+            exit_code=4 if require_active is not False else 5,
+        )
+    return template, product
+
+
+def _product_basic_values(template: Any, product: Any) -> dict[str, Any]:
+    return {
+        "name": template.name,
+        "default_code": product.default_code or "",
+        "product_type": template.type,
+        "category_id": _relation_id(template.categ_id),
+        "uom_id": _relation_id(template.uom_id),
+        "barcode": product.barcode or None,
+        "sale_ok": bool(template.sale_ok),
+        "purchase_ok": bool(template.purchase_ok),
+        "list_price": _canonical_decimal_text(template.list_price),
+    }
+
+
+def _normalized_product_create_values(parameters: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "barcode": None,
+        "sale_ok": True,
+        "purchase_ok": True,
+        "list_price": "0",
+        **parameters,
+    }
+
+
+def _validate_product_references(
+    env: Any,
+    values: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> None:
+    if "category_id" in values:
+        _ensure_ids(
+            env,
+            "product.category",
+            {values["category_id"]},
+            [],
+            company_id,
+            failure_type,
+        )
+    if "uom_id" in values:
+        _ensure_ids(
+            env,
+            "uom.uom",
+            {values["uom_id"]},
+            [("active", "=", True)],
+            company_id,
+            failure_type,
+        )
+
+
+def _product_write_values(values: dict[str, Any]) -> dict[str, Any]:
+    mapped: dict[str, Any] = {}
+    for field_name, value in values.items():
+        target = {
+            "product_type": "type",
+            "category_id": "categ_id",
+        }.get(field_name, field_name)
+        if field_name == "barcode":
+            value = value or False
+        elif field_name == "list_price":
+            value = Decimal(value)
+        mapped[target] = value
+    return mapped
+
+
+def _find_product_by_default_code(
+    env: Any, default_code: str, company_id: int
+) -> Any:
+    return _scoped(env, "product.product", company_id).search(
+        [("company_id", "=", company_id), ("default_code", "=", default_code)],
+        limit=2,
+    )
+
+
+def _create_product(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    expected = _normalized_product_create_values(parameters)
+    _validate_product_references(env, expected, company_id, failure_type)
+    existing = _find_product_by_default_code(
+        env, expected["default_code"], company_id
+    )
+    if existing:
+        if len(existing) == 1:
+            template, product = _fixed_product(
+                env, existing.id, company_id, failure_type
+            )
+            if _product_basic_values(template, product) == expected:
+                return _product_result(template, product, company_id), True
+        raise _fail(
+            failure_type,
+            "idempotency_conflict",
+            "Another product already uses the requested internal reference.",
+            exit_code=5,
+        )
+    template = _scoped(env, "product.template", company_id).create(
+        {
+            **_product_write_values(expected),
+            "company_id": company_id,
+            "active": True,
+            "is_storable": False,
+        }
+    )
+    variants = template.with_context(
+        active_test=False, allowed_company_ids=[company_id]
+    ).product_variant_ids
+    if len(template) != 1 or len(variants) != 1:
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not create exactly one simple product variant.",
+            exit_code=6,
+        )
+    checked_template, product = _fixed_product(
+        env, variants.id, company_id, failure_type
+    )
+    if _product_basic_values(checked_template, product) != expected:
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not retain the requested product values.",
+            exit_code=6,
+        )
+    return _product_result(checked_template, product, company_id), False
+
+
+def _update_product(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    template, product = _fixed_product(
+        env, parameters["product_id"], company_id, failure_type
+    )
+    changes = parameters["changes"]
+    _validate_product_references(env, changes, company_id, failure_type)
+    current = _product_basic_values(template, product)
+    target = {**current, **changes}
+    if target == current:
+        return _product_result(template, product, company_id), True
+    if target["default_code"] != current["default_code"]:
+        conflicts = _find_product_by_default_code(
+            env, target["default_code"], company_id
+        )
+        if conflicts and (len(conflicts) != 1 or conflicts.id != product.id):
+            raise _fail(
+                failure_type,
+                "state_conflict",
+                "Another product already uses the requested internal reference.",
+                exit_code=5,
+            )
+    template.write(_product_write_values(changes))
+    template.invalidate_recordset(
+        [
+            "name",
+            "type",
+            "categ_id",
+            "uom_id",
+            "barcode",
+            "sale_ok",
+            "purchase_ok",
+            "list_price",
+            "default_code",
+            "product_variant_ids",
+        ]
+    )
+    product.invalidate_recordset(["default_code", "barcode", "active"])
+    checked_template, checked_product = _fixed_product(
+        env, product.id, company_id, failure_type
+    )
+    if _product_basic_values(checked_template, checked_product) != target:
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not retain the updated product values.",
+            exit_code=6,
+        )
+    return _product_result(checked_template, checked_product, company_id), False
+
+
+def _duplicate_product(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    source_template, source_product = _fixed_product(
+        env, parameters["product_id"], company_id, failure_type
+    )
+    existing = _find_product_by_default_code(
+        env, parameters["default_code"], company_id
+    )
+    expected_common = _product_basic_values(source_template, source_product)
+    expected_common.update(
+        {
+            "name": parameters["name"],
+            "default_code": parameters["default_code"],
+            "barcode": None,
+        }
+    )
+    if existing:
+        if len(existing) == 1:
+            template, product = _fixed_product(
+                env, existing.id, company_id, failure_type
+            )
+            actual = _product_basic_values(template, product)
+            if actual == expected_common:
+                return _product_result(template, product, company_id), True
+        raise _fail(
+            failure_type,
+            "idempotency_conflict",
+            "Another product already uses the duplicate internal reference.",
+            exit_code=5,
+        )
+    copied_template = source_template.copy(
+        default={
+            "name": parameters["name"],
+            "default_code": parameters["default_code"],
+            "company_id": company_id,
+            "active": True,
+            "is_storable": False,
+        }
+    )
+    variants = copied_template.with_context(
+        active_test=False, allowed_company_ids=[company_id]
+    ).product_variant_ids
+    if len(copied_template) != 1 or len(variants) != 1:
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not duplicate exactly one simple product variant.",
+            exit_code=6,
+        )
+    template, product = _fixed_product(
+        env, variants.id, company_id, failure_type
+    )
+    actual = _product_basic_values(template, product)
+    if actual != expected_common:
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not retain the duplicated product values.",
+            exit_code=6,
+        )
+    return _product_result(template, product, company_id), False
+
+
+def _transition_product(
+    env: Any,
+    capability_id: str,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    template, product = _fixed_product(
+        env,
+        parameters["product_id"],
+        company_id,
+        failure_type,
+        require_active=None,
+    )
+    target_active = capability_id == "product.restore"
+    active = bool(getattr(template, "active", True)) and bool(
+        getattr(product, "active", True)
+    )
+    if active is target_active:
+        return _product_result(template, product, company_id), True
+    if target_active:
+        product.action_unarchive()
+    else:
+        template.action_archive()
+    template.invalidate_recordset(["active", "product_variant_ids"])
+    product.invalidate_recordset(["active"])
+    checked_template, checked_product = _fixed_product(
+        env,
+        product.id,
+        company_id,
+        failure_type,
+        require_active=target_active,
+    )
+    return _product_result(checked_template, checked_product, company_id), False
+
+
+def _update_product_cost(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    template, product = _fixed_product(
+        env, parameters["product_id"], company_id, failure_type
+    )
+    expected = parameters["standard_price"]
+    if _canonical_decimal_text(product.standard_price) == expected:
+        return _product_result(template, product, company_id), True
+    product.write({"standard_price": Decimal(expected)})
+    product.invalidate_recordset(["standard_price"])
+    if _canonical_decimal_text(product.standard_price) != expected:
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not retain the requested product cost.",
+            exit_code=6,
+        )
+    return _product_result(template, product, company_id), False
+
+
+_PRODUCT_ACCOUNT_EXCLUDED_TYPES = frozenset(
+    {
+        "asset_receivable",
+        "liability_payable",
+        "asset_cash",
+        "liability_credit_card",
+        "off_balance",
+    }
+)
+
+
+def _product_profile_account(
+    env: Any,
+    account_id: int | None,
+    company_id: int,
+    failure_type: type[Exception],
+) -> Any:
+    if account_id is None:
+        return False
+    account = _account_config_record(env, account_id, company_id, failure_type)
+    if not bool(account.active) or account.account_type in _PRODUCT_ACCOUNT_EXCLUDED_TYPES:
+        raise _fail(
+            failure_type,
+            "record_not_found",
+            "The referenced product account is unavailable.",
+            exit_code=4,
+        )
+    return account
+
+
+def _product_accounting_profile_values(template: Any) -> dict[str, Any]:
+    return {
+        "income_account_id": _relation_id(template.property_account_income_id),
+        "expense_account_id": _relation_id(template.property_account_expense_id),
+        "sale_tax_ids": _record_ids(template.taxes_id),
+        "purchase_tax_ids": _record_ids(template.supplier_taxes_id),
+    }
+
+
+def _update_product_accounting_profile(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    template, product = _fixed_product(
+        env, parameters["product_id"], company_id, failure_type
+    )
+    template = template.with_company(company_id)
+    changes = parameters["changes"]
+    write_values: dict[str, Any] = {}
+    for source, target in (
+        ("income_account_id", "property_account_income_id"),
+        ("expense_account_id", "property_account_expense_id"),
+    ):
+        if source in changes:
+            account = _product_profile_account(
+                env, changes[source], company_id, failure_type
+            )
+            write_values[target] = account.id if account else False
+    for source, target, tax_use in (
+        ("sale_tax_ids", "taxes_id", "sale"),
+        ("purchase_tax_ids", "supplier_taxes_id", "purchase"),
+    ):
+        if source in changes:
+            _ensure_ids(
+                env,
+                "account.tax",
+                set(changes[source]),
+                [
+                    ("company_id", "=", company_id),
+                    ("type_tax_use", "=", tax_use),
+                    ("active", "=", True),
+                ],
+                company_id,
+                failure_type,
+            )
+            write_values[target] = [(6, 0, changes[source])]
+    current = _product_accounting_profile_values(template)
+    target_values = {**current, **changes}
+    if target_values == current:
+        return _product_result(template, product, company_id), True
+    template.write(write_values)
+    template.invalidate_recordset(
+        [
+            "property_account_income_id",
+            "property_account_expense_id",
+            "taxes_id",
+            "supplier_taxes_id",
+        ]
+    )
+    if _product_accounting_profile_values(template) != target_values:
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not retain the product accounting profile.",
+            exit_code=6,
+        )
+    return _product_result(template, product, company_id), False
+
+
+def _product_category_accounting_profile_values(category: Any) -> dict[str, Any]:
+    return {
+        "income_account_id": _relation_id(
+            category.property_account_income_categ_id
+        ),
+        "expense_account_id": _relation_id(
+            category.property_account_expense_categ_id
+        ),
+    }
+
+
+def _update_product_category_accounting_profile(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    category = _search_one(
+        env,
+        "product.category",
+        [("id", "=", parameters["category_id"])],
+        company_id,
+        failure_type,
+    ).with_company(company_id)
+    changes = parameters["changes"]
+    write_values: dict[str, Any] = {}
+    for source, target in (
+        ("income_account_id", "property_account_income_categ_id"),
+        ("expense_account_id", "property_account_expense_categ_id"),
+    ):
+        if source in changes:
+            account = _product_profile_account(
+                env, changes[source], company_id, failure_type
+            )
+            write_values[target] = account.id if account else False
+    current = _product_category_accounting_profile_values(category)
+    target_values = {**current, **changes}
+    if target_values == current:
+        return _product_category_result(category, company_id), True
+    category.write(write_values)
+    category.invalidate_recordset(
+        ["property_account_income_categ_id", "property_account_expense_categ_id"]
+    )
+    if _product_category_accounting_profile_values(category) != target_values:
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not retain the category accounting profile.",
+            exit_code=6,
+        )
+    return _product_category_result(category, company_id), False
 
 
 def _budget_values(budget: Any) -> dict[str, Any]:
@@ -15802,6 +16678,26 @@ def _dispatch_allowed(
         )
     if capability_id == "account.return.delete":
         return _delete_account_return(env, parameters, company_id, failure_type)
+    if capability_id == "product.create":
+        return _create_product(env, parameters, company_id, failure_type)
+    if capability_id == "product.update":
+        return _update_product(env, parameters, company_id, failure_type)
+    if capability_id == "product.duplicate":
+        return _duplicate_product(env, parameters, company_id, failure_type)
+    if capability_id in {"product.archive", "product.restore"}:
+        return _transition_product(
+            env, capability_id, parameters, company_id, failure_type
+        )
+    if capability_id == "product.cost.update":
+        return _update_product_cost(env, parameters, company_id, failure_type)
+    if capability_id == "product.accounting_profile.update":
+        return _update_product_accounting_profile(
+            env, parameters, company_id, failure_type
+        )
+    if capability_id == "product.category.accounting_profile.update":
+        return _update_product_category_accounting_profile(
+            env, parameters, company_id, failure_type
+        )
     if capability_id == "budget.create":
         return _create_budget(env, parameters, company_id, key, failure_type)
     if capability_id == "budget.update_draft":
