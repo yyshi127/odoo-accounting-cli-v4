@@ -70,6 +70,12 @@ CAPABILITIES = frozenset(
         "bank.transaction.update",
         "bank.transaction.match",
         "bank.transaction.unmatch",
+        "bank.statement.create",
+        "bank.statement.update",
+        "bank.statement.delete",
+        "bank.transaction.delete",
+        "payment.duplicate",
+        "payment.delete",
         "reconciliation.write_off",
         "analytic.plan.create",
         "analytic.plan.update",
@@ -812,6 +818,16 @@ _PARAMETER_KEYS = {
     "bank.transaction.update": {"transaction_id", "changes"},
     "bank.transaction.match": {"transaction_id", "candidate_line_ids"},
     "bank.transaction.unmatch": {"transaction_id"},
+    "bank.statement.create": {
+        "transaction_ids",
+        "reference",
+        "balance_end_real",
+    },
+    "bank.statement.update": {"statement_id", "changes"},
+    "bank.statement.delete": {"statement_id"},
+    "bank.transaction.delete": {"transaction_id"},
+    "payment.duplicate": {"payment_id"},
+    "payment.delete": {"payment_id"},
     "reconciliation.write_off": {
         "transaction_id",
         "write_off_account_id",
@@ -1052,6 +1068,12 @@ _GROUPS = {
     "bank.transaction.update": "account.group_account_user",
     "bank.transaction.match": "account.group_account_user",
     "bank.transaction.unmatch": "account.group_account_user",
+    "bank.statement.create": "account.group_account_user",
+    "bank.statement.update": "account.group_account_user",
+    "bank.statement.delete": "account.group_account_user",
+    "bank.transaction.delete": "account.group_account_user",
+    "payment.duplicate": "account.group_account_invoice",
+    "payment.delete": "account.group_account_invoice",
     "reconciliation.write_off": "account.group_account_user",
     "analytic.plan.create": "account.group_account_user",
     "analytic.plan.update": "account.group_account_user",
@@ -1412,6 +1434,48 @@ _MODELS = {
         "res.company",
         "account.payment",
         "account.move",
+    },
+    "payment.duplicate": {
+        "res.company",
+        "account.payment",
+        "account.move",
+        "account.move.line",
+    },
+    "payment.delete": {
+        "res.company",
+        "account.payment",
+        "account.move",
+        "account.move.line",
+        "account.partial.reconcile",
+        "account.full.reconcile",
+    },
+    "bank.statement.create": {
+        "res.company",
+        "res.currency",
+        "account.journal",
+        "account.bank.statement",
+        "account.bank.statement.line",
+        "account.move",
+    },
+    "bank.statement.update": {
+        "res.company",
+        "res.currency",
+        "account.bank.statement",
+        "account.bank.statement.line",
+    },
+    "bank.statement.delete": {
+        "res.company",
+        "account.bank.statement",
+        "account.bank.statement.line",
+    },
+    "bank.transaction.delete": {
+        "res.company",
+        "account.bank.statement.line",
+        "account.move",
+        "account.move.line",
+        "account.payment",
+        "account.partial.reconcile",
+        "account.full.reconcile",
     },
     "bank.transaction.update": {
         "res.company",
@@ -2003,6 +2067,56 @@ _ACCESS = {
         ("account.payment", "write"),
         ("account.move", "read"),
         ("account.move", "write"),
+    },
+    "payment.duplicate": {
+        ("account.payment", "read"),
+        ("account.payment", "create"),
+        ("account.payment", "write"),
+        ("account.move", "read"),
+        ("account.move", "create"),
+        ("account.move.line", "read"),
+        ("account.move.line", "create"),
+    },
+    "payment.delete": {
+        ("account.payment", "read"),
+        ("account.payment", "unlink"),
+        ("account.move", "read"),
+        ("account.move", "unlink"),
+        ("account.move", "write"),
+        ("account.move.line", "read"),
+        ("account.partial.reconcile", "read"),
+        ("account.full.reconcile", "read"),
+    },
+    "bank.statement.create": {
+        ("res.currency", "read"),
+        ("account.journal", "read"),
+        ("account.bank.statement", "read"),
+        ("account.bank.statement", "create"),
+        ("account.bank.statement.line", "read"),
+        ("account.bank.statement.line", "write"),
+        ("account.move", "read"),
+    },
+    "bank.statement.update": {
+        ("res.currency", "read"),
+        ("account.bank.statement", "read"),
+        ("account.bank.statement", "write"),
+        ("account.bank.statement.line", "read"),
+    },
+    "bank.statement.delete": {
+        ("account.bank.statement", "read"),
+        ("account.bank.statement", "unlink"),
+        ("account.bank.statement.line", "read"),
+        ("account.bank.statement.line", "write"),
+    },
+    "bank.transaction.delete": {
+        ("account.bank.statement.line", "read"),
+        ("account.bank.statement.line", "unlink"),
+        ("account.move", "read"),
+        ("account.move", "unlink"),
+        ("account.move.line", "read"),
+        ("account.payment", "read"),
+        ("account.partial.reconcile", "read"),
+        ("account.full.reconcile", "read"),
     },
     "bank.transaction.update": {
         ("res.partner", "read"),
@@ -3569,6 +3683,30 @@ def _valid_bank_update_changes(changes: Any) -> bool:
     return "partner_id" not in changes or (
         changes["partner_id"] is None or _is_id(changes["partner_id"])
     )
+
+
+def _valid_statement_values(values: Any, *, partial: bool) -> bool:
+    fields = {"reference", "balance_end_real"}
+    if not isinstance(values, dict):
+        return False
+    if partial:
+        if not values or not set(values) <= fields:
+            return False
+    elif set(values) != fields:
+        return False
+    if "reference" in values and not (
+        values["reference"] is None
+        or _is_text(values["reference"], maximum=200)
+    ):
+        return False
+    if "balance_end_real" in values:
+        balance = _signed_decimal(values["balance_end_real"])
+        if (
+            balance is None
+            or _canonical_decimal_text(balance) != values["balance_end_real"]
+        ):
+            return False
+    return True
 
 
 def _valid_analytic_account_changes(changes: Any) -> bool:
@@ -5261,6 +5399,31 @@ def _valid_parameters(
         )
     if capability_id == "bank.transaction.unmatch":
         return _is_id(parameters["transaction_id"])
+    if capability_id == "bank.statement.create":
+        transaction_ids = parameters["transaction_ids"]
+        return bool(
+            isinstance(transaction_ids, list)
+            and 1 <= len(transaction_ids) <= 100
+            and all(_is_id(item) for item in transaction_ids)
+            and transaction_ids == sorted(set(transaction_ids))
+            and _valid_statement_values(
+                {
+                    "reference": parameters["reference"],
+                    "balance_end_real": parameters["balance_end_real"],
+                },
+                partial=False,
+            )
+        )
+    if capability_id == "bank.statement.update":
+        return _is_id(parameters["statement_id"]) and _valid_statement_values(
+            parameters["changes"], partial=True
+        )
+    if capability_id == "bank.statement.delete":
+        return _is_id(parameters["statement_id"])
+    if capability_id == "bank.transaction.delete":
+        return _is_id(parameters["transaction_id"])
+    if capability_id in {"payment.duplicate", "payment.delete"}:
+        return _is_id(parameters["payment_id"])
     if capability_id == "reconciliation.write_off":
         expected = _signed_decimal(parameters["expected_residual_amount"])
         return bool(
@@ -5870,6 +6033,32 @@ def _deterministic_key(
         return f"payment.update_draft:{parameters['payment_id']}:{digest}"
     if capability_id == "payment.reset_to_draft":
         return f"payment.reset_to_draft:{parameters['payment_id']}"
+    if capability_id == "bank.statement.create":
+        canonical = json.dumps(
+            parameters,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        return f"bank.statement.create:{company_id}:{digest}"
+    if capability_id == "bank.statement.update":
+        canonical = json.dumps(
+            parameters["changes"],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        return f"bank.statement.update:{parameters['statement_id']}:{digest}"
+    if capability_id == "bank.statement.delete":
+        return f"bank.statement.delete:{parameters['statement_id']}"
+    if capability_id == "bank.transaction.delete":
+        return f"bank.transaction.delete:{parameters['transaction_id']}"
+    if capability_id in {"payment.duplicate", "payment.delete"}:
+        return f"{capability_id}:{parameters['payment_id']}"
     if capability_id in {
         "bank.transaction.update",
         "bank.transaction.match",
@@ -10022,6 +10211,30 @@ def _bank_transaction_result(
     return result
 
 
+def _bank_statement_result(statement: Any, company_id: int) -> dict[str, Any]:
+    result = {
+        "model": "account.bank.statement",
+        "id": statement.id,
+        "name": statement.name or statement.reference or None,
+        "state": "complete" if statement.is_complete else "incomplete",
+        "company_id": company_id,
+        "move_type": None,
+        "source_id": None,
+        "line_ids": _record_ids(statement.line_ids),
+        "partial_reconcile_ids": [],
+        "full_reconcile_id": None,
+        "reconciled": False,
+    }
+    assert set(result) == _RESULT_KEYS
+    return result
+
+
+def _deleted_result(result: dict[str, Any]) -> dict[str, Any]:
+    deleted = {**result, "state": "deleted", "reconciled": False}
+    assert set(deleted) == _RESULT_KEYS
+    return deleted
+
+
 def _unreconciled_result(
     lines: Any, company_id: int, *, source_id: int | None = None
 ) -> dict[str, Any]:
@@ -12903,6 +13116,412 @@ def _reset_payment_to_draft(
     return _payment_result(payment, company_id, source_id=None), False
 
 
+def _statement_reference(value: Any) -> str | None:
+    return value or None
+
+
+def _statement_currency(statement_or_journal: Any) -> Any:
+    currency = statement_or_journal.currency_id
+    if currency:
+        return currency
+    return statement_or_journal.company_id.currency_id
+
+
+def _rounded_statement_balance(statement_or_journal: Any, value: str) -> Decimal:
+    return _rounded_currency_amount(_statement_currency(statement_or_journal), value)
+
+
+def _statement_matches(
+    statement: Any,
+    transaction_ids: list[int],
+    reference: str | None,
+    balance_end_real: Decimal,
+    company_id: int,
+) -> bool:
+    return bool(
+        statement.company_id.id == company_id
+        and _record_ids(statement.line_ids) == transaction_ids
+        and _statement_reference(statement.reference) == reference
+        and Decimal(str(statement.balance_end_real)) == balance_end_real
+    )
+
+
+def _bank_statement_transactions_are_contiguous(
+    env: Any,
+    transactions: Any,
+    journal_id: int,
+    company_id: int,
+) -> bool:
+    indexes = [transaction.internal_index for transaction in transactions]
+    if not indexes or any(not index for index in indexes):
+        return False
+    lines_between = _scoped(env, "account.bank.statement.line", company_id).search(
+        [
+            ("company_id", "=", company_id),
+            ("journal_id", "=", journal_id),
+            ("internal_index", ">=", min(indexes)),
+            ("internal_index", "<=", max(indexes)),
+            ("state", "!=", "cancel"),
+        ],
+        limit=len(transactions) + 1,
+    )
+    return set(lines_between.ids) == set(transactions.ids)
+
+
+def _create_bank_statement(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    from odoo import Command
+
+    transaction_ids = parameters["transaction_ids"]
+    statement_model = _scoped(env, "account.bank.statement", company_id)
+    overlapping = statement_model.search(
+        [("company_id", "=", company_id), ("line_ids", "in", transaction_ids)],
+        limit=2,
+        order="id",
+    )
+    if overlapping:
+        if len(overlapping) != 1:
+            raise _fail(
+                failure_type,
+                "idempotency_conflict",
+                "The requested bank transactions belong to conflicting statements.",
+                exit_code=5,
+            )
+        expected_balance = _rounded_statement_balance(
+            overlapping, parameters["balance_end_real"]
+        )
+        if not _statement_matches(
+            overlapping,
+            transaction_ids,
+            _statement_reference(parameters["reference"]),
+            expected_balance,
+            company_id,
+        ):
+            raise _fail(
+                failure_type,
+                "idempotency_conflict",
+                "The bank-statement transaction set was already used differently.",
+                exit_code=5,
+            )
+        return _bank_statement_result(overlapping, company_id), True
+
+    transactions = _ensure_ids(
+        env,
+        "account.bank.statement.line",
+        set(transaction_ids),
+        [("company_id", "=", company_id)],
+        company_id,
+        failure_type,
+    ).sorted(lambda transaction: transaction.id)
+    journals = {transaction.journal_id.id for transaction in transactions}
+    if len(journals) != 1:
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "All bank transactions must belong to one journal.",
+            exit_code=5,
+        )
+    journal = transactions[0].journal_id
+    if (
+        journal.company_id.id != company_id
+        or journal.type not in {"bank", "cash"}
+        or not _bank_statement_transactions_are_contiguous(
+            env, transactions, journal.id, company_id
+        )
+        or any(
+            transaction.statement_id
+            or transaction.company_id.id != company_id
+            or transaction.journal_id.id != journal.id
+            or not transaction.move_id
+            or transaction.move_id.company_id.id != company_id
+            or transaction.move_id.move_type != "entry"
+            or transaction.move_id.state != "posted"
+            for transaction in transactions
+        )
+    ):
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Only contiguous, ungrouped, posted transactions from one company bank or cash journal can form a statement.",
+            exit_code=5,
+        )
+    rounded_balance = _rounded_statement_balance(
+        journal, parameters["balance_end_real"]
+    )
+    statement = statement_model.with_context(
+        skip_pdf_attachment_generation=True
+    ).create(
+        {
+            "line_ids": [Command.set(transaction_ids)],
+            "reference": parameters["reference"] or False,
+            "balance_end_real": rounded_balance,
+        }
+    )
+    statement.invalidate_recordset(
+        [
+            "company_id",
+            "journal_id",
+            "currency_id",
+            "reference",
+            "balance_end_real",
+            "is_complete",
+            "line_ids",
+        ]
+    )
+    if (
+        statement.journal_id.id != journal.id
+        or not _statement_matches(
+            statement,
+            transaction_ids,
+            _statement_reference(parameters["reference"]),
+            rounded_balance,
+            company_id,
+        )
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo returned an invalid bank statement.",
+            exit_code=6,
+        )
+    return _bank_statement_result(statement, company_id), False
+
+
+def _update_bank_statement(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    statement = _search_one(
+        env,
+        "account.bank.statement",
+        [("id", "=", parameters["statement_id"]), ("company_id", "=", company_id)],
+        company_id,
+        failure_type,
+    )
+    changes = parameters["changes"]
+    actual = {
+        "reference": _statement_reference(statement.reference),
+        "balance_end_real": _canonical_decimal_text(statement.balance_end_real),
+    }
+    target = dict(actual)
+    if "reference" in changes:
+        target["reference"] = _statement_reference(changes["reference"])
+    if "balance_end_real" in changes:
+        target["balance_end_real"] = _canonical_decimal_text(
+            _rounded_statement_balance(statement, changes["balance_end_real"])
+        )
+    if actual == target:
+        return _bank_statement_result(statement, company_id), True
+    write_values: dict[str, Any] = {}
+    if "reference" in changes:
+        write_values["reference"] = changes["reference"] or False
+    if "balance_end_real" in changes:
+        write_values["balance_end_real"] = Decimal(target["balance_end_real"])
+    statement.write(write_values)
+    statement.invalidate_recordset(
+        ["reference", "balance_end_real", "is_complete", "line_ids"]
+    )
+    reread = {
+        "reference": _statement_reference(statement.reference),
+        "balance_end_real": _canonical_decimal_text(statement.balance_end_real),
+    }
+    if reread != target:
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not apply the requested bank-statement update.",
+            exit_code=6,
+        )
+    return _bank_statement_result(statement, company_id), False
+
+
+def _delete_bank_statement(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    statement = _search_one(
+        env,
+        "account.bank.statement",
+        [("id", "=", parameters["statement_id"]), ("company_id", "=", company_id)],
+        company_id,
+        failure_type,
+    )
+    statement_id = statement.id
+    transaction_ids = _record_ids(statement.line_ids)
+    result = _deleted_result(_bank_statement_result(statement, company_id))
+    statement.unlink()
+    if _scoped(env, "account.bank.statement", company_id).search_count(
+        [("id", "=", statement_id)], limit=1
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not delete the bank statement.",
+            exit_code=6,
+        )
+    transactions = _scoped(env, "account.bank.statement.line", company_id).search(
+        [("id", "in", transaction_ids), ("company_id", "=", company_id)],
+        limit=len(transaction_ids) + 1,
+    )
+    if set(transactions.ids) != set(transaction_ids) or any(
+        transaction.statement_id for transaction in transactions
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not preserve the ungrouped bank transactions.",
+            exit_code=6,
+        )
+    return result, False
+
+
+def _duplicate_payment(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    key: str,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    source = _search_one(
+        env,
+        "account.payment",
+        [("id", "=", parameters["payment_id"]), ("company_id", "=", company_id)],
+        company_id,
+        failure_type,
+    )
+    expected = _payment_actual_values(source)
+    source_memo = source.memo or ""
+    memo_marker = f"[ODACV4DUP:{key}]"
+    target_memo = f"{source_memo} {memo_marker}" if source_memo else memo_marker
+    existing = _scoped(env, "account.payment", company_id).search(
+        [
+            ("company_id", "=", company_id),
+            ("memo", "=like", f"%{memo_marker}"),
+            ("id", "!=", source.id),
+        ],
+        limit=2,
+        order="id",
+    )
+    if existing:
+        if (
+            len(existing) != 1
+            or existing.state != "draft"
+            or existing.memo != target_memo
+            or _payment_actual_values(existing) != expected
+        ):
+            raise _fail(
+                failure_type,
+                "idempotency_conflict",
+                "The duplicate-payment key was already used differently.",
+                exit_code=5,
+            )
+        return _payment_result(existing, company_id, source_id=source.id), True
+    duplicate = source.copy(
+        default={
+            "memo": target_memo,
+            "payment_reference": source.payment_reference or False,
+        }
+    )
+    if (
+        duplicate.id == source.id
+        or duplicate.company_id.id != company_id
+        or duplicate.state != "draft"
+        or duplicate.memo != target_memo
+        or _payment_actual_values(duplicate) != expected
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo returned an invalid draft payment copy.",
+            exit_code=6,
+        )
+    return _payment_result(duplicate, company_id, source_id=source.id), False
+
+
+def _external_reconcile_ids(move: Any) -> tuple[set[int], set[int]]:
+    own_ids = set(move.line_ids.ids)
+    partial_ids: set[int] = set()
+    full_ids: set[int] = set()
+    partials = move.line_ids.matched_debit_ids | move.line_ids.matched_credit_ids
+    for partial in partials:
+        if (
+            partial.debit_move_id.id not in own_ids
+            or partial.credit_move_id.id not in own_ids
+        ):
+            partial_ids.add(partial.id)
+            if partial.full_reconcile_id:
+                full_ids.add(partial.full_reconcile_id.id)
+    for line in move.line_ids:
+        if line.full_reconcile_id:
+            full_ids.add(line.full_reconcile_id.id)
+    return partial_ids, full_ids
+
+
+def _delete_payment(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    payment = _search_one(
+        env,
+        "account.payment",
+        [("id", "=", parameters["payment_id"]), ("company_id", "=", company_id)],
+        company_id,
+        failure_type,
+    )
+    move = payment.move_id
+    if move and move.company_id.id != company_id:
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "The payment journal entry belongs to another company.",
+            exit_code=5,
+        )
+    external_partials, external_fulls = (
+        _external_reconcile_ids(move) if move else (set(), set())
+    )
+    if (
+        payment.state not in {"draft", "canceled"}
+        or payment.is_reconciled
+        or external_partials
+        or external_fulls
+    ):
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Only an unreconciled draft or canceled payment can be deleted.",
+            exit_code=5,
+    )
+    payment_id = payment.id
+    move_id = move.id if move else None
+    result = _deleted_result(_payment_result(payment, company_id, source_id=None))
+    payment.unlink()
+    if _scoped(env, "account.payment", company_id).search_count(
+        [("id", "=", payment_id)], limit=1
+    ) or (
+        move_id is not None
+        and _scoped(env, "account.move", company_id).search_count(
+            [("id", "=", move_id)], limit=1
+        )
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not delete the payment and its journal entry.",
+            exit_code=6,
+        )
+    return result, False
+
+
 def _bank_transaction(
     env: Any,
     transaction_id: int,
@@ -13000,6 +13619,42 @@ def _invalidate_bank_transaction(transaction: Any) -> None:
             "full_reconcile_id",
         ]
     )
+
+
+def _delete_bank_transaction(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    transaction = _bank_transaction(
+        env, parameters["transaction_id"], company_id, failure_type
+    )
+    if transaction.statement_id or not _bank_is_default_unmatched(transaction):
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Only an ungrouped, completely unmatched bank transaction can be deleted.",
+            exit_code=5,
+        )
+    transaction_id = transaction.id
+    move_id = transaction.move_id.id
+    result = _deleted_result(
+        _bank_transaction_result(transaction, company_id, failure_type)
+    )
+    transaction.unlink()
+    if _scoped(env, "account.bank.statement.line", company_id).search_count(
+        [("id", "=", transaction_id)], limit=1
+    ) or _scoped(env, "account.move", company_id).search_count(
+        [("id", "=", move_id)], limit=1
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not delete the bank transaction and its journal entry.",
+            exit_code=6,
+        )
+    return result, False
 
 
 def _update_bank_transaction(
@@ -17534,6 +18189,18 @@ def _dispatch_allowed(
         return _update_draft_payment(env, parameters, company_id, failure_type)
     if capability_id == "payment.reset_to_draft":
         return _reset_payment_to_draft(env, parameters, company_id, failure_type)
+    if capability_id == "payment.duplicate":
+        return _duplicate_payment(env, parameters, company_id, key, failure_type)
+    if capability_id == "payment.delete":
+        return _delete_payment(env, parameters, company_id, failure_type)
+    if capability_id == "bank.statement.create":
+        return _create_bank_statement(env, parameters, company_id, failure_type)
+    if capability_id == "bank.statement.update":
+        return _update_bank_statement(env, parameters, company_id, failure_type)
+    if capability_id == "bank.statement.delete":
+        return _delete_bank_statement(env, parameters, company_id, failure_type)
+    if capability_id == "bank.transaction.delete":
+        return _delete_bank_transaction(env, parameters, company_id, failure_type)
     if capability_id == "bank.transaction.update":
         return _update_bank_transaction(env, parameters, company_id, failure_type)
     if capability_id == "bank.transaction.match":

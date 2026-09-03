@@ -1,22 +1,66 @@
 # Execution status
 
-## Current accounting phase — 2026-09-02
+## Current accounting phase — 2026-09-03
 
 The active objective is capability-first accounting delivery in
 [GOAL_SUMMARY.md](GOAL_SUMMARY.md). Historical sales, purchasing and inventory
 logistics are outside this phase; picking and physical-return commands are not
 accounting-core completion. Financial credit notes/refunds remain in scope.
 
-The current registry has 398 IDs, 383 enabled handlers (215 reads, 168 writes),
-and 772 schemas. Statuses are 335 `unconfigured`, 48 `degraded`, and 15 `disabled`.
+The current registry has 404 IDs, 389 enabled handlers (215 reads, 174 writes),
+and 784 schemas. Statuses are 336 `unconfigured`, 53 `degraded`, and 15 `disabled`.
 These are implementation totals including historical non-accounting extensions,
-not 398 accounting operations, a completion percentage, or proof that every
+not 404 accounting operations, a completion percentage, or proof that every
 configured user is authorized. Capability-ID-list SHA-256 is
-`ff74667373c5ed4e3b2cbb8af933c130a7d51903d092aaed6d5486ff77fe55c4`;
+`a69709c5687088fbabddaebdec710728b45f924a4fa534e43c61b44706bc7ac1`;
 canonical registry SHA-256 is
-`6edac2cefd98864db125ea697969dc88cb553535013a1d51ebd81bcc03dbadf0`.
+`6ca734f64b32a1c5286209d29b7628ff6de5600829d6dbed70b3573fd4c7c103`.
 
-The latest batch adds eight account-transfer-model lifecycle writes:
+The current bank-statement/payment-maintenance checkpoint adds six honest
+commands rather than padding the batch with aliases:
+`bank.statement.create`, `bank.statement.update`, `bank.statement.delete`,
+`bank.transaction.delete`, `payment.duplicate`, and `payment.delete`.
+Statement creation accepts contiguous, posted, ungrouped transactions from one
+company bank/cash journal, including already matched transactions as Odoo does.
+It skips the Enterprise automatic-PDF side effect. Payment duplication uses
+native `copy()`, preserves the source business memo as a prefix, restores the
+`copy=False` payment reference explicitly, and appends a stable replay marker.
+The two delete commands retain narrow native-state boundaries and no persistent
+tombstone, so their later-retry limitation remains explicit.
+
+Final local focused/runtime and public/core selections passed 17 and 192 cases;
+Ruff and `git diff --check` passed. The synchronized server selection passed
+209 cases, followed by two metadata-closure cases. The guarded dual-database
+smoke is **not** acceptance evidence: its first worker failed while constructing
+the Odoo Registry, before any capability call or fixture write, because
+`/mnt/odoo/odoo19/custom/addons/account_asset/models/account_asset.py` is absent
+while that package's `__init__.py` still imports it. Four server backup
+copies of the missing file have the same SHA-256
+`68a8462ec74de92da82281f0c524699731d56e6c4ee23212631df1420f550aaf`,
+and a directory comparison found that file to be the sole difference from the
+complete addon copy. Restoring it is intentionally pending explicit authority
+because this phase forbids changing the Odoo source/add-on tree. All six registry
+integration entries therefore remain `planned` with empty evidence references.
+
+The private evidence directory is
+`/opt/odoo-accounting-cli-v4/.tooling/bank-payment-maintenance-20260903-live1`.
+The initial explicit 22-file archive is 291034 bytes with SHA-256
+`ecb8ae26b9786ce6dd5118e61fe407aa0b745a4c71ea9bdbb84bdfd0c3fc3c8f`;
+the two-file honest-status correction archive is 108952 bytes with SHA-256
+`58e11b5abe7fea277016ef2b418f47024040aa51b2dc2539c0ec674f3ee9ca69`.
+The final ordered 22-file local/server checksum manifest matches at
+`2d53194bcdd01f648ef4b83d9f32022307e78719e43b670caf179ec75a20b6e3`.
+Server focused-test, failed-live diagnostic, before-service, and after-service
+log SHA-256 values are respectively
+`ec7710d545b727f242de8289155519ef1271f54a164357ca04eae3fe17d18725`,
+`73d05de538a2bea160e0285aeb3d7b80c298ee467d400eef2d3b8af68a584bad`,
+`0a3930514f5f95ff101b807461d23df0c00bbffcfc7e006e651bcd10810be393`,
+and `7fce02b4e182e97e9fb1c1df2b01e3bb897cefbdbc118edcccc2f4fc28e21d79`.
+Odoo remained on PID `1952252` with `NRestarts=0`; Nginx remained on PID
+`1952017` with `NRestarts=0`; PostgreSQL remained active. No service-control
+command was issued.
+
+The preceding completed batch adds eight account-transfer-model lifecycle writes:
 `account.transfer_model.create`, `account.transfer_model.update`,
 `account.transfer_model.duplicate`, `account.transfer_model.enable`,
 `account.transfer_model.disable`, `account.transfer_model.archive`,

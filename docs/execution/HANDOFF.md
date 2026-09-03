@@ -1,6 +1,6 @@
 # Odoo Accounting CLI V4 handoff
 
-Updated: 2026-09-02 (Asia/Shanghai)
+Updated: 2026-09-03 (Asia/Shanghai)
 
 ## Objective and working rule
 
@@ -16,11 +16,22 @@ the Odoo source/add-on tree while building CLI capabilities.
 
 ## Current authoritative count
 
-- Registry: 398 capability IDs; 383 enabled handlers (215 reads and 168 writes)
+- Registry: 404 capability IDs; 389 enabled handlers (215 reads and 174 writes)
   and 15 disabled IDs.
-- Runtime status: 335 `unconfigured`, 48 `degraded`, and 15 `disabled`.
-- Versioned JSON Schema documents: 772.
-- The latest batch adds eight account-transfer-model lifecycle writes:
+- Runtime status: 336 `unconfigured`, 53 `degraded`, and 15 `disabled`.
+- Versioned JSON Schema documents: 784.
+- The current checkpoint adds six bank-statement/payment-maintenance writes:
+  `bank.statement.create/update/delete`, `bank.transaction.delete`, and
+  `payment.duplicate/delete`. Public/runtime contracts, schemas, local tests,
+  and server unit tests are complete, but the shared dual-alias smoke is still
+  pending. Its first worker stopped before any capability or fixture write
+  because the installed `account_asset` addon is missing
+  `models/account_asset.py`. The file exists in four identical server backups,
+  but restoring the Odoo source tree requires explicit authority. Do not mark
+  these six integration entries implemented until the original smoke passes.
+  Exact code, evidence, hashes, and recovery instructions are in the last
+  checkpoint below.
+- The preceding completed batch adds eight account-transfer-model lifecycle writes:
   `account.transfer_model.create`, `account.transfer_model.update`,
   `account.transfer_model.duplicate`, `account.transfer_model.enable`,
   `account.transfer_model.disable`, `account.transfer_model.archive`,
@@ -4185,6 +4196,133 @@ invalidate the persistent-session test results. Server Git remains intentionally
 old and dirty; continue with explicit allowlists and never pull, reset, or checkout
 there.
 
-Next work should select another bounded 8–12-command accounting capability batch.
+Next work should select another bounded 8-12-command accounting capability batch.
 Do not count aliases as commands, add a generic ORM dispatcher, or divert the next
 batch into heavyweight approval/audit controls.
+
+## Bank-statement/payment-maintenance checkpoint — 2026-09-03
+
+Starting from pushed baseline `a172d373f3ffe1ace9ffe10146a797de84b740d3`,
+this checkpoint adds exactly six commands. The preceding domain audit did not find
+two more independent operations worth inventing, so the batch remains below the
+normal 8-12 target rather than padding the registry with aliases:
+
+1. `bank.statement.create`
+2. `bank.statement.update`
+3. `bank.statement.delete`
+4. `bank.transaction.delete`
+5. `payment.duplicate`
+6. `payment.delete`
+
+The registry has 404 IDs and 389 enabled handlers (215 reads and 174 writes),
+784 schemas, and statuses of 336 `unconfigured`, 53 `degraded`, and 15
+`disabled`. Capability-ID-list SHA-256 is
+`a69709c5687088fbabddaebdec710728b45f924a4fa534e43c61b44706bc7ac1`;
+canonical registry SHA-256 is
+`6ca734f64b32a1c5286209d29b7628ff6de5600829d6dbed70b3573fd4c7c103`;
+the registry file SHA-256 is
+`c32b2f134774372e355f094627e6f0f0ea2bf8ac2d74959bf4d4395c71e31a55`.
+
+### Implemented boundary
+
+- Statement creation takes a sorted nonempty transaction-ID set, optional
+  reference, and canonical ending balance. All transactions must be posted,
+  ungrouped, company-correct, from one bank/cash journal, and contiguous by
+  Odoo's `internal_index` rule. Canceled lines between the bounds are ignored,
+  as in Odoo 19. Already matched transactions are allowed because statement
+  grouping and reconciliation are separate native concerns.
+- Creation rechecks an existing exact transaction set for serial replay and uses
+  `skip_pdf_attachment_generation=True` to avoid the Enterprise automatic-PDF
+  side effect. Odoo has no uniqueness constraint for concurrent exactly-once
+  statement creation, so the command remains honestly `degraded`.
+- Statement update exposes only reference and ending balance. Statement delete
+  calls native unlink and verifies that its transactions remain present and
+  ungrouped.
+- Bank-transaction delete is limited to an ungrouped, completely unmatched
+  transaction and verifies both the inherited transaction and journal entry
+  absent. Payment delete is limited to unreconciled draft/canceled payments
+  without external reconciliation and verifies the payment and any move absent.
+  Both deletes have no persistent tombstone and are therefore `degraded`.
+- Payment duplication calls native `account.payment.copy()`, produces a draft,
+  preserves `payment_reference` despite its native `copy=False`, retains the
+  source business memo as a prefix, and appends a stable namespaced replay
+  marker. A retry after the source changes returns `idempotency_conflict` instead
+  of silently creating another duplicate. Computed/configuration-dependent
+  payment fields continue to follow Odoo's native copy/recompute behavior.
+
+### Verification completed
+
+- Final local runtime/registry selection: `17 passed in 27.89s`.
+- Final local public/core selection: `192 passed in 6.95s`.
+- Final local honest-status registry selection: `2 passed in 40.02s`; Ruff and
+  `git diff --check` passed.
+- Synchronized server public/runtime/central selection: `209 passed in 35.04s`.
+  After updating the pending-live reason, the server metadata selection passed
+  `2 passed in 15.41s`.
+- Independent runtime and live-fixture reviews found no P0/P1 command blocker.
+  They led to the native continuity check, removal of an over-restrictive
+  unmatched requirement for statement creation, bounded continuity lookup,
+  removal of unused ACL gates, preserved payment memo, and negative deletion
+  tests.
+
+### Live blocker — not acceptance evidence
+
+The guarded dual-database smoke did not reach either capability workflow. The
+first `v4-dev` worker failed while `Registry('odoo_cli_v4_dev')` loaded installed
+modules: `/mnt/odoo/odoo19/custom/addons/account_asset/models/__init__.py`
+imports `account_asset`, but
+`/mnt/odoo/odoo19/custom/addons/account_asset/models/account_asset.py` is absent.
+The worker had not created the business cursor, client, fixture, or first CLI
+request, so it performed no capability call or fixture write. `v4-e2e` was not
+started after that environment failure. The six registry integration entries
+remain `planned`, with no references; do not report this batch as live accepted.
+
+The missing directory's modification timestamp is
+`2026-09-02 17:06:55.161523987 +0800`. A read-only whole-filesystem search found
+four complete copies of `account_asset.py`, all 70373 bytes with SHA-256
+`68a8462ec74de92da82281f0c524699731d56e6c4ee23212631df1420f550aaf`.
+A recursive comparison against
+`/root/project/odoo/custom-addons/account_asset` found the missing file to be the
+only addon-tree difference. No copy was restored because the active phase
+explicitly forbids modifying the Odoo source/add-on tree without new authority.
+Do not work around this with a temporary addon overlay and call it acceptance:
+that would test a repaired environment rather than the deployed bridge runtime.
+
+### Deployment, evidence, and exact continuation
+
+The 22 code/schema/registry/test files were deployed only through an explicit
+allowlist after backing up seven existing targets; 15 targets were new. The
+server repository was not pulled, reset, or checked out. Private evidence is in
+`/opt/odoo-accounting-cli-v4/.tooling/bank-payment-maintenance-20260903-live1`.
+
+- Initial archive: 291034 bytes, SHA-256
+  `ecb8ae26b9786ce6dd5118e61fe407aa0b745a4c71ea9bdbb84bdfd0c3fc3c8f`.
+- Two-file pending-live metadata correction: 108952 bytes, SHA-256
+  `58e11b5abe7fea277016ef2b418f47024040aa51b2dc2539c0ec674f3ee9ca69`.
+- Final ordered 22-file local/server checksum manifest:
+  `2d53194bcdd01f648ef4b83d9f32022307e78719e43b670caf179ec75a20b6e3`.
+- Server focused-test and failed-live diagnostic log SHA-256 values:
+  `ec7710d545b727f242de8289155519ef1271f54a164357ca04eae3fe17d18725`
+  and `73d05de538a2bea160e0285aeb3d7b80c298ee467d400eef2d3b8af68a584bad`.
+- Service-before and service-after log SHA-256 values:
+  `0a3930514f5f95ff101b807461d23df0c00bbffcfc7e006e651bcd10810be393`
+  and `7fce02b4e182e97e9fb1c1df2b01e3bb897cefbdbc118edcccc2f4fc28e21d79`.
+
+No service-control command was issued. Odoo remained active on PID `1952252`
+with `NRestarts=0`; Nginx remained active on PID `1952017` with `NRestarts=0`;
+PostgreSQL remained active. Root disk use was 96%, with about 3.5 GB free.
+
+Exact continuation after explicit restoration authority or an operator repair:
+
+1. Verify the restored file SHA-256 is the value above; do not restart services.
+2. Rerun the unchanged guarded smoke as Linux user `odoo` against only `v4-dev`
+   and `v4-e2e` using the existing runtime configuration.
+3. Require both aliases, all six commands, three immediate replays, fresh-cursor
+   rollback proof, and unchanged service PID/restart counters.
+4. Only after that pass, change the six integration entries from `planned` to
+   `implemented`, attach the live test reference, recompute registry hashes,
+   synchronize the explicit metadata allowlist, and add a follow-up Git commit.
+
+In parallel, capability-gap auditing may continue locally. Do not bypass the
+missing-source blocker, modify business databases, restart services, or claim
+live acceptance from the server's already-running in-memory Odoo process.

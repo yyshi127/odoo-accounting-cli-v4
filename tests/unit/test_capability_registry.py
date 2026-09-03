@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 398
-EXPECTED_ENABLED_CAPABILITY_COUNT = 383
+EXPECTED_CAPABILITY_COUNT = 404
+EXPECTED_ENABLED_CAPABILITY_COUNT = 389
 EXPECTED_IMPLEMENTED_READ_COUNT = 215
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 168
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 174
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 335
-EXPECTED_DEGRADED_CAPABILITY_COUNT = 48
-EXPECTED_SCHEMA_COUNT = 772
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 336
+EXPECTED_DEGRADED_CAPABILITY_COUNT = 53
+EXPECTED_SCHEMA_COUNT = 784
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "ff74667373c5ed4e3b2cbb8af933c130a7d51903d092aaed6d5486ff77fe55c4"
+    "a69709c5687088fbabddaebdec710728b45f924a4fa534e43c61b44706bc7ac1"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -319,6 +319,14 @@ ACCOUNT_TRANSFER_MODEL_WRITES = {
     "account.transfer_model.restore",
     "account.transfer_model.delete",
 }
+BANK_STATEMENT_PAYMENT_MAINTENANCE_WRITES = {
+    "bank.statement.create",
+    "bank.statement.update",
+    "bank.statement.delete",
+    "bank.transaction.delete",
+    "payment.duplicate",
+    "payment.delete",
+}
 IMPLEMENTED_WRITES = {
     "account.group.create",
     "account.group.update",
@@ -463,7 +471,7 @@ IMPLEMENTED_WRITES = {
     "analytic.distribution_model.update",
     "journal.group.create",
     "journal.group.update",
-} | ORDER_DOCUMENT_WRITES | ACCOUNT_TRANSFER_MODEL_WRITES
+} | ORDER_DOCUMENT_WRITES | ACCOUNT_TRANSFER_MODEL_WRITES | BANK_STATEMENT_PAYMENT_MAINTENANCE_WRITES
 ACCOUNTING_DELIVERY_WRITES = {
     "invoice.followup.update",
     "invoice.send",
@@ -2689,6 +2697,8 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             "analytic.distribution_model.create",
             "account.transfer_model.create",
             "account.transfer_model.duplicate",
+            "bank.statement.create",
+            "payment.duplicate",
         }:
             assert descriptor["status"]["value"] == "degraded"
             assert descriptor["status"]["reason_code"] == "concurrent_idempotency_limit"
@@ -2711,6 +2721,9 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             "analytic.line.delete",
             "account.return.delete",
             "account.transfer_model.delete",
+            "bank.statement.delete",
+            "bank.transaction.delete",
+            "payment.delete",
         }:
             assert descriptor["status"]["value"] == "degraded"
             assert (
@@ -2933,6 +2946,24 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             assert descriptor["tests"]["integration"]["references"] == [
                 "tests/integration/test_account_transfer_model_write_batch_live.py"
             ]
+            continue
+        if capability_id in BANK_STATEMENT_PAYMENT_MAINTENANCE_WRITES:
+            assert descriptor["tests"]["unit"]["status"] == "implemented"
+            assert set(descriptor["tests"]["unit"]["references"]) == {
+                "tests/unit/test_bank_statement_payment_maintenance_public.py",
+                "tests/unit/test_bank_statement_payment_maintenance_runtime.py",
+                "tests/unit/test_core_writes.py",
+                "tests/unit/test_capability_registry.py",
+            }
+            assert descriptor["tests"]["integration"] == {
+                "status": "planned",
+                "references": [],
+                "reason": (
+                    "The guarded dual-database live write smoke remains pending because "
+                    "the server addon tree is missing account_asset/models/account_asset.py; "
+                    "the attempted worker failed before any capability call or fixture write."
+                ),
+            }
             continue
         assert descriptor["tests"]["unit"]["status"] == "implemented"
         expected_unit_tests = (
@@ -3323,6 +3354,77 @@ def test_payment_bank_batch_has_exact_registry_and_schema_contracts() -> None:
         "writeoff_lines",
         "payment_ids",
     }
+
+
+def test_bank_statement_payment_maintenance_has_closed_registry_and_schemas() -> None:
+    registry = load_registry()
+    expected_parameters = {
+        "bank.statement.create": {
+            "transaction_ids",
+            "reference",
+            "balance_end_real",
+        },
+        "bank.statement.update": {"statement_id", "changes"},
+        "bank.statement.delete": {"statement_id"},
+        "bank.transaction.delete": {"transaction_id"},
+        "payment.duplicate": {"payment_id"},
+        "payment.delete": {"payment_id"},
+    }
+    degraded = expected_parameters.keys() - {"bank.statement.update"}
+
+    assert set(expected_parameters) == BANK_STATEMENT_PAYMENT_MAINTENANCE_WRITES
+    for capability_id, fields in expected_parameters.items():
+        descriptor = registry.describe(capability_id)
+        request_schema = registry.load_schema(descriptor["schemas"]["request"])
+        response_schema = registry.load_schema(descriptor["schemas"]["response"])
+        parameters = request_schema["properties"]["parameters"]
+
+        assert descriptor["handler_key"] == "core_write"
+        assert descriptor["requirements"]["company"] == "required"
+        assert descriptor["requirements"]["groups"] == [
+            "account.group_account_invoice"
+            if capability_id.startswith("payment.")
+            else "account.group_account_user"
+        ]
+        assert descriptor["tests"]["integration"]["status"] == "planned"
+        assert descriptor["tests"]["integration"]["references"] == []
+        assert descriptor["status"]["value"] == (
+            "degraded" if capability_id in degraded else "unconfigured"
+        )
+        assert parameters["additionalProperties"] is False
+        assert set(parameters["required"]) == fields
+        assert set(parameters["properties"]) == fields
+        assert {
+            "oneOf": [
+                {"type": "null"},
+                {"$ref": "core-write-result.schema.json"},
+            ]
+        } in [
+            branch.get("properties", {}).get("data")
+            for branch in response_schema["allOf"]
+        ]
+
+    create_parameters = registry.load_schema(
+        "schemas/v1/bank.statement.create.request.schema.json"
+    )["properties"]["parameters"]
+    transaction_ids = create_parameters["properties"]["transaction_ids"]
+    assert transaction_ids["minItems"] == 1
+    assert transaction_ids["maxItems"] == 100
+    assert transaction_ids["uniqueItems"] is True
+    assert "ascending order" in transaction_ids["description"]
+    assert create_parameters["properties"]["reference"] == {
+        "$ref": "#/$defs/nullableText"
+    }
+    assert create_parameters["properties"]["balance_end_real"] == {
+        "$ref": "#/$defs/signedDecimal"
+    }
+
+    update_changes = registry.load_schema(
+        "schemas/v1/bank.statement.update.request.schema.json"
+    )["properties"]["parameters"]["properties"]["changes"]
+    assert update_changes["minProperties"] == 1
+    assert update_changes["additionalProperties"] is False
+    assert set(update_changes["properties"]) == {"reference", "balance_end_real"}
 
 
 def test_reconciliation_candidates_has_the_closed_source_and_acl_gates() -> None:

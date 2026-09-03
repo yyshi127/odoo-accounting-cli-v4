@@ -232,6 +232,19 @@ PARAMETERS = {
         "candidate_line_ids": [301, 302],
     },
     "bank.transaction.unmatch": {"transaction_id": 126},
+    "bank.statement.create": {
+        "transaction_ids": [302, 301],
+        "reference": "August statement",
+        "balance_end_real": "1250.5",
+    },
+    "bank.statement.update": {
+        "statement_id": 128,
+        "changes": {"reference": None, "balance_end_real": "1300"},
+    },
+    "bank.statement.delete": {"statement_id": 129},
+    "bank.transaction.delete": {"transaction_id": 130},
+    "payment.duplicate": {"payment_id": 131},
+    "payment.delete": {"payment_id": 132},
     "reconciliation.write_off": {
         "transaction_id": 127,
         "write_off_account_id": 31,
@@ -843,6 +856,12 @@ def _key(capability_id: str) -> str:
         "analytic.line.delete",
         *PRODUCT_ACCOUNTING_WRITES,
         *ACCOUNT_TRANSFER_MODEL_WRITES,
+        "bank.statement.create",
+        "bank.statement.update",
+        "bank.statement.delete",
+        "bank.transaction.delete",
+        "payment.duplicate",
+        "payment.delete",
     }:
         _, context, parameters = validate_core_write_request(
             capability_id, _request(capability_id)
@@ -1499,6 +1518,64 @@ def _result(capability_id: str, **changes) -> dict:
         }
         result.update(changes)
         return result
+    if capability_id.startswith("bank.statement."):
+        result = {
+            "model": "account.bank.statement",
+            "id": 902
+            if capability_id == "bank.statement.create"
+            else parameters["statement_id"],
+            "name": "BNK Statement 2026-08",
+            "state": "deleted"
+            if capability_id == "bank.statement.delete"
+            else "complete",
+            "company_id": 7,
+            "move_type": None,
+            "source_id": None,
+            "line_ids": sorted(parameters.get("transaction_ids", [301, 302])),
+            "partial_reconcile_ids": [],
+            "full_reconcile_id": None,
+            "reconciled": False,
+        }
+        result.update(changes)
+        return result
+    if capability_id in {"payment.duplicate", "payment.delete"}:
+        result = {
+            "model": "account.payment",
+            "id": 902
+            if capability_id == "payment.duplicate"
+            else parameters["payment_id"],
+            "name": "Draft Payment",
+            "state": "draft"
+            if capability_id == "payment.duplicate"
+            else "deleted",
+            "company_id": 7,
+            "move_type": None,
+            "source_id": parameters["payment_id"]
+            if capability_id == "payment.duplicate"
+            else None,
+            "line_ids": [],
+            "partial_reconcile_ids": [],
+            "full_reconcile_id": None,
+            "reconciled": False,
+        }
+        result.update(changes)
+        return result
+    if capability_id == "bank.transaction.delete":
+        result = {
+            "model": "account.bank.statement.line",
+            "id": parameters["transaction_id"],
+            "name": "Deleted bank transaction",
+            "state": "deleted",
+            "company_id": 7,
+            "move_type": "entry",
+            "source_id": 901,
+            "line_ids": [901, 902],
+            "partial_reconcile_ids": [],
+            "full_reconcile_id": None,
+            "reconciled": False,
+        }
+        result.update(changes)
+        return result
     is_payment = capability_id.startswith(("receivable.", "payable.", "payment."))
     is_reconcile = capability_id in {
         "reconciliation.apply",
@@ -1863,10 +1940,11 @@ def test_each_core_write_validates_and_calls_one_fixed_port_operation(
     elif (
         capability_id.startswith(("fiscal_position.", "journal.group."))
         or capability_id in ACCOUNTING_CONFIGURATION_EXPANSION_WRITES
-        or capability_id in ACCOUNTING_MASTER_DATA_COMPLETION_WRITES
-        or capability_id in PRODUCT_ACCOUNTING_WRITES
-        or capability_id in ACCOUNT_TRANSFER_MODEL_WRITES
-    ):
+            or capability_id in ACCOUNTING_MASTER_DATA_COMPLETION_WRITES
+            or capability_id in PRODUCT_ACCOUNTING_WRITES
+            or capability_id in ACCOUNT_TRANSFER_MODEL_WRITES
+            or capability_id == "bank.statement.create"
+        ):
         expected_parameters = validate_core_write_request(capability_id, request)[2]
     elif capability_id == "partner.create":
         for field in (

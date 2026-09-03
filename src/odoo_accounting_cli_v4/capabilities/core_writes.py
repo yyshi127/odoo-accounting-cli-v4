@@ -57,6 +57,12 @@ CORE_WRITE_CAPABILITY_IDS = frozenset(
         "bank.transaction.update",
         "bank.transaction.match",
         "bank.transaction.unmatch",
+        "bank.statement.create",
+        "bank.statement.update",
+        "bank.statement.delete",
+        "bank.transaction.delete",
+        "payment.duplicate",
+        "payment.delete",
         "reconciliation.write_off",
         "analytic.plan.create",
         "analytic.plan.update",
@@ -321,6 +327,16 @@ _BANK_RECONCILIATION_WRITE_CAPABILITIES = frozenset(
         "bank.transaction.match",
         "bank.transaction.unmatch",
         "reconciliation.write_off",
+    }
+)
+_BANK_STATEMENT_PAYMENT_MAINTENANCE_CAPABILITIES = frozenset(
+    {
+        "bank.statement.create",
+        "bank.statement.update",
+        "bank.statement.delete",
+        "bank.transaction.delete",
+        "payment.duplicate",
+        "payment.delete",
     }
 )
 _ANALYTIC_PLAN_WRITE_CAPABILITIES = frozenset(
@@ -1423,6 +1439,64 @@ def _validate_bank_transaction_update_parameters(parameters: Any) -> dict[str, A
     if "partner_id" in changes and not _valid_optional_id(changes["partner_id"]):
         raise _invalid("changes.partner_id must be null or a positive integer.")
     return {"transaction_id": parameters["transaction_id"], "changes": dict(changes)}
+
+
+def _validate_bank_statement_values(values: Any, *, partial: bool) -> dict[str, Any]:
+    allowed = {"reference", "balance_end_real"}
+    required = allowed | {"transaction_ids"}
+    if (
+        not isinstance(values, dict)
+        or (partial and (not values or not set(values) <= allowed))
+        or (not partial and set(values) != required)
+    ):
+        raise _invalid("Bank-statement values do not match the fixed contract.")
+    normalized = dict(values)
+    if "transaction_ids" in normalized:
+        transaction_ids = _validate_ids(normalized["transaction_ids"])
+        if transaction_ids is None or not 1 <= len(transaction_ids) <= 100:
+            raise _invalid(
+                "transaction_ids must contain 1 to 100 unique positive integers."
+            )
+        normalized["transaction_ids"] = sorted(transaction_ids)
+    if "reference" in normalized and not (
+        normalized["reference"] is None
+        or _is_bounded_text(normalized["reference"], 200)
+    ):
+        raise _invalid("reference must be null or a trimmed 1-200 character string.")
+    if "balance_end_real" in normalized and _canonical_decimal(
+        normalized["balance_end_real"], signed=True
+    ) is None:
+        raise _invalid("balance_end_real must be a canonical signed decimal string.")
+    return normalized
+
+
+def _validate_bank_statement_maintenance_parameters(
+    capability_id: str, parameters: Any
+) -> dict[str, Any]:
+    if capability_id == "bank.statement.create":
+        return _validate_bank_statement_values(parameters, partial=False)
+    if capability_id == "bank.statement.update":
+        if not isinstance(parameters, dict) or set(parameters) != {
+            "statement_id",
+            "changes",
+        }:
+            raise _invalid("Bank-statement update parameters are invalid.")
+        if not _valid_id(parameters["statement_id"]):
+            raise _invalid("parameters.statement_id must be a positive integer.")
+        return {
+            "statement_id": parameters["statement_id"],
+            "changes": _validate_bank_statement_values(
+                parameters["changes"], partial=True
+            ),
+        }
+    id_field = (
+        "statement_id"
+        if capability_id == "bank.statement.delete"
+        else "transaction_id"
+        if capability_id == "bank.transaction.delete"
+        else "payment_id"
+    )
+    return _validate_single_id(parameters, id_field)
 
 
 def _validate_bank_match_parameters(parameters: Any) -> dict[str, Any]:
@@ -4197,6 +4271,10 @@ def validate_core_write_request(
         normalized = _validate_refund_parameters(parameters)
     elif capability_id in _PAYMENT_REGISTER_CAPABILITIES:
         normalized = _validate_payment_register_parameters(parameters)
+    elif capability_id in _BANK_STATEMENT_PAYMENT_MAINTENANCE_CAPABILITIES:
+        normalized = _validate_bank_statement_maintenance_parameters(
+            capability_id, parameters
+        )
     elif capability_id == "payment.create":
         normalized = _validate_payment_create_parameters(parameters)
     elif capability_id == "payment.update_draft":
@@ -4682,6 +4760,27 @@ def _expected_idempotency_key(
         ).encode("utf-8")
         digest = hashlib.sha256(canonical).hexdigest()[:32]
         return f"{capability_id}:{parameters['move_id']}:{digest}"
+    if capability_id == "bank.statement.create":
+        canonical = json.dumps(
+            parameters, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        return f"bank.statement.create:{company_id}:{digest}"
+    if capability_id == "bank.statement.update":
+        canonical = json.dumps(
+            parameters["changes"],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        return f"bank.statement.update:{parameters['statement_id']}:{digest}"
+    if capability_id == "bank.statement.delete":
+        return f"bank.statement.delete:{parameters['statement_id']}"
+    if capability_id == "bank.transaction.delete":
+        return f"bank.transaction.delete:{parameters['transaction_id']}"
+    if capability_id in {"payment.duplicate", "payment.delete"}:
+        return f"{capability_id}:{parameters['payment_id']}"
     if capability_id == "payment.update_draft":
         canonical = json.dumps(
             parameters["changes"],
@@ -5060,6 +5159,73 @@ def _validate_result(
             or result["reconciled"]
         ):
             raise _failed("Odoo returned a mismatched product result.")
+        return deepcopy(result)
+
+    if capability_id.startswith("bank.statement."):
+        expected_id = (
+            result["id"]
+            if capability_id == "bank.statement.create"
+            else parameters["statement_id"]
+        )
+        expected_states = (
+            {"complete", "incomplete"}
+            if capability_id != "bank.statement.delete"
+            else {"deleted"}
+        )
+        if (
+            result["model"] != "account.bank.statement"
+            or result["id"] != expected_id
+            or not _valid_id(result["id"])
+            or not _is_text(result["name"])
+            or result["state"] not in expected_states
+            or result["move_type"] is not None
+            or result["source_id"] is not None
+            or (
+                capability_id == "bank.statement.create"
+                and result["line_ids"] != parameters["transaction_ids"]
+            )
+            or (capability_id == "bank.statement.delete" and idempotent_replay)
+            or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None
+            or result["reconciled"]
+        ):
+            raise _failed("Odoo returned a mismatched bank-statement result.")
+        return deepcopy(result)
+
+    if capability_id == "bank.transaction.delete":
+        if (
+            result["model"] != "account.bank.statement.line"
+            or result["id"] != parameters["transaction_id"]
+            or result["state"] != "deleted"
+            or result["move_type"] != "entry"
+            or not _valid_id(result["source_id"])
+            or not result["line_ids"]
+            or idempotent_replay
+            or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None
+            or result["reconciled"]
+        ):
+            raise _failed("Odoo returned a mismatched deleted bank transaction.")
+        return deepcopy(result)
+
+    if capability_id in {"payment.duplicate", "payment.delete"}:
+        duplicate = capability_id == "payment.duplicate"
+        expected_id = result["id"] if duplicate else parameters["payment_id"]
+        if (
+            result["model"] != "account.payment"
+            or result["id"] != expected_id
+            or not _valid_id(result["id"])
+            or (duplicate and result["id"] == parameters["payment_id"])
+            or result["state"] != ("draft" if duplicate else "deleted")
+            or result["move_type"] is not None
+            or result["source_id"]
+            != (parameters["payment_id"] if duplicate else None)
+            or (capability_id == "payment.delete" and idempotent_replay)
+            or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None
+            or result["reconciled"]
+        ):
+            raise _failed("Odoo returned a mismatched payment-maintenance result.")
         return deepcopy(result)
 
     if capability_id == "reconciliation.apply":

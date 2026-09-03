@@ -3421,6 +3421,96 @@
       },
       "handler_key": "bank_statement_search"
     },
+    "bank.statement.create": {
+      "summary": {"zh_CN": "从银行流水创建银行对账单", "en_US": "Create a bank statement from bank transactions"},
+      "domain": "bank_reconciliation",
+      "access": "write",
+      "source": {
+        "modules": ["account"],
+        "models": ["res.company", "res.currency", "account.journal", "account.bank.statement", "account.bank.statement.line", "account.move"],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "_references/base/models/res_currency.py", "account/models/account_journal.py", "account/models/account_bank_statement.py", "account/models/account_bank_statement_line.py", "account/models/account_move.py"]
+      },
+      "schemas": {"request": "schemas/v1/bank.statement.create.request.schema.json", "response": "schemas/v1/bank.statement.create.response.schema.json"},
+      "requirements": {
+        "modules": ["account"],
+        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "company": "required",
+        "groups": ["account.group_account_user"],
+        "acl": ["res.currency:read", "account.journal:read", "account.bank.statement:read", "account.bank.statement:create", "account.bank.statement.line:read", "account.bank.statement.line:write", "account.move:read"]
+      },
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_scoped_bank_statement_create_from_contiguous_ungrouped_transactions", "verify": "same_transaction_statement_transaction_set_balance_and_response_schema_validation", "idempotency": "company_contiguous_transaction_set_and_full_normalized_parameters_recheck_without_concurrent_exactly_once_guarantee", "reverse": "bank.statement.delete"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_bank_statement_payment_maintenance_public.py", "tests/unit/test_bank_statement_payment_maintenance_runtime.py", "tests/unit/test_core_writes.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover the closed normalized request, native transaction continuity, exact confirmation, runtime result contract, CLI dispatch, registry descriptor, and schemas."},
+        "integration": {"status": "planned", "references": [], "reason": "The guarded dual-database live write smoke remains pending because the server addon tree is missing account_asset/models/account_asset.py; the attempted worker failed before any capability call or fixture write."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "degraded", "reason_code": "concurrent_idempotency_limit", "reason": "The handler rechecks the contiguous company-scoped transaction set and normalized statement values, but Odoo provides no matching uniqueness constraint for concurrent exactly-once creation."},
+      "routing": {"object": "bank.statement", "actions": ["create"], "aliases": {"zh_CN": ["创建银行对账单", "将银行流水组成对账单"], "en_US": ["Create bank statement", "Group bank transactions into a statement"]}, "not_for": {"zh_CN": ["合并不同日记账的流水", "合并非连续或已有对账单的流水"], "en_US": ["Combining transactions from different journals", "Combining non-contiguous or already grouped transactions"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
+    "bank.statement.update": {
+      "summary": {"zh_CN": "更新银行对账单", "en_US": "Update a bank statement"},
+      "domain": "bank_reconciliation",
+      "access": "write",
+      "source": {
+        "modules": ["account"],
+        "models": ["res.company", "res.currency", "account.bank.statement", "account.bank.statement.line"],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "_references/base/models/res_currency.py", "account/models/account_bank_statement.py", "account/models/account_bank_statement_line.py"]
+      },
+      "schemas": {"request": "schemas/v1/bank.statement.update.request.schema.json", "response": "schemas/v1/bank.statement.update.response.schema.json"},
+      "requirements": {
+        "modules": ["account"],
+        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "company": "required",
+        "groups": ["account.group_account_user"],
+        "acl": ["res.currency:read", "account.bank.statement:read", "account.bank.statement:write", "account.bank.statement.line:read"]
+      },
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_scoped_bank_statement_update", "verify": "same_transaction_requested_target_state_reread_and_response_schema_validation", "idempotency": "requested_target_state_hash_and_result_replay", "reverse": "bank.statement.update_with_prior_values"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_bank_statement_payment_maintenance_public.py", "tests/unit/test_bank_statement_payment_maintenance_runtime.py", "tests/unit/test_core_writes.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover the non-empty closed changes, exact confirmation, runtime result contract, CLI dispatch, registry descriptor, and schemas."},
+        "integration": {"status": "planned", "references": [], "reason": "The guarded dual-database live write smoke remains pending because the server addon tree is missing account_asset/models/account_asset.py; the attempted worker failed before any capability call or fixture write."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
+      "routing": {"object": "bank.statement", "actions": ["update"], "aliases": {"zh_CN": ["更新银行对账单", "修改对账单参考或期末余额"], "en_US": ["Update bank statement", "Change statement reference or ending balance"]}, "not_for": {"zh_CN": ["增删对账单流水", "银行流水核销"], "en_US": ["Adding or removing statement transactions", "Reconciling bank transactions"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
+    "bank.statement.delete": {
+      "summary": {"zh_CN": "删除银行对账单并保留银行流水", "en_US": "Delete a bank statement while preserving its transactions"},
+      "domain": "bank_reconciliation",
+      "access": "write",
+      "source": {
+        "modules": ["account"],
+        "models": ["res.company", "account.bank.statement", "account.bank.statement.line"],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "account/models/account_bank_statement.py", "account/models/account_bank_statement_line.py"]
+      },
+      "schemas": {"request": "schemas/v1/bank.statement.delete.request.schema.json", "response": "schemas/v1/bank.statement.delete.response.schema.json"},
+      "requirements": {
+        "modules": ["account"],
+        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "company": "required",
+        "groups": ["account.group_account_user"],
+        "acl": ["account.bank.statement:read", "account.bank.statement:unlink", "account.bank.statement.line:read", "account.bank.statement.line:write"]
+      },
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_scoped_bank_statement_unlink_preserving_transactions", "verify": "same_transaction_statement_absence_and_ungrouped_transaction_reread_and_response_schema_validation", "idempotency": "record_absence_recheck_without_operation_store_or_persistent_tombstone", "reverse": "not_reversible_deleted_statement_must_be_recreated"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_bank_statement_payment_maintenance_public.py", "tests/unit/test_bank_statement_payment_maintenance_runtime.py", "tests/unit/test_core_writes.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover confirmation, runtime result contract, CLI dispatch, registry descriptor, delete boundary, and schemas."},
+        "integration": {"status": "planned", "references": [], "reason": "The guarded dual-database live write smoke remains pending because the server addon tree is missing account_asset/models/account_asset.py; the attempted worker failed before any capability call or fixture write."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "degraded", "reason_code": "deleted_record_tombstone_unavailable", "reason": "The handler verifies statement absence and preserved ungrouped transactions after deletion, but keeps no persistent tombstone, so a later retry cannot distinguish its prior deletion from an unrelated disappearance."},
+      "routing": {"object": "bank.statement", "actions": ["delete"], "aliases": {"zh_CN": ["删除银行对账单", "解散银行对账单"], "en_US": ["Delete bank statement", "Ungroup bank statement"]}, "not_for": {"zh_CN": ["删除对账单中的银行流水", "银行流水核销"], "en_US": ["Deleting the statement transactions", "Reconciling bank transactions"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
     "bank.transaction.get": {
       "summary": {
         "zh_CN": "获取银行流水详情",
@@ -3980,6 +4070,36 @@
       },
       "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
       "routing": {"object": "bank.transaction", "actions": ["unmatch", "unreconcile"], "aliases": {"zh_CN": ["撤销银行流水匹配"], "en_US": ["Unmatch a bank transaction"]}, "not_for": {"zh_CN": [], "en_US": []}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
+    "bank.transaction.delete": {
+      "summary": {"zh_CN": "删除未分组且未匹配的银行流水", "en_US": "Delete an ungrouped unmatched bank transaction"},
+      "domain": "bank_reconciliation",
+      "access": "write",
+      "source": {
+        "modules": ["account"],
+        "models": ["res.company", "account.bank.statement.line", "account.move", "account.move.line", "account.payment", "account.partial.reconcile", "account.full.reconcile"],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "account/models/account_bank_statement_line.py", "account/models/account_move.py", "account/models/account_move_line.py", "account/models/account_payment.py", "account/models/account_partial_reconcile.py", "account/models/account_full_reconcile.py"]
+      },
+      "schemas": {"request": "schemas/v1/bank.transaction.delete.request.schema.json", "response": "schemas/v1/bank.transaction.delete.response.schema.json"},
+      "requirements": {
+        "modules": ["account"],
+        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "company": "required",
+        "groups": ["account.group_account_user"],
+        "acl": ["account.bank.statement.line:read", "account.bank.statement.line:unlink", "account.move:read", "account.move:unlink", "account.move.line:read", "account.payment:read", "account.partial.reconcile:read", "account.full.reconcile:read"]
+      },
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_scoped_ungrouped_unmatched_bank_transaction_unlink", "verify": "same_transaction_bank_transaction_and_journal_entry_absence_and_response_schema_validation", "idempotency": "record_absence_recheck_without_operation_store_or_persistent_tombstone", "reverse": "not_reversible_deleted_transaction_must_be_recorded_again"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_bank_statement_payment_maintenance_public.py", "tests/unit/test_bank_statement_payment_maintenance_runtime.py", "tests/unit/test_core_writes.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover confirmation, runtime result contract, CLI dispatch, registry descriptor, delete boundary, and schemas."},
+        "integration": {"status": "planned", "references": [], "reason": "The guarded dual-database live write smoke remains pending because the server addon tree is missing account_asset/models/account_asset.py; the attempted worker failed before any capability call or fixture write."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "degraded", "reason_code": "deleted_record_tombstone_unavailable", "reason": "The handler verifies bank-transaction and journal-entry absence after deleting an ungrouped, completely unmatched transaction, but keeps no persistent tombstone for later retry attribution."},
+      "routing": {"object": "bank.transaction", "actions": ["delete"], "aliases": {"zh_CN": ["删除银行流水", "删除未匹配银行交易"], "en_US": ["Delete bank transaction", "Delete unmatched bank transaction"]}, "not_for": {"zh_CN": ["删除已进入对账单的流水", "删除已匹配或已核销的流水"], "en_US": ["Deleting a transaction assigned to a statement", "Deleting a matched or reconciled transaction"]}, "required_slots": ["database", "company_id", "user_login"]},
       "handler_key": "core_write"
     },
     "budget.cancel": {
@@ -12824,6 +12944,36 @@
       "routing": {"object": "payment", "actions": ["create"], "aliases": {"zh_CN": ["创建草稿会计付款"], "en_US": ["Create a draft accounting payment"]}, "not_for": {"zh_CN": [], "en_US": []}, "required_slots": ["database", "company_id", "user_login"]},
       "handler_key": "core_write"
     },
+    "payment.duplicate": {
+      "summary": {"zh_CN": "复制会计付款为新草稿", "en_US": "Duplicate an accounting payment as a new draft"},
+      "domain": "payments",
+      "access": "write",
+      "source": {
+        "modules": ["account"],
+        "models": ["res.company", "account.payment", "account.move", "account.move.line"],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "account/models/account_payment.py", "account/models/account_move.py", "account/models/account_move_line.py"]
+      },
+      "schemas": {"request": "schemas/v1/payment.duplicate.request.schema.json", "response": "schemas/v1/payment.duplicate.response.schema.json"},
+      "requirements": {
+        "modules": ["account"],
+        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "company": "required",
+        "groups": ["account.group_account_invoice"],
+        "acl": ["account.payment:read", "account.payment:create", "account.payment:write", "account.move:read", "account.move:create", "account.move.line:read", "account.move.line:create"]
+      },
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_scoped_payment_copy_as_draft_with_source_memo_prefix", "verify": "same_transaction_new_draft_payment_source_values_and_appended_marker_reread_and_response_schema_validation", "idempotency": "stable_source_key_suffix_lookup_and_current_source_memo_recheck_without_concurrent_exactly_once_guarantee", "reverse": "payment.delete"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_bank_statement_payment_maintenance_public.py", "tests/unit/test_bank_statement_payment_maintenance_runtime.py", "tests/unit/test_core_writes.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover the closed request, exact confirmation, stable marker lookup, preserved source memo prefix, source-linked draft result, CLI dispatch, registry descriptor, and schemas."},
+        "integration": {"status": "planned", "references": [], "reason": "The guarded dual-database live write smoke remains pending because the server addon tree is missing account_asset/models/account_asset.py; the attempted worker failed before any capability call or fixture write."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "degraded", "reason_code": "concurrent_idempotency_limit", "reason": "The handler preserves the source memo as a visible prefix, appends a stable source-specific marker, and rejects retries after source changes, but Odoo provides no matching uniqueness constraint for concurrent exactly-once duplication."},
+      "routing": {"object": "payment", "actions": ["duplicate", "copy"], "aliases": {"zh_CN": ["复制付款", "复制会计付款为草稿"], "en_US": ["Duplicate payment", "Copy accounting payment as draft"]}, "not_for": {"zh_CN": ["过账复制出的付款", "复制发票或账单"], "en_US": ["Posting the duplicated payment", "Duplicating an invoice or bill"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
     "payment.update_draft": {
       "summary": {"zh_CN": "更新草稿会计付款", "en_US": "Update a draft accounting payment"},
       "domain": "payments",
@@ -12997,6 +13147,36 @@
           "user_login"
         ]
       },
+      "handler_key": "core_write"
+    },
+    "payment.delete": {
+      "summary": {"zh_CN": "删除未核销的草稿或已取消付款", "en_US": "Delete an unreconciled draft or canceled payment"},
+      "domain": "payments",
+      "access": "write",
+      "source": {
+        "modules": ["account"],
+        "models": ["res.company", "account.payment", "account.move", "account.move.line", "account.partial.reconcile", "account.full.reconcile"],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "account/models/account_payment.py", "account/models/account_move.py", "account/models/account_move_line.py", "account/models/account_partial_reconcile.py", "account/models/account_full_reconcile.py"]
+      },
+      "schemas": {"request": "schemas/v1/payment.delete.request.schema.json", "response": "schemas/v1/payment.delete.response.schema.json"},
+      "requirements": {
+        "modules": ["account"],
+        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "company": "required",
+        "groups": ["account.group_account_invoice"],
+        "acl": ["account.payment:read", "account.payment:unlink", "account.move:read", "account.move:write", "account.move:unlink", "account.move.line:read", "account.partial.reconcile:read", "account.full.reconcile:read"]
+      },
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_scoped_unreconciled_draft_or_canceled_payment_unlink", "verify": "same_transaction_payment_and_journal_entry_absence_and_response_schema_validation", "idempotency": "record_absence_recheck_without_operation_store_or_persistent_tombstone", "reverse": "not_reversible_deleted_payment_must_be_recreated"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_bank_statement_payment_maintenance_public.py", "tests/unit/test_bank_statement_payment_maintenance_runtime.py", "tests/unit/test_core_writes.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover confirmation, runtime result contract, CLI dispatch, registry descriptor, deletion boundary, and schemas."},
+        "integration": {"status": "planned", "references": [], "reason": "The guarded dual-database live write smoke remains pending because the server addon tree is missing account_asset/models/account_asset.py; the attempted worker failed before any capability call or fixture write."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "degraded", "reason_code": "deleted_record_tombstone_unavailable", "reason": "The handler verifies payment and journal-entry absence after deleting an unreconciled draft or canceled payment, but keeps no persistent tombstone for later retry attribution."},
+      "routing": {"object": "payment", "actions": ["delete"], "aliases": {"zh_CN": ["删除付款", "删除草稿付款"], "en_US": ["Delete payment", "Delete draft payment"]}, "not_for": {"zh_CN": ["删除已过账或已核销付款", "取消付款"], "en_US": ["Deleting a posted or reconciled payment", "Canceling a payment"]}, "required_slots": ["database", "company_id", "user_login"]},
       "handler_key": "core_write"
     },
     "payment.get": {
