@@ -15,6 +15,9 @@ from odoo_accounting_cli_v4.capabilities.core_object_reads import (
 REQUEST_ID = "7bc39413-0d69-4092-9319-795d33f3167c"
 
 GET_ID_FIELDS = {
+    "partner.payment_preferences.get": "partner_id",
+    "partner.invoice_delivery_preferences.get": "partner_id",
+    "partner.bill_validation_preferences.get": "partner_id",
     "account.account.get": "account_id",
     "journal.get": "journal_id",
     "tax.get": "tax_id",
@@ -254,6 +257,14 @@ def _coded(record_id: int, code: str, name: str) -> dict:
 
 
 def _item(capability_id: str, record_id: int = 31) -> dict:
+    if capability_id in {
+        "partner.payment_preferences.get",
+        "partner.invoice_delivery_preferences.get",
+        "partner.bill_validation_preferences.get",
+    }:
+        from test_partner_preferences_batch import read_item
+
+        return {**read_item(capability_id), "id": record_id}
     if capability_id == "account.account.get":
         return {
             "id": record_id,

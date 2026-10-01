@@ -16,6 +16,9 @@ from odoo_accounting_cli_v4.capabilities.core_object_reads import (
 
 EXPECTED_CAPABILITY_IDS = frozenset(
     {
+        "partner.payment_preferences.get",
+        "partner.invoice_delivery_preferences.get",
+        "partner.bill_validation_preferences.get",
         "partner.search",
         "partner.get",
         "account.account.get",
@@ -153,6 +156,9 @@ GET_ID_FIELDS = {
 }
 
 PRIMARY_MODELS = {
+    "partner.payment_preferences.get": "res.partner",
+    "partner.invoice_delivery_preferences.get": "res.partner",
+    "partner.bill_validation_preferences.get": "res.partner",
     "partner.search": "res.partner",
     "partner.get": "res.partner",
     "account.account.get": "account.account",
@@ -1340,6 +1346,7 @@ def _fixture() -> tuple[Env, dict[str, Any]]:
         "res.bank": Model("res.bank", [fixture_bank]),
         "res.partner.bank": Model("res.partner.bank", partner_banks),
         "account.move": Model("account.move", [move, bank_move]),
+        "ir.actions.report": Model("ir.actions.report", []),
         "account.payment": Model("account.payment"),
         "account.bank.statement": Model("account.bank.statement", bank_statements),
         "account.bank.statement.line": Model(
@@ -1429,6 +1436,12 @@ def _dispatch(
 
 
 def _parameters(capability_id: str) -> dict[str, Any]:
+    if capability_id in {
+        "partner.payment_preferences.get",
+        "partner.invoice_delivery_preferences.get",
+        "partner.bill_validation_preferences.get",
+    }:
+        return {"partner_id": 31}
     if capability_id == "partner.get":
         return {"partner_id": 31}
     if capability_id == "partner.search":

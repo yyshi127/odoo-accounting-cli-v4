@@ -9,6 +9,8 @@ from datetime import date as date_type
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from odoo_accounting_cli_v4 import partner_preferences_contracts as partner_preferences
+
 ACTION = "accounting.core_object.read"
 
 
@@ -57,6 +59,9 @@ CAPABILITY_IDS = frozenset(
         "journal.group.get",
         "payment.method_definition.list",
         "incoterm.list",
+        "partner.bill_validation_preferences.get",
+        "partner.invoice_delivery_preferences.get",
+        "partner.payment_preferences.get",
         "payment.method_definition.get",
         "incoterm.get",
         "partner.bank_account.search",
@@ -139,6 +144,9 @@ _GET_IDS = {
     ),
     "cash_rounding.get": ("account.cash.rounding", "cash_rounding_id"),
     "journal.group.get": ("account.journal.group", "journal_group_id"),
+    "partner.bill_validation_preferences.get": ("res.partner", "partner_id"),
+    "partner.invoice_delivery_preferences.get": ("res.partner", "partner_id"),
+    "partner.payment_preferences.get": ("res.partner", "partner_id"),
     "payment.method_definition.get": ("account.payment.method", "payment_method_id"),
     "incoterm.get": ("account.incoterms", "incoterm_id"),
     "partner.bank_account.get": ("res.partner.bank", "partner_bank_id"),
@@ -264,6 +272,9 @@ _REFERENCE_KINDS = {
     "journal.group.list": "journal_group",
     "journal.group.get": "journal_group",
     "payment.method_definition.list": "payment_method_definition",
+    "partner.bill_validation_preferences.get": "partner.bill_validation_preferences.get",
+    "partner.invoice_delivery_preferences.get": "partner.invoice_delivery_preferences.get",
+    "partner.payment_preferences.get": "partner.payment_preferences.get",
     "payment.method_definition.get": "payment_method_definition",
     "incoterm.list": "incoterm",
     "incoterm.get": "incoterm",
@@ -364,6 +375,9 @@ _REFERENCE_FIELDS = {
         "company_id",
         "excluded_journal_ids",
     ),
+    "partner.bill_validation_preferences.get": ('id', 'name', 'company_id', 'commercial_partner_id', 'autopost_bills', 'ignore_abnormal_invoice_date', 'ignore_abnormal_invoice_amount'),
+    "partner.invoice_delivery_preferences.get": ('id', 'name', 'company_id', 'commercial_partner_id', 'invoice_sending_method', 'invoice_edi_format', 'invoice_template_pdf_report_id'),
+    "partner.payment_preferences.get": ('id', 'name', 'company_id', 'commercial_partner_id', 'property_inbound_payment_method_line_id', 'property_outbound_payment_method_line_id'),
     "payment_method_definition": ("id", "name", "code", "payment_type"),
     "incoterm": ("id", "code", "name", "active"),
     "partner_bank": (
@@ -756,6 +770,9 @@ _REQUIRED_MODELS = {
         "account.journal",
     ),
     "payment.method_definition.list": ("res.company", "account.payment.method"),
+    "partner.bill_validation_preferences.get": ('res.company', 'res.partner'),
+    "partner.invoice_delivery_preferences.get": ('res.company', 'res.partner', 'account.move', 'ir.actions.report'),
+    "partner.payment_preferences.get": ('res.company', 'res.partner', 'account.payment.method.line', 'account.journal'),
     "payment.method_definition.get": ("res.company", "account.payment.method"),
     "incoterm.list": ("res.company", "account.incoterms"),
     "incoterm.get": ("res.company", "account.incoterms"),
@@ -1515,6 +1532,9 @@ def _scope_domain(env: Any, capability_id: str, company_id: int) -> list[Any]:
         "analytic.applicability.get",
         "budget.search",
         "budget.get",
+        "partner.bill_validation_preferences.get",
+        "partner.invoice_delivery_preferences.get",
+        "partner.payment_preferences.get",
         "partner.credit_exposure.inspect",
     }:
         return ["|", ("company_id", "=", False), ("company_id", "=", company_id)]
@@ -2367,7 +2387,7 @@ def _raw_get_rows(
         ]
     )
     model = raw_model.with_context(active_test=False, allowed_company_ids=[company_id])
-    if capability_id in {"cash_rounding.get", "account.transfer_model.get"}:
+    if capability_id in partner_preferences.READ_CAPABILITY_IDS or capability_id in {"cash_rounding.get", "account.transfer_model.get"}:
         model = model.with_company(env["res.company"].browse(company_id))
     return model.search_read(
         domain,
@@ -4489,6 +4509,43 @@ def _normalize_partners(
     return result
 
 
+def _normalize_partner_preferences(env: Any, capability_id: str, rows: list[dict[str, Any]], company_id: int) -> list[dict[str, Any]]:
+    result = []
+    for row in rows:
+        owner = _reference_id(row["company_id"])
+        if owner not in {None, company_id}:
+            raise ValueError("partner preference outside company")
+        item = {
+            "id": row["id"], "name": _optional_text(row["name"]),
+            "company_id": company_id,
+            "commercial_partner_id": _reference_id(row["commercial_partner_id"]),
+            "shared_partner": owner is None,
+        }
+        for field in partner_preferences.READ_FIELDS[capability_id]:
+            value = row[field]
+            item[field] = _reference_id(value) if field.endswith("_id") else _optional_text(value) if field in {"invoice_sending_method", "invoice_edi_format"} else value
+        if capability_id == "partner.payment_preferences.get":
+            ids = {item[field] for field in partner_preferences.READ_FIELDS[capability_id]} - {None}
+            lines = _related_rows(env, "account.payment.method.line", ids, ("company_id", "payment_type", "journal_id"))
+            for field in partner_preferences.READ_FIELDS[capability_id]:
+                line_id = item[field]
+                if line_id is not None:
+                    line = lines[line_id]
+                    # A natively detached historical line has no company/journal.
+                    # Report stored preferences truthfully; assigning a new line is stricter.
+                    if _reference_id(line["company_id"]) not in {None, company_id}:
+                        raise ValueError("payment preference outside company")
+        if capability_id == "partner.invoice_delivery_preferences.get":
+            partner = env["res.partner"].with_company(env["res.company"].browse(company_id)).browse(row["id"])
+            item["available_sending_methods"] = sorted(value for value, label in partner._fields["invoice_sending_method"]._description_selection(partner.env) if value)
+            item["available_edi_formats"] = sorted(value for value, label in partner._fields["invoice_edi_format"]._description_selection(partner.env) if value)
+            item["available_pdf_report_ids"] = sorted(set(partner.available_invoice_template_pdf_report_ids.ids))
+        if not partner_preferences.valid_read_item(capability_id, item, company_id):
+            raise ValueError("invalid native partner preference")
+        result.append(item)
+    return result
+
+
 def _normalize_reference_items(
     env: Any,
     capability_id: str,
@@ -4496,6 +4553,8 @@ def _normalize_reference_items(
     company_id: int,
 ) -> list[dict[str, Any]]:
     kind = _REFERENCE_KINDS[capability_id]
+    if capability_id in partner_preferences.READ_CAPABILITY_IDS:
+        return _normalize_partner_preferences(env, capability_id, rows, company_id)
     if kind == "partner":
         return _normalize_partners(env, rows, company_id)
     if kind == "product":

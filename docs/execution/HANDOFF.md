@@ -1,6 +1,13 @@
 # Odoo Accounting CLI V4 handoff
 
-Updated: 2026-09-03 (Asia/Shanghai)
+Updated: 2026-10-01 (Asia/Shanghai)
+
+## Current authoritative count — 2026-10-01
+
+442 registered IDs; 427 implemented handlers (220 reads, 207 writes);
+860 schemas; 354 unconfigured, 73 degraded, 15 disabled. Enabled-handler integration records:
+423 implemented, three planned, one failed. The latest partner-preferences
+checkpoint below is authoritative; older snapshots are historical.
 
 ## Objective and working rule
 
@@ -14,7 +21,7 @@ All live writes remain restricted to the two dedicated V4 databases. Do not
 restart or modify Odoo, Nginx, PostgreSQL, Pi, V2, V3, business databases, or
 the Odoo source/add-on tree while building CLI capabilities.
 
-## Current authoritative count
+## Historical count snapshot — 2026-09-03
 
 - Registry: 404 capability IDs; 389 enabled handlers (215 reads and 174 writes)
   and 15 disabled IDs.
@@ -4700,3 +4707,93 @@ the two synthetic databases. The older positive integration gaps remain
 `report.customer_statement.send`, and `report.followup.send` (planned).
 Installed-addon repair and real external report delivery require separate
 authority. The overall capability-first goal remains active.
+
+## Partner accounting preferences — 2026-10-01
+
+This checkpoint continues from `a8e02a3` and adds eight IDs: 442 registered
+IDs, 427 implemented handlers (220 reads, 207 writes), 860 schemas;
+354 `unconfigured`, 73 `degraded`, 15 `disabled`. Enabled-handler integration records:
+423 `implemented`, three `planned`, one `failed`. Counts include historical
+non-accounting extensions, not complete accounting coverage or runtime ACLs.
+
+### Native capability scope
+
+- `partner.payment_preferences.get/update` reads or sets/clears native inbound
+  and outbound payment-method-line defaults in the selected company. New
+  assignments require a same-company active journal and matching direction.
+  GET reports a stored detached historical line truthfully; it never invents
+  a journal or silently clears stored preferences. Foreign-company relations
+  are rejected. These are distinct from journal payment-method configuration.
+- `partner.invoice_delivery_preferences.get/update` covers native sending
+  method, EDI format and PDF report. GET exposes installed native selections
+  and available report IDs; writes validate them dynamically. Clearing EDI
+  uses the native computed-field inverse (the backing store can be False or
+  `none`, depending on the native suggestion). Writes target the commercial
+  partner because native invoice-send defaults use that record. No invoice
+  is sent, PDF exported or EDI service invoked by setting these preferences.
+- `partner.bill_validation_preferences.get/update` covers `autopost_bills`
+  (always/ask/never) and the two company-dependent abnormal-date/amount ignore
+  flags. It does not execute an autopost action or bypass native bill checks.
+- `partner.credit_limit.update` uses the native company-dependent Float field;
+  `partner.credit_limit.reset` invokes `use_partner_credit_limit=False` to
+  restore the actual company fallback, not zero. Both target the commercial
+  partner. Existing `partner.credit_exposure.inspect` supplies readback and
+  is not recounted. Setting a limit does not enable company credit checks.
+- PDF report and autopost preference fields are global, not company-dependent.
+  On a shared partner their change affects other companies using that contact;
+  those two writes remain `degraded` with `shared_partner_global_preference`.
+  The smoke explicitly observes this instead of hiding it with private-only
+  fixtures. Other preferences retain native company-dependent behavior.
+- Closed parameter patches, confirmation, deterministic keys, native ACLs and
+  company/user scope reuse the existing framework. No arbitrary model/method
+  dispatch, approval framework, caller-sudo or installed-addon changes.
+
+### Verification, backup and recovery
+
+The first shared native attempt passed both isolated aliases through the CLI
+as ordinary uid 5 with `su=False` in 214.69 seconds. Each alias exercises
+all eight new IDs plus existing journal setup and credit-exposure readback,
+five immediate replays, credit 1000 -> company fallback 300, native EDI clear,
+wrong payment direction, foreign-company partner denial, company-dependent
+isolation and truthful shared-global changes. Each worker verifies rollback
+with a fresh cursor, including the temporary company credit default and two
+temporary native groups. Admin fixture setup stays inside synthetic databases;
+business capability calls remain non-superuser. No external delivery or bill
+posting is performed.
+
+Local tests: batch 51, focused write framework 11, full read framework 792,
+relevant registry selection 19 with one explicit historical deselection.
+Server tests: batch/closed-set 52, final registry selection 19 with the same
+one deselection. The stale baseline test is
+`test_bank_statement_payment_maintenance_has_closed_registry_and_schemas`;
+its six old integration entries were already implemented in unchanged HEAD.
+Ruff and `git diff --check` passed. Changed public code/schema/tests and staged
+added lines have zero privacy findings; the full tree retains five historical
+document path/IP findings and is not described as passing.
+
+Initial 31-file deployment: 12 existing files backed up, 19 new files.
+Initial archive SHA-256: `cd1505d7cf571b010eecd04158ef3fd00048334450cd208ed16ee7d66e9ec400`.
+Final two-file metadata synchronization backed up the exact deployed baselines.
+Final archive SHA-256: `60b8bc7bb42a2cc87aac5b2f4901cefc0117870ad9e3902f8a1718aee9d10993`.
+All 31 deployed files match the final manifest. Private code packages,
+manifests, pre-deployment backups and live logs are under
+`.tooling/partner-preferences-20261001`; never commit that directory.
+The divergent server STATUS/HANDOFF files were not overwritten.
+Registry-file SHA-256: `6d41283f4223ac967d40a81ca073017b3261bb070287bf52318739e9d254e59f`.
+Canonical registry SHA-256: `bddbe6dc0c704388100e6bf47d1e43252bc42512807291274b7253610703de8c`.
+Passing live-log SHA-256: `33a768fc1c98725dff04991db56087998bac1dad4a40c357f978efbd104bf261`.
+
+Odoo remained PID `25607`, `NRestarts=6`; Nginx remained PID `3309593`,
+`NRestarts=0`; PostgreSQL stayed active. No business database, installed addon,
+service configuration, Pi bridge or V2/V3 chain was changed.
+
+### Next step
+
+Audit actual installed accounting fields/actions against the existing IDs,
+then deliver the next related batch of roughly 8–12 genuine capabilities.
+Keep capability-first implementation and one rollback-only dual-alias smoke.
+Do not inflate counts with aliases or unsupported legacy APIs. The older
+positive integration gaps remain asset validation (native failure), product
+accounting-profile readback, and two external report-send commands (planned).
+Addon repair and real external delivery require separate authority. The overall
+goal remains active; no verified denominator for complete coverage exists yet.

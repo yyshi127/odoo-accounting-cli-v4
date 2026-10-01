@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 434
-EXPECTED_ENABLED_CAPABILITY_COUNT = 419
-EXPECTED_IMPLEMENTED_READ_COUNT = 217
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 202
+EXPECTED_CAPABILITY_COUNT = 442
+EXPECTED_ENABLED_CAPABILITY_COUNT = 427
+EXPECTED_IMPLEMENTED_READ_COUNT = 220
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 207
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 348
-EXPECTED_DEGRADED_CAPABILITY_COUNT = 71
-EXPECTED_SCHEMA_COUNT = 844
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 354
+EXPECTED_DEGRADED_CAPABILITY_COUNT = 73
+EXPECTED_SCHEMA_COUNT = 860
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "03b7632278dc7cf8b3745dbcfdbd97cdb2be6964a1e64a9f4a38c21d90c1edc0"
+    "cc541bd974b3814172b9740ded8bef45ce2651bcbdc57f45654cbee5f52f70c6"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -151,6 +151,9 @@ IMPLEMENTED_READS = {
     "invoice.analysis.summary": "invoice_analysis_summary",
     "invoice.payment_status.inspect": "invoice_payment_status_inspect",
     "invoice.send.inspect": "invoice_send_inspect",
+    "partner.payment_preferences.get": "partner_payment_preferences_get",
+    "partner.invoice_delivery_preferences.get": "partner_invoice_delivery_preferences_get",
+    "partner.bill_validation_preferences.get": "partner_bill_validation_preferences_get",
     "payment.method_definition.get": "payment_method_definition_get",
     "payment.method_definition.list": "payment_method_definition_list",
     "incoterm.get": "incoterm_get",
@@ -355,7 +358,9 @@ FISCAL_MAPPING_WRITES = {
 }
 PAYMENT_CONFIGURATION_WRITES = {'payment.method_line.update', 'journal.bank_account.assign', 'payment.method_line.create', 'payment.method_line.duplicate', 'payment.method_line.remove', 'journal.liquidity_configuration.update'}
 
-IMPLEMENTED_WRITES = PAYMENT_CONFIGURATION_WRITES | FISCAL_MAPPING_WRITES | REPORT_BUDGET_WRITES | {
+PARTNER_PREFERENCES_WRITES = {'partner.credit_limit.update', 'partner.invoice_delivery_preferences.update', 'partner.payment_preferences.update', 'partner.bill_validation_preferences.update', 'partner.credit_limit.reset'}
+
+IMPLEMENTED_WRITES = PARTNER_PREFERENCES_WRITES | PAYMENT_CONFIGURATION_WRITES | FISCAL_MAPPING_WRITES | REPORT_BUDGET_WRITES | {
     "account.group.create",
     "account.group.update",
     "account.tag.archive",
@@ -856,6 +861,9 @@ CORE_OBJECT_READ_HANDLERS = {
     "cash_rounding.get": "cash_rounding_get",
     "cash_rounding.list": "cash_rounding_list",
     "currency.get": "currency_get",
+    "partner.payment_preferences.get": "partner_payment_preferences_get",
+    "partner.invoice_delivery_preferences.get": "partner_invoice_delivery_preferences_get",
+    "partner.bill_validation_preferences.get": "partner_bill_validation_preferences_get",
     "payment.method_definition.get": "payment_method_definition_get",
     "payment.method_definition.list": "payment_method_definition_list",
     "incoterm.get": "incoterm_get",
@@ -1150,6 +1158,10 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
         if capability_id in PENDING_LIVE_READS:
             assert descriptor["tests"]["integration"]["status"] == "planned"
             assert descriptor["tests"]["integration"]["references"] == []
+            continue
+        if capability_id in {'partner.payment_preferences.get', 'partner.invoice_delivery_preferences.get', 'partner.bill_validation_preferences.get'}:
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == ["tests/integration/test_partner_preferences_batch_live.py"]
             continue
         if capability_id in {"payment.method_definition.get", "payment.method_definition.list"}:
             assert descriptor["tests"]["integration"]["status"] == "implemented"
@@ -2649,6 +2661,7 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
     )
 
     assert set(CORE_WRITE_MODELS) == IMPLEMENTED_WRITES
+    extended_modules.update({capability_id: ["account", "base"] for capability_id in PARTNER_PREFERENCES_WRITES})
     extended_modules.update({capability_id: ["account", "base"] for capability_id in PAYMENT_CONFIGURATION_WRITES})
     extended_modules.update({capability_id: ["account", "base"] for capability_id in FISCAL_MAPPING_WRITES})
     extended_modules.update({
@@ -2714,7 +2727,10 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             expected_acl.add("res.company:read")
         expected_acl -= runtime_support_acl.get(capability_id, set())
         assert set(descriptor["requirements"]["acl"]) == expected_acl
-        if capability_id in {
+        if capability_id in {"partner.invoice_delivery_preferences.update", "partner.bill_validation_preferences.update"}:
+            assert descriptor["status"]["value"] == "degraded"
+            assert descriptor["status"]["reason_code"] == "shared_partner_global_preference"
+        elif capability_id in {
             "account.tag.archive",
             "account.tag.create",
             "account.tag.restore",
@@ -3009,6 +3025,11 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             assert descriptor["tests"]["integration"]["references"] == [
                 "tests/integration/test_account_transfer_model_write_batch_live.py"
             ]
+            continue
+        if capability_id in PARTNER_PREFERENCES_WRITES:
+            assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_partner_preferences_batch.py"]
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == ["tests/integration/test_partner_preferences_batch_live.py"]
             continue
         if capability_id in PAYMENT_CONFIGURATION_WRITES:
             assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_payment_configuration_batch.py"]

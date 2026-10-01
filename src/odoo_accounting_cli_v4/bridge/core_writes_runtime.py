@@ -18,13 +18,14 @@ from time import strftime, strptime
 from typing import Any
 
 from odoo_accounting_cli_v4 import fiscal_mapping_contracts as fiscal_mappings
+from odoo_accounting_cli_v4 import partner_preferences_contracts as partner_preferences
 from odoo_accounting_cli_v4 import (
     payment_configuration_contracts as payment_configuration,
 )
 from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
 
 ACTION = "accounting.core_write.execute"
-CAPABILITIES = payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
+CAPABILITIES = partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -3312,6 +3313,22 @@ def _protocol(failure_type: type[Exception]) -> Exception:
     )
 
 
+_PARAMETER_KEYS.update(partner_preferences.PARAMETER_KEYS)
+_GROUPS['partner.bill_validation_preferences.update'] = "account.group_account_user"
+_MODELS['partner.bill_validation_preferences.update'] = {'res.company', 'res.partner'}
+_ACCESS['partner.bill_validation_preferences.update'] = {('res.partner', 'read'), ('res.partner', 'write')}
+_GROUPS['partner.credit_limit.reset'] = "account.group_account_user"
+_MODELS['partner.credit_limit.reset'] = {'res.company', 'res.partner'}
+_ACCESS['partner.credit_limit.reset'] = {('res.partner', 'read'), ('res.partner', 'write')}
+_GROUPS['partner.credit_limit.update'] = "account.group_account_user"
+_MODELS['partner.credit_limit.update'] = {'res.company', 'res.partner'}
+_ACCESS['partner.credit_limit.update'] = {('res.partner', 'read'), ('res.partner', 'write')}
+_GROUPS['partner.invoice_delivery_preferences.update'] = "account.group_account_user"
+_MODELS['partner.invoice_delivery_preferences.update'] = {'res.company', 'res.partner', 'account.move', 'ir.actions.report'}
+_ACCESS['partner.invoice_delivery_preferences.update'] = {('res.partner', 'read'), ('account.move', 'read'), ('ir.actions.report', 'read'), ('res.partner', 'write')}
+_GROUPS['partner.payment_preferences.update'] = "account.group_account_user"
+_MODELS['partner.payment_preferences.update'] = {'res.company', 'res.partner', 'account.payment.method.line', 'account.journal'}
+_ACCESS['partner.payment_preferences.update'] = {('res.partner', 'read'), ('account.payment.method.line', 'read'), ('account.journal', 'read'), ('res.partner', 'write')}
 _PARAMETER_KEYS.update(payment_configuration.PARAMETER_KEYS)
 _GROUPS['journal.bank_account.assign'] = "account.group_account_manager"
 _MODELS['journal.bank_account.assign'] = {'res.company', 'account.journal', 'res.partner.bank'}
@@ -5321,6 +5338,11 @@ def _valid_parameters(
 ) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id in partner_preferences.CAPABILITY_IDS:
+        try:
+            return partner_preferences.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
     if capability_id in payment_configuration.CAPABILITY_IDS:
         try:
             return payment_configuration.normalize_parameters(capability_id, parameters) == parameters
@@ -5914,6 +5936,8 @@ def _validated_payload(
 def _deterministic_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in partner_preferences.CAPABILITY_IDS:
+        return partner_preferences.idempotency_key(capability_id, parameters, company_id)
     if capability_id in payment_configuration.CAPABILITY_IDS:
         return payment_configuration.idempotency_key(capability_id, parameters, company_id)
     if capability_id in fiscal_mappings.CAPABILITY_IDS:
@@ -19235,6 +19259,76 @@ def _write_payment_configuration_batch(env, capability_id, parameters, company_i
     return result, replay
 
 
+def _partner_preference_value(partner: Any, field: str) -> Any:
+    value = getattr(partner, field)
+    if field.endswith("_id"):
+        return _relation_id(value)
+    if field in {"invoice_sending_method", "invoice_edi_format"}:
+        return value or None
+    return value
+
+
+def _write_partner_preferences_batch(
+    env: Any,
+    capability_id: str,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    partner = _partner(env, parameters["partner_id"], company_id, failure_type)
+    company = _scoped(env, "res.company", company_id).browse(company_id)
+    partner = partner.with_company(company)
+    credit_action = capability_id.startswith("partner.credit_limit.")
+    invoice_action = capability_id == "partner.invoice_delivery_preferences.update"
+    if (credit_action or invoice_action) and partner.commercial_partner_id.id != partner.id:
+        raise _fail(
+            failure_type, "business_rule_error",
+            "Credit limits and invoice sending defaults must target the commercial partner.",
+            exit_code=6,
+        )
+    if credit_action:
+        if capability_id.endswith(".reset"):
+            expected = partner._fields["credit_limit"].get_company_dependent_fallback(partner)
+            replay = not partner.use_partner_credit_limit and partner.credit_limit == expected
+            if not replay:
+                partner.write({"use_partner_credit_limit": False})
+        else:
+            expected = float(partner_preferences.credit_amount(parameters["credit_limit"]))
+            replay = partner.credit_limit == expected
+            if not replay:
+                partner.write({"credit_limit": expected})
+        partner.invalidate_recordset(["credit_limit", "use_partner_credit_limit"])
+        if partner.credit_limit != expected or (capability_id.endswith(".reset") and partner.use_partner_credit_limit):
+            raise _fail(failure_type, "odoo_write_error", "Odoo did not persist the requested native credit limit.", exit_code=6)
+        return _partner_result(partner, company_id), replay
+
+    changes = parameters["changes"]
+    if capability_id == "partner.payment_preferences.update":
+        for field, line_id in changes.items():
+            if line_id is None:
+                continue
+            line = _payment_line_config_record(env, line_id, company_id, failure_type)
+            direction = "inbound" if "inbound" in field else "outbound"
+            if line.payment_type != direction or not line.journal_id.active:
+                raise _fail(failure_type, "business_rule_error", "The payment preference requires an active journal and the matching payment direction.", exit_code=6)
+    elif invoice_action:
+        for field in ("invoice_sending_method", "invoice_edi_format"):
+            if field in changes and changes[field] is not None:
+                allowed = dict(partner._fields[field]._description_selection(partner.env))
+                if changes[field] not in allowed:
+                    raise _fail(failure_type, "business_rule_error", "The invoice preference is not an installed native selection.", exit_code=6)
+        report_id = changes.get("invoice_template_pdf_report_id")
+        if report_id is not None and report_id not in partner.available_invoice_template_pdf_report_ids.ids:
+            raise _fail(failure_type, "record_not_found", "The requested report is not available for native invoices.", exit_code=4)
+    replay = all(_partner_preference_value(partner, field) == value for field, value in changes.items())
+    if not replay:
+        partner.write({field: value if value is not None else False for field, value in changes.items()})
+        partner.invalidate_recordset()
+    if any(_partner_preference_value(partner, field) != value for field, value in changes.items()):
+        raise _fail(failure_type, "odoo_write_error", "Odoo did not persist the requested partner preferences.", exit_code=6)
+    return _partner_result(partner, company_id), replay
+
+
 def _dispatch_allowed(
     env: Any,
     capability_id: str,
@@ -19244,6 +19338,8 @@ def _dispatch_allowed(
     marker: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if capability_id in partner_preferences.CAPABILITY_IDS:
+        return _write_partner_preferences_batch(env, capability_id, parameters, company_id, failure_type)
     if capability_id in payment_configuration.CAPABILITY_IDS:
         return _write_payment_configuration_batch(env, capability_id, parameters, company_id, failure_type)
     if capability_id in fiscal_mappings.CAPABILITY_IDS:

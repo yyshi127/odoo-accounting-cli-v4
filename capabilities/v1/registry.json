@@ -26232,6 +26232,966 @@
         ]
       },
       "handler_key": "core_write"
+    },
+    "partner.bill_validation_preferences.get": {
+      "summary": {
+        "zh_CN": "读取供应商账单校验偏好",
+        "en_US": "Get native vendor bill validation preferences"
+      },
+      "domain": "accounting_configuration",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "res.partner"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/partner.py",
+          "account/models/account_move.py",
+          "account/models/account_move_send.py",
+          "base/models/res_partner.py",
+          "base/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/partner.bill_validation_preferences.get.request.schema.json",
+        "response": "schemas/v1/partner.bill_validation_preferences.get.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "res.partner:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_company_context_native_partner_preference_read",
+        "verify": "closed_response_schema_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_partner_preferences_batch.py"
+          ],
+          "reason": "Shared fixed contracts, monetary normalization, native credit fallback/inverse and batch framework tests."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_partner_preferences_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all eight new capabilities, five immediate replays, native nonzero company-credit fallback restoration, invoice EDI clearing, payment-direction and company denial, company-dependent preference isolation, truthful shared global preferences, and fresh-cursor business-data, temporary-group and company-default rollback verification. No email/EDI delivery or bill posting was executed."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires an explicit database/company/user runtime and native permissions; credit-limit configuration does not enable company credit checking or create a custom blocking policy."
+      },
+      "routing": {
+        "object": "partner",
+        "actions": [
+          "get"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "读取供应商账单校验偏好"
+          ],
+          "en_US": [
+            "Get native vendor bill validation preferences"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "实际发送邮件或电子发票",
+            "修改其他公司的客户信用额度"
+          ],
+          "en_US": [
+            "Actual email/EDI delivery",
+            "Another company's partner credit-limit configuration"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "partner_bill_validation_preferences_get"
+    },
+    "partner.bill_validation_preferences.update": {
+      "summary": {
+        "zh_CN": "修改供应商账单校验偏好",
+        "en_US": "Update native vendor bill auto-post and abnormal-warning preferences"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "res.partner"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/partner.py",
+          "account/models/account_move.py",
+          "account/models/account_move_send.py",
+          "base/models/res_partner.py",
+          "base/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/partner.bill_validation_preferences.update.request.schema.json",
+        "response": "schemas/v1/partner.bill_validation_preferences.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_user"
+        ],
+        "acl": [
+          "res.partner:read",
+          "res.partner:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_partner_preference_patch_or_credit_inverse",
+        "verify": "same_transaction_native_preference_payload_recheck",
+        "idempotency": "native_current_payload_recheck",
+        "reverse": "restore_previous_preferences_with_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_partner_preferences_batch.py"
+          ],
+          "reason": "Shared fixed contracts, monetary normalization, native credit fallback/inverse and batch framework tests."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_partner_preferences_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all eight new capabilities, five immediate replays, native nonzero company-credit fallback restoration, invoice EDI clearing, payment-direction and company denial, company-dependent preference isolation, truthful shared global preferences, and fresh-cursor business-data, temporary-group and company-default rollback verification. No email/EDI delivery or bill posting was executed."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "degraded",
+        "reason_code": "shared_partner_global_preference",
+        "reason": "PDF-template and auto-post preferences are native non-company-dependent contact fields; changing them on a shared partner affects that partner across companies. Company-dependent fields remain scoped. No external delivery or bill posting is executed by this command."
+      },
+      "routing": {
+        "object": "partner",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "修改供应商账单校验偏好"
+          ],
+          "en_US": [
+            "Update native vendor bill auto-post and abnormal-warning preferences"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "实际发送邮件或电子发票",
+            "修改其他公司的客户信用额度"
+          ],
+          "en_US": [
+            "Actual email/EDI delivery",
+            "Another company's partner credit-limit configuration"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "partner.credit_limit.reset": {
+      "summary": {
+        "zh_CN": "恢复客户公司默认信用额度",
+        "en_US": "Restore a commercial partner's native company credit-limit fallback"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "res.partner"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/partner.py",
+          "account/models/account_move.py",
+          "account/models/account_move_send.py",
+          "base/models/res_partner.py",
+          "base/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/partner.credit_limit.reset.request.schema.json",
+        "response": "schemas/v1/partner.credit_limit.reset.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_user"
+        ],
+        "acl": [
+          "res.partner:read",
+          "res.partner:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_partner_preference_patch_or_credit_inverse",
+        "verify": "same_transaction_native_preference_payload_recheck",
+        "idempotency": "native_current_payload_recheck",
+        "reverse": "restore_previous_preferences_with_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_partner_preferences_batch.py"
+          ],
+          "reason": "Shared fixed contracts, monetary normalization, native credit fallback/inverse and batch framework tests."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_partner_preferences_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all eight new capabilities, five immediate replays, native nonzero company-credit fallback restoration, invoice EDI clearing, payment-direction and company denial, company-dependent preference isolation, truthful shared global preferences, and fresh-cursor business-data, temporary-group and company-default rollback verification. No email/EDI delivery or bill posting was executed."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires an explicit database/company/user runtime and native permissions; credit-limit configuration does not enable company credit checking or create a custom blocking policy."
+      },
+      "routing": {
+        "object": "partner",
+        "actions": [
+          "reset"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "恢复客户公司默认信用额度"
+          ],
+          "en_US": [
+            "Restore a commercial partner's native company credit-limit fallback"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "实际发送邮件或电子发票",
+            "修改其他公司的客户信用额度"
+          ],
+          "en_US": [
+            "Actual email/EDI delivery",
+            "Another company's partner credit-limit configuration"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "partner.credit_limit.update": {
+      "summary": {
+        "zh_CN": "设置客户信用额度",
+        "en_US": "Set a commercial partner's company-dependent credit limit"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "res.partner"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/partner.py",
+          "account/models/account_move.py",
+          "account/models/account_move_send.py",
+          "base/models/res_partner.py",
+          "base/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/partner.credit_limit.update.request.schema.json",
+        "response": "schemas/v1/partner.credit_limit.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_user"
+        ],
+        "acl": [
+          "res.partner:read",
+          "res.partner:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_partner_preference_patch_or_credit_inverse",
+        "verify": "same_transaction_native_preference_payload_recheck",
+        "idempotency": "native_current_payload_recheck",
+        "reverse": "restore_previous_preferences_with_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_partner_preferences_batch.py"
+          ],
+          "reason": "Shared fixed contracts, monetary normalization, native credit fallback/inverse and batch framework tests."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_partner_preferences_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all eight new capabilities, five immediate replays, native nonzero company-credit fallback restoration, invoice EDI clearing, payment-direction and company denial, company-dependent preference isolation, truthful shared global preferences, and fresh-cursor business-data, temporary-group and company-default rollback verification. No email/EDI delivery or bill posting was executed."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires an explicit database/company/user runtime and native permissions; credit-limit configuration does not enable company credit checking or create a custom blocking policy."
+      },
+      "routing": {
+        "object": "partner",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置客户信用额度"
+          ],
+          "en_US": [
+            "Set a commercial partner's company-dependent credit limit"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "实际发送邮件或电子发票",
+            "修改其他公司的客户信用额度"
+          ],
+          "en_US": [
+            "Actual email/EDI delivery",
+            "Another company's partner credit-limit configuration"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "partner.invoice_delivery_preferences.get": {
+      "summary": {
+        "zh_CN": "读取客户发票交付偏好",
+        "en_US": "Get native partner invoice delivery preferences and installed choices"
+      },
+      "domain": "accounting_configuration",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "res.partner",
+          "account.move",
+          "ir.actions.report"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/partner.py",
+          "account/models/account_move.py",
+          "account/models/account_move_send.py",
+          "base/models/res_partner.py",
+          "base/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/partner.invoice_delivery_preferences.get.request.schema.json",
+        "response": "schemas/v1/partner.invoice_delivery_preferences.get.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "res.partner:read",
+          "account.move:read",
+          "ir.actions.report:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_company_context_native_partner_preference_read",
+        "verify": "closed_response_schema_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_partner_preferences_batch.py"
+          ],
+          "reason": "Shared fixed contracts, monetary normalization, native credit fallback/inverse and batch framework tests."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_partner_preferences_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all eight new capabilities, five immediate replays, native nonzero company-credit fallback restoration, invoice EDI clearing, payment-direction and company denial, company-dependent preference isolation, truthful shared global preferences, and fresh-cursor business-data, temporary-group and company-default rollback verification. No email/EDI delivery or bill posting was executed."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires an explicit database/company/user runtime and native permissions; credit-limit configuration does not enable company credit checking or create a custom blocking policy."
+      },
+      "routing": {
+        "object": "partner",
+        "actions": [
+          "get"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "读取客户发票交付偏好"
+          ],
+          "en_US": [
+            "Get native partner invoice delivery preferences and installed choices"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "实际发送邮件或电子发票",
+            "修改其他公司的客户信用额度"
+          ],
+          "en_US": [
+            "Actual email/EDI delivery",
+            "Another company's partner credit-limit configuration"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "partner_invoice_delivery_preferences_get"
+    },
+    "partner.invoice_delivery_preferences.update": {
+      "summary": {
+        "zh_CN": "修改客户发票交付偏好",
+        "en_US": "Update native partner invoice sending, EDI and PDF preferences"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.move",
+          "ir.actions.report",
+          "res.company",
+          "res.partner"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/partner.py",
+          "account/models/account_move.py",
+          "account/models/account_move_send.py",
+          "base/models/res_partner.py",
+          "base/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/partner.invoice_delivery_preferences.update.request.schema.json",
+        "response": "schemas/v1/partner.invoice_delivery_preferences.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_user"
+        ],
+        "acl": [
+          "account.move:read",
+          "ir.actions.report:read",
+          "res.partner:read",
+          "res.partner:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_partner_preference_patch_or_credit_inverse",
+        "verify": "same_transaction_native_preference_payload_recheck",
+        "idempotency": "native_current_payload_recheck",
+        "reverse": "restore_previous_preferences_with_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_partner_preferences_batch.py"
+          ],
+          "reason": "Shared fixed contracts, monetary normalization, native credit fallback/inverse and batch framework tests."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_partner_preferences_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all eight new capabilities, five immediate replays, native nonzero company-credit fallback restoration, invoice EDI clearing, payment-direction and company denial, company-dependent preference isolation, truthful shared global preferences, and fresh-cursor business-data, temporary-group and company-default rollback verification. No email/EDI delivery or bill posting was executed."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "degraded",
+        "reason_code": "shared_partner_global_preference",
+        "reason": "PDF-template and auto-post preferences are native non-company-dependent contact fields; changing them on a shared partner affects that partner across companies. Company-dependent fields remain scoped. No external delivery or bill posting is executed by this command."
+      },
+      "routing": {
+        "object": "partner",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "修改客户发票交付偏好"
+          ],
+          "en_US": [
+            "Update native partner invoice sending, EDI and PDF preferences"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "实际发送邮件或电子发票",
+            "修改其他公司的客户信用额度"
+          ],
+          "en_US": [
+            "Actual email/EDI delivery",
+            "Another company's partner credit-limit configuration"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "partner.payment_preferences.get": {
+      "summary": {
+        "zh_CN": "读取客户供应商付款偏好",
+        "en_US": "Get native partner payment preferences"
+      },
+      "domain": "accounting_configuration",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "res.partner",
+          "account.payment.method.line",
+          "account.journal"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/partner.py",
+          "account/models/account_move.py",
+          "account/models/account_move_send.py",
+          "base/models/res_partner.py",
+          "base/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/partner.payment_preferences.get.request.schema.json",
+        "response": "schemas/v1/partner.payment_preferences.get.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "res.partner:read",
+          "account.payment.method.line:read",
+          "account.journal:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_company_context_native_partner_preference_read",
+        "verify": "closed_response_schema_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_partner_preferences_batch.py"
+          ],
+          "reason": "Shared fixed contracts, monetary normalization, native credit fallback/inverse and batch framework tests."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_partner_preferences_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all eight new capabilities, five immediate replays, native nonzero company-credit fallback restoration, invoice EDI clearing, payment-direction and company denial, company-dependent preference isolation, truthful shared global preferences, and fresh-cursor business-data, temporary-group and company-default rollback verification. No email/EDI delivery or bill posting was executed."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires an explicit database/company/user runtime and native permissions; credit-limit configuration does not enable company credit checking or create a custom blocking policy."
+      },
+      "routing": {
+        "object": "partner",
+        "actions": [
+          "get"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "读取客户供应商付款偏好"
+          ],
+          "en_US": [
+            "Get native partner payment preferences"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "实际发送邮件或电子发票",
+            "修改其他公司的客户信用额度"
+          ],
+          "en_US": [
+            "Actual email/EDI delivery",
+            "Another company's partner credit-limit configuration"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "partner_payment_preferences_get"
+    },
+    "partner.payment_preferences.update": {
+      "summary": {
+        "zh_CN": "修改客户供应商付款偏好",
+        "en_US": "Update native partner payment preferences"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.journal",
+          "account.payment.method.line",
+          "res.company",
+          "res.partner"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/partner.py",
+          "account/models/account_move.py",
+          "account/models/account_move_send.py",
+          "base/models/res_partner.py",
+          "base/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/partner.payment_preferences.update.request.schema.json",
+        "response": "schemas/v1/partner.payment_preferences.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_user"
+        ],
+        "acl": [
+          "account.journal:read",
+          "account.payment.method.line:read",
+          "res.partner:read",
+          "res.partner:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_partner_preference_patch_or_credit_inverse",
+        "verify": "same_transaction_native_preference_payload_recheck",
+        "idempotency": "native_current_payload_recheck",
+        "reverse": "restore_previous_preferences_with_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_partner_preferences_batch.py"
+          ],
+          "reason": "Shared fixed contracts, monetary normalization, native credit fallback/inverse and batch framework tests."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_partner_preferences_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all eight new capabilities, five immediate replays, native nonzero company-credit fallback restoration, invoice EDI clearing, payment-direction and company denial, company-dependent preference isolation, truthful shared global preferences, and fresh-cursor business-data, temporary-group and company-default rollback verification. No email/EDI delivery or bill posting was executed."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires an explicit database/company/user runtime and native permissions; credit-limit configuration does not enable company credit checking or create a custom blocking policy."
+      },
+      "routing": {
+        "object": "partner",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "修改客户供应商付款偏好"
+          ],
+          "en_US": [
+            "Update native partner payment preferences"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "实际发送邮件或电子发票",
+            "修改其他公司的客户信用额度"
+          ],
+          "en_US": [
+            "Actual email/EDI delivery",
+            "Another company's partner credit-limit configuration"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
     }
   }
 }

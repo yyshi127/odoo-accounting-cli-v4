@@ -11,6 +11,8 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 
+from odoo_accounting_cli_v4 import partner_preferences_contracts as partner_preferences
+
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 1000
 _CURSOR_VERSION = 1
@@ -41,6 +43,9 @@ CORE_OBJECT_GET_CAPABILITY_IDS = frozenset(
         "reconciliation.model.get",
         "cash_rounding.get",
         "journal.group.get",
+        "partner.bill_validation_preferences.get",
+        "partner.invoice_delivery_preferences.get",
+        "partner.payment_preferences.get",
         "payment.method_definition.get",
         "incoterm.get",
         "partner.bank_account.get",
@@ -148,6 +153,9 @@ _ID_FIELDS = {
     "reconciliation.model.get": "reconciliation_model_id",
     "cash_rounding.get": "cash_rounding_id",
     "journal.group.get": "journal_group_id",
+    "partner.bill_validation_preferences.get": "partner_id",
+    "partner.invoice_delivery_preferences.get": "partner_id",
+    "partner.payment_preferences.get": "partner_id",
     "payment.method_definition.get": "payment_method_id",
     "incoterm.get": "incoterm_id",
     "partner.bank_account.get": "partner_bank_id",
@@ -2727,6 +2735,8 @@ def _valid_account_status_item(item: Any, company_id: int) -> bool:
 
 
 def _valid_item(capability_id: str, item: Any, company_id: int) -> bool:
+    if capability_id in partner_preferences.READ_CAPABILITY_IDS:
+        return partner_preferences.valid_read_item(capability_id, item, company_id)
     if capability_id == "account.account.get":
         return _valid_account_item(item, company_id)
     if capability_id in {"journal.get", "tax.get", "payment_term.get", "currency.get"}:

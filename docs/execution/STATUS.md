@@ -2,6 +2,53 @@
 
 ## Current accounting phase — 2026-10-01
 
+The registry has 442 IDs and 427 implemented handlers: 220 reads and 207
+writes, with 860 schema files. Availability descriptors are 354
+`unconfigured`, 73 `degraded`, and 15 `disabled`. Enabled-handler integration records are
+423 `implemented`, three `planned`, and one `failed`. These totals include
+historical non-accounting extensions; they are not a completion percentage
+or a guarantee of native permissions for a configured user.
+
+The latest batch adds eight native partner accounting preferences:
+payment, invoice-delivery and bill-validation preference get/update;
+credit-limit update and native company-default reset. No redundant credit
+read, arbitrary field writer, new approval framework or caller-sudo was added.
+PDF templates and autopost preferences are global fields on shared partners;
+their writes honestly remain `degraded`. Setting preferences does not send
+email/EDI, post bills, or enable company credit-limit checks.
+
+The shared real-ORM smoke passed both isolated aliases through the public
+CLI as uid 5 with `su=False` in 214.69 seconds, on the first native attempt.
+It covered all eight new commands, five immediate replays, a nonzero company
+credit fallback of 300, native EDI clearing, payment-direction/company denial,
+company-dependent isolation, truthful shared-global fields, and fresh-cursor
+business-data, temporary-group and company-default rollback verification.
+
+Local batch unit tests passed 51 cases; focused write-framework checks passed
+11; the complete read-framework selection passed 792. Server batch/closed-set
+checks passed 52. Relevant registry checks passed 19 cases locally and on the
+server, explicitly excluding the single known stale baseline test below.
+The initial deployment backed up 12 existing files and added 19; a final
+two-file metadata synchronization also verified baselines and backed them up.
+All 31 deployed files match final local hashes. Server execution documents
+were left untouched. Odoo/Nginx PID/restart counters stayed unchanged and
+PostgreSQL remained active. No business database, installed addon or service
+configuration was changed.
+
+The older bank-statement/payment-maintenance registry test still has a stale
+`planned` expectation although HEAD already records `implemented`; it is
+excluded, not silently fixed or described as passing. The full-tree privacy
+scan retains five historical document findings; changed code/schema/tests
+and staged added lines have no findings.
+
+Next: audit another small native accounting capability-gap batch. Older
+positive integration gaps remain `asset.validate` (failed), and
+`product.accounting_profile.get`, `report.customer_statement.send` and
+`report.followup.send` (planned). Do not repair addons or send external
+reports without separate authority. The capability-first goal remains active.
+
+## Previous checkpoint — bank and payment configuration, 2026-10-01
+
 The registry has 434 IDs and 419 implemented handlers: 217 reads and 202
 writes, with 844 schema files. Availability descriptors are 348
 `unconfigured`, 71 `degraded`, and 15 `disabled`. Integration records are
