@@ -16,6 +16,10 @@ from odoo_accounting_cli_v4.capabilities.core_object_reads import (
 
 EXPECTED_CAPABILITY_IDS = frozenset(
     {
+        "payment.bank_account_candidates.list",
+        "payment.duplicate_candidates.list",
+        "payment.processing_settings.get",
+
         "invoice.presentation_settings.get",
         "invoice.layout_line.list",
         "accounting_move.processing_settings.get",
@@ -159,6 +163,10 @@ GET_ID_FIELDS = {
 }
 
 PRIMARY_MODELS = {
+    "payment.bank_account_candidates.list": "res.partner.bank",
+    "payment.duplicate_candidates.list": "account.payment",
+    "payment.processing_settings.get": "account.payment",
+
     "invoice.presentation_settings.get": "account.move",
     "invoice.layout_line.list": "account.move.line",
     "accounting_move.processing_settings.get": "account.move",
@@ -1442,6 +1450,10 @@ def _dispatch(
 
 
 def _parameters(capability_id: str) -> dict[str, Any]:
+    if capability_id == "payment.processing_settings.get":
+        return {"payment_id": 31}
+    if capability_id in {'payment.bank_account_candidates.list', 'payment.duplicate_candidates.list'}:
+        return {"payment_id": 71, "limit": 100, "after_id": None}
     if capability_id == "invoice.presentation_settings.get":
         return {"move_id": 31}
     if capability_id == "invoice.layout_line.list":

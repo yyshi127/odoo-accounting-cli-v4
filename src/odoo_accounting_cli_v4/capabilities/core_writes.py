@@ -22,9 +22,10 @@ from odoo_accounting_cli_v4 import partner_preferences_contracts as partner_pref
 from odoo_accounting_cli_v4 import (
     payment_configuration_contracts as payment_configuration,
 )
+from odoo_accounting_cli_v4 import payment_processing_contracts as payment_processing
 from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
 
-CORE_WRITE_CAPABILITY_IDS = invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
+CORE_WRITE_CAPABILITY_IDS = payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -4279,7 +4280,12 @@ def validate_core_write_request(
             code="capability_unavailable",
         )
     request_id, context, parameters = _validate_envelope(request)
-    if capability_id in invoice_presentation.CAPABILITY_IDS:
+    if capability_id in payment_processing.CAPABILITY_IDS:
+        try:
+            normalized = payment_processing.normalize_parameters(capability_id, parameters)
+        except ValueError as exc:
+            raise _invalid(str(exc)) from exc
+    elif capability_id in invoice_presentation.CAPABILITY_IDS:
         try:
             normalized = invoice_presentation.normalize_parameters(capability_id, parameters)
         except ValueError as exc:
@@ -4501,6 +4507,8 @@ def validate_core_write_request(
 def _expected_idempotency_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in payment_processing.CAPABILITY_IDS:
+        return payment_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in invoice_presentation.CAPABILITY_IDS:
         return invoice_presentation.idempotency_key(capability_id, parameters, company_id)
     if capability_id in move_processing.CAPABILITY_IDS:
@@ -5200,6 +5208,15 @@ def _validate_result(
 ) -> dict[str, Any]:
     if not _valid_result_shape(result) or result["company_id"] != company_id:
         raise _failed("Odoo returned a malformed or out-of-scope core-write result.")
+
+    if capability_id in payment_processing.CAPABILITY_IDS:
+        states = {"draft"} if capability_id == "payment.destination_account.assign" else {"in_process"} if capability_id == "payment.sent_status.set" else {"paid"} if capability_id == "payment.validate" else {"rejected"} if capability_id == "payment.reject" else payment_processing.STATES
+        if (result["model"] != "account.payment" or result["id"] != parameters["payment_id"]
+            or result["state"] not in states or result["move_type"] is not None or result["source_id"] is not None
+            or result["partial_reconcile_ids"] or result["full_reconcile_id"] is not None
+            or (capability_id == "payment.validate" and result["line_ids"])):
+            raise _failed("Odoo returned a mismatched native payment-processing result.")
+        return deepcopy(result)
 
     if capability_id in invoice_presentation.CAPABILITY_IDS:
         layout = capability_id.startswith("invoice.layout_line.")

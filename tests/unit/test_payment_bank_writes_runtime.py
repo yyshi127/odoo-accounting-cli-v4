@@ -201,7 +201,7 @@ def test_payment_update_replays_target_state_before_enforcing_draft(
     assert result["state"] == "paid"
 
 
-def test_payment_reset_calls_the_native_action_and_rejects_rejected(
+def test_payment_reset_calls_the_native_action_and_accepts_rejected(
     monkeypatch,
 ) -> None:
     move = SimpleNamespace(state="posted", line_ids=Records())
@@ -215,6 +215,15 @@ def test_payment_reset_calls_the_native_action_and_rejects_rejected(
     assert replay is False
     assert result["state"] == "draft"
     payment.state = "rejected"
+    result, replay = runtime._reset_payment_to_draft(
+        object(), {"payment_id": 31}, 7, Failure
+    )
+    assert result["state"] == "draft" and replay is False
+    result, replay = runtime._reset_payment_to_draft(
+        object(), {"payment_id": 31}, 7, Failure
+    )
+    assert result["state"] == "draft" and replay is True
+    payment.state = "unsupported"
     with pytest.raises(Failure, match="cannot be reset") as raised:
         runtime._reset_payment_to_draft(object(), {"payment_id": 31}, 7, Failure)
     assert raised.value.code == "state_conflict"
@@ -234,6 +243,12 @@ def test_payment_reset_calls_the_native_action_and_rejects_rejected(
             "_reset_payment_to_draft",
             "action_draft",
             ["paid", "canceled", "draft"],
+            "draft",
+        ),
+        (
+            "_reset_payment_to_draft",
+            "action_draft",
+            ["paid", "rejected", "draft"],
             "draft",
         ),
     ],
@@ -272,11 +287,11 @@ def test_batch_payment_actions_run_per_singleton_and_replay(
 
 
 @pytest.mark.parametrize(
-    ("runtime_method", "native_action", "valid_state"),
+    ("runtime_method", "native_action", "valid_state", "invalid_state"),
     [
-        ("_post_payment", "action_post", "draft"),
-        ("_cancel_payment", "action_cancel", "in_process"),
-        ("_reset_payment_to_draft", "action_draft", "canceled"),
+        ("_post_payment", "action_post", "draft", "rejected"),
+        ("_cancel_payment", "action_cancel", "in_process", "rejected"),
+        ("_reset_payment_to_draft", "action_draft", "canceled", "unsupported"),
     ],
 )
 def test_batch_payment_actions_preflight_every_state(
@@ -284,11 +299,12 @@ def test_batch_payment_actions_preflight_every_state(
     runtime_method: str,
     native_action: str,
     valid_state: str,
+    invalid_state: str,
 ) -> None:
     calls: list[int] = []
     payments = [
         _payment(id=31, state=valid_state),
-        _payment(id=32, state="rejected"),
+        _payment(id=32, state=invalid_state),
     ]
     for payment in payments:
         setattr(

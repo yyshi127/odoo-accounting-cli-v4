@@ -29317,6 +29317,1023 @@
         ]
       },
       "handler_key": "core_write"
+    },
+    "payment.bank_account.assign": {
+      "summary": {
+        "zh_CN": "指定付款银行账户",
+        "en_US": "Assign a native eligible payment bank account"
+      },
+      "domain": "payments",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.move",
+          "account.move.line",
+          "account.payment",
+          "res.company",
+          "res.partner.bank"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment.py",
+          "account/views/account_payment_view.xml",
+          "account/security/ir.model.access.csv",
+          "base/models/res_bank.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment.bank_account.assign.request.schema.json",
+        "response": "schemas/v1/payment.bank_account.assign.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.move.line:create",
+          "account.move.line:read",
+          "account.move.line:unlink",
+          "account.move.line:write",
+          "account.move:read",
+          "account.move:write",
+          "account.payment:read",
+          "account.payment:write",
+          "res.company:read",
+          "res.partner.bank:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_payment_fields_or_state_action",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "native_desired_payload_or_state_recheck",
+        "reverse": "native_previous_assignment_or_existing_payment_reset_subject_to_acl_and_state"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_processing_batch.py"
+          ],
+          "reason": "Closed schemas, fixed CLI/ORM dispatch, native eligibility and state boundaries, deterministic keys and read/write scope."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, three existing setup/recovery IDs and eleven immediate replays; native recipient/company bank eligibility, scoped keyset duplicate warnings, unchanged bank trust, actual destination account in the posted balanced entry, native sent/unset and rejected/reset lifecycle, truthful posted bank change without rewriting its entry, and native no-entry validation. Invalid state, journal-backed validation, foreign company and ineligible bank denied; fresh-cursor business-data and temporary-group rollback verified. No bank/provider submission, external receipt delivery, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company and native ACLs. Bank assignment uses native eligible recipient/company accounts without changing trust. Accounting destination changes require draft payment and entry. Sent-status actions require in-process manual method. Manual validation is only for no-entry payments; journal-backed settlement uses reconciliation. Rejection requires in-process sent payment. Native duplicate warnings are candidates, not proof of duplication; they may include different currencies. No external transfer, bank submission, receipt send or caller-sudo."
+      },
+      "routing": {
+        "object": "payment",
+        "actions": [
+          "assign"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "指定付款银行账户"
+          ],
+          "en_US": [
+            "Assign a native eligible payment bank account"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "向银行实际转账",
+            "绕过核销强制确认有分录付款",
+            "修改付款创建幂等备注",
+            "操作其他公司付款"
+          ],
+          "en_US": [
+            "Sending bank transfers",
+            "Bypassing reconciliation for journal-backed payments",
+            "Changing payment creation markers",
+            "Another company payment"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "payment.bank_account_candidates.list": {
+      "summary": {
+        "zh_CN": "查询付款可选银行账户",
+        "en_US": "List native eligible payment bank accounts"
+      },
+      "domain": "payments",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "account.payment",
+          "res.partner.bank"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment.py",
+          "account/views/account_payment_view.xml",
+          "account/security/ir.model.access.csv",
+          "base/models/res_bank.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment.bank_account_candidates.list.request.schema.json",
+        "response": "schemas/v1/payment.bank_account_candidates.list.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.payment:read",
+          "res.partner.bank:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_native_payment_read",
+        "verify": "closed_response_schema_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_processing_batch.py"
+          ],
+          "reason": "Closed schemas, fixed CLI/ORM dispatch, native eligibility and state boundaries, deterministic keys and read/write scope."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, three existing setup/recovery IDs and eleven immediate replays; native recipient/company bank eligibility, scoped keyset duplicate warnings, unchanged bank trust, actual destination account in the posted balanced entry, native sent/unset and rejected/reset lifecycle, truthful posted bank change without rewriting its entry, and native no-entry validation. Invalid state, journal-backed validation, foreign company and ineligible bank denied; fresh-cursor business-data and temporary-group rollback verified. No bank/provider submission, external receipt delivery, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples are deferred until the capability library reaches target coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing is outside this capability batch."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company and native ACLs. Bank assignment uses native eligible recipient/company accounts without changing trust. Accounting destination changes require draft payment and entry. Sent-status actions require in-process manual method. Manual validation is only for no-entry payments; journal-backed settlement uses reconciliation. Rejection requires in-process sent payment. Native duplicate warnings are candidates, not proof of duplication; they may include different currencies. No external transfer, bank submission, receipt send or caller-sudo."
+      },
+      "routing": {
+        "object": "payment",
+        "actions": [
+          "list"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "查询付款可选银行账户"
+          ],
+          "en_US": [
+            "List native eligible payment bank accounts"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "向银行实际转账",
+            "绕过核销强制确认有分录付款",
+            "修改付款创建幂等备注",
+            "操作其他公司付款"
+          ],
+          "en_US": [
+            "Sending bank transfers",
+            "Bypassing reconciliation for journal-backed payments",
+            "Changing payment creation markers",
+            "Another company payment"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "payment_bank_account_candidates_list"
+    },
+    "payment.destination_account.assign": {
+      "summary": {
+        "zh_CN": "指定草稿付款对方科目",
+        "en_US": "Assign a draft payment receivable or payable destination"
+      },
+      "domain": "payments",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "account.move",
+          "account.move.line",
+          "account.payment",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment.py",
+          "account/views/account_payment_view.xml",
+          "account/security/ir.model.access.csv",
+          "base/models/res_bank.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment.destination_account.assign.request.schema.json",
+        "response": "schemas/v1/payment.destination_account.assign.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.move.line:create",
+          "account.move.line:read",
+          "account.move.line:unlink",
+          "account.move.line:write",
+          "account.move:read",
+          "account.move:write",
+          "account.payment:read",
+          "account.payment:write",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_payment_fields_or_state_action",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "native_desired_payload_or_state_recheck",
+        "reverse": "native_previous_assignment_or_existing_payment_reset_subject_to_acl_and_state"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_processing_batch.py"
+          ],
+          "reason": "Closed schemas, fixed CLI/ORM dispatch, native eligibility and state boundaries, deterministic keys and read/write scope."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, three existing setup/recovery IDs and eleven immediate replays; native recipient/company bank eligibility, scoped keyset duplicate warnings, unchanged bank trust, actual destination account in the posted balanced entry, native sent/unset and rejected/reset lifecycle, truthful posted bank change without rewriting its entry, and native no-entry validation. Invalid state, journal-backed validation, foreign company and ineligible bank denied; fresh-cursor business-data and temporary-group rollback verified. No bank/provider submission, external receipt delivery, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company and native ACLs. Bank assignment uses native eligible recipient/company accounts without changing trust. Accounting destination changes require draft payment and entry. Sent-status actions require in-process manual method. Manual validation is only for no-entry payments; journal-backed settlement uses reconciliation. Rejection requires in-process sent payment. Native duplicate warnings are candidates, not proof of duplication; they may include different currencies. No external transfer, bank submission, receipt send or caller-sudo."
+      },
+      "routing": {
+        "object": "payment",
+        "actions": [
+          "assign"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "指定草稿付款对方科目"
+          ],
+          "en_US": [
+            "Assign a draft payment receivable or payable destination"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "向银行实际转账",
+            "绕过核销强制确认有分录付款",
+            "修改付款创建幂等备注",
+            "操作其他公司付款"
+          ],
+          "en_US": [
+            "Sending bank transfers",
+            "Bypassing reconciliation for journal-backed payments",
+            "Changing payment creation markers",
+            "Another company payment"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "payment.duplicate_candidates.list": {
+      "summary": {
+        "zh_CN": "查询付款重复候选",
+        "en_US": "List native duplicate-payment warning candidates"
+      },
+      "domain": "payments",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "account.payment"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment.py",
+          "account/views/account_payment_view.xml",
+          "account/security/ir.model.access.csv",
+          "base/models/res_bank.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment.duplicate_candidates.list.request.schema.json",
+        "response": "schemas/v1/payment.duplicate_candidates.list.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.payment:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_native_payment_read",
+        "verify": "closed_response_schema_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_processing_batch.py"
+          ],
+          "reason": "Closed schemas, fixed CLI/ORM dispatch, native eligibility and state boundaries, deterministic keys and read/write scope."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, three existing setup/recovery IDs and eleven immediate replays; native recipient/company bank eligibility, scoped keyset duplicate warnings, unchanged bank trust, actual destination account in the posted balanced entry, native sent/unset and rejected/reset lifecycle, truthful posted bank change without rewriting its entry, and native no-entry validation. Invalid state, journal-backed validation, foreign company and ineligible bank denied; fresh-cursor business-data and temporary-group rollback verified. No bank/provider submission, external receipt delivery, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples are deferred until the capability library reaches target coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing is outside this capability batch."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company and native ACLs. Bank assignment uses native eligible recipient/company accounts without changing trust. Accounting destination changes require draft payment and entry. Sent-status actions require in-process manual method. Manual validation is only for no-entry payments; journal-backed settlement uses reconciliation. Rejection requires in-process sent payment. Native duplicate warnings are candidates, not proof of duplication; they may include different currencies. No external transfer, bank submission, receipt send or caller-sudo."
+      },
+      "routing": {
+        "object": "payment",
+        "actions": [
+          "list"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "查询付款重复候选"
+          ],
+          "en_US": [
+            "List native duplicate-payment warning candidates"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "向银行实际转账",
+            "绕过核销强制确认有分录付款",
+            "修改付款创建幂等备注",
+            "操作其他公司付款"
+          ],
+          "en_US": [
+            "Sending bank transfers",
+            "Bypassing reconciliation for journal-backed payments",
+            "Changing payment creation markers",
+            "Another company payment"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "payment_duplicate_candidates_list"
+    },
+    "payment.processing_settings.get": {
+      "summary": {
+        "zh_CN": "读取付款处理设置",
+        "en_US": "Get native payment processing settings"
+      },
+      "domain": "payments",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "account.payment",
+          "res.partner.bank",
+          "account.account",
+          "account.move"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment.py",
+          "account/views/account_payment_view.xml",
+          "account/security/ir.model.access.csv",
+          "base/models/res_bank.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment.processing_settings.get.request.schema.json",
+        "response": "schemas/v1/payment.processing_settings.get.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.payment:read",
+          "res.partner.bank:read",
+          "account.account:read",
+          "account.move:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_native_payment_read",
+        "verify": "closed_response_schema_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_processing_batch.py"
+          ],
+          "reason": "Closed schemas, fixed CLI/ORM dispatch, native eligibility and state boundaries, deterministic keys and read/write scope."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, three existing setup/recovery IDs and eleven immediate replays; native recipient/company bank eligibility, scoped keyset duplicate warnings, unchanged bank trust, actual destination account in the posted balanced entry, native sent/unset and rejected/reset lifecycle, truthful posted bank change without rewriting its entry, and native no-entry validation. Invalid state, journal-backed validation, foreign company and ineligible bank denied; fresh-cursor business-data and temporary-group rollback verified. No bank/provider submission, external receipt delivery, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company and native ACLs. Bank assignment uses native eligible recipient/company accounts without changing trust. Accounting destination changes require draft payment and entry. Sent-status actions require in-process manual method. Manual validation is only for no-entry payments; journal-backed settlement uses reconciliation. Rejection requires in-process sent payment. Native duplicate warnings are candidates, not proof of duplication; they may include different currencies. No external transfer, bank submission, receipt send or caller-sudo."
+      },
+      "routing": {
+        "object": "payment",
+        "actions": [
+          "get"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "读取付款处理设置"
+          ],
+          "en_US": [
+            "Get native payment processing settings"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "向银行实际转账",
+            "绕过核销强制确认有分录付款",
+            "修改付款创建幂等备注",
+            "操作其他公司付款"
+          ],
+          "en_US": [
+            "Sending bank transfers",
+            "Bypassing reconciliation for journal-backed payments",
+            "Changing payment creation markers",
+            "Another company payment"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "payment_processing_settings_get"
+    },
+    "payment.reject": {
+      "summary": {
+        "zh_CN": "拒绝已发送付款",
+        "en_US": "Reject a native in-process payment marked as sent"
+      },
+      "domain": "payments",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.move",
+          "account.move.line",
+          "account.payment",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment.py",
+          "account/views/account_payment_view.xml",
+          "account/security/ir.model.access.csv",
+          "base/models/res_bank.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment.reject.request.schema.json",
+        "response": "schemas/v1/payment.reject.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.move.line:read",
+          "account.move:read",
+          "account.payment:read",
+          "account.payment:write",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_payment_fields_or_state_action",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "native_desired_payload_or_state_recheck",
+        "reverse": "native_previous_assignment_or_existing_payment_reset_subject_to_acl_and_state"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_processing_batch.py"
+          ],
+          "reason": "Closed schemas, fixed CLI/ORM dispatch, native eligibility and state boundaries, deterministic keys and read/write scope."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, three existing setup/recovery IDs and eleven immediate replays; native recipient/company bank eligibility, scoped keyset duplicate warnings, unchanged bank trust, actual destination account in the posted balanced entry, native sent/unset and rejected/reset lifecycle, truthful posted bank change without rewriting its entry, and native no-entry validation. Invalid state, journal-backed validation, foreign company and ineligible bank denied; fresh-cursor business-data and temporary-group rollback verified. No bank/provider submission, external receipt delivery, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company and native ACLs. Bank assignment uses native eligible recipient/company accounts without changing trust. Accounting destination changes require draft payment and entry. Sent-status actions require in-process manual method. Manual validation is only for no-entry payments; journal-backed settlement uses reconciliation. Rejection requires in-process sent payment. Native duplicate warnings are candidates, not proof of duplication; they may include different currencies. No external transfer, bank submission, receipt send or caller-sudo."
+      },
+      "routing": {
+        "object": "payment",
+        "actions": [
+          "reject"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "拒绝已发送付款"
+          ],
+          "en_US": [
+            "Reject a native in-process payment marked as sent"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "向银行实际转账",
+            "绕过核销强制确认有分录付款",
+            "修改付款创建幂等备注",
+            "操作其他公司付款"
+          ],
+          "en_US": [
+            "Sending bank transfers",
+            "Bypassing reconciliation for journal-backed payments",
+            "Changing payment creation markers",
+            "Another company payment"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "payment.sent_status.set": {
+      "summary": {
+        "zh_CN": "设置付款已发送标记",
+        "en_US": "Set native manual payment sent status"
+      },
+      "domain": "payments",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.move",
+          "account.move.line",
+          "account.payment",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment.py",
+          "account/views/account_payment_view.xml",
+          "account/security/ir.model.access.csv",
+          "base/models/res_bank.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment.sent_status.set.request.schema.json",
+        "response": "schemas/v1/payment.sent_status.set.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.move.line:read",
+          "account.move:read",
+          "account.payment:read",
+          "account.payment:write",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_payment_fields_or_state_action",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "native_desired_payload_or_state_recheck",
+        "reverse": "native_previous_assignment_or_existing_payment_reset_subject_to_acl_and_state"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_processing_batch.py"
+          ],
+          "reason": "Closed schemas, fixed CLI/ORM dispatch, native eligibility and state boundaries, deterministic keys and read/write scope."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, three existing setup/recovery IDs and eleven immediate replays; native recipient/company bank eligibility, scoped keyset duplicate warnings, unchanged bank trust, actual destination account in the posted balanced entry, native sent/unset and rejected/reset lifecycle, truthful posted bank change without rewriting its entry, and native no-entry validation. Invalid state, journal-backed validation, foreign company and ineligible bank denied; fresh-cursor business-data and temporary-group rollback verified. No bank/provider submission, external receipt delivery, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company and native ACLs. Bank assignment uses native eligible recipient/company accounts without changing trust. Accounting destination changes require draft payment and entry. Sent-status actions require in-process manual method. Manual validation is only for no-entry payments; journal-backed settlement uses reconciliation. Rejection requires in-process sent payment. Native duplicate warnings are candidates, not proof of duplication; they may include different currencies. No external transfer, bank submission, receipt send or caller-sudo."
+      },
+      "routing": {
+        "object": "payment",
+        "actions": [
+          "set"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置付款已发送标记"
+          ],
+          "en_US": [
+            "Set native manual payment sent status"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "向银行实际转账",
+            "绕过核销强制确认有分录付款",
+            "修改付款创建幂等备注",
+            "操作其他公司付款"
+          ],
+          "en_US": [
+            "Sending bank transfers",
+            "Bypassing reconciliation for journal-backed payments",
+            "Changing payment creation markers",
+            "Another company payment"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "payment.validate": {
+      "summary": {
+        "zh_CN": "确认无分录付款完成",
+        "en_US": "Validate a native in-process payment without a journal entry"
+      },
+      "domain": "payments",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.move",
+          "account.move.line",
+          "account.payment",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment.py",
+          "account/views/account_payment_view.xml",
+          "account/security/ir.model.access.csv",
+          "base/models/res_bank.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment.validate.request.schema.json",
+        "response": "schemas/v1/payment.validate.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.move.line:create",
+          "account.move.line:read",
+          "account.move.line:write",
+          "account.move:create",
+          "account.move:read",
+          "account.move:write",
+          "account.payment:read",
+          "account.payment:write",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_payment_fields_or_state_action",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "native_desired_payload_or_state_recheck",
+        "reverse": "native_previous_assignment_or_existing_payment_reset_subject_to_acl_and_state"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_processing_batch.py"
+          ],
+          "reason": "Closed schemas, fixed CLI/ORM dispatch, native eligibility and state boundaries, deterministic keys and read/write scope."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, three existing setup/recovery IDs and eleven immediate replays; native recipient/company bank eligibility, scoped keyset duplicate warnings, unchanged bank trust, actual destination account in the posted balanced entry, native sent/unset and rejected/reset lifecycle, truthful posted bank change without rewriting its entry, and native no-entry validation. Invalid state, journal-backed validation, foreign company and ineligible bank denied; fresh-cursor business-data and temporary-group rollback verified. No bank/provider submission, external receipt delivery, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company and native ACLs. Bank assignment uses native eligible recipient/company accounts without changing trust. Accounting destination changes require draft payment and entry. Sent-status actions require in-process manual method. Manual validation is only for no-entry payments; journal-backed settlement uses reconciliation. Rejection requires in-process sent payment. Native duplicate warnings are candidates, not proof of duplication; they may include different currencies. No external transfer, bank submission, receipt send or caller-sudo."
+      },
+      "routing": {
+        "object": "payment",
+        "actions": [
+          "validate"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "确认无分录付款完成"
+          ],
+          "en_US": [
+            "Validate a native in-process payment without a journal entry"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "向银行实际转账",
+            "绕过核销强制确认有分录付款",
+            "修改付款创建幂等备注",
+            "操作其他公司付款"
+          ],
+          "en_US": [
+            "Sending bank transfers",
+            "Bypassing reconciliation for journal-backed payments",
+            "Changing payment creation markers",
+            "Another company payment"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
     }
   }
 }

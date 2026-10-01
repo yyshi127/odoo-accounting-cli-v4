@@ -4,9 +4,9 @@ Updated: 2026-10-01 (Asia/Shanghai)
 
 ## Current authoritative count — 2026-10-01
 
-459 registered IDs; 444 implemented handlers (223 reads, 221 writes);
-894 schemas; 371 unconfigured, 73 degraded, 15 disabled. Enabled-handler integration records:
-440 implemented, three planned, one failed. The latest invoice-presentation/fiscal
+467 registered IDs; 452 implemented handlers (226 reads, 226 writes);
+910 schemas; 379 unconfigured, 73 degraded, 15 disabled. Enabled-handler integration records:
+448 implemented, three planned, one failed. The latest native-payment-processing
 checkpoint below is authoritative; older snapshots are historical.
 
 ## Objective and working rule
@@ -5008,3 +5008,131 @@ commands; avoid aliases, generic field writers and large controls. Asset validat
 remains failed; product accounting-profile readback and two real external report
 sends remain planned. Addon repair and external sends require separate authority.
 The capability-first goal remains active; complete accounting coverage is unproven.
+
+## Native payment processing — 2026-10-01
+
+Baseline: `18703b8`. Eight genuine new IDs: 467 registered, 452 handlers
+(226 reads, 226 writes), 910 schemas; 379 unconfigured, 73 degraded and 15
+disabled. Enabled integrations: 448 implemented, three planned, one failed.
+These totals include historical non-accounting extensions, not a completion
+percentage or ordinary-user ACL guarantees.
+
+### Native command boundaries
+
+- `payment.processing_settings.get` reads native state/direction, bank,
+  destination/outstanding accounts, sent/matched/reconciled flags, method,
+  entry and native bank-visibility/requirement fields. Empty values are null.
+- `payment.bank_account_candidates.list` pages exactly the native eligible
+  bank IDs through scoped ORM reads: recipient banks for outbound payments;
+  the journal's company bank for inbound. Shared bank company IDs are null,
+  not fabricated as the current company. Bank company derives from its holder.
+- `payment.duplicate_candidates.list` pages native duplicate-warning IDs and
+  truthful date/state/amount/currency data. Native amount matching ignores
+  currency, so these are warning candidates, not proof of duplicate payments.
+  Both lists bind ID-keyset cursors and returned rows to one company/payment.
+- `payment.bank_account.assign` assigns/clears native eligible banks subject
+  to the native required-bank field, without validating trust or sending money.
+  A posted payment's bank field may change while its posted entry preserves
+  the old bank, as native Odoo does; no posted line or amount is rewritten.
+- `payment.destination_account.assign` requires draft payment and draft entry,
+  with an active same-company reconcilable receivable for customers or payable
+  for suppliers. Native payment-to-entry synchronization and posting are used.
+- `payment.sent_status.set` calls native mark/unmark methods as an idempotent
+  desired boolean, only for an in-process manual-method payment. The flag is
+  bookkeeping, not confirmation that a bank accepted or executed a transfer.
+- `payment.validate` is native manual no-entry validation from in_process to
+  paid. Journal-backed payments require reconciliation; this command cannot
+  force their financial settlement or bypass their residuals.
+- `payment.reject` calls the native action for an in-process sent payment;
+  requesting already rejected is a replay. It does not reverse the posted
+  entry or execute a bank cancellation. Existing payment.reset_to_draft now
+  supports rejected state in singular and batch input without another ID.
+- All new writes reuse native ACL/company/user boundaries, exact confirmation,
+  deterministic keys and payload/state rechecks. Payment creation's memo
+  marker remains untouched. No caller-sudo or arbitrary field/method dispatcher.
+
+### Shared real workflow and evidence
+
+Both dedicated aliases passed in 529.41 seconds on attempt 3, through
+the public CLI/in-process real ORM as uid 5 with su=False. Each exercises
+all eight new IDs, payment.create/post/reset_to_draft and eleven immediate
+replays. The workflow checks native bank eligibility for company-specific,
+shared and inbound journal-bank scenarios; two duplicate warning rows with
+one-row paging; bank assign/clear, an actual custom payable in a balanced
+posted entry, sent/unset/re-sent, unchanged trust, truthful posted-bank behavior,
+rejection and existing reset recovery, and genuine no-entry manual validation.
+Wrong-recipient/foreign bank, foreign payment, invalid state, posted destination
+changes and forced journal-backed validation are rejected. No provider token,
+bank request, external receipt delivery or service operation is used.
+
+Fresh-cursor checks verify every synthetic business record and temporary
+account-manager/partner-manager group change rolled back. Admin fixtures
+exist only in isolated databases; business CLI calls remain non-superuser.
+Ordinary runtime permissions have not been broadened.
+
+The first attempt failed in 48.44 seconds at a fixture's expected bank set.
+Source and a rollback-only diagnosis confirmed native readonly related
+bank company_id comes from its holder: the simulated foreign bank on the
+same shared holder was also shared, so four native/CLI candidates were correct.
+Only fixture construction changed: actual company-specific, foreign and shared
+holders now represent the intended cases. Eligibility/paging logic did not
+change and shared-bank validation remains positive. The failed run rolled back;
+neither it nor the private diagnostic is counted as full acceptance.
+
+Attempt 2 progressed through bank eligibility, balanced destination posting,
+sent/unset, rejection and reset recovery, then failed at no-entry payment creation
+in 224.14 seconds. The existing adapter required an outstanding account in all
+modes although native accountant mode permits payments without journal entries.
+One failed-before-fix reproduction and three preserving-boundary cases cover the
+two-line fix: an absent account is allowed only for the native in_payment hook;
+wrong-company/non-reconcilable nonempty accounts and the legacy non-accountant
+missing-account path remain denied. No control was disabled. The final native
+test retains public CLI payment.create/post/validate and no-entry assertions,
+not an admin bypass or a substitute journal-backed payment. Failed runs rolled
+back and are not counted as acceptance.
+
+Local evidence: 47 batch cases plus 825 complete read-framework cases (872);
+221 fixed-write contract cases; 177 complete write-runtime cases; 111 preceding-batch
+regressions; 71 payment-configuration/lifecycle/bank regressions; 19 registry cases
+with one known baseline deselection. Two older reset expectations were updated
+for singular and batch native rejected recovery, retaining illegal-state preflight
+and canceled recovery. The first old-regression check had two expectation failures;
+the corrected 71-case selection passed. Two changed registry selections passed
+after final metadata. Server: 47 batch, 71 older regressions and 19 final registry
+cases, with the same deselection. Ruff and diff checks passed. An
+optional full write-schema sweep was stopped because each case repeatedly loads
+the full registry; its partial output is not acceptance evidence. Keep the focused
+closed-write selection, all new batch contracts and complete runtime regressions.
+The excluded historical test is
+test_bank_statement_payment_maintenance_has_closed_registry_and_schemas;
+unchanged HEAD already records those six older integrations implemented.
+
+### Deployment and recovery evidence
+
+Initial allowlist: 31 files, 12 pre-existing backed up and 19 new.
+Initial archive SHA-256: `771084d5a103e1801c5c3d061a04136a6e1a662c7749c9912e581136b1288016`.
+Exact one-file fixture repair SHA-256: `879e37a8efc2e1c27184bcc26bb604b6222ed88db97634ccd7b2ed31020021a1`.
+Exact two-file no-entry repair SHA-256: `bf3d3b67eb3ee6c2ee2f88777f1e72a7263ee8b881c82b29e60f23d32fd99384`.
+Final exact three-file metadata/regression SHA-256: `22748aac65881ce3f485912e2a1f2e648cc505ca650ef96cd4a22d3deae4d4c4`.
+All synchronization verifies deployed baselines before backup and extraction;
+all 32 final hashes match. Private archives, manifests, backups, diagnostics and
+all three native attempt logs are in `.tooling/payment-processing-20261001`; never
+commit them. Server STATUS/HANDOFF files were not overwritten.
+Registry-file SHA-256: `319fc47614a82d9c45200fa77f37150156695d4de0fdeefea7498030d140440b`.
+Canonical registry SHA-256: `2d7b8a23b044ef957e96039494c0f0cb337a0eb3ce3e08c86eb58bb9ff54454c`.
+Passing live-log SHA-256: `4bef438b08af3670ec1c8491d8659a4d42aae8f62eee64a798285baac5d64932`.
+
+Changed public code/schema/tests and staged added lines have zero findings;
+the full tree retains five historical path/IP document findings and is not
+described as passing. Odoo stayed PID 25607/NRestarts 6; Nginx stayed
+PID 3309593/NRestarts 0; PostgreSQL remained active. No business database,
+installed source/addon, Pi/V2/V3 chain, service or configuration changed.
+
+### Continue
+
+Audit actual installed native accounting gaps for the next 8-12 related commands.
+Do not add aliases, arbitrary field writers or large control frameworks. Asset
+validation remains failed; product accounting-profile readback and two real
+external report sends remain planned. Addon repairs and external sends require
+separate authority. The capability-first goal remains active; full coverage
+has not been proven against a complete denominator.

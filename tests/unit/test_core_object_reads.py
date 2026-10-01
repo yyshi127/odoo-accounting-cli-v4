@@ -15,6 +15,7 @@ from odoo_accounting_cli_v4.capabilities.core_object_reads import (
 REQUEST_ID = "7bc39413-0d69-4092-9319-795d33f3167c"
 
 GET_ID_FIELDS = {
+    "payment.processing_settings.get": "payment_id",
     "invoice.presentation_settings.get": "move_id",
     "accounting_move.processing_settings.get": "move_id",
     "partner.payment_preferences.get": "partner_id",
@@ -92,6 +93,8 @@ PAGE_CAPABILITIES = (
     "reconciliation.model.line.list",
     "bank.list",
     "report.catalog.list",
+    "payment.bank_account_candidates.list",
+    "payment.duplicate_candidates.list",
     "invoice.layout_line.list",
     "invoice.duplicate_candidates.list",
     "recurring.journal_entry.search",
@@ -207,6 +210,8 @@ PAGE_DEFAULTS = {
         "availability_conditions": None,
         "active": None,
     },
+    "payment.bank_account_candidates.list": {"payment_id": 71},
+    "payment.duplicate_candidates.list": {"payment_id": 71},
     "invoice.layout_line.list": {"move_id": 31},
     "invoice.duplicate_candidates.list": {"invoice_id": 31},
     "recurring.journal_entry.search": {
@@ -261,6 +266,9 @@ def _coded(record_id: int, code: str, name: str) -> dict:
 
 
 def _item(capability_id: str, record_id: int = 31) -> dict:
+    if capability_id in {'payment.bank_account_candidates.list', 'payment.duplicate_candidates.list', 'payment.processing_settings.get'}:
+        from test_payment_processing_batch import read_item
+        return read_item(capability_id, record_id)
     if capability_id in {"invoice.presentation_settings.get", "invoice.layout_line.list"}:
         from test_invoice_presentation_batch import read_item
         return read_item(capability_id, record_id)
@@ -1014,6 +1022,8 @@ def _page_parameters(capability_id: str, *, after_id: int | None, limit: int) ->
 
 
 def _required_page_parameters(capability_id: str) -> dict:
+    if capability_id in {'payment.bank_account_candidates.list', 'payment.duplicate_candidates.list'}:
+        return {"payment_id": 71}
     if capability_id == "invoice.layout_line.list":
         return {"move_id": 31}
     if capability_id == "budget.line.list":

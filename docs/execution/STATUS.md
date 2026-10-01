@@ -2,6 +2,75 @@
 
 ## Current accounting phase — 2026-10-01
 
+467 registered IDs; 452 implemented handlers (226 reads, 226 writes);
+910 schema files. Availability: 379 unconfigured, 73 degraded, 15 disabled.
+Enabled-handler integration records: 448 implemented, three planned, one failed.
+Totals include historical non-accounting extensions, not complete accounting
+coverage, a completion percentage, or guarantees of ordinary-runtime permissions.
+
+The latest batch adds eight native payment-processing capabilities: settings,
+eligible-bank and duplicate-warning reads; bank assignment, draft receivable/
+payable destination assignment, desired sent status, no-entry validation and
+sent-payment rejection. They reuse existing contracts, routing and ORM adapters;
+no alias padding, creation-memo edits, external transfer or new control framework.
+Existing payment.reset_to_draft now accepts native rejected payments, in both
+singular and batch paths; a failing unit reproduction preceded the two-line fix.
+
+One shared public CLI/real-ORM workflow passed both isolated aliases as uid 5
+with su=False in 529.41 seconds. It covers all eight new IDs, three existing
+setup/recovery IDs and eleven immediate replays; actual recipient/company and
+shared bank eligibility, scoped ID-keyset duplicate warnings, unchanged bank
+trust, the custom payable account in a balanced posted entry, native sent/unset,
+rejection and recovery, posted bank assignment preserving its native entry, and
+no-entry manual validation. State, wrong bank, journal-backed validation and
+foreign-company targets are rejected. Fresh cursors verify business-data and
+temporary manager/partner-group rollback. No bank/provider or receipt submission.
+
+Attempt 1 stopped at a bank-candidate fixture assertion in 48.44 seconds, with
+rollback verified. Native bank company_id is a readonly related field of its
+holder; the attempted foreign-company bank on a shared holder was still shared
+and was correctly included by both native Odoo and the CLI. The one-file fixture
+repair constructs actual company-specific, foreign and shared holders. Production
+candidate logic was not changed. A rollback-only diagnosis is not acceptance.
+
+Attempt 2 passed the bank, posting, sent/unset, rejected and reset checks, then
+stopped after 224.14 seconds because existing payment.create required an
+outstanding account even for native accountant-mode no-entry payments. A failing
+unit reproduction preceded the two-line conditional native-hook fix. Absent
+accounts are accepted only when Odoo returns its native in_payment accountant
+mode; invalid nonempty accounts and legacy non-accountant denials remain intact.
+The final smoke still creates, posts and validates no-entry payments via CLI;
+it does not bypass creation or substitute a journal-backed fixture.
+
+Local checks: batch/read framework 872 (47 batch and 825 read cases), 221 focused
+write-contract cases, 177 complete write-runtime cases, 111 preceding-batch regressions,
+71 payment-configuration/lifecycle/bank regressions, and 19 registry cases with
+one explicit known deselection. Two old reset-state expectations were updated
+for native rejected recovery; illegal-state preflight remains tested. After final
+metadata, the two changed registry selections passed again. Server batch: 47,
+configuration/lifecycle/bank regressions: 71; final registry:
+19 with the same known deselection. Ruff and diff checks passed.
+
+Initial explicit deployment: 31 files, with 12 existing backed up and 19 new.
+One fixture-file repair, a two-file no-entry repair and final three-file metadata/
+regression synchronization verified baselines and made backups first; all 32 final
+hashes match local files. Server execution documents were left untouched.
+Odoo/Nginx PID/restart counters stayed
+unchanged and PostgreSQL stayed active. No business database, installed addon,
+Pi/V2/V3 chain, service or configuration was changed.
+
+Changed code/schema/tests and staged added lines have zero privacy findings.
+The full tree retains five historical document findings. The older bank-statement/
+payment-maintenance registry test still expects planned although unchanged HEAD
+records implemented; it is excluded, not silently fixed or reported as passing.
+
+Next: another small genuine native accounting gap batch. Older positive-live gaps
+remain asset.validate (failed), product accounting-profile readback and two external
+report sends (planned). Addon repairs and actual external sends need separate
+authority. The capability-first goal remains active; complete coverage is unproven.
+
+## Previous checkpoint — invoice presentation and fiscal refresh, 2026-10-01
+
 459 registered IDs; 444 implemented handlers (223 reads, 221 writes);
 894 schema files. Availability: 371 unconfigured, 73 degraded, 15 disabled.
 Enabled-handler integration records: 440 implemented, three planned, one failed.

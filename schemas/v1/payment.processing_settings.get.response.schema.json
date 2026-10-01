@@ -1,0 +1,232 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/payment.processing_settings.get.response.schema.json",
+  "title": "payment.processing_settings.get response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "success",
+    "capability",
+    "status",
+    "data",
+    "warnings",
+    "error",
+    "odoo",
+    "audit"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v1"
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "success": {
+      "type": "boolean"
+    },
+    "capability": {
+      "const": "payment.processing_settings.get"
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "data": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/item"
+        }
+      ]
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "error": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "response.schema.json#/$defs/error"
+        }
+      ]
+    },
+    "odoo": {
+      "$ref": "response.schema.json#/$defs/odoo"
+    },
+    "audit": {
+      "$ref": "response.schema.json#/$defs/audit"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "success": {
+            "const": true
+          }
+        },
+        "required": [
+          "success"
+        ]
+      },
+      "then": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "const": "verified"
+          },
+          "data": {
+            "$ref": "#/$defs/item"
+          },
+          "error": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "data": {
+            "type": "null"
+          },
+          "error": {
+            "$ref": "response.schema.json#/$defs/error"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "company_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "state": {
+          "enum": [
+            "canceled",
+            "draft",
+            "in_process",
+            "paid",
+            "rejected"
+          ]
+        },
+        "payment_type": {
+          "enum": [
+            "inbound",
+            "outbound"
+          ]
+        },
+        "partner_type": {
+          "enum": [
+            "customer",
+            "supplier"
+          ]
+        },
+        "partner_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "partner_bank_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "destination_account_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "outstanding_account_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "move_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "payment_method_code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "is_sent": {
+          "type": "boolean"
+        },
+        "is_reconciled": {
+          "type": "boolean"
+        },
+        "is_matched": {
+          "type": "boolean"
+        },
+        "show_partner_bank_account": {
+          "type": "boolean"
+        },
+        "require_partner_bank_account": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "company_id",
+        "destination_account_id",
+        "id",
+        "is_matched",
+        "is_reconciled",
+        "is_sent",
+        "move_id",
+        "name",
+        "outstanding_account_id",
+        "partner_bank_id",
+        "partner_id",
+        "partner_type",
+        "payment_method_code",
+        "payment_type",
+        "require_partner_bank_account",
+        "show_partner_bank_account",
+        "state"
+      ]
+    }
+  }
+}

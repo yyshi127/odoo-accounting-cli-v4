@@ -16,6 +16,7 @@ from odoo_accounting_cli_v4 import (
 )
 from odoo_accounting_cli_v4 import move_processing_contracts as move_processing
 from odoo_accounting_cli_v4 import partner_preferences_contracts as partner_preferences
+from odoo_accounting_cli_v4 import payment_processing_contracts as payment_processing
 
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 1000
@@ -49,6 +50,7 @@ CORE_OBJECT_GET_CAPABILITY_IDS = frozenset(
         "journal.group.get",
         "partner.bill_validation_preferences.get",
         "partner.invoice_delivery_preferences.get",
+        "payment.processing_settings.get",
         "invoice.presentation_settings.get",
         "accounting_move.processing_settings.get",
         "partner.payment_preferences.get",
@@ -118,6 +120,8 @@ _CORE_OBJECT_SEARCH_CAPABILITY_IDS = frozenset(
         "reconciliation.model.line.list",
         "bank.list",
         "report.catalog.list",
+        "payment.bank_account_candidates.list",
+        "payment.duplicate_candidates.list",
         "invoice.layout_line.list",
         "invoice.duplicate_candidates.list",
         "recurring.journal_entry.search",
@@ -162,6 +166,7 @@ _ID_FIELDS = {
     "journal.group.get": "journal_group_id",
     "partner.bill_validation_preferences.get": "partner_id",
     "partner.invoice_delivery_preferences.get": "partner_id",
+    "payment.processing_settings.get": "payment_id",
     "invoice.presentation_settings.get": "move_id",
     "accounting_move.processing_settings.get": "move_id",
     "partner.payment_preferences.get": "partner_id",
@@ -238,6 +243,8 @@ _SEARCH_FILTERS = {
     "report.catalog.list": frozenset(
         {"country_id", "root_report_id", "availability_conditions", "active"}
     ),
+    "payment.bank_account_candidates.list": frozenset({"payment_id"}),
+    "payment.duplicate_candidates.list": frozenset({"payment_id"}),
     "invoice.layout_line.list": frozenset({"move_id"}),
     "invoice.duplicate_candidates.list": frozenset({"invoice_id"}),
     "recurring.journal_entry.search": frozenset(
@@ -490,6 +497,10 @@ def validate_core_object_read_request(
         if not set(parameters) <= {"limit", "cursor"}:
             raise _invalid(f"{capability_id} contains an unsupported parameter.")
         filters: dict[str, Any] = {}
+    elif capability_id in payment_processing.LIST_IDS:
+        if not {"payment_id"} <= set(parameters) <= {"payment_id", "limit", "cursor"} or not _valid_id(parameters.get("payment_id")):
+            raise _invalid("Native payment candidates require payment_id and optional pagination only.")
+        filters = {"payment_id": parameters["payment_id"]}
     elif capability_id == "invoice.layout_line.list":
         if not {"move_id"} <= set(parameters) <= {"move_id", "limit", "cursor"} or not _valid_id(parameters.get("move_id")):
             raise _invalid("Layout listing requires an invoice move_id and optional pagination only.")
@@ -2749,6 +2760,8 @@ def _valid_account_status_item(item: Any, company_id: int) -> bool:
 
 
 def _valid_item(capability_id: str, item: Any, company_id: int) -> bool:
+    if capability_id in payment_processing.READ_IDS:
+        return payment_processing.valid_read_item(capability_id, item, company_id)
     if capability_id in invoice_presentation.READ_IDS:
         return invoice_presentation.valid_read_item(capability_id, item, company_id)
     if capability_id == move_processing.READ_ID:
@@ -3041,6 +3054,8 @@ def read_core_object(
         company_id=company_id,
         maximum=limit + 1,
     )
+    if capability_id in payment_processing.LIST_IDS and any(item["payment_id"] != filters["payment_id"] for item in items):
+        raise _failed("Odoo returned candidates from the wrong payment.")
     if capability_id == invoice_presentation.LIST_ID and any(item["move_id"] != filters["move_id"] for item in items):
         raise _failed("Odoo returned a layout line from the wrong invoice.")
     if capability_id == "budget.line.list" and any(

@@ -26,10 +26,11 @@ from odoo_accounting_cli_v4 import partner_preferences_contracts as partner_pref
 from odoo_accounting_cli_v4 import (
     payment_configuration_contracts as payment_configuration,
 )
+from odoo_accounting_cli_v4 import payment_processing_contracts as payment_processing
 from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
 
 ACTION = "accounting.core_write.execute"
-CAPABILITIES = invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
+CAPABILITIES = payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -3317,6 +3318,22 @@ def _protocol(failure_type: type[Exception]) -> Exception:
     )
 
 
+_PARAMETER_KEYS.update(payment_processing.PARAMETER_KEYS)
+_GROUPS['payment.bank_account.assign'] = "account.group_account_invoice"
+_MODELS['payment.bank_account.assign'] = {'res.company', 'account.move.line', 'account.payment', 'account.move', 'res.partner.bank'}
+_ACCESS['payment.bank_account.assign'] = {('account.payment', 'write'), ('account.move', 'read'), ('account.move.line', 'write'), ('account.move.line', 'read'), ('account.payment', 'read'), ('res.partner.bank', 'read'), ('account.move.line', 'unlink'), ('account.move', 'write'), ('account.move.line', 'create'), ('res.company', 'read')}
+_GROUPS['payment.destination_account.assign'] = "account.group_account_invoice"
+_MODELS['payment.destination_account.assign'] = {'res.company', 'account.move.line', 'account.account', 'account.payment', 'account.move'}
+_ACCESS['payment.destination_account.assign'] = {('account.payment', 'write'), ('account.move', 'read'), ('account.move.line', 'write'), ('account.account', 'read'), ('account.move.line', 'read'), ('account.payment', 'read'), ('account.move.line', 'unlink'), ('account.move', 'write'), ('account.move.line', 'create'), ('res.company', 'read')}
+_GROUPS['payment.reject'] = "account.group_account_invoice"
+_MODELS['payment.reject'] = {'account.payment', 'res.company', 'account.move', 'account.move.line'}
+_ACCESS['payment.reject'] = {('account.payment', 'write'), ('account.payment', 'read'), ('account.move', 'read'), ('res.company', 'read'), ('account.move.line', 'read')}
+_GROUPS['payment.sent_status.set'] = "account.group_account_invoice"
+_MODELS['payment.sent_status.set'] = {'account.payment', 'res.company', 'account.move', 'account.move.line'}
+_ACCESS['payment.sent_status.set'] = {('account.payment', 'write'), ('account.payment', 'read'), ('account.move', 'read'), ('res.company', 'read'), ('account.move.line', 'read')}
+_GROUPS['payment.validate'] = "account.group_account_invoice"
+_MODELS['payment.validate'] = {'account.payment', 'res.company', 'account.move', 'account.move.line'}
+_ACCESS['payment.validate'] = {('account.payment', 'write'), ('account.move', 'read'), ('account.move.line', 'write'), ('account.move.line', 'read'), ('account.payment', 'read'), ('account.move', 'create'), ('account.move', 'write'), ('account.move.line', 'create'), ('res.company', 'read')}
 _PARAMETER_KEYS.update(invoice_presentation.PARAMETER_KEYS)
 _GROUPS['invoice.fiscal_position.refresh'] = "account.group_account_invoice"
 _MODELS['invoice.fiscal_position.refresh'] = {'res.company', 'account.account', 'product.template', 'account.move', 'res.currency', 'account.move.line', 'product.product', 'account.tax', 'account.fiscal.position'}
@@ -5386,6 +5403,11 @@ def _valid_parameters(
 ) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id in payment_processing.CAPABILITY_IDS:
+        try:
+            return payment_processing.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
     if capability_id in invoice_presentation.CAPABILITY_IDS:
         try:
             return invoice_presentation.normalize_parameters(capability_id, parameters) == parameters
@@ -5994,6 +6016,8 @@ def _validated_payload(
 def _deterministic_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in payment_processing.CAPABILITY_IDS:
+        return payment_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in invoice_presentation.CAPABILITY_IDS:
         return invoice_presentation.idempotency_key(capability_id, parameters, company_id)
     if capability_id in move_processing.CAPABILITY_IDS:
@@ -13679,6 +13703,8 @@ def _validate_payment_configuration(
         failure_type,
     )
     outstanding = method_line.payment_account_id
+    if not outstanding and env["account.move"]._get_invoice_in_payment_state() == "in_payment":
+        return
     if (
         not outstanding
         or company_id not in outstanding.company_ids.ids
@@ -13814,7 +13840,7 @@ def _reset_payment_to_draft(
             env, parameters["payment_ids"], company_id, failure_type
         )
         if any(
-            payment.state not in {"draft", "in_process", "paid", "canceled"}
+            payment.state not in {"draft", "in_process", "paid", "canceled", "rejected"}
             for payment in payments
         ):
             raise _fail(
@@ -13853,7 +13879,7 @@ def _reset_payment_to_draft(
     )
     if payment.state == "draft":
         return _payment_result(payment, company_id, source_id=None), True
-    if payment.state not in {"in_process", "paid", "canceled"}:
+    if payment.state not in {"in_process", "paid", "canceled", "rejected"}:
         raise _fail(
             failure_type,
             "state_conflict",
@@ -19391,6 +19417,74 @@ def _write_partner_preferences_batch(
     return _partner_result(partner, company_id), replay
 
 
+def _write_payment_processing(
+    env: Any, capability_id: str, parameters: dict[str, Any],
+    company_id: int, failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    payment = _search_one(env, "account.payment", [
+        ("id", "=", parameters["payment_id"]), ("company_id", "=", company_id),
+    ], company_id, failure_type)
+    if capability_id == "payment.bank_account.assign":
+        target = parameters["partner_bank_id"]
+        if target is None and payment.require_partner_bank_account:
+            raise _fail(failure_type, "business_rule_error", "This native payment method requires a bank account.", exit_code=6)
+        if target is not None:
+            _ensure_ids(env, "res.partner.bank", {target}, [("company_id", "in", [False, company_id]), ("active", "=", True)], company_id, failure_type)
+            if target not in payment.available_partner_bank_ids.ids:
+                raise _fail(failure_type, "business_rule_error", "The bank account is not a native eligible recipient/company account for this payment.", exit_code=6)
+        replay = _relation_id(payment.partner_bank_id) == target
+        if not replay:
+            payment.write({"partner_bank_id": target or False})
+            payment.invalidate_recordset()
+        if _relation_id(payment.partner_bank_id) != target:
+            raise _fail(failure_type, "odoo_write_error", "Native payment bank assignment was not persisted.", exit_code=6)
+    elif capability_id == "payment.destination_account.assign":
+        if payment.state != "draft" or payment.move_id and payment.move_id.state != "draft":
+            raise _fail(failure_type, "state_conflict", "The payment and any linked entry must be draft to change its accounting destination.", exit_code=6)
+        account = _search_one(env, "account.account", [
+            ("id", "=", parameters["account_id"]), ("company_ids", "in", [company_id]),
+            ("active", "=", True), ("reconcile", "=", True),
+            ("account_type", "=", "asset_receivable" if payment.partner_type == "customer" else "liability_payable"),
+        ], company_id, failure_type)
+        replay = _relation_id(payment.destination_account_id) == account.id
+        if not replay:
+            payment.write({"destination_account_id": account.id})
+            payment.invalidate_recordset()
+        if _relation_id(payment.destination_account_id) != account.id:
+            raise _fail(failure_type, "odoo_write_error", "Native payment destination account was not persisted.", exit_code=6)
+    elif capability_id == "payment.sent_status.set":
+        if payment.state != "in_process" or payment.payment_method_code != "manual":
+            raise _fail(failure_type, "state_conflict", "Native sent-status actions require an in-process manual payment.", exit_code=6)
+        replay = payment.is_sent == parameters["sent"]
+        if not replay:
+            if parameters["sent"]:
+                payment.mark_as_sent()
+            else:
+                payment.unmark_as_sent()
+            payment.invalidate_recordset()
+        if payment.is_sent != parameters["sent"]:
+            raise _fail(failure_type, "odoo_write_error", "Native payment sent status was not persisted.", exit_code=6)
+    elif capability_id == "payment.validate":
+        if payment.move_id or payment.state not in {"in_process", "paid"}:
+            raise _fail(failure_type, "state_conflict", "Native manual validation requires an in-process payment without a journal entry; journal-backed payments settle by reconciliation.", exit_code=6)
+        replay = payment.state == "paid"
+        if not replay:
+            payment.action_validate()
+            payment.invalidate_recordset()
+        if payment.state != "paid" or payment.move_id:
+            raise _fail(failure_type, "odoo_write_error", "Native no-entry payment validation did not produce the requested state.", exit_code=6)
+    else:
+        replay = payment.state == "rejected"
+        if not replay:
+            if payment.state != "in_process" or not payment.is_sent:
+                raise _fail(failure_type, "state_conflict", "Native rejection requires an in-process payment marked as sent.", exit_code=6)
+            payment.action_reject()
+            payment.invalidate_recordset()
+        if payment.state != "rejected":
+            raise _fail(failure_type, "odoo_write_error", "Native payment rejection did not produce the requested state.", exit_code=6)
+    return _payment_result(payment, company_id, source_id=None), replay
+
+
 def _layout_current(line: Any) -> dict[str, Any]:
     return {field: getattr(line, field) for field in invoice_presentation.LAYOUT_KEYS}
 
@@ -19575,6 +19669,8 @@ def _dispatch_allowed(
     marker: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if capability_id in payment_processing.CAPABILITY_IDS:
+        return _write_payment_processing(env, capability_id, parameters, company_id, failure_type)
     if capability_id in invoice_presentation.CAPABILITY_IDS:
         return _write_invoice_presentation(env, capability_id, parameters, company_id, failure_type)
     if capability_id in move_processing.CAPABILITY_IDS:
