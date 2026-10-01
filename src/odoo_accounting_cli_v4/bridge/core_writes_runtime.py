@@ -17,10 +17,11 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from time import strftime, strptime
 from typing import Any
 
+from odoo_accounting_cli_v4 import fiscal_mapping_contracts as fiscal_mappings
 from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
 
 ACTION = "accounting.core_write.execute"
-CAPABILITIES = report_budgets.CAPABILITY_IDS | frozenset(
+CAPABILITIES = fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -3308,6 +3309,31 @@ def _protocol(failure_type: type[Exception]) -> Exception:
     )
 
 
+_PARAMETER_KEYS.update(fiscal_mappings.PARAMETER_KEYS)
+_GROUPS["fiscal_position.taxes.replace"] = "account.group_account_manager"
+_MODELS["fiscal_position.taxes.replace"] = {"account.fiscal.position","account.fiscal.position.account","account.tax","res.company"}
+_ACCESS["fiscal_position.taxes.replace"] = {("account.fiscal.position.account", "read"), ("account.fiscal.position", "read"), ("account.fiscal.position", "write"), ("account.tax", "read")}
+_GROUPS["tax.original_taxes.replace"] = "account.group_account_manager"
+_MODELS["tax.original_taxes.replace"] = {"account.fiscal.position","account.tax","res.company"}
+_ACCESS["tax.original_taxes.replace"] = {("account.fiscal.position", "read"), ("account.tax", "read"), ("account.tax", "write")}
+_GROUPS["fiscal_position.account_mapping.create"] = "account.group_account_manager"
+_MODELS["fiscal_position.account_mapping.create"] = {"account.account","account.fiscal.position","account.fiscal.position.account","res.company"}
+_ACCESS["fiscal_position.account_mapping.create"] = {("account.account", "read"), ("account.fiscal.position.account", "create"), ("account.fiscal.position.account", "read"), ("account.fiscal.position", "read")}
+_GROUPS["fiscal_position.account_mapping.update"] = "account.group_account_manager"
+_MODELS["fiscal_position.account_mapping.update"] = {"account.account","account.fiscal.position","account.fiscal.position.account","res.company"}
+_ACCESS["fiscal_position.account_mapping.update"] = {("account.account", "read"), ("account.fiscal.position.account", "read"), ("account.fiscal.position.account", "write"), ("account.fiscal.position", "read")}
+_GROUPS["fiscal_position.account_mapping.delete"] = "account.group_account_manager"
+_MODELS["fiscal_position.account_mapping.delete"] = {"account.account","account.fiscal.position","account.fiscal.position.account","res.company"}
+_ACCESS["fiscal_position.account_mapping.delete"] = {("account.account", "read"), ("account.fiscal.position.account", "read"), ("account.fiscal.position.account", "unlink"), ("account.fiscal.position", "read")}
+_GROUPS["fiscal_position.duplicate"] = "account.group_account_manager"
+_MODELS["fiscal_position.duplicate"] = {"account.account","account.fiscal.position","account.fiscal.position.account","account.tax","res.company"}
+_ACCESS["fiscal_position.duplicate"] = {("account.account", "read"), ("account.fiscal.position.account", "create"), ("account.fiscal.position.account", "read"), ("account.fiscal.position", "create"), ("account.fiscal.position", "read"), ("account.tax", "read")}
+_GROUPS["fiscal_position.delete"] = "account.group_account_manager"
+_MODELS["fiscal_position.delete"] = {"account.fiscal.position","account.fiscal.position.account","res.company"}
+_ACCESS["fiscal_position.delete"] = {("account.fiscal.position.account", "read"), ("account.fiscal.position.account", "unlink"), ("account.fiscal.position", "read"), ("account.fiscal.position", "unlink")}
+_GROUPS["tax.duplicate"] = "account.group_account_manager"
+_MODELS["tax.duplicate"] = {"account.tax","account.tax.repartition.line","res.company"}
+_ACCESS["tax.duplicate"] = {("account.tax.repartition.line", "create"), ("account.tax.repartition.line", "read"), ("account.tax", "create"), ("account.tax", "read")}
 _PARAMETER_KEYS.update(report_budgets.PARAMETER_KEYS)
 for _report_budget_capability in report_budgets.CAPABILITY_IDS:
     _GROUPS[_report_budget_capability] = "account.group_account_manager"
@@ -5273,6 +5299,11 @@ def _valid_parameters(
 ) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id in fiscal_mappings.CAPABILITY_IDS:
+        try:
+            return fiscal_mappings.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
     if capability_id in report_budgets.CAPABILITY_IDS:
         try:
             return report_budgets.normalize_parameters(capability_id, parameters) == parameters
@@ -5856,6 +5887,8 @@ def _validated_payload(
 def _deterministic_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in fiscal_mappings.CAPABILITY_IDS:
+        return fiscal_mappings.idempotency_key(capability_id, parameters, company_id)
     if capability_id in report_budgets.CAPABILITY_IDS:
         return report_budgets.idempotency_key(capability_id, parameters, company_id)
     if capability_id in _BATCH_LIFECYCLE_CAPABILITIES and (
@@ -18754,6 +18787,316 @@ def _write_report_budget(
     ), False
 
 
+def _fiscal_mapping_pair(line: Any) -> tuple[int, int]:
+    return line.account_src_id.id, line.account_dest_id.id
+
+
+def _fiscal_mapping_signature(position: Any) -> dict[str, Any]:
+    fields = set(_FISCAL_POSITION_FIELDS) - {
+        "name",
+        "state_ids",
+        "country_id",
+        "country_group_id",
+    }
+    return {
+        **{field: getattr(position, field) for field in fields},
+        "active": position.active,
+        "foreign_vat": position.foreign_vat,
+        "country_id": _many2one_id(position.country_id),
+        "country_group_id": _many2one_id(position.country_group_id),
+        "state_ids": _record_ids(position.state_ids),
+        "tax_ids": _record_ids(position.tax_ids),
+        "accounts": sorted(_fiscal_mapping_pair(line) for line in position.account_ids),
+    }
+
+
+def _tax_copy_signature(tax: Any) -> dict[str, Any]:
+    fields = (
+        "type_tax_use",
+        "tax_scope",
+        "amount_type",
+        "amount",
+        "sequence",
+        "active",
+        "invoice_label",
+        "description",
+        "price_include_override",
+        "include_base_amount",
+        "is_base_affected",
+        "tax_exigibility",
+    )
+    return {
+        **{field: getattr(tax, field) for field in fields},
+        "tax_group_id": tax.tax_group_id.id,
+        "country_id": tax.country_id.id,
+        "children_tax_ids": _record_ids(tax.children_tax_ids),
+        "original_tax_ids": _record_ids(tax.original_tax_ids),
+        "repartition": sorted(
+            (
+                line.document_type,
+                line.repartition_type,
+                line.factor_percent,
+                _many2one_id(line.account_id) or 0,
+                tuple(_record_ids(line.tag_ids)),
+                line.use_in_tax_closing,
+            )
+            for line in tax.repartition_line_ids
+        ),
+    }
+
+
+def _write_fiscal_mapping_batch(
+    env: Any,
+    capability_id: str,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    mapping_model = _scoped(env, "account.fiscal.position.account", company_id)
+    action = capability_id.rsplit(".", 1)[-1]
+    mapping_action = capability_id.startswith("fiscal_position.account_mapping.")
+    tax_action = capability_id.startswith("tax.")
+    if action == "duplicate":
+        source = (
+            _tax_config_record(env, parameters["tax_id"], company_id, failure_type)
+            if tax_action
+            else _fiscal_position(
+                env, parameters["fiscal_position_id"], company_id, failure_type
+            )
+        )
+        signature = _tax_copy_signature if tax_action else _fiscal_mapping_signature
+        expected = signature(source)
+        for tax_id in (
+            expected["original_tax_ids"] if tax_action else expected["tax_ids"]
+        ):
+            _tax_config_record(env, tax_id, company_id, failure_type)
+        if not tax_action:
+            for pair in expected["accounts"]:
+                for account_id in pair:
+                    _account_config_record(env, account_id, company_id, failure_type)
+        model_name = "account.tax" if tax_action else "account.fiscal.position"
+        model = _scoped(env, model_name, company_id)
+        copied = model.search(
+            [
+                ("company_id", "=", company_id),
+                ("name", "=", parameters["name"]),
+                ("id", "!=", source.id),
+            ],
+            limit=2,
+        )
+        replay = bool(copied)
+        if copied:
+            if (
+                len(copied) != 1
+                or signature(copied) != expected
+                or (
+                    tax_action
+                    and (copied.fiscal_position_ids or copied.replacing_tax_ids)
+                )
+            ):
+                raise _fail(
+                    failure_type,
+                    "idempotency_conflict",
+                    "The copy name has another fiscal configuration.",
+                    exit_code=5,
+                )
+        else:
+            defaults: dict[str, Any] = {"name": parameters["name"]}
+            if tax_action:
+                # Detach inverse links: a copy must not alter existing fiscal positions or
+                # the original-tax sets of taxes which replace the source.
+                defaults.update(
+                    fiscal_position_ids=[(5, 0, 0)], replacing_tax_ids=[(5, 0, 0)]
+                )
+            copied = source.copy(defaults)
+            copied.invalidate_recordset()
+        children = copied.repartition_line_ids if tax_action else copied.account_ids
+        source_children = (
+            source.repartition_line_ids if tax_action else source.account_ids
+        )
+        if (
+            copied.id == source.id
+            or copied.company_id.id != company_id
+            or copied.name != parameters["name"]
+            or signature(copied) != expected
+            or signature(source) != expected
+            or set(children.ids).intersection(source_children.ids)
+            or (tax_action and (copied.fiscal_position_ids or copied.replacing_tax_ids))
+        ):
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not persist an independent fiscal configuration copy.",
+                exit_code=6,
+            )
+        result = _config_result(copied, model_name, company_id)
+        result.update(source_id=source.id, line_ids=sorted(children.ids))
+        return result, replay
+    if capability_id == "tax.original_taxes.replace":
+        tax = _tax_config_record(env, parameters["tax_id"], company_id, failure_type)
+        originals = _ensure_ids(
+            env,
+            "account.tax",
+            set(parameters["original_tax_ids"]),
+            [("company_id", "=", company_id)],
+            company_id,
+            failure_type,
+        )
+        if any(
+            original.type_tax_use != tax.type_tax_use or not original.is_domestic
+            for original in originals
+        ) or any(
+            position.company_id.id != company_id for position in tax.fiscal_position_ids
+        ):
+            raise _fail(
+                failure_type,
+                "business_rule_error",
+                "Original taxes must be domestic, have the same tax use, and remain company-scoped.",
+                exit_code=6,
+            )
+        replay = _record_ids(tax.original_tax_ids) == parameters["original_tax_ids"]
+        if not replay:
+            tax.write({"original_tax_ids": [(6, 0, parameters["original_tax_ids"])]})
+            tax.invalidate_recordset(["original_tax_ids"])
+            tax.fiscal_position_ids.invalidate_recordset(["tax_map"])
+        if _record_ids(tax.original_tax_ids) != parameters["original_tax_ids"]:
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not persist the original-tax set.",
+                exit_code=6,
+            )
+        return _config_result(tax, "account.tax", company_id), replay
+    if mapping_action and action != "create":
+        line = _search_one(
+            env,
+            "account.fiscal.position.account",
+            [
+                ("id", "=", parameters["account_mapping_id"]),
+                ("company_id", "=", company_id),
+            ],
+            company_id,
+            failure_type,
+        )
+        position = line.position_id
+    else:
+        line = None
+        position = _fiscal_position(
+            env, parameters["fiscal_position_id"], company_id, failure_type
+        )
+    if action == "delete":
+        result = (
+            _config_result(line, "account.fiscal.position.account", company_id)
+            if mapping_action
+            else _fiscal_position_result(position, company_id)
+        )
+        if mapping_action:
+            result["source_id"] = position.id
+        result = _deleted_result(result)
+        (line if mapping_action else position).unlink()
+        model = (
+            mapping_model
+            if mapping_action
+            else _scoped(env, "account.fiscal.position", company_id)
+        )
+        if model.search_count([("id", "=", result["id"])], limit=1) or (
+            not mapping_action
+            and result["line_ids"]
+            and mapping_model.search_count([("id", "in", result["line_ids"])], limit=1)
+        ):
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not remove the fiscal target and its mapping children.",
+                exit_code=6,
+            )
+        return result, False
+    if capability_id == "fiscal_position.taxes.replace":
+        _ensure_ids(
+            env,
+            "account.tax",
+            set(parameters["tax_ids"]),
+            [("company_id", "=", company_id)],
+            company_id,
+            failure_type,
+        )
+        replay = _record_ids(position.tax_ids) == parameters["tax_ids"]
+        if not replay:
+            position.write({"tax_ids": [(6, 0, parameters["tax_ids"])]})
+            position.invalidate_recordset(["tax_ids", "tax_map"])
+        if _record_ids(position.tax_ids) != parameters["tax_ids"]:
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not persist the fiscal tax set.",
+                exit_code=6,
+            )
+        return _fiscal_position_result(position, company_id), replay
+    values = (
+        parameters
+        if line is None
+        else {
+            "source_account_id": line.account_src_id.id,
+            "destination_account_id": line.account_dest_id.id,
+            **parameters["changes"],
+        }
+    )
+    pair = values["source_account_id"], values["destination_account_id"]
+    if pair[0] == pair[1]:
+        raise _fail(
+            failure_type,
+            "business_rule_error",
+            "Source and destination accounts must differ.",
+            exit_code=6,
+        )
+    for account_id in pair:
+        _account_config_record(env, account_id, company_id, failure_type)
+    conflicts = mapping_model.search(
+        [("position_id", "=", position.id), ("account_src_id", "=", pair[0])]
+        + ([("id", "!=", line.id)] if line is not None else []),
+        limit=2,
+    )
+    if line is None and conflicts:
+        if len(conflicts) != 1 or _fiscal_mapping_pair(conflicts) != pair:
+            raise _fail(
+                failure_type,
+                "idempotency_conflict",
+                "The source account has an ambiguous mapping.",
+                exit_code=5,
+            )
+        line, replay = conflicts, True
+    else:
+        if conflicts:
+            raise _fail(
+                failure_type,
+                "idempotency_conflict",
+                "The source account already has another mapping.",
+                exit_code=5,
+            )
+        replay = line is not None and _fiscal_mapping_pair(line) == pair
+        write_values = {"account_src_id": pair[0], "account_dest_id": pair[1]}
+        if line is None:
+            line = mapping_model.create({**write_values, "position_id": position.id})
+        elif not replay:
+            line.write(write_values)
+        line.invalidate_recordset()
+    if (
+        line.company_id.id != company_id
+        or line.position_id.id != position.id
+        or _fiscal_mapping_pair(line) != pair
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not persist the account mapping.",
+            exit_code=6,
+        )
+    position.invalidate_recordset(["account_ids", "account_map"])
+    result = _config_result(line, "account.fiscal.position.account", company_id)
+    result.update(state="recorded", source_id=position.id)
+    return result, bool(replay)
+
+
 def _dispatch_allowed(
     env: Any,
     capability_id: str,
@@ -18763,6 +19106,8 @@ def _dispatch_allowed(
     marker: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if capability_id in fiscal_mappings.CAPABILITY_IDS:
+        return _write_fiscal_mapping_batch(env, capability_id, parameters, company_id, failure_type)
     if capability_id in report_budgets.CAPABILITY_IDS:
         return _write_report_budget(env, capability_id, parameters, company_id, failure_type)
     if capability_id.startswith("fiscal_year."):

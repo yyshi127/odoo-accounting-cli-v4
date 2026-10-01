@@ -24345,6 +24345,941 @@
         ]
       },
       "handler_key": "core_write"
+    },
+    "fiscal_position.taxes.replace": {
+      "summary": {
+        "zh_CN": "替换财政状况税集合",
+        "en_US": "Replace a fiscal position's destination tax set"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.fiscal.position",
+          "account.fiscal.position.account",
+          "account.tax",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/partner.py",
+          "account/models/account_tax.py",
+          "account/models/account_account.py",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/fiscal_position.taxes.replace.request.schema.json",
+        "response": "schemas/v1/fiscal_position.taxes.replace.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.fiscal.position.account:read",
+          "account.fiscal.position:read",
+          "account.fiscal.position:write",
+          "account.tax:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_fiscal_mapping_replace",
+        "verify": "same_transaction_native_record_payload_or_absence_and_response_schema_validation",
+        "idempotency": "requested_target_state_recheck_before_native_write",
+        "reverse": "repeat_update_with_previous_configuration"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_fiscal_mapping_writes.py"
+          ],
+          "reason": "Shared batch tests cover contracts, schemas, CLI dispatch, company/result binding, deterministic keys, manager and ACL gates; native workflow acceptance requires the shared live smoke."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": ["tests/integration/test_fiscal_mapping_write_batch_live.py"],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all eight fiscal/tax writes, two mapping readbacks, six immediate replays, company isolation, independent fiscal and detached tax copies, native mapping/cascade deletion, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user."
+      },
+      "routing": {
+        "object": "fiscal_position.taxes",
+        "actions": [
+          "replace"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "替换财政状况税集合"
+          ],
+          "en_US": [
+            "Replace a fiscal position's destination tax set"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "旧版 account.fiscal.position.tax 映射行"
+          ],
+          "en_US": [
+            "Legacy account.fiscal.position.tax rows"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "tax.original_taxes.replace": {
+      "summary": {
+        "zh_CN": "替换税的来源税集合",
+        "en_US": "Replace the original taxes substituted by a tax"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.fiscal.position",
+          "account.tax",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/partner.py",
+          "account/models/account_tax.py",
+          "account/models/account_account.py",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/tax.original_taxes.replace.request.schema.json",
+        "response": "schemas/v1/tax.original_taxes.replace.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.fiscal.position:read",
+          "account.tax:read",
+          "account.tax:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_fiscal_mapping_replace",
+        "verify": "same_transaction_native_record_payload_or_absence_and_response_schema_validation",
+        "idempotency": "requested_target_state_recheck_before_native_write",
+        "reverse": "repeat_update_with_previous_configuration"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_fiscal_mapping_writes.py"
+          ],
+          "reason": "Shared batch tests cover contracts, schemas, CLI dispatch, company/result binding, deterministic keys, manager and ACL gates; native workflow acceptance requires the shared live smoke."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": ["tests/integration/test_fiscal_mapping_write_batch_live.py"],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all eight fiscal/tax writes, two mapping readbacks, six immediate replays, company isolation, independent fiscal and detached tax copies, native mapping/cascade deletion, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user."
+      },
+      "routing": {
+        "object": "tax.original_taxes",
+        "actions": [
+          "replace"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "替换税的来源税集合"
+          ],
+          "en_US": [
+            "Replace the original taxes substituted by a tax"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "旧版 account.fiscal.position.tax 映射行"
+          ],
+          "en_US": [
+            "Legacy account.fiscal.position.tax rows"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "fiscal_position.account_mapping.create": {
+      "summary": {
+        "zh_CN": "新增财政状况科目映射",
+        "en_US": "Create a fiscal-position account mapping"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "account.fiscal.position",
+          "account.fiscal.position.account",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/partner.py",
+          "account/models/account_tax.py",
+          "account/models/account_account.py",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/fiscal_position.account_mapping.create.request.schema.json",
+        "response": "schemas/v1/fiscal_position.account_mapping.create.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.fiscal.position.account:create",
+          "account.fiscal.position.account:read",
+          "account.fiscal.position:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_fiscal_mapping_create",
+        "verify": "same_transaction_native_record_payload_or_absence_and_response_schema_validation",
+        "idempotency": "natural_key_payload_recheck_without_operation_store",
+        "reverse": "delete_new_configuration_with_native_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_fiscal_mapping_writes.py"
+          ],
+          "reason": "Shared batch tests cover contracts, schemas, CLI dispatch, company/result binding, deterministic keys, manager and ACL gates; native workflow acceptance requires the shared live smoke."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": ["tests/integration/test_fiscal_mapping_write_batch_live.py"],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all eight fiscal/tax writes, two mapping readbacks, six immediate replays, company isolation, independent fiscal and detached tax copies, native mapping/cascade deletion, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "degraded",
+        "reason_code": "natural_key_replay_attribution_limit",
+        "reason": "Natural-key replay can adopt an existing matching configuration; attribution and concurrent exactly-once execution are not proven."
+      },
+      "routing": {
+        "object": "fiscal_position.account_mapping",
+        "actions": [
+          "create"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "新增财政状况科目映射"
+          ],
+          "en_US": [
+            "Create a fiscal-position account mapping"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "旧版 account.fiscal.position.tax 映射行"
+          ],
+          "en_US": [
+            "Legacy account.fiscal.position.tax rows"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "fiscal_position.account_mapping.update": {
+      "summary": {
+        "zh_CN": "修改财政状况科目映射",
+        "en_US": "Update a fiscal-position account mapping"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "account.fiscal.position",
+          "account.fiscal.position.account",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/partner.py",
+          "account/models/account_tax.py",
+          "account/models/account_account.py",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/fiscal_position.account_mapping.update.request.schema.json",
+        "response": "schemas/v1/fiscal_position.account_mapping.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.fiscal.position.account:read",
+          "account.fiscal.position.account:write",
+          "account.fiscal.position:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_fiscal_mapping_update",
+        "verify": "same_transaction_native_record_payload_or_absence_and_response_schema_validation",
+        "idempotency": "requested_target_state_recheck_before_native_write",
+        "reverse": "repeat_update_with_previous_configuration"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_fiscal_mapping_writes.py"
+          ],
+          "reason": "Shared batch tests cover contracts, schemas, CLI dispatch, company/result binding, deterministic keys, manager and ACL gates; native workflow acceptance requires the shared live smoke."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": ["tests/integration/test_fiscal_mapping_write_batch_live.py"],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all eight fiscal/tax writes, two mapping readbacks, six immediate replays, company isolation, independent fiscal and detached tax copies, native mapping/cascade deletion, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user."
+      },
+      "routing": {
+        "object": "fiscal_position.account_mapping",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "修改财政状况科目映射"
+          ],
+          "en_US": [
+            "Update a fiscal-position account mapping"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "旧版 account.fiscal.position.tax 映射行"
+          ],
+          "en_US": [
+            "Legacy account.fiscal.position.tax rows"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "fiscal_position.account_mapping.delete": {
+      "summary": {
+        "zh_CN": "删除财政状况科目映射",
+        "en_US": "Delete a fiscal-position account mapping"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "account.fiscal.position",
+          "account.fiscal.position.account",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/partner.py",
+          "account/models/account_tax.py",
+          "account/models/account_account.py",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/fiscal_position.account_mapping.delete.request.schema.json",
+        "response": "schemas/v1/fiscal_position.account_mapping.delete.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.fiscal.position.account:read",
+          "account.fiscal.position.account:unlink",
+          "account.fiscal.position:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_fiscal_mapping_delete",
+        "verify": "same_transaction_native_record_payload_or_absence_and_response_schema_validation",
+        "idempotency": "target_lookup_without_persistent_tombstone",
+        "reverse": "not_reversible"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_fiscal_mapping_writes.py"
+          ],
+          "reason": "Shared batch tests cover contracts, schemas, CLI dispatch, company/result binding, deterministic keys, manager and ACL gates; native workflow acceptance requires the shared live smoke."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": ["tests/integration/test_fiscal_mapping_write_batch_live.py"],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all eight fiscal/tax writes, two mapping readbacks, six immediate replays, company isolation, independent fiscal and detached tax copies, native mapping/cascade deletion, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "degraded",
+        "reason_code": "deleted_record_tombstone_unavailable",
+        "reason": "Native deletion has no persistent operation tombstone or automatic reversal."
+      },
+      "routing": {
+        "object": "fiscal_position.account_mapping",
+        "actions": [
+          "delete"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "删除财政状况科目映射"
+          ],
+          "en_US": [
+            "Delete a fiscal-position account mapping"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "旧版 account.fiscal.position.tax 映射行"
+          ],
+          "en_US": [
+            "Legacy account.fiscal.position.tax rows"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "fiscal_position.duplicate": {
+      "summary": {
+        "zh_CN": "复制财政状况",
+        "en_US": "Duplicate a fiscal position"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "account.fiscal.position",
+          "account.fiscal.position.account",
+          "account.tax",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/partner.py",
+          "account/models/account_tax.py",
+          "account/models/account_account.py",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/fiscal_position.duplicate.request.schema.json",
+        "response": "schemas/v1/fiscal_position.duplicate.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.fiscal.position.account:create",
+          "account.fiscal.position.account:read",
+          "account.fiscal.position:create",
+          "account.fiscal.position:read",
+          "account.tax:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_fiscal_mapping_duplicate",
+        "verify": "same_transaction_native_record_payload_or_absence_and_response_schema_validation",
+        "idempotency": "natural_key_payload_recheck_without_operation_store",
+        "reverse": "delete_new_configuration_with_native_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_fiscal_mapping_writes.py"
+          ],
+          "reason": "Shared batch tests cover contracts, schemas, CLI dispatch, company/result binding, deterministic keys, manager and ACL gates; native workflow acceptance requires the shared live smoke."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": ["tests/integration/test_fiscal_mapping_write_batch_live.py"],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all eight fiscal/tax writes, two mapping readbacks, six immediate replays, company isolation, independent fiscal and detached tax copies, native mapping/cascade deletion, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "degraded",
+        "reason_code": "natural_key_replay_attribution_limit",
+        "reason": "Natural-key replay can adopt an existing matching configuration; attribution and concurrent exactly-once execution are not proven."
+      },
+      "routing": {
+        "object": "fiscal_position",
+        "actions": [
+          "duplicate"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "复制财政状况"
+          ],
+          "en_US": [
+            "Duplicate a fiscal position"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "旧版 account.fiscal.position.tax 映射行"
+          ],
+          "en_US": [
+            "Legacy account.fiscal.position.tax rows"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "fiscal_position.delete": {
+      "summary": {
+        "zh_CN": "删除财政状况",
+        "en_US": "Delete a fiscal position"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.fiscal.position",
+          "account.fiscal.position.account",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/partner.py",
+          "account/models/account_tax.py",
+          "account/models/account_account.py",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/fiscal_position.delete.request.schema.json",
+        "response": "schemas/v1/fiscal_position.delete.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.fiscal.position.account:read",
+          "account.fiscal.position.account:unlink",
+          "account.fiscal.position:read",
+          "account.fiscal.position:unlink"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_fiscal_mapping_delete",
+        "verify": "same_transaction_native_record_payload_or_absence_and_response_schema_validation",
+        "idempotency": "target_lookup_without_persistent_tombstone",
+        "reverse": "not_reversible"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_fiscal_mapping_writes.py"
+          ],
+          "reason": "Shared batch tests cover contracts, schemas, CLI dispatch, company/result binding, deterministic keys, manager and ACL gates; native workflow acceptance requires the shared live smoke."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": ["tests/integration/test_fiscal_mapping_write_batch_live.py"],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all eight fiscal/tax writes, two mapping readbacks, six immediate replays, company isolation, independent fiscal and detached tax copies, native mapping/cascade deletion, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "degraded",
+        "reason_code": "deleted_record_tombstone_unavailable",
+        "reason": "Native deletion has no persistent operation tombstone or automatic reversal."
+      },
+      "routing": {
+        "object": "fiscal_position",
+        "actions": [
+          "delete"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "删除财政状况"
+          ],
+          "en_US": [
+            "Delete a fiscal position"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "旧版 account.fiscal.position.tax 映射行"
+          ],
+          "en_US": [
+            "Legacy account.fiscal.position.tax rows"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "tax.duplicate": {
+      "summary": {
+        "zh_CN": "复制税",
+        "en_US": "Duplicate a tax without inverse fiscal links"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.tax",
+          "account.tax.repartition.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/partner.py",
+          "account/models/account_tax.py",
+          "account/models/account_account.py",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/tax.duplicate.request.schema.json",
+        "response": "schemas/v1/tax.duplicate.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.tax.repartition.line:create",
+          "account.tax.repartition.line:read",
+          "account.tax:create",
+          "account.tax:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_fiscal_mapping_duplicate",
+        "verify": "same_transaction_native_record_payload_or_absence_and_response_schema_validation",
+        "idempotency": "natural_key_payload_recheck_without_operation_store",
+        "reverse": "delete_new_configuration_with_native_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_fiscal_mapping_writes.py"
+          ],
+          "reason": "Shared batch tests cover contracts, schemas, CLI dispatch, company/result binding, deterministic keys, manager and ACL gates; native workflow acceptance requires the shared live smoke."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": ["tests/integration/test_fiscal_mapping_write_batch_live.py"],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all eight fiscal/tax writes, two mapping readbacks, six immediate replays, company isolation, independent fiscal and detached tax copies, native mapping/cascade deletion, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "degraded",
+        "reason_code": "natural_key_replay_attribution_limit",
+        "reason": "Natural-key replay can adopt an existing matching configuration; attribution and concurrent exactly-once execution are not proven."
+      },
+      "routing": {
+        "object": "tax",
+        "actions": [
+          "duplicate"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "复制税"
+          ],
+          "en_US": [
+            "Duplicate a tax without inverse fiscal links"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "旧版 account.fiscal.position.tax 映射行"
+          ],
+          "en_US": [
+            "Legacy account.fiscal.position.tax rows"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
     }
   }
 }

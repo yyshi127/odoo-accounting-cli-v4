@@ -13,9 +13,10 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from time import strftime, strptime
 from typing import Any, Protocol
 
+from odoo_accounting_cli_v4 import fiscal_mapping_contracts as fiscal_mappings
 from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
 
-CORE_WRITE_CAPABILITY_IDS = report_budgets.CAPABILITY_IDS | frozenset(
+CORE_WRITE_CAPABILITY_IDS = fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -4270,7 +4271,12 @@ def validate_core_write_request(
             code="capability_unavailable",
         )
     request_id, context, parameters = _validate_envelope(request)
-    if capability_id in report_budgets.CAPABILITY_IDS:
+    if capability_id in fiscal_mappings.CAPABILITY_IDS:
+        try:
+            normalized = fiscal_mappings.normalize_parameters(capability_id, parameters)
+        except ValueError as exc:
+            raise _invalid(str(exc)) from exc
+    elif capability_id in report_budgets.CAPABILITY_IDS:
         try:
             normalized = report_budgets.normalize_parameters(capability_id, parameters)
         except ValueError as exc:
@@ -4467,6 +4473,8 @@ def validate_core_write_request(
 def _expected_idempotency_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in fiscal_mappings.CAPABILITY_IDS:
+        return fiscal_mappings.idempotency_key(capability_id, parameters, company_id)
     if capability_id in report_budgets.CAPABILITY_IDS:
         return report_budgets.idempotency_key(capability_id, parameters, company_id)
     if capability_id in _BATCH_LIFECYCLE_CAPABILITIES and (
@@ -5156,6 +5164,34 @@ def _validate_result(
 ) -> dict[str, Any]:
     if not _valid_result_shape(result) or result["company_id"] != company_id:
         raise _failed("Odoo returned a malformed or out-of-scope core-write result.")
+
+    if capability_id in fiscal_mappings.CAPABILITY_IDS:
+        mapping = capability_id.startswith("fiscal_position.account_mapping.")
+        tax = capability_id.startswith("tax.")
+        creates = capability_id.endswith((".create", ".duplicate"))
+        deleted = capability_id.endswith(".delete")
+        id_field = "account_mapping_id" if mapping else "tax_id" if tax else "fiscal_position_id"
+        expected_id = result["id"] if creates else parameters[id_field]
+        source_id = (parameters["fiscal_position_id"] if mapping and creates
+                     else result["source_id"] if mapping
+                     else parameters[id_field] if capability_id.endswith(".duplicate")
+                     else None)
+        if (
+            result["model"] != ("account.fiscal.position.account" if mapping else "account.tax" if tax else "account.fiscal.position")
+            or not _valid_id(result["id"]) or result["id"] != expected_id
+            or result["source_id"] != source_id
+            or (mapping and not _valid_id(source_id))
+            or (capability_id.endswith(".duplicate") and result["id"] == source_id)
+            or (deleted and (result["state"] != "deleted" or idempotent_replay))
+            or (not deleted and result["state"] not in ({"recorded"} if mapping else {"active", "archived"}))
+            or (mapping and result["line_ids"])
+            or result["move_type"] is not None or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None or result["reconciled"]
+            or (not mapping and not _is_text(result["name"]))
+            or (capability_id.endswith(".duplicate") and result["name"] != parameters["name"])
+        ):
+            raise _failed("Odoo returned a mismatched fiscal mapping result.")
+        return deepcopy(result)
 
     if capability_id in report_budgets.CAPABILITY_IDS:
         item_action = capability_id.startswith("report.budget_item.")

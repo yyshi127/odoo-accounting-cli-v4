@@ -4509,3 +4509,91 @@ validation failed), `product.accounting_profile.get`,
 `report.customer_statement.send`, and `report.followup.send` (planned).
 Do not repair installed addons or perform external report delivery without the
 necessary authority. Keep write verification inside the two synthetic databases.
+
+## Fiscal-position and tax mapping maintenance — 2026-10-01
+
+This checkpoint continues from `50b6677`. It adds eight IDs, taking the
+registry to 426 IDs and 411 implemented handlers (215 reads, 196 writes),
+with 828 schemas. Availability descriptors are 343 `unconfigured`,
+68 `degraded`, and 15 `disabled`. Integration records are 407
+`implemented`, three `planned`, and one `failed`. These totals include
+historical non-accounting extensions, not a complete accounting denominator.
+
+### Delivered boundary
+
+- `fiscal_position.taxes.replace` sets the native Odoo 19 destination-tax
+  membership, with same-company tax references. An empty set removes all taxes
+  under the native fiscal position; it does not mean identity tax mapping.
+- `tax.original_taxes.replace` updates the destination tax's native
+  `original_tax_ids`. Original taxes must be domestic, same-company, distinct
+  from the target, and have the same tax use. This is a tax-level relationship:
+  it affects every fiscal position using that destination tax, not only one
+  position. Cross-company fiscal links are rejected before mutation.
+- `fiscal_position.account_mapping.create/update/delete` performs individual
+  native mapping-row maintenance. Source accounts stay unambiguous, both
+  accounts remain company-isolated, and a patch cannot move the row's parent.
+  The existing whole-list replacement and mapping reads are not recounted.
+- `fiscal_position.duplicate/delete` uses native copy/unlink, preserving
+  configured tax membership, header values, independent account rows, and the
+  source. Deletion uses native constraints and mapping cascade behavior.
+- `tax.duplicate` uses native copy with the requested name and independent
+  repartition rows. It preserves tax settings and original-tax references but
+  explicitly detaches fiscal-position and replacing-tax inverse links. It does
+  not attach the new tax to existing positions or change another tax's
+  original-tax set.
+- No obsolete `account.fiscal.position.tax` model is used. Company/user scope,
+  accounting-manager ACLs, deterministic keys, exact confirmation and ordinary
+  business-user ORM execution reuse the existing framework.
+- Three create/copy commands retain natural-key attribution/concurrency
+  limitations; two delete commands have no persistent tombstone or reversal.
+  These five `degraded` descriptors remain honest after live acceptance.
+
+### Verification and deployment
+
+The local shared batch/runtime/budget regression selection passed 239 tests;
+the public/schema selection passed 16 cases. Two central registry checks
+passed. The synchronized server selection, including those central checks,
+passed 241 cases. Ruff and `git diff --check` passed.
+
+The shared real-ORM smoke passed both synthetic aliases as uid 5 with
+`su=False`, covering eight new writes, two existing mapping readbacks, existing
+fiscal/tax creation for fixtures, six immediate replays, company isolation, two
+source mappings, independent fiscal copying, both source-tax and destination-tax
+detached copies, individual deletion, native cascade, and fresh-cursor rollback.
+Temporary manager-group membership was also rolled back. The smoke passed in
+222.00 seconds without a live fixture or implementation retry.
+
+The initial 26-file deployment backed up seven existing files and added 19
+files. Archive SHA-256:
+`09f99c9a461bf4fa16be823fed06ba9423a32dc139619b1c45d99214e5fba33e`.
+Private manifests, archives, and logs are under
+`.tooling/fiscal-mapping-maintenance-20261001-live1`. Final metadata
+synchronization changes only the registry and its unit test. Divergent server
+STATUS/HANDOFF documents remain untouched.
+
+The changed code/schema/test scan has no public-material findings. The full-tree
+scan still has five pre-existing path/IP findings in historical execution
+documents; do not describe it as passing or commit private evidence.
+
+Final registry-file SHA-256:
+`bd30eb0c2382440fdc458558d2cc28287c9e7a6340f9f2d15afbce132428ab0a`.
+Canonical registry SHA-256:
+`29e67f7a30c979b13c129c67de1fe278277a165203ca1b1f7a2d357708fa3f34`.
+Passing live-log SHA-256:
+`264182e0c5db45e74879155dd243956dda50df7725586f572dcaebc6752eb855`.
+
+Before/after service snapshots were byte-identical. Odoo remained at PID
+`25607`, `NRestarts=6`; Nginx remained at PID `3309593`, `NRestarts=0`;
+PostgreSQL stayed active. No service-control command was issued.
+
+### Continue from here
+
+Continue auditing actual installed native accounting models and existing IDs
+before the next related capability batch. Do not pad counts with aliases or
+recount existing read commands. Keep all write smoke activity within the two
+synthetic databases and do not modify installed addons or restart services.
+
+The older positive integration gaps remain `asset.validate` (failed),
+`product.accounting_profile.get`, `report.customer_statement.send`, and
+`report.followup.send` (planned). The full capability-first objective remains
+active; this related batch alone does not prove complete accounting coverage.

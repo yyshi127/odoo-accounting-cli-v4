@@ -6,6 +6,8 @@ from hashlib import sha256
 from pathlib import Path
 
 import pytest
+from test_fiscal_mapping_writes import PARAMETERS as FISCAL_MAPPING_PARAMETERS
+from test_fiscal_mapping_writes import result as fiscal_mapping_result
 from test_report_budget_writes import PARAMETERS as REPORT_BUDGET_PARAMETERS
 
 from odoo_accounting_cli_v4.capabilities.core_writes import (
@@ -823,6 +825,7 @@ PARAMETERS = {
 }
 
 
+PARAMETERS.update(deepcopy(FISCAL_MAPPING_PARAMETERS))
 PARAMETERS.update(deepcopy(REPORT_BUDGET_PARAMETERS))
 PARAMETERS["report.budget_definition.create"]["sequence"] = 0
 
@@ -843,7 +846,7 @@ def _request(capability_id: str) -> dict:
 
 
 def _key(capability_id: str) -> str:
-    if capability_id in REPORT_BUDGET_PARAMETERS:
+    if capability_id in REPORT_BUDGET_PARAMETERS or capability_id in FISCAL_MAPPING_PARAMETERS:
         parameters = validate_core_write_request(capability_id, _request(capability_id))[2]
         return _expected_idempotency_key(capability_id, parameters, 7)
     if capability_id in {
@@ -1135,6 +1138,10 @@ def _key(capability_id: str) -> str:
 
 
 def _result(capability_id: str, **changes) -> dict:
+    if capability_id in FISCAL_MAPPING_PARAMETERS:
+        result = fiscal_mapping_result(capability_id, PARAMETERS[capability_id])
+        result.update(changes)
+        return result
     if capability_id in REPORT_BUDGET_PARAMETERS:
         parameters = PARAMETERS[capability_id]
         item = capability_id.startswith("report.budget_item.")

@@ -2,6 +2,38 @@
 
 ## Current accounting phase — 2026-10-01
 
+The registry has 426 IDs and 411 implemented handlers: 215 reads and 196
+writes, with 828 schema files. Availability descriptors are 343
+`unconfigured`, 68 `degraded`, and 15 `disabled`. Integration records are
+407 `implemented`, three `planned`, and one `failed`. These totals include
+historical non-accounting extensions, not complete accounting coverage or a
+guarantee that a configured user has native Odoo permissions.
+
+The latest batch adds eight fiscal-position/tax maintenance commands:
+destination-tax and original-tax set replacement, individual account-mapping
+create/update/delete, fiscal-position duplicate/delete, and detached tax copy.
+The tax relationships use actual Odoo 19 fields, not the obsolete fiscal-tax
+mapping-row model. Replacing a tax's original-tax set affects all positions
+using that destination tax; an empty fiscal tax set removes all taxes.
+
+The shared smoke passed both isolated aliases through the public CLI as uid 5
+with `su=False`, covering all eight writes, two mapping readbacks, six immediate
+replays, company isolation, independent fiscal copies, both source/destination
+tax copies without inverse-link contamination, native deletion/cascade, and
+fresh-cursor business-data and temporary-group rollback verification.
+Local related tests passed 239 cases and the public/schema selection passed
+16 cases; the server selection including central registry checks passed
+241 cases. Odoo/Nginx PID and restart counters stayed unchanged, and PostgreSQL
+remained active. No business database or installed addon was changed.
+
+Next: keep auditing installed native accounting models and existing IDs before
+another related capability batch. Four older positive integration gaps remain:
+`asset.validate` (failed), `product.accounting_profile.get`,
+`report.customer_statement.send`, and `report.followup.send` (planned).
+See the latest [handoff checkpoint](HANDOFF.md) for boundaries and evidence.
+
+## Previous checkpoint — financial-report budgets, 2026-10-01
+
 The registry has 418 IDs and 403 implemented handlers: 215 reads and 188
 writes, with 812 schema files. Availability descriptors are 340
 `unconfigured`, 63 `degraded`, and 15 `disabled`. Integration records for

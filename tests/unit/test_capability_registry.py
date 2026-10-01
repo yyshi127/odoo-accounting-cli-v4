@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 418
-EXPECTED_ENABLED_CAPABILITY_COUNT = 403
+EXPECTED_CAPABILITY_COUNT = 426
+EXPECTED_ENABLED_CAPABILITY_COUNT = 411
 EXPECTED_IMPLEMENTED_READ_COUNT = 215
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 188
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 196
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 340
-EXPECTED_DEGRADED_CAPABILITY_COUNT = 63
-EXPECTED_SCHEMA_COUNT = 812
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 343
+EXPECTED_DEGRADED_CAPABILITY_COUNT = 68
+EXPECTED_SCHEMA_COUNT = 828
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "80ab24fab163c1b141449a591e7ea5dff2ca783c52c696c524831b8396214dd5"
+    "f2457a8355ba7d0a1b703e2eb1b662db74e3828924e165c9acbac9c356659775"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -341,7 +341,17 @@ REPORT_BUDGET_WRITES = {
     "report.budget_item.create", "report.budget_item.update", "report.budget_item.delete",
     "report.budget_account_period.set_total",
 }
-IMPLEMENTED_WRITES = REPORT_BUDGET_WRITES | {
+FISCAL_MAPPING_WRITES = {
+    "fiscal_position.taxes.replace",
+    "tax.original_taxes.replace",
+    "fiscal_position.account_mapping.create",
+    "fiscal_position.account_mapping.update",
+    "fiscal_position.account_mapping.delete",
+    "fiscal_position.duplicate",
+    "fiscal_position.delete",
+    "tax.duplicate",
+}
+IMPLEMENTED_WRITES = FISCAL_MAPPING_WRITES | REPORT_BUDGET_WRITES | {
     "account.group.create",
     "account.group.update",
     "account.tag.archive",
@@ -2629,6 +2639,7 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
     )
 
     assert set(CORE_WRITE_MODELS) == IMPLEMENTED_WRITES
+    extended_modules.update({capability_id: ["account", "base"] for capability_id in FISCAL_MAPPING_WRITES})
     extended_modules.update({
         capability_id: ["account", "account_reports", "base"]
         for capability_id in REPORT_BUDGET_WRITES
@@ -2705,6 +2716,7 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
         elif capability_id in {
             "product.create", "product.duplicate", "report.budget_definition.create",
             "report.budget_definition.duplicate", "report.budget_item.create",
+            "fiscal_position.account_mapping.create", "fiscal_position.duplicate", "tax.duplicate",
         }:
             assert descriptor["status"]["value"] == "degraded"
             assert (
@@ -2749,6 +2761,7 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             "analytic.line.delete",
             "report.budget_definition.delete",
             "report.budget_item.delete",
+            "fiscal_position.account_mapping.delete", "fiscal_position.delete",
             "account.return.delete",
             "account.transfer_model.delete",
             "bank.statement.delete",
@@ -2979,6 +2992,21 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             assert descriptor["tests"]["integration"]["references"] == [
                 "tests/integration/test_account_transfer_model_write_batch_live.py"
             ]
+            continue
+        if capability_id in FISCAL_MAPPING_WRITES:
+            assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_fiscal_mapping_writes.py"]
+            assert descriptor["tests"]["integration"] == {
+                "status": "implemented",
+                "references": ["tests/integration/test_fiscal_mapping_write_batch_live.py"],
+                "reason": (
+                    "The guarded shared smoke passed both isolated aliases through the "
+                    "public CLI as uid 5 with su=False, exercising all eight fiscal/tax "
+                    "writes, two mapping readbacks, six immediate replays, company isolation, "
+                    "independent fiscal and detached tax copies, native mapping/cascade "
+                    "deletion, and fresh-cursor business-data and temporary-group rollback "
+                    "verification."
+                ),
+            }
             continue
         if capability_id in REPORT_BUDGET_WRITES:
             assert descriptor["tests"]["unit"]["status"] == "implemented"
