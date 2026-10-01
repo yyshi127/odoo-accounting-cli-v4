@@ -5505,3 +5505,99 @@ Continue another small genuine native accounting gap batch. Asset validation
 still failed; product accounting-profile readback/two external report sends still
 planned. Addon fixes/actual sends need separate authority. Goal stays active;
 complete accounting coverage remains unproven.
+
+## Native journal and ledger-group maintenance — 2026-10-01
+
+Baseline `423c20a`. 508 registered IDs; 493 implemented handlers (234 reads, 259 writes);
+992 schemas. Availability: 420 unconfigured, 73 degraded, 15 disabled.
+Enabled integrations: 489 implemented, three planned, one failed. Historical
+non-accounting extensions are included; these are not a complete accounting
+denominator, completion percentage or ordinary-runtime permission guarantee.
+
+Eight native journal capabilities: advanced settings/available invoice-template
+reading; duplication/deletion, dedicated refund/payment sequence flags, invoice
+payment-reference settings, private-share-account and customer-invoice-template
+assignment, and ledger-group deletion. Existing basic/liquidity/bank-reference
+edits and basic/reference/hash-configuration reads are reused, not alias padding.
+
+Both isolated aliases passed one shared public CLI/real-ORM workflow in 783.61
+seconds as uid 5, su=False, company 1: eight new IDs, six setup IDs and twelve
+immediate replays per alias. Native general/sale/bank copies have independent
+identities, fifteen stable copied fields, preserved sources and fresh identities
+after deletion, including archived source/copy reads. Native copy_data replaces
+caller names/codes; the real copy alone is then renamed in the same savepoint.
+Default accounts/bank links/method lines retain native copy=False behavior: bank
+copies get fresh default accounts/method lines and do not reuse the source bank
+link. Serial code/profile replay is not concurrent exactly-once or copy-provenance
+proof. Native settings persist; private-account/template references can clear.
+Templates must be actually available native customer-invoice reports on sale
+journals, not arbitrary report IDs. No rendered-report or historic resequencing
+claim. Foreign/global-group/inapplicable/missing/deleted targets are denied.
+
+Draft/posted journal unlink denials verify actual ForeignKeyViolation on
+account_move_journal_id_fkey/account_move, not merely any generic failure. The
+existing public mapping remains odoo_write_error/exit 6. Posted identities,
+accounts/journals/maturities/amounts/residuals/tax links stay unchanged. Group
+deletion removes the group and preserves journals. Native linked-bank journal
+deletion is denied by the business user's bank unlink ACL and restores journal,
+method lines and bank reference in its savepoint. Public reference detachment
+then permits journal/method-line deletion while preserving the detached bank
+record. No standalone alias/bank CRUD privileges added as global preconditions,
+broader group grants or caller-sudo; actual native parent/child ACLs remain.
+Fresh cursors verify all synthetic data and temporary manager groups rolled back.
+
+Retained failed runs are not acceptance: attempt 1, 139.91s, was blocked by our
+unnecessary global standalone mail.alias:create precheck. UID 5/su=False native
+diagnostics proved general/sale/bank copies work without it; bank copy profiles
+match and native linked-bank unlink denies/restores children. Four-file repair
+removes inappropriate standalone alias/bank preconditions, adds a regression,
+aligns descriptors and tests native conditional bank ACL behavior. Attempt 2,
+229.65s, wrongly expected business_rule_error for a SQL FK violation. A rolled-back
+native diagnostic confirmed exact exception/constraint, public exit 6 and intact
+journal/draft move; one-file fixture repair preserves production mapping and
+checks the cause. Attempt 3, 231.04s, verified the draft FK denial, then used the
+wrong existing posting parameter entry_id. One-file fixture repair uses move_id;
+all six setup request contracts were locally checked before rerun. All failed
+workers verified full data/group rollback before rethrowing the original failure;
+all diagnostic fixtures/group memberships were likewise verified rolled back.
+
+Local: 1083 cases (34 batch + 872 reads + 177 runtime), 254 focused writes.
+Initial registry: 18 passed/one source-model-order failure/one known deselection;
+descriptor model/ACL order fixed, failed selector repassed, then changed closure
+selectors checked. Server: 33 initial/34 final batch cases and 19 final registry
+cases with explicit stale bank_statement_payment_maintenance deselection.
+Ruff/diff and changed/staged-added-line privacy checks passed; full tree still has
+five historical document findings, not a full scan pass. Initial 31-file allowlist
+backed up 12 existing files and added 19; four-file repair, two one-file fixture
+repairs and two-file metadata closure checked prior hashes/backups first. All 31
+final code hashes match. Server STATUS/HANDOFF overlays left untouched; service
+PIDs/restart counts unchanged. No business DB, installed addon/source, Pi/V2/V3,
+service or configuration changed; no external payments/deliveries.
+
+Next: another genuine native accounting gap batch. Older asset validation remains
+failed; product accounting-profile readback and two actual external report sends
+remain planned. Addon fixes/actual sends need separate authority. Keep the
+capability-first goal active; complete accounting coverage is still unproven.
+
+
+New IDs: `journal.processing_settings.get`, `journal.duplicate`, `journal.delete`,
+`journal.sequence_policy.update`, `journal.invoice_reference.update`,
+`journal.non_deductible_account.assign`, `journal.invoice_template.assign`,
+`journal.group.delete`. Advanced reads expose native refund/payment/self-billing
+flags, private-share account, chosen template and actual available template IDs;
+old basic/reference/hash reads remain separate. Writes are fixed closed fields,
+native copy/unlink, one savepoint, business ACL/company/user, exact confirmation
+and deterministic keys. Account references active/current-company, nullable
+clears. Fixed core reference models odoo/euro/number and types invoice/partner.
+Deletes have no tombstone/fake replay; global groups are not company-owned targets.
+No native hashing toggle, arbitrary fields or new control framework.
+
+Private artifacts: `.tooling/journal-processing-20261001`; never stage them.
+Initial archive SHA256: `e1b25e4a892d5aa3388f5752cd724362add576b1f9279d3535c26263cb311a3d`.
+ACL repair SHA256: `d28b16b123f90fb4efc2a0ee8a8f71d4511aa6cfa2f1963080469ef438967cc3`.
+FK fixture repair SHA256: `539fbf61fdd8d0cba8d3fef2a134d679e3bc22395e34760504a6436af3ae1320`.
+Posting fixture repair SHA256: `21ab1d7643ac5aecb67b92b690c2ac671bf70a7c285b765b57677721fbc7e58f`.
+Final metadata SHA256: `970ba5591e069cf5208d547f7c0279bc6ef39ee8e02ef1d498410bb7f81ad6da`.
+Registry file SHA256: `2ddeeef984ab43ee3ccc9336a60255b32c38fc1620d4cc4f7e607ee20475f632`.
+Canonical registry SHA256: `45f066e87b617220aa87c21cf88fd46899d1a9cad4a71be8a6cc10a7071d7df3`.
+Passing live log SHA256: `b182184abd5336cfbe4c2bbc48a8a325eb6883c4000f181a2e6b5cb73d039591`.

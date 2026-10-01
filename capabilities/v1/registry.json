@@ -34467,6 +34467,1006 @@
         ]
       },
       "handler_key": "core_write"
+    },
+    "journal.delete": {
+      "summary": {
+        "zh_CN": "原生删除日记账",
+        "en_US": "Delete a journal subject to native guards"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "models": [
+          "account.journal",
+          "account.move",
+          "account.payment.method.line",
+          "mail.alias",
+          "res.company",
+          "res.partner.bank"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_journal.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/journal.delete.request.schema.json",
+        "response": "schemas/v1/journal.delete.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.journal:read",
+          "account.journal:unlink",
+          "account.move:read",
+          "account.payment.method.line:read",
+          "account.payment.method.line:unlink",
+          "mail.alias:read",
+          "res.company:read",
+          "res.partner.bank:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_journal_copy_unlink_or_settings_write",
+        "verify": "native_identity_and_requested_configuration_reread_in_one_savepoint",
+        "idempotency": "serial_journal_code_profile_or_current_requested_fields_with_missing_delete_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_journal_processing_batch.py"
+          ],
+          "reason": "Closed public CLI/schemas, deterministic keys, native copy rename and state replay, result/company binding, fixed field/reference/access denials and savepoint rollback."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_journal_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs, six setup IDs and twelve immediate replays per alias. Actual general/sale/bank native copies retain fifteen stable fields, rename only the real copy after native copy_data, preserve sources, use independent identities, honor serial conflict/replay and recreate deleted targets with fresh archived identities. Native copy=False default/bank references are not forced to share; bank copies have fresh native default accounts/method lines and no source bank link. Real native sequence/reference/private-share-account and available customer-invoice-template settings persist and nullable references clear. Foreign/global-group/inapplicable/missing/deleted targets are denied. Native account_move_journal_id_fkey ForeignKeyViolation is verified directly for both draft and posted journal deletion denials, retaining the existing public odoo_write_error/exit-6 mapping. Posted IDs/accounts/journals/maturities/amounts/residuals/tax links remain unchanged. Native group deletion preserves journals. With no standalone bank unlink privilege, linked-bank journal deletion is denied by native ACL and restores journal/method lines/reference in its savepoint; publicly detaching the reference permits journal/method-line unlink while preserving the detached bank record. No added standalone alias/bank prerequisites or broader roles/caller-sudo. Fresh-cursor synthetic business data and temporary manager-group rollback verified; no business DB, addon/source, service or external payment changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Native advanced journal fields and available invoice-report IDs, not a duplicate of existing basic/liquidity configuration reads. Fixed edits retain company/user/ACLs. Native copy first chooses its name/code, then the copy alone is renamed inside the same savepoint; default accounts, bank references, payment-method lines and aliases retain native copy semantics, not forced source-child sharing. Stable copied configuration is compared; serial code/profile replay is not concurrent exactly-once or copy-provenance proof. Template assignment is limited to native available customer-invoice templates on sale journals; null clears. Account assignment requires an active account containing the current company; null clears. Native unlink may remove method lines, aliases and an exclusively linked bank account, and native journal-entry references still block deletion. Group deletion removes the group, not its journals. No historical sequence repair, posted-entry rewrite, native hashing toggle, arbitrary fields, caller-sudo, external payment or new control framework. Standalone mail-alias creation/deletion and bank-account unlink are not global prerequisites for a journal operation; native parent and applicable child ACLs remain authoritative. An exclusively linked bank account still requires its actual native unlink rights: a denial rolls back journal/method-line removal, and detaching the bank reference does not delete the bank account."
+      },
+      "routing": {
+        "object": "journal",
+        "actions": [
+          "delete"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "原生删除日记账"
+          ],
+          "en_US": [
+            "Delete a journal subject to native guards"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "重排历史分录序列",
+            "修改已过账分录",
+            "关闭原生哈希保护",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Resequencing historical entries",
+            "Rewriting posted entries",
+            "Disabling native hash protection",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "journal.duplicate": {
+      "summary": {
+        "zh_CN": "原生复制日记账",
+        "en_US": "Duplicate a journal natively"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "models": [
+          "account.account",
+          "account.journal",
+          "account.payment.method",
+          "account.payment.method.line",
+          "ir.actions.report",
+          "mail.alias",
+          "res.company",
+          "res.currency"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_journal.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/journal.duplicate.request.schema.json",
+        "response": "schemas/v1/journal.duplicate.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:create",
+          "account.account:read",
+          "account.account:write",
+          "account.journal:create",
+          "account.journal:read",
+          "account.journal:write",
+          "account.payment.method.line:create",
+          "account.payment.method.line:read",
+          "account.payment.method:read",
+          "ir.actions.report:read",
+          "mail.alias:read",
+          "res.company:read",
+          "res.currency:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_journal_copy_unlink_or_settings_write",
+        "verify": "native_identity_and_requested_configuration_reread_in_one_savepoint",
+        "idempotency": "serial_journal_code_profile_or_current_requested_fields_with_missing_delete_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_journal_processing_batch.py"
+          ],
+          "reason": "Closed public CLI/schemas, deterministic keys, native copy rename and state replay, result/company binding, fixed field/reference/access denials and savepoint rollback."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_journal_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs, six setup IDs and twelve immediate replays per alias. Actual general/sale/bank native copies retain fifteen stable fields, rename only the real copy after native copy_data, preserve sources, use independent identities, honor serial conflict/replay and recreate deleted targets with fresh archived identities. Native copy=False default/bank references are not forced to share; bank copies have fresh native default accounts/method lines and no source bank link. Real native sequence/reference/private-share-account and available customer-invoice-template settings persist and nullable references clear. Foreign/global-group/inapplicable/missing/deleted targets are denied. Native account_move_journal_id_fkey ForeignKeyViolation is verified directly for both draft and posted journal deletion denials, retaining the existing public odoo_write_error/exit-6 mapping. Posted IDs/accounts/journals/maturities/amounts/residuals/tax links remain unchanged. Native group deletion preserves journals. With no standalone bank unlink privilege, linked-bank journal deletion is denied by native ACL and restores journal/method lines/reference in its savepoint; publicly detaching the reference permits journal/method-line unlink while preserving the detached bank record. No added standalone alias/bank prerequisites or broader roles/caller-sudo. Fresh-cursor synthetic business data and temporary manager-group rollback verified; no business DB, addon/source, service or external payment changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Native advanced journal fields and available invoice-report IDs, not a duplicate of existing basic/liquidity configuration reads. Fixed edits retain company/user/ACLs. Native copy first chooses its name/code, then the copy alone is renamed inside the same savepoint; default accounts, bank references, payment-method lines and aliases retain native copy semantics, not forced source-child sharing. Stable copied configuration is compared; serial code/profile replay is not concurrent exactly-once or copy-provenance proof. Template assignment is limited to native available customer-invoice templates on sale journals; null clears. Account assignment requires an active account containing the current company; null clears. Native unlink may remove method lines, aliases and an exclusively linked bank account, and native journal-entry references still block deletion. Group deletion removes the group, not its journals. No historical sequence repair, posted-entry rewrite, native hashing toggle, arbitrary fields, caller-sudo, external payment or new control framework. Standalone mail-alias creation/deletion and bank-account unlink are not global prerequisites for a journal operation; native parent and applicable child ACLs remain authoritative. An exclusively linked bank account still requires its actual native unlink rights: a denial rolls back journal/method-line removal, and detaching the bank reference does not delete the bank account."
+      },
+      "routing": {
+        "object": "journal",
+        "actions": [
+          "duplicate"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "原生复制日记账"
+          ],
+          "en_US": [
+            "Duplicate a journal natively"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "重排历史分录序列",
+            "修改已过账分录",
+            "关闭原生哈希保护",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Resequencing historical entries",
+            "Rewriting posted entries",
+            "Disabling native hash protection",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "journal.group.delete": {
+      "summary": {
+        "zh_CN": "删除日记账组",
+        "en_US": "Delete a journal group"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "models": [
+          "account.journal.group",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_journal.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/journal.group.delete.request.schema.json",
+        "response": "schemas/v1/journal.group.delete.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.journal.group:read",
+          "account.journal.group:unlink",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_journal_copy_unlink_or_settings_write",
+        "verify": "native_identity_and_requested_configuration_reread_in_one_savepoint",
+        "idempotency": "serial_journal_code_profile_or_current_requested_fields_with_missing_delete_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_journal_processing_batch.py"
+          ],
+          "reason": "Closed public CLI/schemas, deterministic keys, native copy rename and state replay, result/company binding, fixed field/reference/access denials and savepoint rollback."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_journal_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs, six setup IDs and twelve immediate replays per alias. Actual general/sale/bank native copies retain fifteen stable fields, rename only the real copy after native copy_data, preserve sources, use independent identities, honor serial conflict/replay and recreate deleted targets with fresh archived identities. Native copy=False default/bank references are not forced to share; bank copies have fresh native default accounts/method lines and no source bank link. Real native sequence/reference/private-share-account and available customer-invoice-template settings persist and nullable references clear. Foreign/global-group/inapplicable/missing/deleted targets are denied. Native account_move_journal_id_fkey ForeignKeyViolation is verified directly for both draft and posted journal deletion denials, retaining the existing public odoo_write_error/exit-6 mapping. Posted IDs/accounts/journals/maturities/amounts/residuals/tax links remain unchanged. Native group deletion preserves journals. With no standalone bank unlink privilege, linked-bank journal deletion is denied by native ACL and restores journal/method lines/reference in its savepoint; publicly detaching the reference permits journal/method-line unlink while preserving the detached bank record. No added standalone alias/bank prerequisites or broader roles/caller-sudo. Fresh-cursor synthetic business data and temporary manager-group rollback verified; no business DB, addon/source, service or external payment changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Native advanced journal fields and available invoice-report IDs, not a duplicate of existing basic/liquidity configuration reads. Fixed edits retain company/user/ACLs. Native copy first chooses its name/code, then the copy alone is renamed inside the same savepoint; default accounts, bank references, payment-method lines and aliases retain native copy semantics, not forced source-child sharing. Stable copied configuration is compared; serial code/profile replay is not concurrent exactly-once or copy-provenance proof. Template assignment is limited to native available customer-invoice templates on sale journals; null clears. Account assignment requires an active account containing the current company; null clears. Native unlink may remove method lines, aliases and an exclusively linked bank account, and native journal-entry references still block deletion. Group deletion removes the group, not its journals. No historical sequence repair, posted-entry rewrite, native hashing toggle, arbitrary fields, caller-sudo, external payment or new control framework. Standalone mail-alias creation/deletion and bank-account unlink are not global prerequisites for a journal operation; native parent and applicable child ACLs remain authoritative. An exclusively linked bank account still requires its actual native unlink rights: a denial rolls back journal/method-line removal, and detaching the bank reference does not delete the bank account."
+      },
+      "routing": {
+        "object": "journal.group",
+        "actions": [
+          "delete"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "删除日记账组"
+          ],
+          "en_US": [
+            "Delete a journal group"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "重排历史分录序列",
+            "修改已过账分录",
+            "关闭原生哈希保护",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Resequencing historical entries",
+            "Rewriting posted entries",
+            "Disabling native hash protection",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "journal.invoice_reference.update": {
+      "summary": {
+        "zh_CN": "设置发票付款参考格式",
+        "en_US": "Configure invoice payment reference standards"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "models": [
+          "account.journal",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_journal.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/journal.invoice_reference.update.request.schema.json",
+        "response": "schemas/v1/journal.invoice_reference.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.journal:read",
+          "account.journal:write",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_journal_copy_unlink_or_settings_write",
+        "verify": "native_identity_and_requested_configuration_reread_in_one_savepoint",
+        "idempotency": "serial_journal_code_profile_or_current_requested_fields_with_missing_delete_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_journal_processing_batch.py"
+          ],
+          "reason": "Closed public CLI/schemas, deterministic keys, native copy rename and state replay, result/company binding, fixed field/reference/access denials and savepoint rollback."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_journal_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs, six setup IDs and twelve immediate replays per alias. Actual general/sale/bank native copies retain fifteen stable fields, rename only the real copy after native copy_data, preserve sources, use independent identities, honor serial conflict/replay and recreate deleted targets with fresh archived identities. Native copy=False default/bank references are not forced to share; bank copies have fresh native default accounts/method lines and no source bank link. Real native sequence/reference/private-share-account and available customer-invoice-template settings persist and nullable references clear. Foreign/global-group/inapplicable/missing/deleted targets are denied. Native account_move_journal_id_fkey ForeignKeyViolation is verified directly for both draft and posted journal deletion denials, retaining the existing public odoo_write_error/exit-6 mapping. Posted IDs/accounts/journals/maturities/amounts/residuals/tax links remain unchanged. Native group deletion preserves journals. With no standalone bank unlink privilege, linked-bank journal deletion is denied by native ACL and restores journal/method lines/reference in its savepoint; publicly detaching the reference permits journal/method-line unlink while preserving the detached bank record. No added standalone alias/bank prerequisites or broader roles/caller-sudo. Fresh-cursor synthetic business data and temporary manager-group rollback verified; no business DB, addon/source, service or external payment changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Native advanced journal fields and available invoice-report IDs, not a duplicate of existing basic/liquidity configuration reads. Fixed edits retain company/user/ACLs. Native copy first chooses its name/code, then the copy alone is renamed inside the same savepoint; default accounts, bank references, payment-method lines and aliases retain native copy semantics, not forced source-child sharing. Stable copied configuration is compared; serial code/profile replay is not concurrent exactly-once or copy-provenance proof. Template assignment is limited to native available customer-invoice templates on sale journals; null clears. Account assignment requires an active account containing the current company; null clears. Native unlink may remove method lines, aliases and an exclusively linked bank account, and native journal-entry references still block deletion. Group deletion removes the group, not its journals. No historical sequence repair, posted-entry rewrite, native hashing toggle, arbitrary fields, caller-sudo, external payment or new control framework. Standalone mail-alias creation/deletion and bank-account unlink are not global prerequisites for a journal operation; native parent and applicable child ACLs remain authoritative. An exclusively linked bank account still requires its actual native unlink rights: a denial rolls back journal/method-line removal, and detaching the bank reference does not delete the bank account."
+      },
+      "routing": {
+        "object": "journal",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置发票付款参考格式"
+          ],
+          "en_US": [
+            "Configure invoice payment reference standards"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "重排历史分录序列",
+            "修改已过账分录",
+            "关闭原生哈希保护",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Resequencing historical entries",
+            "Rewriting posted entries",
+            "Disabling native hash protection",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "journal.invoice_template.assign": {
+      "summary": {
+        "zh_CN": "设置可用客户发票模板",
+        "en_US": "Assign an available customer invoice template"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "models": [
+          "account.journal",
+          "ir.actions.report",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_journal.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/journal.invoice_template.assign.request.schema.json",
+        "response": "schemas/v1/journal.invoice_template.assign.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.journal:read",
+          "account.journal:write",
+          "ir.actions.report:read",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_journal_copy_unlink_or_settings_write",
+        "verify": "native_identity_and_requested_configuration_reread_in_one_savepoint",
+        "idempotency": "serial_journal_code_profile_or_current_requested_fields_with_missing_delete_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_journal_processing_batch.py"
+          ],
+          "reason": "Closed public CLI/schemas, deterministic keys, native copy rename and state replay, result/company binding, fixed field/reference/access denials and savepoint rollback."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_journal_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs, six setup IDs and twelve immediate replays per alias. Actual general/sale/bank native copies retain fifteen stable fields, rename only the real copy after native copy_data, preserve sources, use independent identities, honor serial conflict/replay and recreate deleted targets with fresh archived identities. Native copy=False default/bank references are not forced to share; bank copies have fresh native default accounts/method lines and no source bank link. Real native sequence/reference/private-share-account and available customer-invoice-template settings persist and nullable references clear. Foreign/global-group/inapplicable/missing/deleted targets are denied. Native account_move_journal_id_fkey ForeignKeyViolation is verified directly for both draft and posted journal deletion denials, retaining the existing public odoo_write_error/exit-6 mapping. Posted IDs/accounts/journals/maturities/amounts/residuals/tax links remain unchanged. Native group deletion preserves journals. With no standalone bank unlink privilege, linked-bank journal deletion is denied by native ACL and restores journal/method lines/reference in its savepoint; publicly detaching the reference permits journal/method-line unlink while preserving the detached bank record. No added standalone alias/bank prerequisites or broader roles/caller-sudo. Fresh-cursor synthetic business data and temporary manager-group rollback verified; no business DB, addon/source, service or external payment changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Native advanced journal fields and available invoice-report IDs, not a duplicate of existing basic/liquidity configuration reads. Fixed edits retain company/user/ACLs. Native copy first chooses its name/code, then the copy alone is renamed inside the same savepoint; default accounts, bank references, payment-method lines and aliases retain native copy semantics, not forced source-child sharing. Stable copied configuration is compared; serial code/profile replay is not concurrent exactly-once or copy-provenance proof. Template assignment is limited to native available customer-invoice templates on sale journals; null clears. Account assignment requires an active account containing the current company; null clears. Native unlink may remove method lines, aliases and an exclusively linked bank account, and native journal-entry references still block deletion. Group deletion removes the group, not its journals. No historical sequence repair, posted-entry rewrite, native hashing toggle, arbitrary fields, caller-sudo, external payment or new control framework. Standalone mail-alias creation/deletion and bank-account unlink are not global prerequisites for a journal operation; native parent and applicable child ACLs remain authoritative. An exclusively linked bank account still requires its actual native unlink rights: a denial rolls back journal/method-line removal, and detaching the bank reference does not delete the bank account."
+      },
+      "routing": {
+        "object": "journal",
+        "actions": [
+          "assign"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置可用客户发票模板"
+          ],
+          "en_US": [
+            "Assign an available customer invoice template"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "重排历史分录序列",
+            "修改已过账分录",
+            "关闭原生哈希保护",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Resequencing historical entries",
+            "Rewriting posted entries",
+            "Disabling native hash protection",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "journal.non_deductible_account.assign": {
+      "summary": {
+        "zh_CN": "设置私人分摊科目",
+        "en_US": "Assign the private share account"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "models": [
+          "account.account",
+          "account.journal",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_journal.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/journal.non_deductible_account.assign.request.schema.json",
+        "response": "schemas/v1/journal.non_deductible_account.assign.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.journal:read",
+          "account.journal:write",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_journal_copy_unlink_or_settings_write",
+        "verify": "native_identity_and_requested_configuration_reread_in_one_savepoint",
+        "idempotency": "serial_journal_code_profile_or_current_requested_fields_with_missing_delete_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_journal_processing_batch.py"
+          ],
+          "reason": "Closed public CLI/schemas, deterministic keys, native copy rename and state replay, result/company binding, fixed field/reference/access denials and savepoint rollback."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_journal_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs, six setup IDs and twelve immediate replays per alias. Actual general/sale/bank native copies retain fifteen stable fields, rename only the real copy after native copy_data, preserve sources, use independent identities, honor serial conflict/replay and recreate deleted targets with fresh archived identities. Native copy=False default/bank references are not forced to share; bank copies have fresh native default accounts/method lines and no source bank link. Real native sequence/reference/private-share-account and available customer-invoice-template settings persist and nullable references clear. Foreign/global-group/inapplicable/missing/deleted targets are denied. Native account_move_journal_id_fkey ForeignKeyViolation is verified directly for both draft and posted journal deletion denials, retaining the existing public odoo_write_error/exit-6 mapping. Posted IDs/accounts/journals/maturities/amounts/residuals/tax links remain unchanged. Native group deletion preserves journals. With no standalone bank unlink privilege, linked-bank journal deletion is denied by native ACL and restores journal/method lines/reference in its savepoint; publicly detaching the reference permits journal/method-line unlink while preserving the detached bank record. No added standalone alias/bank prerequisites or broader roles/caller-sudo. Fresh-cursor synthetic business data and temporary manager-group rollback verified; no business DB, addon/source, service or external payment changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Native advanced journal fields and available invoice-report IDs, not a duplicate of existing basic/liquidity configuration reads. Fixed edits retain company/user/ACLs. Native copy first chooses its name/code, then the copy alone is renamed inside the same savepoint; default accounts, bank references, payment-method lines and aliases retain native copy semantics, not forced source-child sharing. Stable copied configuration is compared; serial code/profile replay is not concurrent exactly-once or copy-provenance proof. Template assignment is limited to native available customer-invoice templates on sale journals; null clears. Account assignment requires an active account containing the current company; null clears. Native unlink may remove method lines, aliases and an exclusively linked bank account, and native journal-entry references still block deletion. Group deletion removes the group, not its journals. No historical sequence repair, posted-entry rewrite, native hashing toggle, arbitrary fields, caller-sudo, external payment or new control framework. Standalone mail-alias creation/deletion and bank-account unlink are not global prerequisites for a journal operation; native parent and applicable child ACLs remain authoritative. An exclusively linked bank account still requires its actual native unlink rights: a denial rolls back journal/method-line removal, and detaching the bank reference does not delete the bank account."
+      },
+      "routing": {
+        "object": "journal",
+        "actions": [
+          "assign"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置私人分摊科目"
+          ],
+          "en_US": [
+            "Assign the private share account"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "重排历史分录序列",
+            "修改已过账分录",
+            "关闭原生哈希保护",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Resequencing historical entries",
+            "Rewriting posted entries",
+            "Disabling native hash protection",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "journal.processing_settings.get": {
+      "summary": {
+        "zh_CN": "查看日记账高级设置和可用发票模板",
+        "en_US": "Inspect advanced journal settings and available invoice templates"
+      },
+      "domain": "accounting_configuration",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "models": [
+          "res.company",
+          "account.journal",
+          "account.account",
+          "ir.actions.report"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_journal.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/journal.processing_settings.get.request.schema.json",
+        "response": "schemas/v1/journal.processing_settings.get.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.journal:read",
+          "account.account:read",
+          "ir.actions.report:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_native_advanced_journal_read",
+        "verify": "closed_response_schema_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_journal_processing_batch.py"
+          ],
+          "reason": "Closed public CLI/schemas, deterministic keys, native copy rename and state replay, result/company binding, fixed field/reference/access denials and savepoint rollback."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_journal_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs, six setup IDs and twelve immediate replays per alias. Actual general/sale/bank native copies retain fifteen stable fields, rename only the real copy after native copy_data, preserve sources, use independent identities, honor serial conflict/replay and recreate deleted targets with fresh archived identities. Native copy=False default/bank references are not forced to share; bank copies have fresh native default accounts/method lines and no source bank link. Real native sequence/reference/private-share-account and available customer-invoice-template settings persist and nullable references clear. Foreign/global-group/inapplicable/missing/deleted targets are denied. Native account_move_journal_id_fkey ForeignKeyViolation is verified directly for both draft and posted journal deletion denials, retaining the existing public odoo_write_error/exit-6 mapping. Posted IDs/accounts/journals/maturities/amounts/residuals/tax links remain unchanged. Native group deletion preserves journals. With no standalone bank unlink privilege, linked-bank journal deletion is denied by native ACL and restores journal/method lines/reference in its savepoint; publicly detaching the reference permits journal/method-line unlink while preserving the detached bank record. No added standalone alias/bank prerequisites or broader roles/caller-sudo. Fresh-cursor synthetic business data and temporary manager-group rollback verified; no business DB, addon/source, service or external payment changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Native advanced journal fields and available invoice-report IDs, not a duplicate of existing basic/liquidity configuration reads. Fixed edits retain company/user/ACLs. Native copy first chooses its name/code, then the copy alone is renamed inside the same savepoint; default accounts, bank references, payment-method lines and aliases retain native copy semantics, not forced source-child sharing. Stable copied configuration is compared; serial code/profile replay is not concurrent exactly-once or copy-provenance proof. Template assignment is limited to native available customer-invoice templates on sale journals; null clears. Account assignment requires an active account containing the current company; null clears. Native unlink may remove method lines, aliases and an exclusively linked bank account, and native journal-entry references still block deletion. Group deletion removes the group, not its journals. No historical sequence repair, posted-entry rewrite, native hashing toggle, arbitrary fields, caller-sudo, external payment or new control framework. Standalone mail-alias creation/deletion and bank-account unlink are not global prerequisites for a journal operation; native parent and applicable child ACLs remain authoritative. An exclusively linked bank account still requires its actual native unlink rights: a denial rolls back journal/method-line removal, and detaching the bank reference does not delete the bank account."
+      },
+      "routing": {
+        "object": "journal",
+        "actions": [
+          "get"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "查看日记账高级设置和可用发票模板"
+          ],
+          "en_US": [
+            "Inspect advanced journal settings and available invoice templates"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "重排历史分录序列",
+            "修改已过账分录",
+            "关闭原生哈希保护",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Resequencing historical entries",
+            "Rewriting posted entries",
+            "Disabling native hash protection",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "journal_processing_settings_get"
+    },
+    "journal.sequence_policy.update": {
+      "summary": {
+        "zh_CN": "设置专用贷项和付款序列",
+        "en_US": "Configure dedicated refund and payment sequences"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "models": [
+          "account.journal",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_journal.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/journal.sequence_policy.update.request.schema.json",
+        "response": "schemas/v1/journal.sequence_policy.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.journal:read",
+          "account.journal:write",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_journal_copy_unlink_or_settings_write",
+        "verify": "native_identity_and_requested_configuration_reread_in_one_savepoint",
+        "idempotency": "serial_journal_code_profile_or_current_requested_fields_with_missing_delete_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_journal_processing_batch.py"
+          ],
+          "reason": "Closed public CLI/schemas, deterministic keys, native copy rename and state replay, result/company binding, fixed field/reference/access denials and savepoint rollback."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_journal_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs, six setup IDs and twelve immediate replays per alias. Actual general/sale/bank native copies retain fifteen stable fields, rename only the real copy after native copy_data, preserve sources, use independent identities, honor serial conflict/replay and recreate deleted targets with fresh archived identities. Native copy=False default/bank references are not forced to share; bank copies have fresh native default accounts/method lines and no source bank link. Real native sequence/reference/private-share-account and available customer-invoice-template settings persist and nullable references clear. Foreign/global-group/inapplicable/missing/deleted targets are denied. Native account_move_journal_id_fkey ForeignKeyViolation is verified directly for both draft and posted journal deletion denials, retaining the existing public odoo_write_error/exit-6 mapping. Posted IDs/accounts/journals/maturities/amounts/residuals/tax links remain unchanged. Native group deletion preserves journals. With no standalone bank unlink privilege, linked-bank journal deletion is denied by native ACL and restores journal/method lines/reference in its savepoint; publicly detaching the reference permits journal/method-line unlink while preserving the detached bank record. No added standalone alias/bank prerequisites or broader roles/caller-sudo. Fresh-cursor synthetic business data and temporary manager-group rollback verified; no business DB, addon/source, service or external payment changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Native advanced journal fields and available invoice-report IDs, not a duplicate of existing basic/liquidity configuration reads. Fixed edits retain company/user/ACLs. Native copy first chooses its name/code, then the copy alone is renamed inside the same savepoint; default accounts, bank references, payment-method lines and aliases retain native copy semantics, not forced source-child sharing. Stable copied configuration is compared; serial code/profile replay is not concurrent exactly-once or copy-provenance proof. Template assignment is limited to native available customer-invoice templates on sale journals; null clears. Account assignment requires an active account containing the current company; null clears. Native unlink may remove method lines, aliases and an exclusively linked bank account, and native journal-entry references still block deletion. Group deletion removes the group, not its journals. No historical sequence repair, posted-entry rewrite, native hashing toggle, arbitrary fields, caller-sudo, external payment or new control framework. Standalone mail-alias creation/deletion and bank-account unlink are not global prerequisites for a journal operation; native parent and applicable child ACLs remain authoritative. An exclusively linked bank account still requires its actual native unlink rights: a denial rolls back journal/method-line removal, and detaching the bank reference does not delete the bank account."
+      },
+      "routing": {
+        "object": "journal",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置专用贷项和付款序列"
+          ],
+          "en_US": [
+            "Configure dedicated refund and payment sequences"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "重排历史分录序列",
+            "修改已过账分录",
+            "关闭原生哈希保护",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Resequencing historical entries",
+            "Rewriting posted entries",
+            "Disabling native hash protection",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
     }
   }
 }

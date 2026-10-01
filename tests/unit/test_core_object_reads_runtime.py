@@ -16,6 +16,7 @@ from odoo_accounting_cli_v4.capabilities.core_object_reads import (
 
 EXPECTED_CAPABILITY_IDS = frozenset(
     {
+        "journal.processing_settings.get",
         "account.account.processing_settings.get",
         "tax.processing_settings.get",
         "tax.usage_lines.list",
@@ -173,6 +174,7 @@ GET_ID_FIELDS = {
 }
 
 PRIMARY_MODELS = {
+    "journal.processing_settings.get": "account.journal",
     "account.account.processing_settings.get": "account.account",
     "tax.processing_settings.get": "account.tax",
     "tax.usage_lines.list": "account.tax",
@@ -1471,6 +1473,8 @@ def _dispatch(
 
 
 def _parameters(capability_id: str) -> dict[str, Any]:
+    if capability_id == "journal.processing_settings.get":
+        return {"journal_id":31}
     if capability_id == "account.account.processing_settings.get":
         return {"account_id": 31}
     if capability_id == "tax.processing_settings.get":

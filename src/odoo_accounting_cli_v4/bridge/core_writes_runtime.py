@@ -22,6 +22,7 @@ from odoo_accounting_cli_v4 import fiscal_mapping_contracts as fiscal_mappings
 from odoo_accounting_cli_v4 import (
     invoice_presentation_contracts as invoice_presentation,
 )
+from odoo_accounting_cli_v4 import journal_processing_contracts as journal_processing
 from odoo_accounting_cli_v4 import move_processing_contracts as move_processing
 from odoo_accounting_cli_v4 import partner_preferences_contracts as partner_preferences
 from odoo_accounting_cli_v4 import (
@@ -38,7 +39,7 @@ from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
 from odoo_accounting_cli_v4 import tax_processing_contracts as tax_processing
 
 ACTION = "accounting.core_write.execute"
-CAPABILITIES = account_processing.CAPABILITY_IDS | tax_processing.CAPABILITY_IDS | payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
+CAPABILITIES = journal_processing.CAPABILITY_IDS | account_processing.CAPABILITY_IDS | tax_processing.CAPABILITY_IDS | payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -3326,6 +3327,28 @@ def _protocol(failure_type: type[Exception]) -> Exception:
     )
 
 
+_PARAMETER_KEYS.update(journal_processing.PARAMETER_KEYS)
+_GROUPS['journal.delete'] = "account.group_account_manager"
+_MODELS['journal.delete'] = {'account.journal', 'account.move', 'account.payment.method.line', 'res.company', 'res.partner.bank', 'mail.alias'}
+_ACCESS['journal.delete'] = {('mail.alias', 'read'), ('account.move', 'read'), ('account.payment.method.line', 'unlink'), ('account.journal', 'unlink'), ('res.company', 'read'), ('res.partner.bank', 'read'), ('account.payment.method.line', 'read'), ('account.journal', 'read')}
+_GROUPS['journal.duplicate'] = "account.group_account_manager"
+_MODELS['journal.duplicate'] = {'account.journal', 'account.account', 'account.payment.method.line', 'res.company', 'res.currency', 'mail.alias', 'ir.actions.report', 'account.payment.method'}
+_ACCESS['journal.duplicate'] = {('account.payment.method.line', 'create'), ('mail.alias', 'read'), ('account.journal', 'create'), ('res.currency', 'read'), ('res.company', 'read'), ('account.journal', 'write'), ('account.account', 'read'), ('account.payment.method', 'read'), ('account.account', 'create'), ('account.account', 'write'), ('account.payment.method.line', 'read'), ('ir.actions.report', 'read'), ('account.journal', 'read')}
+_GROUPS['journal.group.delete'] = "account.group_account_manager"
+_MODELS['journal.group.delete'] = {'res.company', 'account.journal.group'}
+_ACCESS['journal.group.delete'] = {('account.journal.group', 'unlink'), ('res.company', 'read'), ('account.journal.group', 'read')}
+_GROUPS['journal.invoice_reference.update'] = "account.group_account_manager"
+_MODELS['journal.invoice_reference.update'] = {'res.company', 'account.journal'}
+_ACCESS['journal.invoice_reference.update'] = {('res.company', 'read'), ('account.journal', 'write'), ('account.journal', 'read')}
+_GROUPS['journal.invoice_template.assign'] = "account.group_account_manager"
+_MODELS['journal.invoice_template.assign'] = {'res.company', 'account.journal', 'ir.actions.report'}
+_ACCESS['journal.invoice_template.assign'] = {('ir.actions.report', 'read'), ('res.company', 'read'), ('account.journal', 'write'), ('account.journal', 'read')}
+_GROUPS['journal.non_deductible_account.assign'] = "account.group_account_manager"
+_MODELS['journal.non_deductible_account.assign'] = {'res.company', 'account.journal', 'account.account'}
+_ACCESS['journal.non_deductible_account.assign'] = {('account.account', 'read'), ('res.company', 'read'), ('account.journal', 'write'), ('account.journal', 'read')}
+_GROUPS['journal.sequence_policy.update'] = "account.group_account_manager"
+_MODELS['journal.sequence_policy.update'] = {'res.company', 'account.journal'}
+_ACCESS['journal.sequence_policy.update'] = {('res.company', 'read'), ('account.journal', 'write'), ('account.journal', 'read')}
 _PARAMETER_KEYS.update(account_processing.PARAMETER_KEYS)
 _GROUPS['account.account.default_taxes.assign'] = "account.group_account_manager"
 _MODELS['account.account.default_taxes.assign'] = {'res.company', 'account.tax', 'account.account'}
@@ -5493,6 +5516,11 @@ def _valid_parameters(
 ) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id in journal_processing.CAPABILITY_IDS:
+        try:
+            return journal_processing.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
     if capability_id in account_processing.CAPABILITY_IDS:
         try:
             return account_processing.normalize_parameters(capability_id, parameters) == parameters
@@ -6126,6 +6154,8 @@ def _validated_payload(
 def _deterministic_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in journal_processing.CAPABILITY_IDS:
+        return journal_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in account_processing.CAPABILITY_IDS:
         return account_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in tax_processing.CAPABILITY_IDS:
@@ -17799,6 +17829,75 @@ def _account_processing_values(account: Any) -> dict[str, Any]:
     return values
 
 
+def _journal_processing_values(journal: Any) -> dict[str, Any]:
+    values = {field: getattr(journal, field) for field in journal_processing.COPY_FIELDS}
+    for field in journal_processing.RELATION_FIELDS:
+        values[field] = _relation_id(values[field])
+    return values
+
+
+def _write_journal_processing(
+    env: Any, capability_id: str, parameters: dict[str, Any],
+    company_id: int, failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    with env.cr.savepoint():
+        group = capability_id == "journal.group.delete"
+        record = (_journal_group(env, parameters["journal_group_id"], company_id, failure_type) if group
+                  else _journal_config_record(env, parameters["journal_id"], company_id, failure_type))
+        model = "account.journal.group" if group else "account.journal"
+        if capability_id in {"journal.delete", "journal.group.delete"}:
+            result = _deleted_result(_config_result(record, model, company_id))
+            record.unlink()
+            if record.exists():
+                raise _fail(failure_type, "odoo_write_error", "Native journal/group deletion failed.", exit_code=6)
+            return result, False
+        if capability_id == "journal.duplicate":
+            expected = _journal_processing_values(record)
+            candidates = _scoped(env, model, company_id).search([
+                ("company_id", "=", company_id), ("code", "=", parameters["code"]),
+            ], limit=2)
+            replay = bool(candidates)
+            if candidates:
+                if (len(candidates) != 1 or candidates.id == record.id or candidates.name != parameters["name"]
+                    or _journal_processing_values(candidates) != expected):
+                    raise _fail(failure_type, "idempotency_conflict", "Journal code belongs to a different configuration.", exit_code=5)
+                target = candidates
+            else:
+                # Native copy_data replaces caller name/code; rename its real copy
+                # in the same savepoint, retaining native fresh liquidity children.
+                target = record.copy({"company_id": company_id})
+                target.write({"code": parameters["code"], "name": parameters["name"]})
+                target.invalidate_recordset()
+            if (target.id == record.id or target.company_id.id != company_id or target.code != parameters["code"]
+                or target.name != parameters["name"] or _journal_processing_values(target) != expected):
+                raise _fail(failure_type, "odoo_write_error", "Native journal copy did not preserve requested configuration.", exit_code=6)
+            result = _config_result(target, model, company_id)
+            result["source_id"] = record.id
+            return result, replay
+        changes = parameters.get("changes")
+        if capability_id == "journal.non_deductible_account.assign":
+            account_id = parameters["account_id"]
+            if account_id is not None:
+                _ensure_ids(env, "account.account", {account_id}, [("company_ids", "in", [company_id]), ("active", "=", True)], company_id, failure_type)
+            changes = {"non_deductible_account_id": account_id}
+        if capability_id == "journal.invoice_template.assign":
+            report_id = parameters["report_id"]
+            record.invalidate_recordset(["available_invoice_template_pdf_report_ids"])
+            if record.type != "sale" or (report_id is not None and report_id not in record.available_invoice_template_pdf_report_ids.ids):
+                raise _fail(failure_type, "record_not_found", "The report is not an available customer-invoice template for this journal.", exit_code=4)
+            if report_id is not None:
+                _ensure_ids(env, "ir.actions.report", {report_id}, [], company_id, failure_type)
+            changes = {"invoice_template_pdf_report_id": report_id}
+        current = _journal_processing_values(record)
+        replay = all(current[field] == value for field, value in changes.items())
+        if not replay:
+            record.write({field: False if value is None else value for field, value in changes.items()})
+            record.invalidate_recordset()
+        if any(_journal_processing_values(record)[field] != value for field, value in changes.items()):
+            raise _fail(failure_type, "odoo_write_error", "Native journal update did not persist requested fields.", exit_code=6)
+        return _config_result(record, model, company_id), replay
+
+
 def _write_account_processing(
     env: Any, capability_id: str, parameters: dict[str, Any],
     company_id: int, failure_type: type[Exception],
@@ -20172,6 +20271,8 @@ def _dispatch_allowed(
     marker: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if capability_id in journal_processing.CAPABILITY_IDS:
+        return _write_journal_processing(env, capability_id, parameters, company_id, failure_type)
     if capability_id in account_processing.CAPABILITY_IDS:
         return _write_account_processing(env, capability_id, parameters, company_id, failure_type)
     if capability_id in tax_processing.CAPABILITY_IDS:

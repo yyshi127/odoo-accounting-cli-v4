@@ -15,6 +15,7 @@ from odoo_accounting_cli_v4 import account_processing_contracts as account_proce
 from odoo_accounting_cli_v4 import (
     invoice_presentation_contracts as invoice_presentation,
 )
+from odoo_accounting_cli_v4 import journal_processing_contracts as journal_processing
 from odoo_accounting_cli_v4 import move_processing_contracts as move_processing
 from odoo_accounting_cli_v4 import partner_preferences_contracts as partner_preferences
 from odoo_accounting_cli_v4 import payment_processing_contracts as payment_processing
@@ -58,6 +59,7 @@ CORE_OBJECT_GET_CAPABILITY_IDS = frozenset(
         "journal.group.get",
         "partner.bill_validation_preferences.get",
         "partner.invoice_delivery_preferences.get",
+        "journal.processing_settings.get",
         "account.account.processing_settings.get",
         "tax.processing_settings.get",
         "invoice.payment_schedule.inspect",
@@ -181,6 +183,7 @@ _ID_FIELDS = {
     "journal.group.get": "journal_group_id",
     "partner.bill_validation_preferences.get": "partner_id",
     "partner.invoice_delivery_preferences.get": "partner_id",
+    "journal.processing_settings.get": "journal_id",
     "account.account.processing_settings.get": "account_id",
     "tax.processing_settings.get": "tax_id",
     "invoice.payment_schedule.inspect": "invoice_id",
@@ -2794,6 +2797,8 @@ def _valid_account_status_item(item: Any, company_id: int) -> bool:
 
 
 def _valid_item(capability_id: str, item: Any, company_id: int) -> bool:
+    if capability_id == journal_processing.GET_ID:
+        return journal_processing.valid_read_item(item, company_id)
     if capability_id == account_processing.GET_ID:
         return account_processing.valid_read_item(item, company_id)
     if capability_id in tax_processing.READ_IDS:
