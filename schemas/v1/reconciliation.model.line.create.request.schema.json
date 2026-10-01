@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/reconciliation.model.line.create.request.schema.json",
+  "title": "reconciliation.model.line.create request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "context",
+    "parameters"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v1"
+    },
+    "request_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "context": {
+      "$ref": "request.schema.json#/$defs/context"
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reconciliation_model_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "line": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sequence": {
+              "type": "integer",
+              "minimum": -2147483648,
+              "maximum": 2147483647
+            },
+            "account_id": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            },
+            "partner_id": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "amount_type": {
+              "enum": [
+                "fixed",
+                "percentage",
+                "percentage_st_line",
+                "regex"
+              ]
+            },
+            "amount_string": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "tax_ids": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "maxItems": 100
+            },
+            "analytic_distribution": {
+              "type": "array",
+              "maxItems": 16,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "analytic_account_ids": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "minItems": 1,
+                    "maxItems": 16
+                  },
+                  "percentage": {
+                    "type": "string",
+                    "maxLength": 256,
+                    "pattern": "^(?:(?:[1-9][0-9]?)(?:\\.[0-9]{1,4})?|0\\.(?=[0-9]*[1-9])[0-9]{1,4}|100(?:\\.0{1,4})?)$(?![\\s\\S])"
+                  }
+                },
+                "required": [
+                  "analytic_account_ids",
+                  "percentage"
+                ]
+              }
+            }
+          },
+          "required": [
+            "account_id",
+            "amount_string",
+            "amount_type",
+            "label",
+            "partner_id",
+            "sequence",
+            "tax_ids"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "amount_type": {
+                    "enum": [
+                      "fixed",
+                      "percentage",
+                      "percentage_st_line"
+                    ]
+                  }
+                },
+                "required": [
+                  "amount_type"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "amount_string": {
+                    "type": "string",
+                    "maxLength": 256,
+                    "pattern": "^(?!-?0(?:\\.0+)?$(?![\\s\\S]))-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "line",
+        "reconciliation_model_id"
+      ]
+    }
+  }
+}

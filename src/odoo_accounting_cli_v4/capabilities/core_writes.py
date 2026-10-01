@@ -23,9 +23,12 @@ from odoo_accounting_cli_v4 import (
     payment_configuration_contracts as payment_configuration,
 )
 from odoo_accounting_cli_v4 import payment_processing_contracts as payment_processing
+from odoo_accounting_cli_v4 import (
+    reconciliation_processing_contracts as reconciliation_processing,
+)
 from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
 
-CORE_WRITE_CAPABILITY_IDS = payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
+CORE_WRITE_CAPABILITY_IDS = reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -4280,7 +4283,12 @@ def validate_core_write_request(
             code="capability_unavailable",
         )
     request_id, context, parameters = _validate_envelope(request)
-    if capability_id in payment_processing.CAPABILITY_IDS:
+    if capability_id in reconciliation_processing.CAPABILITY_IDS:
+        try:
+            normalized = reconciliation_processing.normalize_parameters(capability_id, parameters)
+        except ValueError as exc:
+            raise _invalid(str(exc)) from exc
+    elif capability_id in payment_processing.CAPABILITY_IDS:
         try:
             normalized = payment_processing.normalize_parameters(capability_id, parameters)
         except ValueError as exc:
@@ -4507,6 +4515,8 @@ def validate_core_write_request(
 def _expected_idempotency_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in reconciliation_processing.CAPABILITY_IDS:
+        return reconciliation_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in payment_processing.CAPABILITY_IDS:
         return payment_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in invoice_presentation.CAPABILITY_IDS:
@@ -5208,6 +5218,23 @@ def _validate_result(
 ) -> dict[str, Any]:
     if not _valid_result_shape(result) or result["company_id"] != company_id:
         raise _failed("Odoo returned a malformed or out-of-scope core-write result.")
+
+    if capability_id in reconciliation_processing.CAPABILITY_IDS:
+        duplicate = capability_id == "reconciliation.model.duplicate"
+        child = capability_id.startswith("reconciliation.model.line.")
+        removed = capability_id in {"reconciliation.model.delete", "reconciliation.model.line.delete"}
+        source = parameters["reconciliation_model_id"] if duplicate else result["source_id"] if capability_id.endswith("line.create") else parameters["line_id"] if child else None
+        if (result["model"] != "account.reconcile.model" or not _valid_id(result["id"])
+            or (duplicate and (result["id"] == source or result["name"] != parameters["name"]))
+            or (not duplicate and result["id"] != parameters["reconciliation_model_id"])
+            or result["source_id"] != source or (child and not _valid_id(source))
+            or result["state"] not in ({"deleted"} if capability_id == "reconciliation.model.delete" else {"active", "archived"})
+            or result["move_type"] is not None or result["partial_reconcile_ids"] or result["full_reconcile_id"] is not None or result["reconciled"]
+            or (removed and idempotent_replay)
+            or (capability_id == "reconciliation.model.delete" and result["line_ids"])
+            or (child and ((source in result["line_ids"]) == removed))):
+            raise _failed("Odoo returned a mismatched reconciliation-processing result.")
+        return deepcopy(result)
 
     if capability_id in payment_processing.CAPABILITY_IDS:
         states = {"draft"} if capability_id == "payment.destination_account.assign" else {"in_process"} if capability_id == "payment.sent_status.set" else {"paid"} if capability_id == "payment.validate" else {"rejected"} if capability_id == "payment.reject" else payment_processing.STATES

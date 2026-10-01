@@ -30334,6 +30334,1200 @@
         ]
       },
       "handler_key": "core_write"
+    },
+    "reconciliation.model.activity_type.assign": {
+      "summary": {
+        "zh_CN": "设置对账规则后续活动类型",
+        "en_US": "Assign a native reconciliation-rule follow-up activity type"
+      },
+      "domain": "reconciliation",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "models": [
+          "account.reconcile.model",
+          "account.reconcile.model.line",
+          "mail.activity.type",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_reconcile_model.py",
+          "account/models/account_move_line.py",
+          "account/views/account_reconcile_model_views.xml",
+          "mail/models/mail_activity_type.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/reconciliation.model.activity_type.assign.request.schema.json",
+        "response": "schemas/v1/reconciliation.model.activity_type.assign.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.reconcile.model.line:read",
+          "account.reconcile.model:read",
+          "account.reconcile.model:write",
+          "mail.activity.type:read",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_rule_fields_copy_or_unlink",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "serial_native_payload_match_or_missing_target_denial",
+        "reverse": "previous_values_or_native_backup_restore_subject_to_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_reconciliation_processing_batch.py"
+          ],
+          "reason": "Closed contracts, fixed CLI/ORM routing, child ownership, native numeric/regex shapes, ACL denial and serial payload replay."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_reconciliation_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all nine new IDs, two existing setup IDs and eleven immediate replays; native computed partner mapping, signed amounts above 100 percent and regex, native line IDs and complete ordering, tax/analytic configuration copy and clearing, activity configuration without scheduling, scoped usage ID-keyset reads including archived rules, actual child deletion and used-rule cascade/usage-link clearing with posted amounts unchanged. Foreign-company, wrong-parent, incomplete ordering, invalid regex/activity model, changed-source copy conflicts and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No actual bank reconciliation, external notification, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company and native ACLs. Edits fixed rule fields/lines, not posted journal amounts. Copy uses native copy with new child IDs; usage lists are scoped ORM reads of reconcile_model_id. Follow-up assignment only changes configuration; it schedules no activity. Numeric rule percentages follow native nonzero signed constraints, not an invented 0-100 ceiling. Serial line creation matches one full native payload; ambiguity conflicts. Delete missing targets remain record_not_found, never a fabricated successful replay. Native model deletion cascades rule lines and can clear historical reconcile_model_id links; no bank/provider call, mail delivery, arbitrary methods or caller-sudo."
+      },
+      "routing": {
+        "object": "reconciliation_model",
+        "actions": [
+          "assign"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置对账规则后续活动类型"
+          ],
+          "en_US": [
+            "Assign a native reconciliation-rule follow-up activity type"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "执行银行对账",
+            "向银行转账",
+            "发送通知或邮件",
+            "任意修改已过账金额",
+            "不存在的独立伙伴映射模型"
+          ],
+          "en_US": [
+            "Executing bank reconciliation",
+            "Sending transfers",
+            "Sending notifications",
+            "Arbitrary posted amount edits",
+            "A nonexistent standalone partner-mapping model"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "reconciliation.model.delete": {
+      "summary": {
+        "zh_CN": "删除对账规则",
+        "en_US": "Delete a native reconciliation rule"
+      },
+      "domain": "reconciliation",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "models": [
+          "account.reconcile.model",
+          "account.reconcile.model.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_reconcile_model.py",
+          "account/models/account_move_line.py",
+          "account/views/account_reconcile_model_views.xml",
+          "mail/models/mail_activity_type.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/reconciliation.model.delete.request.schema.json",
+        "response": "schemas/v1/reconciliation.model.delete.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.reconcile.model.line:read",
+          "account.reconcile.model.line:unlink",
+          "account.reconcile.model:read",
+          "account.reconcile.model:unlink",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_rule_fields_copy_or_unlink",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "serial_native_payload_match_or_missing_target_denial",
+        "reverse": "previous_values_or_native_backup_restore_subject_to_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_reconciliation_processing_batch.py"
+          ],
+          "reason": "Closed contracts, fixed CLI/ORM routing, child ownership, native numeric/regex shapes, ACL denial and serial payload replay."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_reconciliation_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all nine new IDs, two existing setup IDs and eleven immediate replays; native computed partner mapping, signed amounts above 100 percent and regex, native line IDs and complete ordering, tax/analytic configuration copy and clearing, activity configuration without scheduling, scoped usage ID-keyset reads including archived rules, actual child deletion and used-rule cascade/usage-link clearing with posted amounts unchanged. Foreign-company, wrong-parent, incomplete ordering, invalid regex/activity model, changed-source copy conflicts and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No actual bank reconciliation, external notification, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company and native ACLs. Edits fixed rule fields/lines, not posted journal amounts. Copy uses native copy with new child IDs; usage lists are scoped ORM reads of reconcile_model_id. Follow-up assignment only changes configuration; it schedules no activity. Numeric rule percentages follow native nonzero signed constraints, not an invented 0-100 ceiling. Serial line creation matches one full native payload; ambiguity conflicts. Delete missing targets remain record_not_found, never a fabricated successful replay. Native model deletion cascades rule lines and can clear historical reconcile_model_id links; no bank/provider call, mail delivery, arbitrary methods or caller-sudo."
+      },
+      "routing": {
+        "object": "reconciliation_model",
+        "actions": [
+          "delete"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "删除对账规则"
+          ],
+          "en_US": [
+            "Delete a native reconciliation rule"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "执行银行对账",
+            "向银行转账",
+            "发送通知或邮件",
+            "任意修改已过账金额",
+            "不存在的独立伙伴映射模型"
+          ],
+          "en_US": [
+            "Executing bank reconciliation",
+            "Sending transfers",
+            "Sending notifications",
+            "Arbitrary posted amount edits",
+            "A nonexistent standalone partner-mapping model"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "reconciliation.model.duplicate": {
+      "summary": {
+        "zh_CN": "复制对账规则",
+        "en_US": "Duplicate a native reconciliation rule and its lines"
+      },
+      "domain": "reconciliation",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "models": [
+          "account.account",
+          "account.analytic.account",
+          "account.journal",
+          "account.reconcile.model",
+          "account.reconcile.model.line",
+          "account.tax",
+          "mail.activity.type",
+          "res.company",
+          "res.partner"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_reconcile_model.py",
+          "account/models/account_move_line.py",
+          "account/views/account_reconcile_model_views.xml",
+          "mail/models/mail_activity_type.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/reconciliation.model.duplicate.request.schema.json",
+        "response": "schemas/v1/reconciliation.model.duplicate.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.analytic.account:read",
+          "account.journal:read",
+          "account.reconcile.model.line:create",
+          "account.reconcile.model.line:read",
+          "account.reconcile.model:create",
+          "account.reconcile.model:read",
+          "account.tax:read",
+          "mail.activity.type:read",
+          "res.company:read",
+          "res.partner:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_rule_fields_copy_or_unlink",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "serial_native_payload_match_or_missing_target_denial",
+        "reverse": "previous_values_or_native_backup_restore_subject_to_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_reconciliation_processing_batch.py"
+          ],
+          "reason": "Closed contracts, fixed CLI/ORM routing, child ownership, native numeric/regex shapes, ACL denial and serial payload replay."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_reconciliation_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all nine new IDs, two existing setup IDs and eleven immediate replays; native computed partner mapping, signed amounts above 100 percent and regex, native line IDs and complete ordering, tax/analytic configuration copy and clearing, activity configuration without scheduling, scoped usage ID-keyset reads including archived rules, actual child deletion and used-rule cascade/usage-link clearing with posted amounts unchanged. Foreign-company, wrong-parent, incomplete ordering, invalid regex/activity model, changed-source copy conflicts and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No actual bank reconciliation, external notification, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company and native ACLs. Edits fixed rule fields/lines, not posted journal amounts. Copy uses native copy with new child IDs; usage lists are scoped ORM reads of reconcile_model_id. Follow-up assignment only changes configuration; it schedules no activity. Numeric rule percentages follow native nonzero signed constraints, not an invented 0-100 ceiling. Serial line creation matches one full native payload; ambiguity conflicts. Delete missing targets remain record_not_found, never a fabricated successful replay. Native model deletion cascades rule lines and can clear historical reconcile_model_id links; no bank/provider call, mail delivery, arbitrary methods or caller-sudo."
+      },
+      "routing": {
+        "object": "reconciliation_model",
+        "actions": [
+          "duplicate"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "复制对账规则"
+          ],
+          "en_US": [
+            "Duplicate a native reconciliation rule and its lines"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "执行银行对账",
+            "向银行转账",
+            "发送通知或邮件",
+            "任意修改已过账金额",
+            "不存在的独立伙伴映射模型"
+          ],
+          "en_US": [
+            "Executing bank reconciliation",
+            "Sending transfers",
+            "Sending notifications",
+            "Arbitrary posted amount edits",
+            "A nonexistent standalone partner-mapping model"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "reconciliation.model.line.create": {
+      "summary": {
+        "zh_CN": "新增对账规则行",
+        "en_US": "Create one native reconciliation-rule line"
+      },
+      "domain": "reconciliation",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "models": [
+          "account.account",
+          "account.analytic.account",
+          "account.reconcile.model",
+          "account.reconcile.model.line",
+          "account.tax",
+          "res.company",
+          "res.partner"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_reconcile_model.py",
+          "account/models/account_move_line.py",
+          "account/views/account_reconcile_model_views.xml",
+          "mail/models/mail_activity_type.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/reconciliation.model.line.create.request.schema.json",
+        "response": "schemas/v1/reconciliation.model.line.create.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.analytic.account:read",
+          "account.reconcile.model.line:create",
+          "account.reconcile.model.line:read",
+          "account.reconcile.model:read",
+          "account.tax:read",
+          "res.company:read",
+          "res.partner:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_rule_fields_copy_or_unlink",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "serial_native_payload_match_or_missing_target_denial",
+        "reverse": "previous_values_or_native_backup_restore_subject_to_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_reconciliation_processing_batch.py"
+          ],
+          "reason": "Closed contracts, fixed CLI/ORM routing, child ownership, native numeric/regex shapes, ACL denial and serial payload replay."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_reconciliation_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all nine new IDs, two existing setup IDs and eleven immediate replays; native computed partner mapping, signed amounts above 100 percent and regex, native line IDs and complete ordering, tax/analytic configuration copy and clearing, activity configuration without scheduling, scoped usage ID-keyset reads including archived rules, actual child deletion and used-rule cascade/usage-link clearing with posted amounts unchanged. Foreign-company, wrong-parent, incomplete ordering, invalid regex/activity model, changed-source copy conflicts and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No actual bank reconciliation, external notification, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company and native ACLs. Edits fixed rule fields/lines, not posted journal amounts. Copy uses native copy with new child IDs; usage lists are scoped ORM reads of reconcile_model_id. Follow-up assignment only changes configuration; it schedules no activity. Numeric rule percentages follow native nonzero signed constraints, not an invented 0-100 ceiling. Serial line creation matches one full native payload; ambiguity conflicts. Delete missing targets remain record_not_found, never a fabricated successful replay. Native model deletion cascades rule lines and can clear historical reconcile_model_id links; no bank/provider call, mail delivery, arbitrary methods or caller-sudo."
+      },
+      "routing": {
+        "object": "reconciliation_model",
+        "actions": [
+          "create"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "新增对账规则行"
+          ],
+          "en_US": [
+            "Create one native reconciliation-rule line"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "执行银行对账",
+            "向银行转账",
+            "发送通知或邮件",
+            "任意修改已过账金额",
+            "不存在的独立伙伴映射模型"
+          ],
+          "en_US": [
+            "Executing bank reconciliation",
+            "Sending transfers",
+            "Sending notifications",
+            "Arbitrary posted amount edits",
+            "A nonexistent standalone partner-mapping model"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "reconciliation.model.line.delete": {
+      "summary": {
+        "zh_CN": "删除对账规则行",
+        "en_US": "Delete one native reconciliation-rule line"
+      },
+      "domain": "reconciliation",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "models": [
+          "account.reconcile.model",
+          "account.reconcile.model.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_reconcile_model.py",
+          "account/models/account_move_line.py",
+          "account/views/account_reconcile_model_views.xml",
+          "mail/models/mail_activity_type.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/reconciliation.model.line.delete.request.schema.json",
+        "response": "schemas/v1/reconciliation.model.line.delete.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.reconcile.model.line:read",
+          "account.reconcile.model.line:unlink",
+          "account.reconcile.model:read",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_rule_fields_copy_or_unlink",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "serial_native_payload_match_or_missing_target_denial",
+        "reverse": "previous_values_or_native_backup_restore_subject_to_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_reconciliation_processing_batch.py"
+          ],
+          "reason": "Closed contracts, fixed CLI/ORM routing, child ownership, native numeric/regex shapes, ACL denial and serial payload replay."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_reconciliation_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all nine new IDs, two existing setup IDs and eleven immediate replays; native computed partner mapping, signed amounts above 100 percent and regex, native line IDs and complete ordering, tax/analytic configuration copy and clearing, activity configuration without scheduling, scoped usage ID-keyset reads including archived rules, actual child deletion and used-rule cascade/usage-link clearing with posted amounts unchanged. Foreign-company, wrong-parent, incomplete ordering, invalid regex/activity model, changed-source copy conflicts and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No actual bank reconciliation, external notification, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company and native ACLs. Edits fixed rule fields/lines, not posted journal amounts. Copy uses native copy with new child IDs; usage lists are scoped ORM reads of reconcile_model_id. Follow-up assignment only changes configuration; it schedules no activity. Numeric rule percentages follow native nonzero signed constraints, not an invented 0-100 ceiling. Serial line creation matches one full native payload; ambiguity conflicts. Delete missing targets remain record_not_found, never a fabricated successful replay. Native model deletion cascades rule lines and can clear historical reconcile_model_id links; no bank/provider call, mail delivery, arbitrary methods or caller-sudo."
+      },
+      "routing": {
+        "object": "reconciliation_model",
+        "actions": [
+          "delete"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "删除对账规则行"
+          ],
+          "en_US": [
+            "Delete one native reconciliation-rule line"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "执行银行对账",
+            "向银行转账",
+            "发送通知或邮件",
+            "任意修改已过账金额",
+            "不存在的独立伙伴映射模型"
+          ],
+          "en_US": [
+            "Executing bank reconciliation",
+            "Sending transfers",
+            "Sending notifications",
+            "Arbitrary posted amount edits",
+            "A nonexistent standalone partner-mapping model"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "reconciliation.model.line.update": {
+      "summary": {
+        "zh_CN": "修改对账规则行",
+        "en_US": "Patch one native reconciliation-rule line"
+      },
+      "domain": "reconciliation",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "models": [
+          "account.account",
+          "account.analytic.account",
+          "account.reconcile.model",
+          "account.reconcile.model.line",
+          "account.tax",
+          "res.company",
+          "res.partner"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_reconcile_model.py",
+          "account/models/account_move_line.py",
+          "account/views/account_reconcile_model_views.xml",
+          "mail/models/mail_activity_type.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/reconciliation.model.line.update.request.schema.json",
+        "response": "schemas/v1/reconciliation.model.line.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.analytic.account:read",
+          "account.reconcile.model.line:read",
+          "account.reconcile.model.line:write",
+          "account.reconcile.model:read",
+          "account.tax:read",
+          "res.company:read",
+          "res.partner:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_rule_fields_copy_or_unlink",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "serial_native_payload_match_or_missing_target_denial",
+        "reverse": "previous_values_or_native_backup_restore_subject_to_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_reconciliation_processing_batch.py"
+          ],
+          "reason": "Closed contracts, fixed CLI/ORM routing, child ownership, native numeric/regex shapes, ACL denial and serial payload replay."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_reconciliation_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all nine new IDs, two existing setup IDs and eleven immediate replays; native computed partner mapping, signed amounts above 100 percent and regex, native line IDs and complete ordering, tax/analytic configuration copy and clearing, activity configuration without scheduling, scoped usage ID-keyset reads including archived rules, actual child deletion and used-rule cascade/usage-link clearing with posted amounts unchanged. Foreign-company, wrong-parent, incomplete ordering, invalid regex/activity model, changed-source copy conflicts and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No actual bank reconciliation, external notification, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company and native ACLs. Edits fixed rule fields/lines, not posted journal amounts. Copy uses native copy with new child IDs; usage lists are scoped ORM reads of reconcile_model_id. Follow-up assignment only changes configuration; it schedules no activity. Numeric rule percentages follow native nonzero signed constraints, not an invented 0-100 ceiling. Serial line creation matches one full native payload; ambiguity conflicts. Delete missing targets remain record_not_found, never a fabricated successful replay. Native model deletion cascades rule lines and can clear historical reconcile_model_id links; no bank/provider call, mail delivery, arbitrary methods or caller-sudo."
+      },
+      "routing": {
+        "object": "reconciliation_model",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "修改对账规则行"
+          ],
+          "en_US": [
+            "Patch one native reconciliation-rule line"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "执行银行对账",
+            "向银行转账",
+            "发送通知或邮件",
+            "任意修改已过账金额",
+            "不存在的独立伙伴映射模型"
+          ],
+          "en_US": [
+            "Executing bank reconciliation",
+            "Sending transfers",
+            "Sending notifications",
+            "Arbitrary posted amount edits",
+            "A nonexistent standalone partner-mapping model"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "reconciliation.model.lines.resequence": {
+      "summary": {
+        "zh_CN": "重排对账规则行",
+        "en_US": "Resequence all native reconciliation-rule lines"
+      },
+      "domain": "reconciliation",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "models": [
+          "account.reconcile.model",
+          "account.reconcile.model.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_reconcile_model.py",
+          "account/models/account_move_line.py",
+          "account/views/account_reconcile_model_views.xml",
+          "mail/models/mail_activity_type.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/reconciliation.model.lines.resequence.request.schema.json",
+        "response": "schemas/v1/reconciliation.model.lines.resequence.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.reconcile.model.line:read",
+          "account.reconcile.model.line:write",
+          "account.reconcile.model:read",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_rule_fields_copy_or_unlink",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "serial_native_payload_match_or_missing_target_denial",
+        "reverse": "previous_values_or_native_backup_restore_subject_to_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_reconciliation_processing_batch.py"
+          ],
+          "reason": "Closed contracts, fixed CLI/ORM routing, child ownership, native numeric/regex shapes, ACL denial and serial payload replay."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_reconciliation_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all nine new IDs, two existing setup IDs and eleven immediate replays; native computed partner mapping, signed amounts above 100 percent and regex, native line IDs and complete ordering, tax/analytic configuration copy and clearing, activity configuration without scheduling, scoped usage ID-keyset reads including archived rules, actual child deletion and used-rule cascade/usage-link clearing with posted amounts unchanged. Foreign-company, wrong-parent, incomplete ordering, invalid regex/activity model, changed-source copy conflicts and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No actual bank reconciliation, external notification, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company and native ACLs. Edits fixed rule fields/lines, not posted journal amounts. Copy uses native copy with new child IDs; usage lists are scoped ORM reads of reconcile_model_id. Follow-up assignment only changes configuration; it schedules no activity. Numeric rule percentages follow native nonzero signed constraints, not an invented 0-100 ceiling. Serial line creation matches one full native payload; ambiguity conflicts. Delete missing targets remain record_not_found, never a fabricated successful replay. Native model deletion cascades rule lines and can clear historical reconcile_model_id links; no bank/provider call, mail delivery, arbitrary methods or caller-sudo."
+      },
+      "routing": {
+        "object": "reconciliation_model",
+        "actions": [
+          "resequence"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "重排对账规则行"
+          ],
+          "en_US": [
+            "Resequence all native reconciliation-rule lines"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "执行银行对账",
+            "向银行转账",
+            "发送通知或邮件",
+            "任意修改已过账金额",
+            "不存在的独立伙伴映射模型"
+          ],
+          "en_US": [
+            "Executing bank reconciliation",
+            "Sending transfers",
+            "Sending notifications",
+            "Arbitrary posted amount edits",
+            "A nonexistent standalone partner-mapping model"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "reconciliation.model.processing_settings.get": {
+      "summary": {
+        "zh_CN": "读取对账规则原生处理状态",
+        "en_US": "Get native reconciliation-rule processing settings"
+      },
+      "domain": "reconciliation",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "models": [
+          "res.company",
+          "account.reconcile.model",
+          "account.reconcile.model.line",
+          "res.partner",
+          "mail.activity.type"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_reconcile_model.py",
+          "account/models/account_move_line.py",
+          "account/views/account_reconcile_model_views.xml",
+          "mail/models/mail_activity_type.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/reconciliation.model.processing_settings.get.request.schema.json",
+        "response": "schemas/v1/reconciliation.model.processing_settings.get.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.reconcile.model:read",
+          "account.reconcile.model.line:read",
+          "res.partner:read",
+          "mail.activity.type:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_native_rule_read",
+        "verify": "closed_response_schema_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_reconciliation_processing_batch.py"
+          ],
+          "reason": "Closed contracts, fixed CLI/ORM routing, child ownership, native numeric/regex shapes, ACL denial and serial payload replay."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_reconciliation_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all nine new IDs, two existing setup IDs and eleven immediate replays; native computed partner mapping, signed amounts above 100 percent and regex, native line IDs and complete ordering, tax/analytic configuration copy and clearing, activity configuration without scheduling, scoped usage ID-keyset reads including archived rules, actual child deletion and used-rule cascade/usage-link clearing with posted amounts unchanged. Foreign-company, wrong-parent, incomplete ordering, invalid regex/activity model, changed-source copy conflicts and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No actual bank reconciliation, external notification, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company and native ACLs. Edits fixed rule fields/lines, not posted journal amounts. Copy uses native copy with new child IDs; usage lists are scoped ORM reads of reconcile_model_id. Follow-up assignment only changes configuration; it schedules no activity. Numeric rule percentages follow native nonzero signed constraints, not an invented 0-100 ceiling. Serial line creation matches one full native payload; ambiguity conflicts. Delete missing targets remain record_not_found, never a fabricated successful replay. Native model deletion cascades rule lines and can clear historical reconcile_model_id links; no bank/provider call, mail delivery, arbitrary methods or caller-sudo."
+      },
+      "routing": {
+        "object": "reconciliation_model",
+        "actions": [
+          "get"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "读取对账规则原生处理状态"
+          ],
+          "en_US": [
+            "Get native reconciliation-rule processing settings"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "执行银行对账",
+            "向银行转账",
+            "发送通知或邮件",
+            "任意修改已过账金额",
+            "不存在的独立伙伴映射模型"
+          ],
+          "en_US": [
+            "Executing bank reconciliation",
+            "Sending transfers",
+            "Sending notifications",
+            "Arbitrary posted amount edits",
+            "A nonexistent standalone partner-mapping model"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "reconciliation_model_processing_settings_get"
+    },
+    "reconciliation.model.usage_lines.list": {
+      "summary": {
+        "zh_CN": "查询对账规则使用明细",
+        "en_US": "List journal items linked to a native reconciliation rule"
+      },
+      "domain": "reconciliation",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "models": [
+          "res.company",
+          "account.reconcile.model",
+          "account.move.line",
+          "account.move",
+          "account.account",
+          "res.partner",
+          "res.currency"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_reconcile_model.py",
+          "account/models/account_move_line.py",
+          "account/views/account_reconcile_model_views.xml",
+          "mail/models/mail_activity_type.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/reconciliation.model.usage_lines.list.request.schema.json",
+        "response": "schemas/v1/reconciliation.model.usage_lines.list.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base",
+          "mail"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.reconcile.model:read",
+          "account.move.line:read",
+          "account.move:read",
+          "account.account:read",
+          "res.partner:read",
+          "res.currency:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_native_rule_read",
+        "verify": "closed_response_schema_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_reconciliation_processing_batch.py"
+          ],
+          "reason": "Closed contracts, fixed CLI/ORM routing, child ownership, native numeric/regex shapes, ACL denial and serial payload replay."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_reconciliation_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all nine new IDs, two existing setup IDs and eleven immediate replays; native computed partner mapping, signed amounts above 100 percent and regex, native line IDs and complete ordering, tax/analytic configuration copy and clearing, activity configuration without scheduling, scoped usage ID-keyset reads including archived rules, actual child deletion and used-rule cascade/usage-link clearing with posted amounts unchanged. Foreign-company, wrong-parent, incomplete ordering, invalid regex/activity model, changed-source copy conflicts and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No actual bank reconciliation, external notification, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples are deferred until the capability library reaches target coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing is outside this capability batch."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company and native ACLs. Edits fixed rule fields/lines, not posted journal amounts. Copy uses native copy with new child IDs; usage lists are scoped ORM reads of reconcile_model_id. Follow-up assignment only changes configuration; it schedules no activity. Numeric rule percentages follow native nonzero signed constraints, not an invented 0-100 ceiling. Serial line creation matches one full native payload; ambiguity conflicts. Delete missing targets remain record_not_found, never a fabricated successful replay. Native model deletion cascades rule lines and can clear historical reconcile_model_id links; no bank/provider call, mail delivery, arbitrary methods or caller-sudo."
+      },
+      "routing": {
+        "object": "reconciliation_model",
+        "actions": [
+          "list"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "查询对账规则使用明细"
+          ],
+          "en_US": [
+            "List journal items linked to a native reconciliation rule"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "执行银行对账",
+            "向银行转账",
+            "发送通知或邮件",
+            "任意修改已过账金额",
+            "不存在的独立伙伴映射模型"
+          ],
+          "en_US": [
+            "Executing bank reconciliation",
+            "Sending transfers",
+            "Sending notifications",
+            "Arbitrary posted amount edits",
+            "A nonexistent standalone partner-mapping model"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "reconciliation_model_usage_lines_list"
     }
   }
 }

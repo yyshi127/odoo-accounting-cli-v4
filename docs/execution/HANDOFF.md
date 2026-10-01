@@ -4,9 +4,9 @@ Updated: 2026-10-01 (Asia/Shanghai)
 
 ## Current authoritative count — 2026-10-01
 
-467 registered IDs; 452 implemented handlers (226 reads, 226 writes);
-910 schemas; 379 unconfigured, 73 degraded, 15 disabled. Enabled-handler integration records:
-448 implemented, three planned, one failed. The latest native-payment-processing
+476 registered IDs; 461 implemented handlers (228 reads, 233 writes);
+928 schemas; 388 unconfigured, 73 degraded, 15 disabled. Enabled-handler integration records:
+457 implemented, three planned, one failed. The latest native-reconciliation-rule
 checkpoint below is authoritative; older snapshots are historical.
 
 ## Objective and working rule
@@ -5136,3 +5136,103 @@ validation remains failed; product accounting-profile readback and two real
 external report sends remain planned. Addon repairs and external sends require
 separate authority. The capability-first goal remains active; full coverage
 has not been proven against a complete denominator.
+
+## Native reconciliation-rule processing — 2026-10-01
+
+Baseline: `075cf64`. Nine genuine new IDs: 476 registered, 461 handlers
+(228 reads, 233 writes), 928 schemas; 388 unconfigured, 73 degraded, 15 disabled.
+Enabled integrations: 457 implemented, three planned, one failed. These totals
+include historical non-accounting extensions, not a complete accounting
+denominator, completion percentage or ordinary-user authorization guarantees.
+
+### Command boundaries
+
+- `reconciliation.model.processing_settings.get` returns native active/trigger,
+  computed partner mapping/proposal eligibility, next activity and ordered line
+  IDs. Missing/foreign-company targets return a typed record_not_found error,
+  not a successful null result. Archived same-company rules remain readable.
+- `reconciliation.model.usage_lines.list` uses scoped ORM ID-keyset reads of
+  actual journal-item reconcile_model_id links, after checking the parent rule.
+  It includes archived-rule usage; missing/invisible parents have no visible rows.
+- `reconciliation.model.duplicate` uses native copy, preserving published rule
+  configuration and tax/analytic child payloads while creating independent IDs.
+  A unique same-name identical native payload replays; conflicting/ambiguous
+  targets or a changed source cause idempotency_conflict. No memo marker edits.
+- `reconciliation.model.line.create/update/delete` operate on individually scoped
+  native child IDs, retaining siblings. Update validates the full merged amount
+  type/string before writing only requested fields. Native fixed, percentage,
+  percentage_st_line and regex types are supported, including nonzero negative
+  and above-100 numeric amounts. Tax and analytic references can be cleared.
+  Create replays one unique matching payload and rejects ambiguous matches.
+- `reconciliation.model.lines.resequence` requires the complete native child ID
+  set exactly once, persists sequence 10/20/... and retains IDs and payloads.
+- `reconciliation.model.activity_type.assign` assigns/clears a native active type
+  applicable globally or to bank-statement lines. It does not schedule activities
+  or deliver mail/notifications; unrelated model types are denied.
+- `reconciliation.model.delete` calls native unlink: children cascade and stored
+  historical journal-item rule links clear, while posted amounts remain unchanged.
+  Neither rule nor child deletion has a tombstone; missing targets error rather
+  than claiming a replay. Used-rule deletion is positively tested, not silently
+  limited to unused rules. All writes preserve ACL/company/user checks, exact
+  confirmation and deterministic keys; no caller-sudo or arbitrary dispatcher.
+
+### Verified workflow and repairs
+
+One shared public CLI/in-process real-ORM workflow passed both dedicated aliases
+in 552.22 seconds, with uid 5 and su=False for every business CLI call. Each
+exercises all nine new IDs, existing rule create/archive and eleven immediate
+replays. It verifies computed partner mapping, native signed amounts/regex,
+tax/analytic copy and clearing, child order/identity, activity configuration
+without scheduling, scoped one-row usage pages and archived-rule reads. Used-rule
+deletion clears actual FK links/cascades children while a balanced posted entry's
+IDs/accounts/amounts remain unchanged. Its historical entry links are synthetic
+admin fixtures, not proof of actual rule application or bank reconciliation.
+Company/parent/configuration denials and missing targets are retained. Fresh
+cursors verify all synthetic business data and temporary manager-group membership
+rolled back; ordinary runtime permissions have not been permanently broadened.
+
+Attempt 1 failed in 12.65 seconds at the first child result: SDK validation
+expected configured although the existing native parent helper returns active
+or archived. Two failed-before-fix unit reproductions precede the one-line SDK
+state correction. Attempt 2 passed copy, edits/order and negative writes, then
+failed in 205.37 seconds because the foreign-parent GET fixture expected null
+success instead of native record_not_found. The fixture now asserts the actual
+public CLI exit code/error; an added unit case validates its error schema. No
+production read logic or access boundary was relaxed. Both failures verified
+fresh-cursor rollback and are retained, not counted as acceptance.
+
+Local evidence: 1069 complete batch/read/runtime cases (56 + 836 + 177), 228
+focused write-contract cases, 19 registry cases at the planned-metadata baseline
+with one known deselection, and two changed registry selections after closure.
+Server: 56 batch cases; final registry 19 passed with one known deselection.
+Ruff/diff checks passed. The excluded baseline test is
+test_bank_statement_payment_maintenance_has_closed_registry_and_schemas; unchanged
+HEAD already records its six integrations implemented, contrary to its old test.
+
+### Deployment and continuation
+
+Initial allowlist: 33 files, 12 existing backed up and 21 new. Exact two-file
+state and typed-error fixture repairs and a final two-file metadata closure
+verified baselines and backed up first. All 33 final deployed hashes match local.
+Server execution-document overlays were not overwritten. Private archives,
+manifests/backups and all three native logs stay under
+`.tooling/reconciliation-processing-20261001`; do not commit them.
+Initial archive SHA-256: `17422195f0405f04a4f6f8d1db0688603327cc98a0dca71a9ea6718af245c268`.
+State repair SHA-256: `6c05153820e680fbb7741545c423ef2a2faa2497886d6e9b3e2240069a10fb55`.
+Typed-error fixture repair SHA-256: `987ff96bf91bef7e076efa1233dfc890ad4a2091039935e3a9e99937f5f02118`.
+Final metadata SHA-256: `9489150bf50ea842be3a1c4c2eaf113da4e0eaa53e51e3572c0b86d9d4ca84d5`.
+Registry-file SHA-256: `7db5007d61359c7269f39bb504a2a7eff54d5e3c3343e7be027572b98913d924`.
+Canonical registry SHA-256: `29f5f60175965f67195706f537fa3209a27c1d6a2b98f5015f5c63cea6c8fb6f`.
+Passing live-log SHA-256: `c44640fab79fb5fb6d94a9dfad8e6b4c94f8bede388c4f42d869bd0d5a3f51df`.
+Changed code/schema/tests and staged added lines have zero privacy findings;
+the full tree retains five historical document findings and is not called passing.
+Odoo stayed PID 25607/NRestarts 6, Nginx 3309593/0 and PostgreSQL 3063758/0;
+all remained active/running. No business database, installed addon/source,
+Pi/V2/V3 chain, service or configuration was changed.
+
+Continue another small genuine native accounting gap batch, prioritizing actual
+invoice/payment/reconciliation workflows rather than aliases or logistics.
+Asset validation remains failed; product accounting-profile readback and two
+external report sends remain planned. Addon repairs and real external sends
+need separate authority. The capability-first goal remains active; full accounting
+coverage has not been proven against a complete denominator.

@@ -2,6 +2,59 @@
 
 ## Current accounting phase — 2026-10-01
 
+476 registered IDs; 461 implemented handlers (228 reads, 233 writes);
+928 schema files. Availability: 388 unconfigured, 73 degraded, 15 disabled.
+Enabled-handler integration records: 457 implemented, three planned, one failed.
+These totals include historical non-accounting extensions, not complete accounting
+coverage, a completion percentage, or guarantees of ordinary-runtime permissions.
+
+The latest batch adds nine native reconciliation-rule capabilities: processing
+settings and usage-line reads; rule duplication/deletion, individual line
+creation/update/deletion, complete line ordering and activity-type assignment.
+It reuses existing CLI/contracts/ORM paths, without aliases, arbitrary field
+writers, actual bank reconciliation, notifications or a new control framework.
+
+One shared public CLI/real-ORM workflow passed both isolated aliases as uid 5
+with su=False in 552.22 seconds: all nine new IDs, two existing setup IDs and
+eleven immediate replays. It verifies native computed partner mapping, signed
+amounts including percentages above 100, regex, tax/analytic copy and clearing,
+preserved child IDs/order, activity configuration without scheduling, and scoped
+ID-keyset usage reads including archived rules. Deleting a used rule cascades
+its children and clears historical usage links, but preserves posted amounts.
+Synthetic historical links are admin fixtures, not actual bank reconciliation.
+Foreign-company/wrong-parent targets, invalid configuration, incomplete ordering,
+changed-source copy conflicts and missing targets are denied. Fresh cursors
+verify business-data and temporary manager-group rollback.
+
+Attempt 1 failed in 12.65 seconds because SDK validation expected configured
+instead of the existing native result's active/archived state. Two failed-before-
+fix reproductions precede the one-line state correction. Attempt 2 failed in
+205.37 seconds because a negative GET fixture expected null success instead of
+the correct record_not_found error. Only that fixture expectation changed; a
+new public-CLI unit case preserves the typed error. Both failed runs rolled back.
+
+Local evidence: 1069 batch/read/runtime cases (56 + 836 + 177), 228 focused
+write-contract cases, 19 registry cases at the planned-metadata baseline with
+one known deselection, then two changed registry selections after closure.
+Server: 56 batch cases and 19 final registry cases with the same deselection.
+Ruff and diff checks passed. Initial deployment allowed 33 files, backed up
+12 existing files and added 21 new files; two exact two-file repairs and the
+final two-file metadata closure also checked baselines and backed up first.
+All 33 final deployed hashes match. Server STATUS/HANDOFF overlays were preserved.
+Odoo/Nginx/PostgreSQL PIDs and restart counters stayed unchanged. No business
+database, installed addon/source, Pi/V2/V3 chain, service or configuration changed.
+
+Changed code/schema/tests and staged added lines have zero privacy findings;
+the full tree retains five historical document findings. The older bank-statement/
+payment-maintenance registry test has a stale planned expectation despite
+unchanged HEAD already recording implemented; it is explicitly excluded.
+Next: another small genuine native accounting gap batch. Asset validation remains
+failed; product accounting-profile readback and two external report sends remain
+planned. Addon repairs and actual sends need separate authority. The capability-
+first goal remains active; complete accounting coverage is unproven.
+
+## Previous checkpoint — native payment processing, 2026-10-01
+
 467 registered IDs; 452 implemented handlers (226 reads, 226 writes);
 910 schema files. Availability: 379 unconfigured, 73 degraded, 15 disabled.
 Enabled-handler integration records: 448 implemented, three planned, one failed.

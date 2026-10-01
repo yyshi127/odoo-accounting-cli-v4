@@ -27,10 +27,13 @@ from odoo_accounting_cli_v4 import (
     payment_configuration_contracts as payment_configuration,
 )
 from odoo_accounting_cli_v4 import payment_processing_contracts as payment_processing
+from odoo_accounting_cli_v4 import (
+    reconciliation_processing_contracts as reconciliation_processing,
+)
 from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
 
 ACTION = "accounting.core_write.execute"
-CAPABILITIES = payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
+CAPABILITIES = reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -3318,6 +3321,28 @@ def _protocol(failure_type: type[Exception]) -> Exception:
     )
 
 
+_PARAMETER_KEYS.update(reconciliation_processing.PARAMETER_KEYS)
+_GROUPS['reconciliation.model.activity_type.assign'] = "account.group_account_manager"
+_MODELS['reconciliation.model.activity_type.assign'] = {'res.company', 'account.reconcile.model', 'account.reconcile.model.line', 'mail.activity.type'}
+_ACCESS['reconciliation.model.activity_type.assign'] = {('account.reconcile.model', 'write'), ('mail.activity.type', 'read'), ('account.reconcile.model', 'read'), ('res.company', 'read'), ('account.reconcile.model.line', 'read')}
+_GROUPS['reconciliation.model.delete'] = "account.group_account_manager"
+_MODELS['reconciliation.model.delete'] = {'res.company', 'account.reconcile.model', 'account.reconcile.model.line'}
+_ACCESS['reconciliation.model.delete'] = {('account.reconcile.model.line', 'unlink'), ('account.reconcile.model', 'unlink'), ('account.reconcile.model', 'read'), ('res.company', 'read'), ('account.reconcile.model.line', 'read')}
+_GROUPS['reconciliation.model.duplicate'] = "account.group_account_manager"
+_MODELS['reconciliation.model.duplicate'] = {'res.partner', 'res.company', 'account.reconcile.model.line', 'mail.activity.type', 'account.account', 'account.reconcile.model', 'account.analytic.account', 'account.journal', 'account.tax'}
+_ACCESS['reconciliation.model.duplicate'] = {('account.reconcile.model', 'create'), ('mail.activity.type', 'read'), ('account.reconcile.model.line', 'read'), ('res.partner', 'read'), ('account.analytic.account', 'read'), ('account.journal', 'read'), ('account.account', 'read'), ('account.reconcile.model.line', 'create'), ('account.tax', 'read'), ('account.reconcile.model', 'read'), ('res.company', 'read')}
+_GROUPS['reconciliation.model.line.create'] = "account.group_account_manager"
+_MODELS['reconciliation.model.line.create'] = {'res.partner', 'res.company', 'account.tax', 'account.reconcile.model.line', 'account.reconcile.model', 'account.analytic.account', 'account.account'}
+_ACCESS['reconciliation.model.line.create'] = {('account.analytic.account', 'read'), ('account.account', 'read'), ('account.reconcile.model.line', 'create'), ('account.tax', 'read'), ('account.reconcile.model', 'read'), ('res.company', 'read'), ('account.reconcile.model.line', 'read'), ('res.partner', 'read')}
+_GROUPS['reconciliation.model.line.delete'] = "account.group_account_manager"
+_MODELS['reconciliation.model.line.delete'] = {'res.company', 'account.reconcile.model', 'account.reconcile.model.line'}
+_ACCESS['reconciliation.model.line.delete'] = {('account.reconcile.model.line', 'unlink'), ('account.reconcile.model', 'read'), ('res.company', 'read'), ('account.reconcile.model.line', 'read')}
+_GROUPS['reconciliation.model.line.update'] = "account.group_account_manager"
+_MODELS['reconciliation.model.line.update'] = {'res.partner', 'res.company', 'account.tax', 'account.reconcile.model.line', 'account.reconcile.model', 'account.analytic.account', 'account.account'}
+_ACCESS['reconciliation.model.line.update'] = {('account.analytic.account', 'read'), ('account.reconcile.model.line', 'write'), ('account.account', 'read'), ('account.tax', 'read'), ('account.reconcile.model', 'read'), ('res.company', 'read'), ('account.reconcile.model.line', 'read'), ('res.partner', 'read')}
+_GROUPS['reconciliation.model.lines.resequence'] = "account.group_account_manager"
+_MODELS['reconciliation.model.lines.resequence'] = {'res.company', 'account.reconcile.model', 'account.reconcile.model.line'}
+_ACCESS['reconciliation.model.lines.resequence'] = {('account.reconcile.model.line', 'write'), ('account.reconcile.model', 'read'), ('res.company', 'read'), ('account.reconcile.model.line', 'read')}
 _PARAMETER_KEYS.update(payment_processing.PARAMETER_KEYS)
 _GROUPS['payment.bank_account.assign'] = "account.group_account_invoice"
 _MODELS['payment.bank_account.assign'] = {'res.company', 'account.move.line', 'account.payment', 'account.move', 'res.partner.bank'}
@@ -5403,6 +5428,11 @@ def _valid_parameters(
 ) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id in reconciliation_processing.CAPABILITY_IDS:
+        try:
+            return reconciliation_processing.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
     if capability_id in payment_processing.CAPABILITY_IDS:
         try:
             return payment_processing.normalize_parameters(capability_id, parameters) == parameters
@@ -6016,6 +6046,8 @@ def _validated_payload(
 def _deterministic_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in reconciliation_processing.CAPABILITY_IDS:
+        return reconciliation_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in payment_processing.CAPABILITY_IDS:
         return payment_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in invoice_presentation.CAPABILITY_IDS:
@@ -19417,6 +19449,122 @@ def _write_partner_preferences_batch(
     return _partner_result(partner, company_id), replay
 
 
+def _reconciliation_copy_values(model: Any) -> dict[str, Any]:
+    return {
+        "active": bool(model.active), "sequence": model.sequence, "trigger": model.trigger,
+        "match_journal_ids": _record_ids(model.match_journal_ids),
+        "match_partner_ids": _record_ids(model.match_partner_ids),
+        "match_amount": _normalized_match_amount(model), "match_label": _normalized_match_label(model),
+        "next_activity_type_id": _relation_id(model.next_activity_type_id),
+        "lines": [_normalized_reconciliation_line(line) for line in model.line_ids.sorted(lambda line: (line.sequence, line.id))],
+    }
+
+
+def _write_reconciliation_processing(
+    env: Any, capability_id: str, parameters: dict[str, Any],
+    company_id: int, failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    model = _reconciliation_model(env, parameters["reconciliation_model_id"], company_id, failure_type)
+    source_id = None
+    replay = False
+    if capability_id == "reconciliation.model.duplicate":
+        expected = _reconciliation_copy_values(model)
+        candidates = _scoped(env, "account.reconcile.model", company_id).search([
+            ("company_id", "=", company_id), ("name", "=", parameters["name"]),
+        ], limit=2)
+        if candidates:
+            if len(candidates) != 1 or candidates.id == model.id or _reconciliation_copy_values(candidates) != expected:
+                raise _fail(failure_type, "idempotency_conflict", "The duplicate name already belongs to other reconciliation configuration.", exit_code=5)
+            duplicate, replay = candidates, True
+        else:
+            duplicate = model.copy({"name": parameters["name"]})
+            duplicate.invalidate_recordset()
+        if (duplicate.id == model.id or _relation_id(duplicate.company_id) != company_id
+            or duplicate.name != parameters["name"] or _reconciliation_copy_values(duplicate) != expected
+            or set(duplicate.line_ids.ids) & set(model.line_ids.ids)):
+            raise _fail(failure_type, "odoo_write_error", "Native reconciliation copy did not preserve the requested configuration with new rule lines.", exit_code=6)
+        result = _reconciliation_model_result(duplicate, company_id)
+        result["source_id"] = model.id
+        return result, replay
+    if capability_id == "reconciliation.model.delete":
+        result = _deleted_result(_reconciliation_model_result(model, company_id))
+        result["line_ids"] = []
+        model.unlink()
+        if _scoped(env, "account.reconcile.model", company_id).search_count([("id", "=", result["id"])], limit=1):
+            raise _fail(failure_type, "odoo_write_error", "Native reconciliation model deletion failed.", exit_code=6)
+        return result, False
+    if capability_id == "reconciliation.model.activity_type.assign":
+        target = parameters["activity_type_id"]
+        if target is not None:
+            _ensure_ids(env, "mail.activity.type", {target}, [
+                ("active", "=", True), ("res_model", "in", [False, "account.bank.statement.line"]),
+            ], company_id, failure_type)
+        replay = _relation_id(model.next_activity_type_id) == target
+        if not replay:
+            model.write({"next_activity_type_id": target or False})
+            model.invalidate_recordset()
+        if _relation_id(model.next_activity_type_id) != target:
+            raise _fail(failure_type, "odoo_write_error", "Native reconciliation activity assignment was not persisted.", exit_code=6)
+    elif capability_id == "reconciliation.model.lines.resequence":
+        ids = parameters["line_ids"]
+        if set(ids) != set(model.line_ids.ids):
+            raise _fail(failure_type, "business_rule_error", "Resequencing requires every native rule line exactly once.", exit_code=6)
+        lines = {line.id: line for line in model.line_ids}
+        replay = all(lines[line_id].sequence == index * 10 for index, line_id in enumerate(ids, 1))
+        for index, line_id in enumerate(ids, 1):
+            if lines[line_id].sequence != index * 10:
+                lines[line_id].write({"sequence": index * 10})
+        model.invalidate_recordset()
+        if (model.line_ids.sorted(lambda line: (line.sequence, line.id)).ids != ids
+            or any(line.sequence != index * 10 for index, line in enumerate(model.line_ids.sorted(lambda line: (line.sequence, line.id)), 1))):
+            raise _fail(failure_type, "odoo_write_error", "Native rule-line resequencing failed.", exit_code=6)
+    else:
+        create = capability_id == "reconciliation.model.line.create"
+        if not create:
+            line = _search_one(env, "account.reconcile.model.line", [
+                ("id", "=", parameters["line_id"]), ("model_id", "=", model.id), ("company_id", "=", company_id),
+            ], company_id, failure_type)
+            source_id = line.id
+        if capability_id == "reconciliation.model.line.delete":
+            line.unlink()
+            model.invalidate_recordset()
+            if source_id in model.line_ids.ids:
+                raise _fail(failure_type, "odoo_write_error", "Native rule-line deletion failed.", exit_code=6)
+        else:
+            changes = parameters["line"] if create else parameters["changes"]
+            target = changes if create else {**_normalized_reconciliation_line(line), **changes}
+            try:
+                reconciliation_processing.line_values(target)
+            except ValueError as exc:
+                raise _fail(failure_type, "business_rule_error", str(exc), exit_code=6) from exc
+            references = {"account_id": None, "partner_id": None, "tax_ids": []}
+            references.update({field: target[field] for field in ("account_id", "partner_id", "tax_ids", "analytic_distribution") if field in changes})
+            _validate_reconciliation_line_references(env, [references], company_id, failure_type)
+            expected = _expected_reconciliation_line(target)
+            if create:
+                matches = model.line_ids.filtered(lambda row: _normalized_reconciliation_line(row) == expected)
+                if len(matches) > 1:
+                    raise _fail(failure_type, "idempotency_conflict", "Multiple existing rule lines match this create payload.", exit_code=5)
+                if matches:
+                    line, replay = matches, True
+                else:
+                    values = _reconciliation_line_commands([target])[1][2]
+                    line = _scoped(env, "account.reconcile.model.line", company_id).create({**values, "model_id": model.id})
+                source_id = line.id
+            else:
+                replay = _normalized_reconciliation_line(line) == expected
+                if not replay:
+                    values = _reconciliation_line_commands([target])[1][2]
+                    line.write({field: value for field, value in values.items() if field in changes})
+            line.invalidate_recordset()
+            model.invalidate_recordset()
+            if _normalized_reconciliation_line(line) != expected or _relation_id(line.model_id) != model.id or _relation_id(line.company_id) != company_id:
+                raise _fail(failure_type, "odoo_write_error", "Native rule-line payload was not persisted in the requested company/model.", exit_code=6)
+    result = _reconciliation_model_result(model, company_id)
+    result["source_id"] = source_id
+    return result, replay
+
+
 def _write_payment_processing(
     env: Any, capability_id: str, parameters: dict[str, Any],
     company_id: int, failure_type: type[Exception],
@@ -19669,6 +19817,8 @@ def _dispatch_allowed(
     marker: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if capability_id in reconciliation_processing.CAPABILITY_IDS:
+        return _write_reconciliation_processing(env, capability_id, parameters, company_id, failure_type)
     if capability_id in payment_processing.CAPABILITY_IDS:
         return _write_payment_processing(env, capability_id, parameters, company_id, failure_type)
     if capability_id in invoice_presentation.CAPABILITY_IDS:

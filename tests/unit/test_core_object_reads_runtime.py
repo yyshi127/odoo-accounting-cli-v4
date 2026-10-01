@@ -16,6 +16,9 @@ from odoo_accounting_cli_v4.capabilities.core_object_reads import (
 
 EXPECTED_CAPABILITY_IDS = frozenset(
     {
+        "reconciliation.model.processing_settings.get",
+        "reconciliation.model.usage_lines.list",
+
         "payment.bank_account_candidates.list",
         "payment.duplicate_candidates.list",
         "payment.processing_settings.get",
@@ -163,6 +166,9 @@ GET_ID_FIELDS = {
 }
 
 PRIMARY_MODELS = {
+    "reconciliation.model.processing_settings.get": "account.reconcile.model",
+    "reconciliation.model.usage_lines.list": "account.move.line",
+
     "payment.bank_account_candidates.list": "res.partner.bank",
     "payment.duplicate_candidates.list": "account.payment",
     "payment.processing_settings.get": "account.payment",
@@ -1376,6 +1382,7 @@ def _fixture() -> tuple[Env, dict[str, Any]]:
             "account.payment.method.line", payment_method_lines
         ),
         "account.reconcile.model": Model("account.reconcile.model", reconcile_models),
+        "mail.activity.type": Model("mail.activity.type"),
         "account.cash.rounding": Model("account.cash.rounding", cash_roundings),
         "account.journal.group": Model("account.journal.group", journal_groups),
         "account.incoterms": Model("account.incoterms", incoterms),
@@ -1450,6 +1457,10 @@ def _dispatch(
 
 
 def _parameters(capability_id: str) -> dict[str, Any]:
+    if capability_id == "reconciliation.model.processing_settings.get":
+        return {"reconciliation_model_id": 31}
+    if capability_id == "reconciliation.model.usage_lines.list":
+        return {"reconciliation_model_id": 71, "limit": 100, "after_id": None}
     if capability_id == "payment.processing_settings.get":
         return {"payment_id": 31}
     if capability_id in {'payment.bank_account_candidates.list', 'payment.duplicate_candidates.list'}:
