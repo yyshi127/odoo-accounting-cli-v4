@@ -33,6 +33,8 @@ from test_reconciliation_processing_batch import (
     result as reconciliation_processing_result,
 )
 from test_report_budget_writes import PARAMETERS as REPORT_BUDGET_PARAMETERS
+from test_tax_processing_batch import PARAMETERS as TAX_PROCESSING_PARAMETERS
+from test_tax_processing_batch import result as tax_processing_result
 
 from odoo_accounting_cli_v4.capabilities.core_writes import (
     CORE_WRITE_CAPABILITY_IDS,
@@ -850,6 +852,7 @@ PARAMETERS = {
 
 
 PARAMETERS.update(deepcopy(PAYMENT_CONFIGURATION_PARAMETERS))
+PARAMETERS.update(deepcopy(TAX_PROCESSING_PARAMETERS))
 PARAMETERS.update(deepcopy(PAYMENT_TERM_PROCESSING_PARAMETERS))
 PARAMETERS.update(deepcopy(RECONCILIATION_PROCESSING_PARAMETERS))
 PARAMETERS.update(deepcopy(PAYMENT_PROCESSING_PARAMETERS))
@@ -877,7 +880,7 @@ def _request(capability_id: str) -> dict:
 
 
 def _key(capability_id: str) -> str:
-    if capability_id in PAYMENT_TERM_PROCESSING_PARAMETERS or capability_id in RECONCILIATION_PROCESSING_PARAMETERS or capability_id in PAYMENT_PROCESSING_PARAMETERS or capability_id in INVOICE_PRESENTATION_PARAMETERS or capability_id in MOVE_PROCESSING_PARAMETERS or capability_id in PARTNER_PREFERENCES_PARAMETERS or capability_id in PAYMENT_CONFIGURATION_PARAMETERS or capability_id in REPORT_BUDGET_PARAMETERS or capability_id in FISCAL_MAPPING_PARAMETERS:
+    if capability_id in TAX_PROCESSING_PARAMETERS or capability_id in PAYMENT_TERM_PROCESSING_PARAMETERS or capability_id in RECONCILIATION_PROCESSING_PARAMETERS or capability_id in PAYMENT_PROCESSING_PARAMETERS or capability_id in INVOICE_PRESENTATION_PARAMETERS or capability_id in MOVE_PROCESSING_PARAMETERS or capability_id in PARTNER_PREFERENCES_PARAMETERS or capability_id in PAYMENT_CONFIGURATION_PARAMETERS or capability_id in REPORT_BUDGET_PARAMETERS or capability_id in FISCAL_MAPPING_PARAMETERS:
         parameters = validate_core_write_request(capability_id, _request(capability_id))[2]
         return _expected_idempotency_key(capability_id, parameters, 7)
     if capability_id in {
@@ -1169,6 +1172,10 @@ def _key(capability_id: str) -> str:
 
 
 def _result(capability_id: str, **changes) -> dict:
+    if capability_id in TAX_PROCESSING_PARAMETERS:
+        result = tax_processing_result(capability_id, PARAMETERS[capability_id])
+        result.update(changes)
+        return result
     if capability_id in PAYMENT_TERM_PROCESSING_PARAMETERS:
         result = payment_term_processing_result(capability_id, PARAMETERS[capability_id])
         result.update(changes)

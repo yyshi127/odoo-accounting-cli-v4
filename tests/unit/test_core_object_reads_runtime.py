@@ -16,6 +16,9 @@ from odoo_accounting_cli_v4.capabilities.core_object_reads import (
 
 EXPECTED_CAPABILITY_IDS = frozenset(
     {
+        "tax.processing_settings.get",
+        "tax.usage_lines.list",
+
         "invoice.payment_schedule.inspect",
         "payment_term.usage_moves.list",
 
@@ -169,6 +172,9 @@ GET_ID_FIELDS = {
 }
 
 PRIMARY_MODELS = {
+    "tax.processing_settings.get": "account.tax",
+    "tax.usage_lines.list": "account.tax",
+
     "invoice.payment_schedule.inspect": "account.move",
     "payment_term.usage_moves.list": "account.payment.term",
 
@@ -1463,6 +1469,10 @@ def _dispatch(
 
 
 def _parameters(capability_id: str) -> dict[str, Any]:
+    if capability_id == "tax.processing_settings.get":
+        return {"tax_id": 31}
+    if capability_id == "tax.usage_lines.list":
+        return {"tax_id": 71,"limit": 100,"after_id": None}
     if capability_id == "invoice.payment_schedule.inspect":
         return {"invoice_id": 31}
     if capability_id == "payment_term.usage_moves.list":

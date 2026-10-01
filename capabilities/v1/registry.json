@@ -32509,6 +32509,990 @@
         ]
       },
       "handler_key": "payment_term_usage_moves_list"
+    },
+    "tax.delete": {
+      "summary": {
+        "zh_CN": "删除未被原生引用阻止的税种",
+        "en_US": "Delete a tax subject to native reference guards"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.move.line",
+          "account.tax",
+          "account.tax.repartition.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_tax.py",
+          "account/models/account_move_line.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/tax.delete.request.schema.json",
+        "response": "schemas/v1/tax.delete.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.move.line:read",
+          "account.tax.repartition.line:read",
+          "account.tax.repartition.line:unlink",
+          "account.tax:read",
+          "account.tax:unlink",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_tax_unlink_or_atomic_repartition_commands",
+        "verify": "requested_fields_and_native_identity_reread_in_one_savepoint",
+        "idempotency": "serial_native_pair_or_requested_payload_matching_with_missing_target_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_tax_processing_batch.py"
+          ],
+          "reason": "Closed schemas/public CLI, deterministic keys, result/parent/company scope, ID-preserving atomic native commands, reference/access denials and native read normalization."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_tax_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, five setup IDs and eight immediate replays; native invoice/refund pair creation, deletion and same-payload recreation with fresh IDs, atomic positive factors and complete matching order, negative factors and actual posted reverse-charge invoice/refund journal items, native failed mutations rolled back per call, computed closing flags after account assignment, scoped actual usage ID-keyset pages including archived taxes, unused tax deletion/cascade and native referenced tax/pair deletion denials. Configuration changes preserve posted line identities/accounts/maturities/amounts/residuals/links. Foreign-company, wrong-parent/side, incomplete order, wrong-applicability tags and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No external filing/payment, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured company/user/native ACLs. Settings expose actual native advanced/computed tax fields and side IDs ordered as native pair validation. Usage reads actual same-company tax_ids/tax_line_id/group_tax_id links, not proof of settlement or tax filing. Native parent write/savepoint edits retain child identities, enforce invoice/refund correspondence, exactly one base, positive and negative factor totals and native reference restrictions. Pair create/delete touch both document sides; complete ordering does not replace lines. Account/tag reference scope and native computed closing behavior remain intact. Deletes have no tombstones or fake replay. No historical-entry rewrite, arbitrary fields, caller-sudo, tax submission or new control framework."
+      },
+      "routing": {
+        "object": "tax",
+        "actions": [
+          "delete"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "删除未被原生引用阻止的税种"
+          ],
+          "en_US": [
+            "Delete a tax subject to native reference guards"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "申报或缴纳税款",
+            "重写已过账分录",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Submitting or paying taxes",
+            "Rewriting posted entries",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "tax.processing_settings.get": {
+      "summary": {
+        "zh_CN": "查看税种原生处理设置",
+        "en_US": "Inspect native tax processing settings"
+      },
+      "domain": "accounting_configuration",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "res.company",
+          "account.tax",
+          "account.tax.repartition.line",
+          "account.move.line",
+          "account.reconcile.model.line"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_tax.py",
+          "account/models/account_move_line.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/tax.processing_settings.get.request.schema.json",
+        "response": "schemas/v1/tax.processing_settings.get.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.tax:read",
+          "account.tax.repartition.line:read",
+          "account.move.line:read",
+          "account.reconcile.model.line:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_native_advanced_tax_or_scoped_usage_read",
+        "verify": "closed_response_schema_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_tax_processing_batch.py"
+          ],
+          "reason": "Closed schemas/public CLI, deterministic keys, result/parent/company scope, ID-preserving atomic native commands, reference/access denials and native read normalization."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_tax_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, five setup IDs and eight immediate replays; native invoice/refund pair creation, deletion and same-payload recreation with fresh IDs, atomic positive factors and complete matching order, negative factors and actual posted reverse-charge invoice/refund journal items, native failed mutations rolled back per call, computed closing flags after account assignment, scoped actual usage ID-keyset pages including archived taxes, unused tax deletion/cascade and native referenced tax/pair deletion denials. Configuration changes preserve posted line identities/accounts/maturities/amounts/residuals/links. Foreign-company, wrong-parent/side, incomplete order, wrong-applicability tags and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No external filing/payment, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured company/user/native ACLs. Settings expose actual native advanced/computed tax fields and side IDs ordered as native pair validation. Usage reads actual same-company tax_ids/tax_line_id/group_tax_id links, not proof of settlement or tax filing. Native parent write/savepoint edits retain child identities, enforce invoice/refund correspondence, exactly one base, positive and negative factor totals and native reference restrictions. Pair create/delete touch both document sides; complete ordering does not replace lines. Account/tag reference scope and native computed closing behavior remain intact. Deletes have no tombstones or fake replay. No historical-entry rewrite, arbitrary fields, caller-sudo, tax submission or new control framework."
+      },
+      "routing": {
+        "object": "tax",
+        "actions": [
+          "get"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "查看税种原生处理设置"
+          ],
+          "en_US": [
+            "Inspect native tax processing settings"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "申报或缴纳税款",
+            "重写已过账分录",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Submitting or paying taxes",
+            "Rewriting posted entries",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "tax_processing_settings_get"
+    },
+    "tax.repartition_line.update": {
+      "summary": {
+        "zh_CN": "修改税务分摊行",
+        "en_US": "Patch a native tax repartition line"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.account",
+          "account.account.tag",
+          "account.tax",
+          "account.tax.repartition.line",
+          "res.company",
+          "res.country"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_tax.py",
+          "account/models/account_move_line.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/tax.repartition_line.update.request.schema.json",
+        "response": "schemas/v1/tax.repartition_line.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account.tag:read",
+          "account.account:read",
+          "account.tax.repartition.line:read",
+          "account.tax.repartition.line:write",
+          "account.tax:read",
+          "account.tax:write",
+          "res.company:read",
+          "res.country:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_tax_unlink_or_atomic_repartition_commands",
+        "verify": "requested_fields_and_native_identity_reread_in_one_savepoint",
+        "idempotency": "serial_native_pair_or_requested_payload_matching_with_missing_target_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_tax_processing_batch.py"
+          ],
+          "reason": "Closed schemas/public CLI, deterministic keys, result/parent/company scope, ID-preserving atomic native commands, reference/access denials and native read normalization."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_tax_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, five setup IDs and eight immediate replays; native invoice/refund pair creation, deletion and same-payload recreation with fresh IDs, atomic positive factors and complete matching order, negative factors and actual posted reverse-charge invoice/refund journal items, native failed mutations rolled back per call, computed closing flags after account assignment, scoped actual usage ID-keyset pages including archived taxes, unused tax deletion/cascade and native referenced tax/pair deletion denials. Configuration changes preserve posted line identities/accounts/maturities/amounts/residuals/links. Foreign-company, wrong-parent/side, incomplete order, wrong-applicability tags and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No external filing/payment, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured company/user/native ACLs. Settings expose actual native advanced/computed tax fields and side IDs ordered as native pair validation. Usage reads actual same-company tax_ids/tax_line_id/group_tax_id links, not proof of settlement or tax filing. Native parent write/savepoint edits retain child identities, enforce invoice/refund correspondence, exactly one base, positive and negative factor totals and native reference restrictions. Pair create/delete touch both document sides; complete ordering does not replace lines. Account/tag reference scope and native computed closing behavior remain intact. Deletes have no tombstones or fake replay. No historical-entry rewrite, arbitrary fields, caller-sudo, tax submission or new control framework."
+      },
+      "routing": {
+        "object": "tax",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "修改税务分摊行"
+          ],
+          "en_US": [
+            "Patch a native tax repartition line"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "申报或缴纳税款",
+            "重写已过账分录",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Submitting or paying taxes",
+            "Rewriting posted entries",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "tax.repartition_lines.resequence": {
+      "summary": {
+        "zh_CN": "调整两侧税务分摊行顺序",
+        "en_US": "Resequence complete invoice/refund repartition sides"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.account",
+          "account.account.tag",
+          "account.tax",
+          "account.tax.repartition.line",
+          "res.company",
+          "res.country"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_tax.py",
+          "account/models/account_move_line.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/tax.repartition_lines.resequence.request.schema.json",
+        "response": "schemas/v1/tax.repartition_lines.resequence.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account.tag:read",
+          "account.account:read",
+          "account.tax.repartition.line:read",
+          "account.tax.repartition.line:write",
+          "account.tax:read",
+          "account.tax:write",
+          "res.company:read",
+          "res.country:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_tax_unlink_or_atomic_repartition_commands",
+        "verify": "requested_fields_and_native_identity_reread_in_one_savepoint",
+        "idempotency": "serial_native_pair_or_requested_payload_matching_with_missing_target_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_tax_processing_batch.py"
+          ],
+          "reason": "Closed schemas/public CLI, deterministic keys, result/parent/company scope, ID-preserving atomic native commands, reference/access denials and native read normalization."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_tax_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, five setup IDs and eight immediate replays; native invoice/refund pair creation, deletion and same-payload recreation with fresh IDs, atomic positive factors and complete matching order, negative factors and actual posted reverse-charge invoice/refund journal items, native failed mutations rolled back per call, computed closing flags after account assignment, scoped actual usage ID-keyset pages including archived taxes, unused tax deletion/cascade and native referenced tax/pair deletion denials. Configuration changes preserve posted line identities/accounts/maturities/amounts/residuals/links. Foreign-company, wrong-parent/side, incomplete order, wrong-applicability tags and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No external filing/payment, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured company/user/native ACLs. Settings expose actual native advanced/computed tax fields and side IDs ordered as native pair validation. Usage reads actual same-company tax_ids/tax_line_id/group_tax_id links, not proof of settlement or tax filing. Native parent write/savepoint edits retain child identities, enforce invoice/refund correspondence, exactly one base, positive and negative factor totals and native reference restrictions. Pair create/delete touch both document sides; complete ordering does not replace lines. Account/tag reference scope and native computed closing behavior remain intact. Deletes have no tombstones or fake replay. No historical-entry rewrite, arbitrary fields, caller-sudo, tax submission or new control framework."
+      },
+      "routing": {
+        "object": "tax",
+        "actions": [
+          "resequence"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "调整两侧税务分摊行顺序"
+          ],
+          "en_US": [
+            "Resequence complete invoice/refund repartition sides"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "申报或缴纳税款",
+            "重写已过账分录",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Submitting or paying taxes",
+            "Rewriting posted entries",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "tax.repartition_lines.update": {
+      "summary": {
+        "zh_CN": "原子修改现有税务分摊行",
+        "en_US": "Atomically patch existing tax repartition lines"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.account",
+          "account.account.tag",
+          "account.tax",
+          "account.tax.repartition.line",
+          "res.company",
+          "res.country"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_tax.py",
+          "account/models/account_move_line.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/tax.repartition_lines.update.request.schema.json",
+        "response": "schemas/v1/tax.repartition_lines.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account.tag:read",
+          "account.account:read",
+          "account.tax.repartition.line:read",
+          "account.tax.repartition.line:write",
+          "account.tax:read",
+          "account.tax:write",
+          "res.company:read",
+          "res.country:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_tax_unlink_or_atomic_repartition_commands",
+        "verify": "requested_fields_and_native_identity_reread_in_one_savepoint",
+        "idempotency": "serial_native_pair_or_requested_payload_matching_with_missing_target_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_tax_processing_batch.py"
+          ],
+          "reason": "Closed schemas/public CLI, deterministic keys, result/parent/company scope, ID-preserving atomic native commands, reference/access denials and native read normalization."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_tax_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, five setup IDs and eight immediate replays; native invoice/refund pair creation, deletion and same-payload recreation with fresh IDs, atomic positive factors and complete matching order, negative factors and actual posted reverse-charge invoice/refund journal items, native failed mutations rolled back per call, computed closing flags after account assignment, scoped actual usage ID-keyset pages including archived taxes, unused tax deletion/cascade and native referenced tax/pair deletion denials. Configuration changes preserve posted line identities/accounts/maturities/amounts/residuals/links. Foreign-company, wrong-parent/side, incomplete order, wrong-applicability tags and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No external filing/payment, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured company/user/native ACLs. Settings expose actual native advanced/computed tax fields and side IDs ordered as native pair validation. Usage reads actual same-company tax_ids/tax_line_id/group_tax_id links, not proof of settlement or tax filing. Native parent write/savepoint edits retain child identities, enforce invoice/refund correspondence, exactly one base, positive and negative factor totals and native reference restrictions. Pair create/delete touch both document sides; complete ordering does not replace lines. Account/tag reference scope and native computed closing behavior remain intact. Deletes have no tombstones or fake replay. No historical-entry rewrite, arbitrary fields, caller-sudo, tax submission or new control framework."
+      },
+      "routing": {
+        "object": "tax",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "原子修改现有税务分摊行"
+          ],
+          "en_US": [
+            "Atomically patch existing tax repartition lines"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "申报或缴纳税款",
+            "重写已过账分录",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Submitting or paying taxes",
+            "Rewriting posted entries",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "tax.repartition_pair.create": {
+      "summary": {
+        "zh_CN": "成对新增发票退款税务分摊行",
+        "en_US": "Create an invoice/refund repartition pair"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.account",
+          "account.account.tag",
+          "account.tax",
+          "account.tax.repartition.line",
+          "res.company",
+          "res.country"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_tax.py",
+          "account/models/account_move_line.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/tax.repartition_pair.create.request.schema.json",
+        "response": "schemas/v1/tax.repartition_pair.create.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account.tag:read",
+          "account.account:read",
+          "account.tax.repartition.line:create",
+          "account.tax.repartition.line:read",
+          "account.tax:read",
+          "account.tax:write",
+          "res.company:read",
+          "res.country:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_tax_unlink_or_atomic_repartition_commands",
+        "verify": "requested_fields_and_native_identity_reread_in_one_savepoint",
+        "idempotency": "serial_native_pair_or_requested_payload_matching_with_missing_target_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_tax_processing_batch.py"
+          ],
+          "reason": "Closed schemas/public CLI, deterministic keys, result/parent/company scope, ID-preserving atomic native commands, reference/access denials and native read normalization."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_tax_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, five setup IDs and eight immediate replays; native invoice/refund pair creation, deletion and same-payload recreation with fresh IDs, atomic positive factors and complete matching order, negative factors and actual posted reverse-charge invoice/refund journal items, native failed mutations rolled back per call, computed closing flags after account assignment, scoped actual usage ID-keyset pages including archived taxes, unused tax deletion/cascade and native referenced tax/pair deletion denials. Configuration changes preserve posted line identities/accounts/maturities/amounts/residuals/links. Foreign-company, wrong-parent/side, incomplete order, wrong-applicability tags and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No external filing/payment, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured company/user/native ACLs. Settings expose actual native advanced/computed tax fields and side IDs ordered as native pair validation. Usage reads actual same-company tax_ids/tax_line_id/group_tax_id links, not proof of settlement or tax filing. Native parent write/savepoint edits retain child identities, enforce invoice/refund correspondence, exactly one base, positive and negative factor totals and native reference restrictions. Pair create/delete touch both document sides; complete ordering does not replace lines. Account/tag reference scope and native computed closing behavior remain intact. Deletes have no tombstones or fake replay. No historical-entry rewrite, arbitrary fields, caller-sudo, tax submission or new control framework."
+      },
+      "routing": {
+        "object": "tax",
+        "actions": [
+          "create"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "成对新增发票退款税务分摊行"
+          ],
+          "en_US": [
+            "Create an invoice/refund repartition pair"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "申报或缴纳税款",
+            "重写已过账分录",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Submitting or paying taxes",
+            "Rewriting posted entries",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "tax.repartition_pair.delete": {
+      "summary": {
+        "zh_CN": "成对删除发票退款税务分摊行",
+        "en_US": "Delete an invoice/refund repartition pair"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.tax",
+          "account.tax.repartition.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_tax.py",
+          "account/models/account_move_line.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/tax.repartition_pair.delete.request.schema.json",
+        "response": "schemas/v1/tax.repartition_pair.delete.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.tax.repartition.line:read",
+          "account.tax.repartition.line:unlink",
+          "account.tax:read",
+          "account.tax:write",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_tax_unlink_or_atomic_repartition_commands",
+        "verify": "requested_fields_and_native_identity_reread_in_one_savepoint",
+        "idempotency": "serial_native_pair_or_requested_payload_matching_with_missing_target_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_tax_processing_batch.py"
+          ],
+          "reason": "Closed schemas/public CLI, deterministic keys, result/parent/company scope, ID-preserving atomic native commands, reference/access denials and native read normalization."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_tax_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, five setup IDs and eight immediate replays; native invoice/refund pair creation, deletion and same-payload recreation with fresh IDs, atomic positive factors and complete matching order, negative factors and actual posted reverse-charge invoice/refund journal items, native failed mutations rolled back per call, computed closing flags after account assignment, scoped actual usage ID-keyset pages including archived taxes, unused tax deletion/cascade and native referenced tax/pair deletion denials. Configuration changes preserve posted line identities/accounts/maturities/amounts/residuals/links. Foreign-company, wrong-parent/side, incomplete order, wrong-applicability tags and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No external filing/payment, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured company/user/native ACLs. Settings expose actual native advanced/computed tax fields and side IDs ordered as native pair validation. Usage reads actual same-company tax_ids/tax_line_id/group_tax_id links, not proof of settlement or tax filing. Native parent write/savepoint edits retain child identities, enforce invoice/refund correspondence, exactly one base, positive and negative factor totals and native reference restrictions. Pair create/delete touch both document sides; complete ordering does not replace lines. Account/tag reference scope and native computed closing behavior remain intact. Deletes have no tombstones or fake replay. No historical-entry rewrite, arbitrary fields, caller-sudo, tax submission or new control framework."
+      },
+      "routing": {
+        "object": "tax",
+        "actions": [
+          "delete"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "成对删除发票退款税务分摊行"
+          ],
+          "en_US": [
+            "Delete an invoice/refund repartition pair"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "申报或缴纳税款",
+            "重写已过账分录",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Submitting or paying taxes",
+            "Rewriting posted entries",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "tax.usage_lines.list": {
+      "summary": {
+        "zh_CN": "查询税种使用的分录行",
+        "en_US": "List actual journal items linked to a tax"
+      },
+      "domain": "accounting_configuration",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "res.company",
+          "account.tax",
+          "account.move.line",
+          "account.move",
+          "account.account",
+          "res.currency"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_tax.py",
+          "account/models/account_move_line.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/tax.usage_lines.list.request.schema.json",
+        "response": "schemas/v1/tax.usage_lines.list.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.tax:read",
+          "account.move.line:read",
+          "account.move:read",
+          "account.account:read",
+          "res.currency:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_native_advanced_tax_or_scoped_usage_read",
+        "verify": "closed_response_schema_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_tax_processing_batch.py"
+          ],
+          "reason": "Closed schemas/public CLI, deterministic keys, result/parent/company scope, ID-preserving atomic native commands, reference/access denials and native read normalization."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_tax_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, five setup IDs and eight immediate replays; native invoice/refund pair creation, deletion and same-payload recreation with fresh IDs, atomic positive factors and complete matching order, negative factors and actual posted reverse-charge invoice/refund journal items, native failed mutations rolled back per call, computed closing flags after account assignment, scoped actual usage ID-keyset pages including archived taxes, unused tax deletion/cascade and native referenced tax/pair deletion denials. Configuration changes preserve posted line identities/accounts/maturities/amounts/residuals/links. Foreign-company, wrong-parent/side, incomplete order, wrong-applicability tags and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No external filing/payment, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples are deferred until the capability library reaches target coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing is outside this capability batch."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured company/user/native ACLs. Settings expose actual native advanced/computed tax fields and side IDs ordered as native pair validation. Usage reads actual same-company tax_ids/tax_line_id/group_tax_id links, not proof of settlement or tax filing. Native parent write/savepoint edits retain child identities, enforce invoice/refund correspondence, exactly one base, positive and negative factor totals and native reference restrictions. Pair create/delete touch both document sides; complete ordering does not replace lines. Account/tag reference scope and native computed closing behavior remain intact. Deletes have no tombstones or fake replay. No historical-entry rewrite, arbitrary fields, caller-sudo, tax submission or new control framework."
+      },
+      "routing": {
+        "object": "tax",
+        "actions": [
+          "list"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "查询税种使用的分录行"
+          ],
+          "en_US": [
+            "List actual journal items linked to a tax"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "申报或缴纳税款",
+            "重写已过账分录",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Submitting or paying taxes",
+            "Rewriting posted entries",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "tax_usage_lines_list"
     }
   }
 }

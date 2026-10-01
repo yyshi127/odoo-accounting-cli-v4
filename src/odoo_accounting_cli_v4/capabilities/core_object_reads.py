@@ -23,6 +23,7 @@ from odoo_accounting_cli_v4 import (
 from odoo_accounting_cli_v4 import (
     reconciliation_processing_contracts as reconciliation_processing,
 )
+from odoo_accounting_cli_v4 import tax_processing_contracts as tax_processing
 
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 1000
@@ -56,6 +57,7 @@ CORE_OBJECT_GET_CAPABILITY_IDS = frozenset(
         "journal.group.get",
         "partner.bill_validation_preferences.get",
         "partner.invoice_delivery_preferences.get",
+        "tax.processing_settings.get",
         "invoice.payment_schedule.inspect",
         "reconciliation.model.processing_settings.get",
         "payment.processing_settings.get",
@@ -128,6 +130,7 @@ _CORE_OBJECT_SEARCH_CAPABILITY_IDS = frozenset(
         "reconciliation.model.line.list",
         "bank.list",
         "report.catalog.list",
+        "tax.usage_lines.list",
         "payment_term.usage_moves.list",
         "reconciliation.model.usage_lines.list",
         "payment.bank_account_candidates.list",
@@ -176,6 +179,7 @@ _ID_FIELDS = {
     "journal.group.get": "journal_group_id",
     "partner.bill_validation_preferences.get": "partner_id",
     "partner.invoice_delivery_preferences.get": "partner_id",
+    "tax.processing_settings.get": "tax_id",
     "invoice.payment_schedule.inspect": "invoice_id",
     "reconciliation.model.processing_settings.get": "reconciliation_model_id",
     "payment.processing_settings.get": "payment_id",
@@ -255,6 +259,7 @@ _SEARCH_FILTERS = {
     "report.catalog.list": frozenset(
         {"country_id", "root_report_id", "availability_conditions", "active"}
     ),
+    "tax.usage_lines.list": frozenset({"tax_id"}),
     "payment_term.usage_moves.list": frozenset({"payment_term_id"}),
     "reconciliation.model.usage_lines.list": frozenset({"reconciliation_model_id"}),
     "payment.bank_account_candidates.list": frozenset({"payment_id"}),
@@ -511,6 +516,10 @@ def validate_core_object_read_request(
         if not set(parameters) <= {"limit", "cursor"}:
             raise _invalid(f"{capability_id} contains an unsupported parameter.")
         filters: dict[str, Any] = {}
+    elif capability_id == tax_processing.LIST_ID:
+        if not {"tax_id"} <= set(parameters) <= {"tax_id", "limit", "cursor"} or not _valid_id(parameters.get("tax_id")):
+            raise _invalid("Tax usage requires tax_id and optional pagination only.")
+        filters = {"tax_id": parameters["tax_id"]}
     elif capability_id == payment_term_processing.LIST_ID:
         if not {"payment_term_id"} <= set(parameters) <= {"payment_term_id", "limit", "cursor"} or not _valid_id(parameters.get("payment_term_id")):
             raise _invalid("Payment-term usage requires payment_term_id and optional pagination only.")
@@ -2782,6 +2791,8 @@ def _valid_account_status_item(item: Any, company_id: int) -> bool:
 
 
 def _valid_item(capability_id: str, item: Any, company_id: int) -> bool:
+    if capability_id in tax_processing.READ_IDS:
+        return tax_processing.valid_read_item(capability_id, item, company_id)
     if capability_id in payment_term_processing.READ_IDS:
         return payment_term_processing.valid_read_item(capability_id, item, company_id)
     if capability_id in reconciliation_processing.READ_IDS:
@@ -3080,6 +3091,8 @@ def read_core_object(
         company_id=company_id,
         maximum=limit + 1,
     )
+    if capability_id == tax_processing.LIST_ID and any(filters["tax_id"] not in item["tax_ids"] and filters["tax_id"] not in (item["tax_line_id"], item["group_tax_id"]) for item in items):
+        raise _failed("Odoo returned journal items unrelated to the requested tax.")
     if capability_id == payment_term_processing.LIST_ID and any(item["invoice_payment_term_id"] != filters["payment_term_id"] for item in items):
         raise _failed("Odoo returned usage from the wrong payment term.")
     if capability_id == reconciliation_processing.LIST_ID and any(item["reconcile_model_id"] != filters["reconciliation_model_id"] for item in items):

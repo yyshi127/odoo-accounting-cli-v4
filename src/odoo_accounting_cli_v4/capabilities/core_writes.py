@@ -30,8 +30,9 @@ from odoo_accounting_cli_v4 import (
     reconciliation_processing_contracts as reconciliation_processing,
 )
 from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
+from odoo_accounting_cli_v4 import tax_processing_contracts as tax_processing
 
-CORE_WRITE_CAPABILITY_IDS = payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
+CORE_WRITE_CAPABILITY_IDS = tax_processing.CAPABILITY_IDS | payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -4286,7 +4287,12 @@ def validate_core_write_request(
             code="capability_unavailable",
         )
     request_id, context, parameters = _validate_envelope(request)
-    if capability_id in payment_term_processing.CAPABILITY_IDS:
+    if capability_id in tax_processing.CAPABILITY_IDS:
+        try:
+            normalized = tax_processing.normalize_parameters(capability_id, parameters)
+        except ValueError as exc:
+            raise _invalid(str(exc)) from exc
+    elif capability_id in payment_term_processing.CAPABILITY_IDS:
         try:
             normalized = payment_term_processing.normalize_parameters(capability_id, parameters)
         except ValueError as exc:
@@ -4523,6 +4529,8 @@ def validate_core_write_request(
 def _expected_idempotency_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in tax_processing.CAPABILITY_IDS:
+        return tax_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in payment_term_processing.CAPABILITY_IDS:
         return payment_term_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in reconciliation_processing.CAPABILITY_IDS:
@@ -5228,6 +5236,23 @@ def _validate_result(
 ) -> dict[str, Any]:
     if not _valid_result_shape(result) or result["company_id"] != company_id:
         raise _failed("Odoo returned a malformed or out-of-scope core-write result.")
+
+    if capability_id in tax_processing.CAPABILITY_IDS:
+        deleted = capability_id == "tax.delete"
+        removed = deleted or capability_id == "tax.repartition_pair.delete"
+        source = parameters["line_id"] if capability_id == "tax.repartition_line.update" else None
+        requested = {entry["line_id"] for entry in parameters["lines"]} if "lines" in parameters else {source} if source else set()
+        ordered = set(parameters.get("invoice_line_ids", [])) | set(parameters.get("refund_line_ids", []))
+        if (result["model"] != "account.tax" or result["id"] != parameters["tax_id"] or not _is_text(result["name"])
+            or result["source_id"] != source or result["state"] not in ({"deleted"} if deleted else {"active", "archived"})
+            or result["move_type"] is not None or result["partial_reconcile_ids"] or result["full_reconcile_id"] is not None or result["reconciled"]
+            or (removed and idempotent_replay) or (deleted and result["line_ids"])
+            or not requested <= set(result["line_ids"])
+            or (capability_id == "tax.repartition_pair.delete" and {parameters["invoice_line_id"], parameters["refund_line_id"]} & set(result["line_ids"]))
+            or (capability_id == "tax.repartition_pair.create" and len(result["line_ids"]) < 2)
+            or (capability_id == "tax.repartition_lines.resequence" and ordered != set(result["line_ids"]))):
+            raise _failed("Odoo returned a mismatched native tax-processing result.")
+        return deepcopy(result)
 
     if capability_id in payment_term_processing.CAPABILITY_IDS:
         duplicate = capability_id == "payment_term.duplicate"

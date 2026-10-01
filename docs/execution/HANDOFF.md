@@ -5319,3 +5319,89 @@ Continue another small genuine native accounting gap batch. Asset validation is
 still failed; product accounting-profile readback and two real external report
 sends remain planned. Addon fixes/real sends require separate authority. Keep
 the capability-first goal active; a complete accounting denominator is unproven.
+
+## Native tax and repartition processing — 2026-10-01
+
+Baseline: `d28dea6`. Eight new IDs: 492 registered, 477 handlers
+(232 reads, 245 writes), 960 schemas; 404 unconfigured, 73 degraded, 15 disabled.
+Enabled integrations: 473 implemented, three planned, one failed. Totals include
+historical non-accounting extensions, not complete accounting coverage.
+
+### Command boundaries
+
+- `tax.processing_settings.get` complements the existing basic tax get with
+  actual scope/exigibility/transition account, price override/computed inclusion,
+  analytic/used/negative-factor flags, children, country and both repartition
+  side IDs ordered by sequence/id as native pair validation. Archived owned
+  taxes remain readable; missing/foreign targets raise record_not_found.
+- `tax.usage_lines.list` reads actual same-company tax_ids, tax_line_id or
+  group_tax_id journal-item links through scoped ID-keyset paging, after checking
+  the visible parent. Includes archived taxes; missing/invisible/deleted parents
+  have no visible rows. It is usage evidence, not tax filing or settlement proof.
+- `tax.repartition_pair.create/delete` creates/removes both document sides in
+  one parent write, preserving all sibling IDs. Native matching ordered types/
+  factors, one base per side and positive/negative totals remain authoritative.
+  A unique exact ordered pair replays creation; partial/ambiguous matches conflict.
+  Deletion has no tombstone or fake replay. Recreating a deleted payload yields
+  fresh child IDs, not a memo-based response for deleted records.
+- `tax.repartition_line.update` patches fixed published fields on one scoped
+  child; `tax.repartition_lines.update` atomically patches 2-200 distinct existing
+  IDs, preflighting every parent before any write. Requested fields are verified
+  without forcing unspecified native computed closing flags. Native signed
+  factors (twelve decimal places) and signed sequence integers are supported.
+  Accounts are active/scoped and exclude receivable/payable/off-balance types;
+  tags are applicable to taxes and native allowed countries. Null/empty references
+  clear fields. No document-side reassignment or arbitrary field writer.
+- `tax.repartition_lines.resequence` requires each complete side's native IDs
+  exactly once, persists sequence 10/20/... and retains identities/payloads.
+  The native validator still rejects mismatched side types/factors/order.
+- `tax.delete` calls native unlink: unused children cascade; real journal-item
+  references retain native restrictions. Missing targets are errors, not replays.
+- All mutations use native ACL/company/user boundaries, exact confirmation,
+  deterministic keys and one savepoint; invalid mutations roll back per call.
+  No posted-entry rewrite, tax filing/payment, caller-sudo or new framework.
+
+### Shared real workflow and continuation
+
+Both isolated aliases passed in 579.13 seconds on attempt 2 as uid 5,
+su=False, company 1. Each exercises eight new IDs, five setup IDs and eight
+immediate replays. It checks pair recreation/fresh IDs; matching 40/60 positive
+and -100 negative factors; complete side ordering; actual posted invoice and
+credit-note tax lines with positive/negative amounts; native failed single/
+atomic factors and bad references/IDs; native computed closing after account
+assignment; unchanged posted accounts, IDs, maturities, amounts/residuals/links;
+actual usage paging and archive; unused-tax cascade and used-tax/pair denial.
+Foreign/wrong-parent/side, incomplete order, wrong-applicability tags and missing
+targets are denied. Fresh cursors verify all synthetic business data and
+temporary manager memberships rolled back; no permanent authorization grant.
+
+Attempt 1 failed in 148.03 seconds before invoice creation because the fixture
+omitted the existing command's required currency_id. The one-file repair supplies
+the actual company currency through the public CLI. No new implementation or
+access/native constraint changed; the real invoice/refund workflow remains.
+The failed run verified rollback and is retained, not counted as acceptance.
+
+Local: 1073 batch/read/runtime cases (38 + 858 + 177), 240 fixed write contracts,
+19 planned-baseline registry cases with one known deselection, then two changed
+registry selections after closure. Server: 38 batch and 19 final registry cases
+with the same stale bank_statement_payment_maintenance deselection. Ruff/diff
+passed. Initial allowlist: 31 files, 12 existing backed up, 19 new. Exact one-file
+fixture and two-file metadata deployments checked baselines/backups first;
+all 31 final deployed hashes match. Server document overlays remain untouched.
+Private archives/manifests/backups/native logs stay under
+`.tooling/tax-processing-20261001`; never commit them.
+Initial archive SHA-256: `fad10c1ff92b5be8d89be3b2f7289fa9ac00d7ebb66bbf97026239ca98cc6f6b`.
+Fixture repair SHA-256: `ddd55460d48da06f0f305ef1ad78adf293cb849da8ec63bcd8400499524740eb`.
+Final metadata SHA-256: `9f65f375fb4e1d6b4b12cf0a06e7ab97e0ca1ee6def3a9986acaaacce7a105e0`.
+Registry-file SHA-256: `e8f99af95c759380236db164c5240902078e9c07496577aefc7f2a9f8970615a`.
+Canonical registry SHA-256: `613eeb6837fc9f55f4a7f273be53a6127f46cdd1d81ea760835c25d45eafbe64`.
+Passing live-log SHA-256: `78fa3df5984e4b53b245fe2079d0cc12e8c2c4e3c6f459fd909deaeee10416de`.
+Changed code/schema/tests and staged added lines have zero privacy findings;
+five historical full-tree document findings remain, not a full scan pass.
+Service PIDs/restart counts stayed at the prior baseline; no business database,
+installed addon/source, Pi/V2/V3, service or configuration change.
+
+Continue another small genuine native accounting gap batch. Asset validation
+remains failed; product accounting-profile readback and two actual external
+report sends remain planned. Addon fixes/real sends need separate authority.
+Keep the capability-first goal active; complete accounting coverage is unproven.

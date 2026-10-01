@@ -2,6 +2,57 @@
 
 ## Current accounting phase — 2026-10-01
 
+492 registered IDs; 477 implemented handlers (232 reads, 245 writes);
+960 schema files. Availability: 404 unconfigured, 73 degraded, 15 disabled.
+Enabled-handler integration records: 473 implemented, three planned, one failed.
+Totals include historical non-accounting extensions, not a complete accounting
+denominator, completion percentage or ordinary-runtime permission guarantee.
+
+The latest batch adds eight native tax-processing capabilities: advanced tax
+settings and actual usage-line reads; tax deletion, individual repartition-line
+updates, paired invoice/refund line creation/deletion, atomic existing-line
+updates and complete two-sided ordering. Existing basic tax/repartition reads,
+creation and whole-line replacement are reused, not duplicated with aliases.
+Writes use one native parent write/savepoint and preserve child identities and
+native computed closing behavior. No tax filing/payment or new control framework.
+
+One shared public CLI/real-ORM workflow passed both isolated aliases as uid 5
+with su=False in 579.13 seconds: all eight new IDs, five existing setup IDs
+and eight immediate replays per alias. It verifies pair create/delete/recreate
+with fresh identities, atomic matching factor/order edits, native positive and
+negative factors, actual posted reverse-charge invoices and credit notes,
+per-call failed-mutation rollback, native computed closing flags, scoped actual
+usage paging and archived reads, unused-tax deletion/cascade and referenced
+tax/pair deletion denials. Configuration edits leave posted IDs/accounts,
+maturities, amounts, residuals and tax links unchanged. Fresh cursors verify
+all synthetic business records and temporary manager-group rollback.
+
+Attempt 1 failed in 148.03 seconds at an existing invoice-creation fixture:
+the request omitted its required currency_id after the configuration checks.
+Only that fixture gained the actual company currency; all new implementations
+and access/constraint checks were unchanged. The failure verified rollback;
+neither it nor partial checks count as full acceptance.
+
+Local: 1073 batch/read/runtime cases (38 + 858 + 177), 240 focused writes,
+19 planned-baseline registry cases with one known deselection, then two changed
+registry selections after closure. Server: 38 batch and 19 final registry cases
+with the same explicit stale bank_statement_payment_maintenance deselection.
+Ruff/diff passed. Initial 31-file deployment backed up 12 existing files and
+added 19; the one-file fixture repair and final two-file metadata closure checked
+baselines and backed up first. All 31 final deployed hashes match local files.
+Server STATUS/HANDOFF overlays were preserved. Service PIDs/restart counts
+remained unchanged. No business database, installed addon/source, Pi/V2/V3,
+service or configuration changed.
+
+Changed code/schema/tests and staged added lines have zero privacy findings;
+the full tree retains five historical document findings, not a scan pass.
+Next: another genuine native accounting gap batch. Asset validation is still
+failed; product accounting-profile readback and two real external report sends
+remain planned. Addon repairs/actual sends require separate authority. Keep the
+capability-first goal active; complete accounting coverage remains unproven.
+
+## Previous checkpoint — native payment-term processing, 2026-10-01
+
 484 registered IDs; 469 implemented handlers (230 reads, 239 writes);
 944 schema files. Availability: 396 unconfigured, 73 degraded, 15 disabled.
 Enabled-handler integration records: 465 implemented, three planned, one failed.

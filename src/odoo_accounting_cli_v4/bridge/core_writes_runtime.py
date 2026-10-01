@@ -34,9 +34,10 @@ from odoo_accounting_cli_v4 import (
     reconciliation_processing_contracts as reconciliation_processing,
 )
 from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
+from odoo_accounting_cli_v4 import tax_processing_contracts as tax_processing
 
 ACTION = "accounting.core_write.execute"
-CAPABILITIES = payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
+CAPABILITIES = tax_processing.CAPABILITY_IDS | payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -3324,6 +3325,25 @@ def _protocol(failure_type: type[Exception]) -> Exception:
     )
 
 
+_PARAMETER_KEYS.update(tax_processing.PARAMETER_KEYS)
+_GROUPS['tax.delete'] = "account.group_account_manager"
+_MODELS['tax.delete'] = {'account.move.line', 'account.tax', 'res.company', 'account.tax.repartition.line'}
+_ACCESS['tax.delete'] = {('res.company', 'read'), ('account.tax', 'unlink'), ('account.tax.repartition.line', 'read'), ('account.tax.repartition.line', 'unlink'), ('account.move.line', 'read'), ('account.tax', 'read')}
+_GROUPS['tax.repartition_line.update'] = "account.group_account_manager"
+_MODELS['tax.repartition_line.update'] = {'account.account.tag', 'res.country', 'account.tax', 'res.company', 'account.account', 'account.tax.repartition.line'}
+_ACCESS['tax.repartition_line.update'] = {('account.tax.repartition.line', 'write'), ('account.tax', 'read'), ('res.company', 'read'), ('res.country', 'read'), ('account.account.tag', 'read'), ('account.tax.repartition.line', 'read'), ('account.tax', 'write'), ('account.account', 'read')}
+_GROUPS['tax.repartition_lines.resequence'] = "account.group_account_manager"
+_MODELS['tax.repartition_lines.resequence'] = {'account.account.tag', 'res.country', 'account.tax', 'res.company', 'account.account', 'account.tax.repartition.line'}
+_ACCESS['tax.repartition_lines.resequence'] = {('account.tax.repartition.line', 'write'), ('account.tax', 'read'), ('res.company', 'read'), ('res.country', 'read'), ('account.account.tag', 'read'), ('account.tax.repartition.line', 'read'), ('account.tax', 'write'), ('account.account', 'read')}
+_GROUPS['tax.repartition_lines.update'] = "account.group_account_manager"
+_MODELS['tax.repartition_lines.update'] = {'account.account.tag', 'res.country', 'account.tax', 'res.company', 'account.account', 'account.tax.repartition.line'}
+_ACCESS['tax.repartition_lines.update'] = {('account.tax.repartition.line', 'write'), ('account.tax', 'read'), ('res.company', 'read'), ('res.country', 'read'), ('account.account.tag', 'read'), ('account.tax.repartition.line', 'read'), ('account.tax', 'write'), ('account.account', 'read')}
+_GROUPS['tax.repartition_pair.create'] = "account.group_account_manager"
+_MODELS['tax.repartition_pair.create'] = {'account.account.tag', 'res.country', 'account.tax', 'res.company', 'account.account', 'account.tax.repartition.line'}
+_ACCESS['tax.repartition_pair.create'] = {('account.tax', 'read'), ('account.tax.repartition.line', 'create'), ('res.company', 'read'), ('res.country', 'read'), ('account.account.tag', 'read'), ('account.tax.repartition.line', 'read'), ('account.tax', 'write'), ('account.account', 'read')}
+_GROUPS['tax.repartition_pair.delete'] = "account.group_account_manager"
+_MODELS['tax.repartition_pair.delete'] = {'account.tax', 'res.company', 'account.tax.repartition.line'}
+_ACCESS['tax.repartition_pair.delete'] = {('account.tax.repartition.line', 'unlink'), ('account.tax', 'read'), ('res.company', 'read'), ('account.tax.repartition.line', 'read'), ('account.tax', 'write')}
 _PARAMETER_KEYS.update(payment_term_processing.PARAMETER_KEYS)
 _GROUPS['payment_term.delete'] = "account.group_account_manager"
 _MODELS['payment_term.delete'] = {'account.payment.term.line', 'account.move', 'account.payment.term', 'res.company'}
@@ -5450,6 +5470,11 @@ def _valid_parameters(
 ) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id in tax_processing.CAPABILITY_IDS:
+        try:
+            return tax_processing.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
     if capability_id in payment_term_processing.CAPABILITY_IDS:
         try:
             return payment_term_processing.normalize_parameters(capability_id, parameters) == parameters
@@ -6073,6 +6098,8 @@ def _validated_payload(
 def _deterministic_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in tax_processing.CAPABILITY_IDS:
+        return tax_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in payment_term_processing.CAPABILITY_IDS:
         return payment_term_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in reconciliation_processing.CAPABILITY_IDS:
@@ -17722,6 +17749,91 @@ def _validate_tax_repartition_references(
     )
 
 
+def _write_tax_processing(
+    env: Any, capability_id: str, parameters: dict[str, Any],
+    company_id: int, failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    with env.cr.savepoint():
+        tax = _tax_config_record(env, parameters["tax_id"], company_id, failure_type)
+        if capability_id == "tax.delete":
+            result = _deleted_result(_tax_repartition_result(tax, company_id))
+            result["line_ids"] = []
+            tax.unlink()
+            if tax.exists():
+                raise _fail(failure_type, "odoo_write_error", "Native tax deletion failed.", exit_code=6)
+            return result, False
+        sides = {kind: getattr(tax, f"{kind}_repartition_line_ids").sorted(lambda row: (row.sequence, row.id)) for kind in ("invoice", "refund")}
+        commands, expected, source_id, replay = [], {}, None, False
+        if capability_id == "tax.repartition_pair.create":
+            payloads = {kind: parameters[f"{kind}_line"] for kind in sides}
+            matches = {kind: rows.filtered(lambda row, kind=kind: _normalized_tax_repartition_line(row) == payloads[kind]) for kind, rows in sides.items()}
+            if any(len(rows) > 1 for rows in matches.values()) or bool(matches["invoice"]) != bool(matches["refund"]):
+                raise _fail(failure_type, "idempotency_conflict", "The native tax pair payload is ambiguous or only partially present.", exit_code=5)
+            if matches["invoice"]:
+                if sides["invoice"].ids.index(matches["invoice"].id) != sides["refund"].ids.index(matches["refund"].id):
+                    raise _fail(failure_type, "idempotency_conflict", "Matching native lines are not one ordered invoice/refund pair.", exit_code=5)
+                return _tax_repartition_result(tax, company_id), True
+            before = set(tax.repartition_line_ids.ids)
+            for kind, payload in payloads.items():
+                commands.append((0, 0, _tax_repartition_line_values(payload, document_type=kind)))
+        elif capability_id == "tax.repartition_lines.resequence":
+            for kind, rows in sides.items():
+                order = parameters[f"{kind}_line_ids"]
+                if set(order) != set(rows.ids):
+                    raise _fail(failure_type, "record_not_found", "Ordering requires the complete native side's line IDs.", exit_code=4)
+                for index, row_id in enumerate(order, 1):
+                    expected[row_id] = {"sequence": index * 10}
+                    commands.append((1, row_id, expected[row_id]))
+        else:
+            remove = capability_id == "tax.repartition_pair.delete"
+            patches = [{"line_id": parameters[f"{kind}_line_id"], "kind": kind} for kind in sides] if remove else parameters["lines"] if capability_id == "tax.repartition_lines.update" else [
+                {"line_id": parameters["line_id"], "changes": parameters["changes"]},
+            ]
+            for patch in patches:
+                row = _search_one(env, "account.tax.repartition.line", [("id", "=", patch["line_id"]), ("tax_id", "=", tax.id)], company_id, failure_type)
+                if remove:
+                    if row.document_type != patch["kind"]:
+                        raise _fail(failure_type, "record_not_found", "The native line belongs to the wrong document side.", exit_code=4)
+                    commands.append((2, row.id, 0))
+                else:
+                    merged = tax_processing.line_values({**_normalized_tax_repartition_line(row), **patch["changes"]})
+                    values = _tax_repartition_line_values(merged, document_type=row.document_type)
+                    expected[row.id] = patch["changes"]
+                    commands.append((1, row.id, {field: value for field, value in values.items() if field in patch["changes"]}))
+            if capability_id == "tax.repartition_line.update":
+                source_id = parameters["line_id"]
+        payloads = [command[2] for command in commands if command[0] in (0, 1)]
+        account_ids = {values["account_id"] for values in payloads if values.get("account_id")}
+        tag_ids = {tag_id for values in payloads for command in values.get("tag_ids", []) for tag_id in command[2]}
+        _ensure_ids(env, "account.account", account_ids,
+                    [("company_ids", "in", [company_id]), ("active", "=", True), ("account_type", "not in", ["asset_receivable", "liability_payable", "off_balance"])],
+                    company_id, failure_type)
+        countries = [False, _relation_id(tax.country_id), *env.company.multi_vat_foreign_country_ids.ids]
+        _ensure_ids(env, "account.account.tag", tag_ids, [("applicability", "=", "taxes"), ("country_id", "in", countries)], company_id, failure_type)
+        if expected:
+            current = {row.id: _normalized_tax_repartition_line(row) for rows in sides.values() for row in rows}
+            replay = all(all(current[row_id][field] == value for field, value in values.items()) for row_id, values in expected.items())
+        if not replay:
+            # Native parent validation checks both document sides only after all commands.
+            tax.write({"repartition_line_ids": commands})
+            tax.invalidate_recordset()
+        if capability_id == "tax.repartition_pair.create":
+            created = tax.repartition_line_ids.filtered(lambda row: row.id not in before)
+            if (len(created) != 2 or {row.document_type for row in created} != {"invoice", "refund"}
+                or any(_normalized_tax_repartition_line(row) != parameters[f"{row.document_type}_line"] for row in created)):
+                raise _fail(failure_type, "odoo_write_error", "Native tax pair creation did not preserve its payload.", exit_code=6)
+        elif capability_id == "tax.repartition_pair.delete":
+            if {parameters["invoice_line_id"], parameters["refund_line_id"]} & set(tax.repartition_line_ids.ids):
+                raise _fail(failure_type, "odoo_write_error", "Native tax pair deletion failed.", exit_code=6)
+        else:
+            current = {row.id: _normalized_tax_repartition_line(row) for row in tax.repartition_line_ids}
+            if any(row_id not in current or any(current[row_id][field] != value for field, value in values.items()) for row_id, values in expected.items()):
+                raise _fail(failure_type, "odoo_write_error", "Native tax line changes did not preserve requested fields.", exit_code=6)
+        result = _tax_repartition_result(tax, company_id)
+        result["source_id"] = source_id
+        return result, replay
+
+
 def _replace_tax_repartition_lines(
     env: Any,
     parameters: dict[str, Any],
@@ -19956,6 +20068,8 @@ def _dispatch_allowed(
     marker: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if capability_id in tax_processing.CAPABILITY_IDS:
+        return _write_tax_processing(env, capability_id, parameters, company_id, failure_type)
     if capability_id in payment_term_processing.CAPABILITY_IDS:
         return _write_payment_term_processing(env, capability_id, parameters, company_id, failure_type)
     if capability_id in reconciliation_processing.CAPABILITY_IDS:

@@ -26,6 +26,8 @@ CAPABILITY_IDS = frozenset(
         "partner.invoice_delivery_preferences.get",
         "payment.bank_account_candidates.list",
         "payment.duplicate_candidates.list",
+        "tax.processing_settings.get",
+        "tax.usage_lines.list",
         "invoice.payment_schedule.inspect",
         "payment_term.usage_moves.list",
         "reconciliation.model.processing_settings.get",
