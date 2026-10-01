@@ -43,12 +43,18 @@ CORE_WRITE_CAPABILITY_IDS = frozenset(
         "localization.china.period_transfer.run",
         "invoice.update",
         "invoice.lines.replace",
+        "invoice.line.create",
+        "invoice.line.update",
+        "invoice.line.delete",
+        "invoice.delete",
         "invoice.cancel",
         "invoice.reset_to_draft",
         "invoice.duplicate",
         "invoice.type.switch",
         "journal_entry.update",
         "journal_entry.lines.replace",
+        "journal_entry.duplicate",
+        "journal_entry.delete",
         "journal_entry.cancel",
         "journal_entry.reset_to_draft",
         "payment.create",
@@ -241,6 +247,10 @@ _INVOICE_LIFECYCLE_CAPABILITIES = frozenset(
     {
         "invoice.update",
         "invoice.lines.replace",
+        "invoice.line.create",
+        "invoice.line.update",
+        "invoice.line.delete",
+        "invoice.delete",
         "invoice.cancel",
         "invoice.reset_to_draft",
     }
@@ -249,6 +259,8 @@ _JOURNAL_ENTRY_LIFECYCLE_CAPABILITIES = frozenset(
     {
         "journal_entry.update",
         "journal_entry.lines.replace",
+        "journal_entry.duplicate",
+        "journal_entry.delete",
         "journal_entry.cancel",
         "journal_entry.reset_to_draft",
     }
@@ -278,6 +290,16 @@ _DOCUMENT_CONTENT_CAPABILITIES = frozenset(
         "invoice.lines.replace",
         "journal_entry.update",
         "journal_entry.lines.replace",
+    }
+)
+_DRAFT_DOCUMENT_MAINTENANCE_CAPABILITIES = frozenset(
+    {
+        "invoice.line.create",
+        "invoice.line.update",
+        "invoice.line.delete",
+        "invoice.delete",
+        "journal_entry.duplicate",
+        "journal_entry.delete",
     }
 )
 _ORDER_CREATE_CAPABILITIES = frozenset({"sale.order.create", "purchase.order.create"})
@@ -1051,18 +1073,9 @@ def _validate_invoice_update_parameters(parameters: Any) -> dict[str, Any]:
     return {"move_id": parameters["move_id"], "changes": dict(changes)}
 
 
-def _validate_invoice_line_replacement_parameters(
-    parameters: Any,
+def _validate_invoice_line_values(
+    values: Any, *, partial: bool
 ) -> dict[str, Any]:
-    if not isinstance(parameters, dict) or set(parameters) != {"move_id", "lines"}:
-        raise _invalid(
-            "Invoice-line replacement parameters do not match the fixed contract."
-        )
-    if not _valid_id(parameters["move_id"]):
-        raise _invalid("parameters.move_id must be a positive integer.")
-    lines = parameters["lines"]
-    if not isinstance(lines, list) or not 1 <= len(lines) <= 500:
-        raise _invalid("parameters.lines must contain between 1 and 500 lines.")
     required_line_fields = {
         "name",
         "product_id",
@@ -1077,41 +1090,109 @@ def _validate_invoice_line_replacement_parameters(
         "deferred_start_date",
         "deferred_end_date",
     }
-    normalized_lines: list[dict[str, Any]] = []
-    for line in lines:
-        if (
-            not isinstance(line, dict)
-            or not required_line_fields <= set(line) <= allowed_line_fields
-        ):
-            raise _invalid("Each invoice line must match the replacement contract.")
-        if not _is_bounded_text(line["name"], 500):
-            raise _invalid("Invoice line names must be non-empty strings.")
-        if not _valid_optional_id(line["product_id"]):
-            raise _invalid(
-                "Invoice line product_id must be null or a positive integer."
-            )
-        if not _valid_id(line["account_id"]):
-            raise _invalid("Invoice line account_id must be a positive integer.")
-        if _decimal(line["quantity"], signed=False) is None:
-            raise _invalid("Invoice line quantity must be an unsigned decimal string.")
-        if _decimal(line["price_unit"], signed=True) is None:
-            raise _invalid("Invoice line price_unit must be a signed decimal string.")
-        discount = _decimal(line["discount"], signed=False)
+    if (
+        not isinstance(values, dict)
+        or (partial and (not values or not set(values) <= allowed_line_fields))
+        or (
+            not partial
+            and not required_line_fields <= set(values) <= allowed_line_fields
+        )
+    ):
+        raise _invalid("Invoice-line values do not match the fixed contract.")
+    if "name" in values and not _is_bounded_text(values["name"], 500):
+        raise _invalid("Invoice line names must be non-empty strings.")
+    if "product_id" in values and not _valid_optional_id(values["product_id"]):
+        raise _invalid(
+            "Invoice line product_id must be null or a positive integer."
+        )
+    if "account_id" in values and not _valid_id(values["account_id"]):
+        raise _invalid("Invoice line account_id must be a positive integer.")
+    if "quantity" in values and _decimal(values["quantity"], signed=False) is None:
+        raise _invalid("Invoice line quantity must be an unsigned decimal string.")
+    if "price_unit" in values and _decimal(values["price_unit"], signed=True) is None:
+        raise _invalid("Invoice line price_unit must be a signed decimal string.")
+    if "discount" in values:
+        discount = _decimal(values["discount"], signed=False)
         if discount is None or discount > 100:
             raise _invalid("Invoice line discount must be between 0 and 100.")
-        tax_ids = _validate_ids(line["tax_ids"])
+    normalized = dict(values)
+    if "tax_ids" in values:
+        tax_ids = _validate_ids(values["tax_ids"])
         if tax_ids is None or tax_ids != sorted(tax_ids):
             raise _invalid(
                 "Invoice line tax_ids must be sorted unique positive integers."
             )
-        _validate_deferred_line_dates(line)
-        normalized_line = {**line, "tax_ids": tax_ids}
-        if "analytic_distribution" in line:
-            normalized_line["analytic_distribution"] = _validate_analytic_distribution(
-                line["analytic_distribution"]
-            )
-        normalized_lines.append(normalized_line)
+        normalized["tax_ids"] = tax_ids
+    _validate_deferred_line_dates(values)
+    if "analytic_distribution" in values:
+        normalized["analytic_distribution"] = _validate_analytic_distribution(
+            values["analytic_distribution"]
+        )
+    return normalized
+
+
+def _validate_invoice_line_replacement_parameters(
+    parameters: Any,
+) -> dict[str, Any]:
+    if not isinstance(parameters, dict) or set(parameters) != {"move_id", "lines"}:
+        raise _invalid(
+            "Invoice-line replacement parameters do not match the fixed contract."
+        )
+    if not _valid_id(parameters["move_id"]):
+        raise _invalid("parameters.move_id must be a positive integer.")
+    lines = parameters["lines"]
+    if not isinstance(lines, list) or not 1 <= len(lines) <= 500:
+        raise _invalid("parameters.lines must contain between 1 and 500 lines.")
+    normalized_lines = [
+        _validate_invoice_line_values(line, partial=False) for line in lines
+    ]
     return {"move_id": parameters["move_id"], "lines": normalized_lines}
+
+
+def _validate_draft_document_maintenance_parameters(
+    capability_id: str, parameters: Any
+) -> dict[str, Any]:
+    if capability_id == "invoice.line.create":
+        if not isinstance(parameters, dict) or set(parameters) != {"move_id", "line"}:
+            raise _invalid("Invoice-line create parameters are invalid.")
+        if not _valid_id(parameters["move_id"]):
+            raise _invalid("parameters.move_id must be a positive integer.")
+        return {
+            "move_id": parameters["move_id"],
+            "line": _validate_invoice_line_values(
+                parameters["line"], partial=False
+            ),
+        }
+    if capability_id == "invoice.line.update":
+        if not isinstance(parameters, dict) or set(parameters) != {
+            "move_id",
+            "line_id",
+            "changes",
+        }:
+            raise _invalid("Invoice-line update parameters are invalid.")
+        if not _valid_id(parameters["move_id"]) or not _valid_id(
+            parameters["line_id"]
+        ):
+            raise _invalid("move_id and line_id must be positive integers.")
+        return {
+            "move_id": parameters["move_id"],
+            "line_id": parameters["line_id"],
+            "changes": _validate_invoice_line_values(
+                parameters["changes"], partial=True
+            ),
+        }
+    if capability_id == "invoice.line.delete":
+        if not isinstance(parameters, dict) or set(parameters) != {
+            "move_id",
+            "line_id",
+        }:
+            raise _invalid("Invoice-line delete parameters are invalid.")
+        if not _valid_id(parameters["move_id"]) or not _valid_id(
+            parameters["line_id"]
+        ):
+            raise _invalid("move_id and line_id must be positive integers.")
+        return dict(parameters)
+    return _validate_single_id(parameters, "move_id")
 
 
 def _validate_journal_entry_update_parameters(parameters: Any) -> dict[str, Any]:
@@ -4249,6 +4330,10 @@ def validate_core_write_request(
         normalized = _validate_invoice_parameters(parameters)
     elif capability_id == "journal_entry.create":
         normalized = _validate_journal_parameters(parameters)
+    elif capability_id in _DRAFT_DOCUMENT_MAINTENANCE_CAPABILITIES:
+        normalized = _validate_draft_document_maintenance_parameters(
+            capability_id, parameters
+        )
     elif capability_id == "invoice.update":
         normalized = _validate_invoice_update_parameters(parameters)
     elif capability_id == "invoice.lines.replace":
@@ -4705,6 +4790,34 @@ def _expected_idempotency_key(
         return f"{capability_id}:{parameters['transfer_id']}"
     if capability_id == "purchase.order.bill.create":
         return f"purchase.order.bill.create:{parameters['order_id']}"
+    if capability_id in {"invoice.line.create", "invoice.line.update"}:
+        content = (
+            parameters["line"]
+            if capability_id == "invoice.line.create"
+            else parameters["changes"]
+        )
+        canonical = json.dumps(
+            content,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:32]
+        target = (
+            str(parameters["move_id"])
+            if capability_id == "invoice.line.create"
+            else f"{parameters['move_id']}:{parameters['line_id']}"
+        )
+        return f"{capability_id}:{target}:{digest}"
+    if capability_id == "invoice.line.delete":
+        return (
+            f"invoice.line.delete:{parameters['move_id']}:{parameters['line_id']}"
+        )
+    if capability_id in {"invoice.delete", "journal_entry.delete"}:
+        return f"{capability_id}:{parameters['move_id']}"
+    if capability_id == "journal_entry.duplicate":
+        return None
     if capability_id in _CREATE_CAPABILITIES:
         return None
     if capability_id in _REFUND_CAPABILITIES:
@@ -5993,6 +6106,50 @@ def _validate_result(
             or not result["line_ids"]
         ):
             raise _failed("Odoo returned a mismatched bank-transaction result.")
+        return deepcopy(result)
+    if capability_id in _DRAFT_DOCUMENT_MAINTENANCE_CAPABILITIES:
+        line_action = capability_id.startswith("invoice.line.")
+        duplicate = capability_id == "journal_entry.duplicate"
+        deleted = capability_id in {
+            "invoice.line.delete",
+            "invoice.delete",
+            "journal_entry.delete",
+        }
+        expected_id = result["id"] if duplicate else parameters["move_id"]
+        expected_move_types = (
+            _INVOICE_MOVE_TYPES
+            if capability_id.startswith("invoice.")
+            else {"entry"}
+        )
+        expected_source_id = (
+            result["source_id"]
+            if capability_id == "invoice.line.create"
+            else parameters["line_id"]
+            if line_action
+            else parameters["move_id"]
+            if duplicate
+            else None
+        )
+        if (
+            result["model"] != "account.move"
+            or result["id"] != expected_id
+            or not _valid_id(result["id"])
+            or (duplicate and result["id"] == parameters["move_id"])
+            or result["move_type"] not in expected_move_types
+            or result["state"] != ("deleted" if deleted and not line_action else "draft")
+            or result["source_id"] != expected_source_id
+            or (line_action and not _valid_id(result["source_id"]))
+            or (
+                capability_id in {"invoice.line.create", "invoice.line.update"}
+                and result["source_id"] not in result["line_ids"]
+            )
+            or (
+                capability_id == "invoice.line.delete"
+                and result["source_id"] in result["line_ids"]
+            )
+            or (deleted and idempotent_replay)
+        ):
+            raise _failed("Odoo returned a mismatched draft-document result.")
         return deepcopy(result)
     if capability_id in _DOCUMENT_LIFECYCLE_CAPABILITIES:
         expected_move_types = (

@@ -14,6 +14,7 @@ import json
 import os
 import subprocess
 import sys
+import sysconfig
 import uuid
 from decimal import Decimal
 from pathlib import Path
@@ -138,7 +139,13 @@ def _run_worker(
     environment = os.environ.copy()
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
     environment["PYTHONPATH"] = os.pathsep.join(
-        part for part in (str(_root() / "src"), environment.get("PYTHONPATH")) if part
+        part
+        for part in (
+            str(_root() / "src"),
+            sysconfig.get_path("purelib"),
+            environment.get("PYTHONPATH"),
+        )
+        if part
     )
     completed = subprocess.run(
         command,
@@ -313,6 +320,7 @@ def _write(
     parameters: dict[str, Any],
     *,
     replayable: bool,
+    explicit_key: str | None = None,
 ) -> dict[str, Any]:
     from odoo_accounting_cli_v4.capabilities.core_writes import (
         _expected_idempotency_key,
@@ -323,7 +331,11 @@ def _write(
     _, context, normalized = validate_core_write_request(capability_id, request)
     key = _expected_idempotency_key(capability_id, normalized, context["company_id"])
     if key is None:
-        raise RuntimeError(f"{capability_id} lacks its deterministic key")
+        if not explicit_key:
+            raise RuntimeError(f"{capability_id} requires a caller-chosen key")
+        key = explicit_key
+    elif explicit_key is not None and explicit_key != key:
+        raise RuntimeError(f"{capability_id} received a noncanonical key")
     first = _invoke(
         client,
         alias,
@@ -451,6 +463,7 @@ def _record_transaction(
             "partner_id": fixture["partner"],
         },
         replayable=False,
+        explicit_key=f"{marker}-record",
     )
     move_id = result.get("source_id")
     if not isinstance(move_id, int) or isinstance(move_id, bool) or move_id <= 0:
@@ -640,6 +653,7 @@ def _exercise(
             "payment_reference": payment_reference,
         },
         replayable=False,
+        explicit_key=f"{marker}-payment-create",
     )
     payment_id = _assert_result(
         payment,

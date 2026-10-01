@@ -24,6 +24,10 @@ CAPABILITIES = frozenset(
         "vendor_bill.create",
         "invoice.update",
         "invoice.lines.replace",
+        "invoice.line.create",
+        "invoice.line.update",
+        "invoice.line.delete",
+        "invoice.delete",
         "invoice.cancel",
         "invoice.reset_to_draft",
         "invoice.post",
@@ -32,6 +36,8 @@ CAPABILITIES = frozenset(
         "journal_entry.create",
         "journal_entry.update",
         "journal_entry.lines.replace",
+        "journal_entry.duplicate",
+        "journal_entry.delete",
         "journal_entry.cancel",
         "journal_entry.reset_to_draft",
         "journal_entry.post",
@@ -233,6 +239,10 @@ _INVOICE_LIFECYCLE_CAPABILITIES = frozenset(
     {
         "invoice.update",
         "invoice.lines.replace",
+        "invoice.line.create",
+        "invoice.line.update",
+        "invoice.line.delete",
+        "invoice.delete",
         "invoice.cancel",
         "invoice.reset_to_draft",
     }
@@ -241,8 +251,20 @@ _JOURNAL_ENTRY_LIFECYCLE_CAPABILITIES = frozenset(
     {
         "journal_entry.update",
         "journal_entry.lines.replace",
+        "journal_entry.duplicate",
+        "journal_entry.delete",
         "journal_entry.cancel",
         "journal_entry.reset_to_draft",
+    }
+)
+_DRAFT_DOCUMENT_MAINTENANCE_CAPABILITIES = frozenset(
+    {
+        "invoice.line.create",
+        "invoice.line.update",
+        "invoice.line.delete",
+        "invoice.delete",
+        "journal_entry.duplicate",
+        "journal_entry.delete",
     }
 )
 _MOVE_BATCH_LIFECYCLE_CAPABILITIES = frozenset(
@@ -712,6 +734,10 @@ _PARAMETER_KEYS = {
     },
     "invoice.update": {"move_id", "changes"},
     "invoice.lines.replace": {"move_id", "lines"},
+    "invoice.line.create": {"move_id", "line"},
+    "invoice.line.update": {"move_id", "line_id", "changes"},
+    "invoice.line.delete": {"move_id", "line_id"},
+    "invoice.delete": {"move_id"},
     "invoice.cancel": {"move_id", "move_ids"},
     "invoice.reset_to_draft": {"move_id", "move_ids"},
     "invoice.post": {"move_id", "move_ids"},
@@ -720,6 +746,8 @@ _PARAMETER_KEYS = {
     "journal_entry.create": {"journal_id", "date", "lines", "reference"},
     "journal_entry.update": {"move_id", "changes"},
     "journal_entry.lines.replace": {"move_id", "lines"},
+    "journal_entry.duplicate": {"move_id"},
+    "journal_entry.delete": {"move_id"},
     "journal_entry.cancel": {"move_id", "move_ids"},
     "journal_entry.reset_to_draft": {"move_id", "move_ids"},
     "journal_entry.post": {"move_id", "move_ids"},
@@ -1022,6 +1050,10 @@ _GROUPS = {
     "vendor_bill.create": "account.group_account_invoice",
     "invoice.update": "account.group_account_invoice",
     "invoice.lines.replace": "account.group_account_invoice",
+    "invoice.line.create": "account.group_account_invoice",
+    "invoice.line.update": "account.group_account_invoice",
+    "invoice.line.delete": "account.group_account_invoice",
+    "invoice.delete": "account.group_account_invoice",
     "invoice.cancel": "account.group_account_invoice",
     "invoice.reset_to_draft": "account.group_account_invoice",
     "invoice.post": "account.group_account_invoice",
@@ -1030,6 +1062,8 @@ _GROUPS = {
     "journal_entry.create": "account.group_account_user",
     "journal_entry.update": "account.group_account_user",
     "journal_entry.lines.replace": "account.group_account_user",
+    "journal_entry.duplicate": "account.group_account_user",
+    "journal_entry.delete": "account.group_account_user",
     "journal_entry.cancel": "account.group_account_user",
     "journal_entry.reset_to_draft": "account.group_account_user",
     "journal_entry.post": "account.group_account_user",
@@ -1227,6 +1261,36 @@ _MODELS = {
         "account.move",
         "account.move.line",
     },
+    "invoice.line.create": {
+        "res.company",
+        "res.partner",
+        "product.product",
+        "account.account",
+        "account.tax",
+        "account.move",
+        "account.move.line",
+        "account.analytic.account",
+    },
+    "invoice.line.update": {
+        "res.company",
+        "res.partner",
+        "product.product",
+        "account.account",
+        "account.tax",
+        "account.move",
+        "account.move.line",
+        "account.analytic.account",
+    },
+    "invoice.line.delete": {
+        "res.company",
+        "account.move",
+        "account.move.line",
+    },
+    "invoice.delete": {
+        "res.company",
+        "account.move",
+        "account.move.line",
+    },
     "invoice.cancel": {"res.company", "account.move"},
     "invoice.reset_to_draft": {"res.company", "account.move"},
     "invoice.post": {"res.company", "account.move"},
@@ -1254,6 +1318,18 @@ _MODELS = {
         "res.company",
         "res.partner",
         "account.account",
+        "account.move",
+        "account.move.line",
+    },
+    "journal_entry.duplicate": {
+        "res.company",
+        "account.journal",
+        "account.move",
+        "account.move.line",
+    },
+    "journal_entry.delete": {
+        "res.company",
+        "account.journal",
         "account.move",
         "account.move.line",
     },
@@ -1773,6 +1849,46 @@ _ACCESS = {
         ("account.move.line", "write"),
         ("account.move.line", "unlink"),
     },
+    "invoice.line.create": {
+        ("res.partner", "read"),
+        ("product.product", "read"),
+        ("account.account", "read"),
+        ("account.tax", "read"),
+        ("account.analytic.account", "read"),
+        ("account.move", "read"),
+        ("account.move", "write"),
+        ("account.move.line", "read"),
+        ("account.move.line", "create"),
+        ("account.move.line", "write"),
+        ("account.move.line", "unlink"),
+    },
+    "invoice.line.update": {
+        ("res.partner", "read"),
+        ("product.product", "read"),
+        ("account.account", "read"),
+        ("account.tax", "read"),
+        ("account.analytic.account", "read"),
+        ("account.move", "read"),
+        ("account.move", "write"),
+        ("account.move.line", "read"),
+        ("account.move.line", "create"),
+        ("account.move.line", "write"),
+        ("account.move.line", "unlink"),
+    },
+    "invoice.line.delete": {
+        ("account.move", "read"),
+        ("account.move", "write"),
+        ("account.move.line", "read"),
+        ("account.move.line", "create"),
+        ("account.move.line", "write"),
+        ("account.move.line", "unlink"),
+    },
+    "invoice.delete": {
+        ("account.move", "read"),
+        ("account.move", "unlink"),
+        ("account.move.line", "read"),
+        ("account.move.line", "unlink"),
+    },
     "invoice.cancel": {
         ("account.move", "read"),
         ("account.move", "write"),
@@ -1818,6 +1934,21 @@ _ACCESS = {
         ("account.move.line", "read"),
         ("account.move.line", "create"),
         ("account.move.line", "write"),
+        ("account.move.line", "unlink"),
+    },
+    "journal_entry.duplicate": {
+        ("account.journal", "read"),
+        ("account.move", "read"),
+        ("account.move", "create"),
+        ("account.move", "write"),
+        ("account.move.line", "read"),
+        ("account.move.line", "create"),
+    },
+    "journal_entry.delete": {
+        ("account.journal", "read"),
+        ("account.move", "read"),
+        ("account.move", "unlink"),
+        ("account.move.line", "read"),
         ("account.move.line", "unlink"),
     },
     "journal_entry.cancel": {
@@ -3452,9 +3583,7 @@ def _valid_journal_entry_changes(value: Any) -> bool:
     return True
 
 
-def _valid_replacement_invoice_lines(value: Any) -> bool:
-    if not isinstance(value, list) or not 1 <= len(value) <= 500:
-        return False
+def _valid_invoice_line_values(value: Any, *, partial: bool) -> bool:
     required = {
         "name",
         "product_id",
@@ -3464,33 +3593,51 @@ def _valid_replacement_invoice_lines(value: Any) -> bool:
         "discount",
         "tax_ids",
     }
-    for line in value:
-        if not isinstance(line, dict) or not required <= set(line) <= required | {
-            "analytic_distribution",
-            *_DEFERRED_LINE_DATE_FIELDS,
-        }:
+    allowed = required | {"analytic_distribution", *_DEFERRED_LINE_DATE_FIELDS}
+    if (
+        not isinstance(value, dict)
+        or (partial and (not value or not set(value) <= allowed))
+        or (not partial and not required <= set(value) <= allowed)
+    ):
+        return False
+    if "name" in value and not _is_text(value["name"]):
+        return False
+    if "product_id" in value and value["product_id"] is not None and not _is_id(
+        value["product_id"]
+    ):
+        return False
+    if "account_id" in value and not _is_id(value["account_id"]):
+        return False
+    if "quantity" in value and _decimal(value["quantity"]) is None:
+        return False
+    if "price_unit" in value and _signed_decimal(value["price_unit"]) is None:
+        return False
+    if "discount" in value:
+        discount = _decimal(value["discount"])
+        if discount is None or discount > Decimal(100):
             return False
-        quantity = _decimal(line["quantity"])
-        price_unit = _signed_decimal(line["price_unit"])
-        discount = _decimal(line["discount"])
-        tax_ids = line["tax_ids"]
+    if "tax_ids" in value:
+        tax_ids = value["tax_ids"]
         if (
-            not _is_text(line["name"])
-            or (line["product_id"] is not None and not _is_id(line["product_id"]))
-            or not _is_id(line["account_id"])
-            or quantity is None
-            or price_unit is None
-            or discount is None
-            or discount > Decimal(100)
-            or not isinstance(tax_ids, list)
+            not isinstance(tax_ids, list)
             or any(not _is_id(item) for item in tax_ids)
             or tax_ids != sorted(set(tax_ids))
-            or not _valid_deferred_line_dates(line)
-            or (
-                "analytic_distribution" in line
-                and not _valid_analytic_distribution(line["analytic_distribution"])
-            )
         ):
+            return False
+    return bool(
+        _valid_deferred_line_dates(value)
+        and (
+            "analytic_distribution" not in value
+            or _valid_analytic_distribution(value["analytic_distribution"])
+        )
+    )
+
+
+def _valid_replacement_invoice_lines(value: Any) -> bool:
+    if not isinstance(value, list) or not 1 <= len(value) <= 500:
+        return False
+    for line in value:
+        if not _valid_invoice_line_values(line, partial=False):
             return False
     return True
 
@@ -5229,6 +5376,24 @@ def _valid_parameters(
         return _is_id(parameters["move_id"]) and _valid_replacement_invoice_lines(
             parameters["lines"]
         )
+    if capability_id == "invoice.line.create":
+        return _is_id(parameters["move_id"]) and _valid_invoice_line_values(
+            parameters["line"], partial=False
+        )
+    if capability_id == "invoice.line.update":
+        return bool(
+            _is_id(parameters["move_id"])
+            and _is_id(parameters["line_id"])
+            and _valid_invoice_line_values(parameters["changes"], partial=True)
+        )
+    if capability_id == "invoice.line.delete":
+        return _is_id(parameters["move_id"]) and _is_id(parameters["line_id"])
+    if capability_id in {
+        "invoice.delete",
+        "journal_entry.duplicate",
+        "journal_entry.delete",
+    }:
+        return _is_id(parameters["move_id"])
     if capability_id == "journal_entry.lines.replace":
         return _is_id(parameters["move_id"]) and _valid_entry_lines(
             parameters["lines"], minimum=1
@@ -5861,6 +6026,35 @@ def _deterministic_key(
         return f"{capability_id}:{parameters['transfer_id']}"
     if capability_id == "purchase.order.bill.create":
         return f"purchase.order.bill.create:{parameters['order_id']}"
+    if capability_id in {"invoice.line.create", "invoice.line.update"}:
+        content = (
+            parameters["line"]
+            if capability_id == "invoice.line.create"
+            else parameters["changes"]
+        )
+        digest = hashlib.sha256(
+            json.dumps(
+                content,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()[:32]
+        target = (
+            str(parameters["move_id"])
+            if capability_id == "invoice.line.create"
+            else f"{parameters['move_id']}:{parameters['line_id']}"
+        )
+        return f"{capability_id}:{target}:{digest}"
+    if capability_id == "invoice.line.delete":
+        return (
+            f"invoice.line.delete:{parameters['move_id']}:{parameters['line_id']}"
+        )
+    if capability_id in {"invoice.delete", "journal_entry.delete"}:
+        return f"{capability_id}:{parameters['move_id']}"
+    if capability_id == "journal_entry.duplicate":
+        return None
     if capability_id in {"purchase_bill.match", "purchase_bill.lines.unmatch"}:
         target = parameters[
             "pairs" if capability_id == "purchase_bill.match" else "bill_line_ids"
@@ -10906,32 +11100,37 @@ def _ordered_move_lines(lines: Any) -> list[Any]:
     )
 
 
+def _current_invoice_line(line: Any) -> dict[str, Any] | None:
+    if getattr(line, "display_type", None) not in {None, False, "product"}:
+        return None
+    account_id = _many2one_id(line.account_id)
+    if not _is_text(line.name) or account_id is None:
+        return None
+    return {
+        "name": line.name,
+        "product_id": _many2one_id(line.product_id),
+        "account_id": account_id,
+        "quantity": _canonical_decimal_text(line.quantity),
+        "price_unit": _canonical_decimal_text(line.price_unit),
+        "discount": _canonical_decimal_text(line.discount),
+        "tax_ids": _relation_ids(line.tax_ids),
+        "analytic_distribution": _normalized_analytic_distribution(
+            getattr(line, "analytic_distribution", None)
+        ),
+        **{
+            field: _nullable_value(getattr(line, field, None))
+            for field in _DEFERRED_LINE_DATE_FIELDS
+        },
+    }
+
+
 def _current_invoice_lines(move: Any) -> list[dict[str, Any]] | None:
     result: list[dict[str, Any]] = []
     for line in _ordered_move_lines(move.invoice_line_ids):
-        if getattr(line, "display_type", None) not in {None, False, "product"}:
+        values = _current_invoice_line(line)
+        if values is None:
             return None
-        account_id = _many2one_id(line.account_id)
-        if not _is_text(line.name) or account_id is None:
-            return None
-        result.append(
-            {
-                "name": line.name,
-                "product_id": _many2one_id(line.product_id),
-                "account_id": account_id,
-                "quantity": _canonical_decimal_text(line.quantity),
-                "price_unit": _canonical_decimal_text(line.price_unit),
-                "discount": _canonical_decimal_text(line.discount),
-                "tax_ids": _relation_ids(line.tax_ids),
-                "analytic_distribution": _normalized_analytic_distribution(
-                    getattr(line, "analytic_distribution", None)
-                ),
-                **{
-                    field: _nullable_value(getattr(line, field, None))
-                    for field in _DEFERRED_LINE_DATE_FIELDS
-                },
-            }
-        )
+        result.append(values)
     return result
 
 
@@ -11187,6 +11386,366 @@ def _replace_move_lines(
             exit_code=6,
         )
     return _move_result(move, company_id), False
+
+
+def _invoice_line_write_values(values: dict[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for field_name, value in values.items():
+        if field_name in {"quantity", "price_unit", "discount"}:
+            result[field_name] = Decimal(value)
+        elif field_name == "tax_ids":
+            result[field_name] = [(6, 0, value)]
+        elif field_name == "analytic_distribution":
+            result[field_name] = _odoo_analytic_distribution(value)
+        elif field_name in {
+            "product_id",
+            "deferred_start_date",
+            "deferred_end_date",
+        }:
+            result[field_name] = value or False
+        else:
+            result[field_name] = value
+    return result
+
+
+def _invoice_line(
+    env: Any,
+    move: Any,
+    line_id: int,
+    company_id: int,
+    failure_type: type[Exception],
+) -> Any:
+    line = _search_one(
+        env,
+        "account.move.line",
+        [
+            ("id", "=", line_id),
+            ("move_id", "=", move.id),
+            ("company_id", "=", company_id),
+            ("display_type", "in", [False, "product"]),
+        ],
+        company_id,
+        failure_type,
+    )
+    if line.id not in set(move.invoice_line_ids.ids):
+        raise _fail(
+            failure_type,
+            "record_not_found",
+            "The requested invoice business line was not found.",
+            exit_code=4,
+        )
+    return line
+
+
+def _invoice_line_matches(line: Any, target: dict[str, Any]) -> bool:
+    current = _current_invoice_line(line)
+    expected = _normalized_invoice_replacement_lines([target])[0]
+    return current == expected
+
+
+def _create_invoice_line(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    move = _lifecycle_move(
+        env, "invoice.line.create", parameters["move_id"], company_id, failure_type
+    )
+    if move.state != "draft":
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Only a draft invoice or bill can receive a business line.",
+            exit_code=5,
+        )
+    requested = parameters["line"]
+    _validate_invoice_line_references(
+        env, move, [requested], company_id, failure_type
+    )
+    matches = [
+        line
+        for line in move.invoice_line_ids
+        if _current_invoice_line(line) is not None
+        and _invoice_line_matches(line, requested)
+    ]
+    if len(matches) == 1:
+        return _move_result(move, company_id, source_id=matches[0].id), True
+    if len(matches) > 1:
+        raise _fail(
+            failure_type,
+            "idempotency_conflict",
+            "More than one invoice line matches the requested create state.",
+            exit_code=5,
+        )
+    before_ids = set(move.invoice_line_ids.ids)
+    values = {
+        "display_type": "product",
+        **_invoice_line_write_values(requested),
+    }
+    move.write({"invoice_line_ids": [(0, 0, values)]})
+    created = [
+        line
+        for line in move.invoice_line_ids
+        if line.id not in before_ids
+        and _current_invoice_line(line) is not None
+        and _invoice_line_matches(line, requested)
+    ]
+    if len(created) != 1:
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not create exactly one requested invoice business line.",
+            exit_code=6,
+        )
+    return _move_result(move, company_id, source_id=created[0].id), False
+
+
+def _update_invoice_line(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    move = _lifecycle_move(
+        env, "invoice.line.update", parameters["move_id"], company_id, failure_type
+    )
+    if move.state != "draft":
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Only a draft invoice or bill can have a business line updated.",
+            exit_code=5,
+        )
+    line = _invoice_line(
+        env, move, parameters["line_id"], company_id, failure_type
+    )
+    current = _current_invoice_line(line)
+    if current is None:
+        raise _fail(
+            failure_type,
+            "record_not_found",
+            "The requested invoice business line was not found.",
+            exit_code=4,
+        )
+    target = {**current, **parameters["changes"]}
+    if _invoice_line_matches(line, target):
+        return _move_result(move, company_id, source_id=line.id), True
+    field_names = getattr(line, "_fields", {})
+    changes_product = (
+        "product_id" in parameters["changes"]
+        and parameters["changes"]["product_id"] != current["product_id"]
+    )
+    sourced = (
+        "sale_line_ids" in field_names and bool(line.sale_line_ids)
+    ) or ("purchase_line_id" in field_names and bool(line.purchase_line_id))
+    if changes_product and sourced:
+        raise _fail(
+            failure_type,
+            "business_rule_error",
+            "A sales- or purchase-sourced invoice line cannot change product.",
+            exit_code=6,
+        )
+    _validate_invoice_line_references(env, move, [target], company_id, failure_type)
+    line.write(_invoice_line_write_values(parameters["changes"]))
+    if not _invoice_line_matches(line, target):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not persist the requested invoice-line update.",
+            exit_code=6,
+        )
+    return _move_result(move, company_id, source_id=line.id), False
+
+
+def _delete_invoice_line(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    move = _lifecycle_move(
+        env, "invoice.line.delete", parameters["move_id"], company_id, failure_type
+    )
+    if move.state != "draft":
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Only a draft invoice or bill can have a business line deleted.",
+            exit_code=5,
+        )
+    line = _invoice_line(
+        env, move, parameters["line_id"], company_id, failure_type
+    )
+    line_id = line.id
+    line.unlink()
+    if _scoped(env, "account.move.line", company_id).search_count(
+        [("id", "=", line_id)], limit=1
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not delete the requested invoice business line.",
+            exit_code=6,
+        )
+    return _move_result(move, company_id, source_id=line_id), False
+
+
+_GENERATED_ENTRY_LINK_FIELDS = (
+    "origin_payment_id",
+    "statement_line_id",
+    "tax_cash_basis_origin_move_id",
+    "reversed_entry_id",
+    "reversal_move_ids",
+    "auto_post_origin_id",
+    "asset_id",
+    "asset_value_change",
+    "deferred_original_move_ids",
+    "transfer_model_id",
+)
+
+
+def _generated_entry(move: Any) -> bool:
+    fields = getattr(move, "_fields", {})
+    if "auto_post" in fields and getattr(move, "auto_post", "no") not in {
+        False,
+        None,
+        "no",
+    }:
+        return True
+    return any(
+        field_name in fields and bool(getattr(move, field_name, False))
+        for field_name in _GENERATED_ENTRY_LINK_FIELDS
+    )
+
+
+def _delete_draft_move(
+    env: Any,
+    capability_id: str,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    move = _lifecycle_move(
+        env, capability_id, parameters["move_id"], company_id, failure_type
+    )
+    if (
+        move.state != "draft"
+        or bool(move.posted_before)
+        or (capability_id == "journal_entry.delete" and _generated_entry(move))
+    ):
+        raise _fail(
+            failure_type,
+            "state_conflict",
+            "Only a never-posted ordinary draft document can be deleted.",
+            exit_code=5,
+        )
+    move_id = move.id
+    result = _deleted_result(_move_result(move, company_id))
+    move.unlink()
+    if _scoped(env, "account.move", company_id).search_count(
+        [("id", "=", move_id)], limit=1
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not delete the requested draft accounting document.",
+            exit_code=6,
+        )
+    return result, False
+
+
+def _duplicate_journal_entry(
+    env: Any,
+    parameters: dict[str, Any],
+    company_id: int,
+    key: str,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    source = _lifecycle_move(
+        env,
+        "journal_entry.duplicate",
+        parameters["move_id"],
+        company_id,
+        failure_type,
+    )
+    if _generated_entry(source):
+        raise _fail(
+            failure_type,
+            "business_rule_error",
+            "Generated journal entries cannot be duplicated by this capability.",
+            exit_code=6,
+        )
+    key_marker = _idempotency_key_marker(
+        "journal_entry.duplicate", company_id, key
+    )
+    operation_marker = _operation_marker(
+        "journal_entry.duplicate", key, parameters
+    )
+    candidates = _scoped(env, "account.move", company_id).search(
+        [
+            ("company_id", "=", company_id),
+            ("move_type", "=", "entry"),
+            ("id", "!=", source.id),
+            ("invoice_origin", "ilike", key_marker),
+        ],
+        limit=2,
+    )
+    candidates = candidates.filtered(lambda move: _move_has_marker(move, key_marker))
+    if candidates:
+        if (
+            len(candidates) != 1
+            or not _move_has_marker(candidates, operation_marker)
+            or candidates.state != "draft"
+            or bool(candidates.posted_before)
+            or not candidates.journal_id
+            or candidates.journal_id.type != "general"
+            or _generated_entry(candidates)
+        ):
+            raise _fail(
+                failure_type,
+                "idempotency_conflict",
+                "The journal-entry duplication key conflicts with another entry.",
+                exit_code=5,
+            )
+        return _move_result(candidates, company_id, source_id=source.id), True
+    preserved_origin = ";".join(
+        token
+        for token in (
+            part.strip() for part in str(source.invoice_origin or "").split(";")
+        )
+        if token
+        and not token.startswith("ODACV4:")
+        and not token.startswith("ODACV4K:")
+    )
+    duplicate = source.copy(default={"invoice_origin": preserved_origin or False})
+    if not _is_id(duplicate.id) or duplicate.id == source.id:
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not return a new duplicated journal entry.",
+            exit_code=6,
+        )
+    _append_move_marker(duplicate, key_marker, failure_type)
+    _append_move_marker(duplicate, operation_marker, failure_type)
+    if (
+        duplicate.company_id.id != company_id
+        or duplicate.move_type != "entry"
+        or duplicate.state != "draft"
+        or bool(duplicate.posted_before)
+        or not duplicate.journal_id
+        or duplicate.journal_id.type != "general"
+        or _generated_entry(duplicate)
+        or not _move_has_marker(duplicate, key_marker)
+        or not _move_has_marker(duplicate, operation_marker)
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo returned an invalid duplicated journal entry.",
+            exit_code=6,
+        )
+    return _move_result(duplicate, company_id, source_id=source.id), False
 
 
 def _transition_move(
@@ -18136,6 +18695,20 @@ def _dispatch_allowed(
         )
     if capability_id == "journal_entry.create":
         return _create_entry(env, parameters, company_id, key, marker, failure_type)
+    if capability_id == "invoice.line.create":
+        return _create_invoice_line(env, parameters, company_id, failure_type)
+    if capability_id == "invoice.line.update":
+        return _update_invoice_line(env, parameters, company_id, failure_type)
+    if capability_id == "invoice.line.delete":
+        return _delete_invoice_line(env, parameters, company_id, failure_type)
+    if capability_id in {"invoice.delete", "journal_entry.delete"}:
+        return _delete_draft_move(
+            env, capability_id, parameters, company_id, failure_type
+        )
+    if capability_id == "journal_entry.duplicate":
+        return _duplicate_journal_entry(
+            env, parameters, company_id, key, failure_type
+        )
     if capability_id in {"invoice.update", "journal_entry.update"}:
         return _update_move(env, capability_id, parameters, company_id, failure_type)
     if capability_id in {

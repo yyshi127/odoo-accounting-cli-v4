@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 404
-EXPECTED_ENABLED_CAPABILITY_COUNT = 389
+EXPECTED_CAPABILITY_COUNT = 410
+EXPECTED_ENABLED_CAPABILITY_COUNT = 395
 EXPECTED_IMPLEMENTED_READ_COUNT = 215
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 174
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 180
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 336
-EXPECTED_DEGRADED_CAPABILITY_COUNT = 53
-EXPECTED_SCHEMA_COUNT = 784
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 337
+EXPECTED_DEGRADED_CAPABILITY_COUNT = 58
+EXPECTED_SCHEMA_COUNT = 796
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "a69709c5687088fbabddaebdec710728b45f924a4fa534e43c61b44706bc7ac1"
+    "a64154567e29da24bd822a008df497ef1733e5318ec96729abd8f8101a733ee2"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -327,6 +327,14 @@ BANK_STATEMENT_PAYMENT_MAINTENANCE_WRITES = {
     "payment.duplicate",
     "payment.delete",
 }
+DRAFT_DOCUMENT_MAINTENANCE_WRITES = {
+    "invoice.line.create",
+    "invoice.line.update",
+    "invoice.line.delete",
+    "invoice.delete",
+    "journal_entry.duplicate",
+    "journal_entry.delete",
+}
 IMPLEMENTED_WRITES = {
     "account.group.create",
     "account.group.update",
@@ -471,7 +479,12 @@ IMPLEMENTED_WRITES = {
     "analytic.distribution_model.update",
     "journal.group.create",
     "journal.group.update",
-} | ORDER_DOCUMENT_WRITES | ACCOUNT_TRANSFER_MODEL_WRITES | BANK_STATEMENT_PAYMENT_MAINTENANCE_WRITES
+} | (
+    ORDER_DOCUMENT_WRITES
+    | ACCOUNT_TRANSFER_MODEL_WRITES
+    | BANK_STATEMENT_PAYMENT_MAINTENANCE_WRITES
+    | DRAFT_DOCUMENT_MAINTENANCE_WRITES
+)
 ACCOUNTING_DELIVERY_WRITES = {
     "invoice.followup.update",
     "invoice.send",
@@ -2698,6 +2711,8 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             "account.transfer_model.create",
             "account.transfer_model.duplicate",
             "bank.statement.create",
+            "invoice.line.create",
+            "journal_entry.duplicate",
             "payment.duplicate",
         }:
             assert descriptor["status"]["value"] == "degraded"
@@ -2723,6 +2738,9 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             "account.transfer_model.delete",
             "bank.statement.delete",
             "bank.transaction.delete",
+            "invoice.delete",
+            "invoice.line.delete",
+            "journal_entry.delete",
             "payment.delete",
         }:
             assert descriptor["status"]["value"] == "degraded"
@@ -2947,6 +2965,28 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
                 "tests/integration/test_account_transfer_model_write_batch_live.py"
             ]
             continue
+        if capability_id in DRAFT_DOCUMENT_MAINTENANCE_WRITES:
+            assert descriptor["tests"]["unit"]["status"] == "implemented"
+            assert set(descriptor["tests"]["unit"]["references"]) == {
+                "tests/unit/test_core_writes.py",
+                "tests/unit/test_core_writes_runtime.py",
+                "tests/unit/test_draft_document_maintenance_runtime.py",
+                "tests/unit/test_draft_document_maintenance_schemas.py",
+                "tests/unit/test_capability_registry.py",
+            }
+            assert descriptor["tests"]["integration"] == {
+                "status": "implemented",
+                "references": [
+                    "tests/integration/test_draft_document_maintenance_live.py"
+                ],
+                "reason": (
+                    "The guarded shared smoke passed both isolated aliases through the "
+                    "public CLI as uid 5 with su=False, exercising all six draft-maintenance "
+                    "commands, five immediate replays, and fresh-cursor business-data "
+                    "and temporary-group rollback verification."
+                ),
+            }
+            continue
         if capability_id in BANK_STATEMENT_PAYMENT_MAINTENANCE_WRITES:
             assert descriptor["tests"]["unit"]["status"] == "implemented"
             assert set(descriptor["tests"]["unit"]["references"]) == {
@@ -2956,12 +2996,15 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
                 "tests/unit/test_capability_registry.py",
             }
             assert descriptor["tests"]["integration"] == {
-                "status": "planned",
-                "references": [],
+                "status": "implemented",
+                "references": [
+                    "tests/integration/test_bank_statement_payment_maintenance_live.py"
+                ],
                 "reason": (
-                    "The guarded dual-database live write smoke remains pending because "
-                    "the server addon tree is missing account_asset/models/account_asset.py; "
-                    "the attempted worker failed before any capability call or fixture write."
+                    "The guarded shared smoke passed both isolated aliases through the "
+                    "public CLI as uid 5 with su=False, exercising all six "
+                    "bank/payment-maintenance commands, three immediate replays, native "
+                    "statement/payment readbacks, and fresh-cursor rollback verification."
                 ),
             }
             continue

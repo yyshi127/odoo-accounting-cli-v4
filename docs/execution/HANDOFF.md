@@ -4326,3 +4326,95 @@ Exact continuation after explicit restoration authority or an operator repair:
 In parallel, capability-gap auditing may continue locally. Do not bypass the
 missing-source blocker, modify business databases, restart services, or claim
 live acceptance from the server's already-running in-memory Odoo process.
+
+## Draft maintenance and deferred bank verification — 2026-10-01
+
+This checkpoint continues from `62cc2cd`. It adds six capability IDs, bringing the
+registry to 410 IDs and 395 implemented handlers (215 reads, 180 writes), with
+796 schemas. Descriptors are 337 `unconfigured`, 58 `degraded`, and 15 `disabled`.
+Integration records are 391 `implemented`, three `planned`, and one `failed`.
+Registry-file SHA-256:
+`63a3417e3495ea2cab0bdff244fe8f85121456a6e34605ac889fe92f98231f17`.
+These totals include historical non-accounting capabilities, not a fixed
+denominator for complete Odoo accounting coverage.
+
+### Delivered boundary
+
+- `invoice.line.create`, `invoice.line.update`, and `invoice.line.delete` operate
+  only on draft invoice/bill business lines, never tax or payment-term lines.
+  They reuse the rich-line contract and native dynamic-line synchronization.
+  Product changes are rejected for sales/purchase-sourced lines.
+- `invoice.delete` and `journal_entry.delete` require never-posted draft moves;
+  journal-entry deletion additionally excludes generated entries and requires a
+  general journal. Native unlink is used without force-delete flags.
+- `journal_entry.duplicate` uses native copy for ordinary general-journal entries
+  and returns a new draft. Payment, statement, reversal, asset, deferred,
+  cash-basis-tax, transfer-model, and automatic-posting source links are excluded
+  using the actual installed Odoo 19 field names.
+- Natural invoice-line-create replay cannot create a second identical line.
+  Concurrent exactly-once creation/copy is not guaranteed. Deletes have no
+  persistent tombstone and are not reversible. The corresponding `degraded`
+  descriptors remain honest even after live acceptance.
+
+### Verification and deployment
+
+Local selections passed 229 runtime/schema cases, 27 public-contract cases,
+11 shared CLI cases, three central registry cases, and five fixture regression
+cases. Updated integration metadata passed its focused registry check. Ruff and
+`git diff --check` passed. The server runtime/schema selection passed 229 cases.
+
+The shared draft-maintenance smoke passed both isolated aliases in 133.24 seconds,
+including all six new commands, five immediate replays, ordinary uid 5 ORM
+execution, fresh-cursor rollback checks, and restored temporary group membership.
+An earlier SSH-streamed run lost its final output and is not acceptance evidence;
+the detached rerun preserved its result on the server.
+
+The previous six bank/payment-maintenance commands passed both aliases in
+152.46 seconds, including three immediate replays, native readbacks, deletion
+boundaries, and fresh-cursor rollback checks. Two earlier fixture-only failures
+were corrected: the creation setup must pass caller-selected idempotency keys,
+and the Odoo worker must include the CLI environment's dependency directory.
+No capability ACL was loosened and no Odoo environment package was installed.
+
+The initial exact 22-file deployment backed up seven existing files and added
+15 files. The original bank-maintenance live test was backed up before its
+fixture correction. Private archives and logs are under
+`.tooling/draft-document-maintenance-20261001-live1`. Odoo, Nginx, and PostgreSQL
+service snapshots remained identical before and after both workflows. Only the
+two synthetic databases were used; this work did not restore addon source,
+restart services, or change a business database.
+
+The local STATUS/HANDOFF records were updated. Their server copies differ from
+the local committed baseline, so those server documents were deliberately
+preserved; final synchronization updates only the registry and its test metadata.
+
+The full public-tree scan still reports five pre-existing path/IP findings in
+historical execution documentation, reproduced from HEAD. The capability
+code/schema/test change scan had no findings. Do not report that the full-tree
+scan passed or include private
+archives, runtime configuration, or source snapshots in the commit.
+
+### Exact next capability batch
+
+The installed `account_reports` module and `account.report.budget` /
+`account.report.budget.item` models were confirmed read-only. Existing
+`report.budget_definition.search/get` and `report.budget_item.search/get` already
+cover reads. The next candidate writes are not implemented at this checkpoint:
+
+1. `report.budget_definition.create`
+2. `report.budget_definition.update`
+3. `report.budget_definition.duplicate`
+4. `report.budget_definition.delete`
+5. `report.budget_item.create`
+6. `report.budget_item.update`
+7. `report.budget_item.delete`
+8. `report.budget_account_period.set_total`
+
+Reuse native budget create/write/copy/unlink and the native monthly-total update
+method. Preserve company scope and the native accounting-manager requirement;
+do not add an approval framework or count existing reads again. Keep the
+financial-report budget separate from analytic `budget.*` objects. Complete one
+shared rollback-only dual-database smoke before recording this next batch as
+live verified. Remaining older integration gaps are `asset.validate` (failed),
+`product.accounting_profile.get`, `report.customer_statement.send`, and
+`report.followup.send` (planned).

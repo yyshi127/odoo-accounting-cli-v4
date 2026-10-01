@@ -3443,7 +3443,7 @@
       "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_scoped_bank_statement_create_from_contiguous_ungrouped_transactions", "verify": "same_transaction_statement_transaction_set_balance_and_response_schema_validation", "idempotency": "company_contiguous_transaction_set_and_full_normalized_parameters_recheck_without_concurrent_exactly_once_guarantee", "reverse": "bank.statement.delete"},
       "tests": {
         "unit": {"status": "implemented", "references": ["tests/unit/test_bank_statement_payment_maintenance_public.py", "tests/unit/test_bank_statement_payment_maintenance_runtime.py", "tests/unit/test_core_writes.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover the closed normalized request, native transaction continuity, exact confirmation, runtime result contract, CLI dispatch, registry descriptor, and schemas."},
-        "integration": {"status": "planned", "references": [], "reason": "The guarded dual-database live write smoke remains pending because the server addon tree is missing account_asset/models/account_asset.py; the attempted worker failed before any capability call or fixture write."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_bank_statement_payment_maintenance_live.py"], "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all six bank/payment-maintenance commands, three immediate replays, native statement/payment readbacks, and fresh-cursor rollback verification."},
         "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
         "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
       },
@@ -3473,7 +3473,7 @@
       "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_scoped_bank_statement_update", "verify": "same_transaction_requested_target_state_reread_and_response_schema_validation", "idempotency": "requested_target_state_hash_and_result_replay", "reverse": "bank.statement.update_with_prior_values"},
       "tests": {
         "unit": {"status": "implemented", "references": ["tests/unit/test_bank_statement_payment_maintenance_public.py", "tests/unit/test_bank_statement_payment_maintenance_runtime.py", "tests/unit/test_core_writes.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover the non-empty closed changes, exact confirmation, runtime result contract, CLI dispatch, registry descriptor, and schemas."},
-        "integration": {"status": "planned", "references": [], "reason": "The guarded dual-database live write smoke remains pending because the server addon tree is missing account_asset/models/account_asset.py; the attempted worker failed before any capability call or fixture write."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_bank_statement_payment_maintenance_live.py"], "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all six bank/payment-maintenance commands, three immediate replays, native statement/payment readbacks, and fresh-cursor rollback verification."},
         "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
         "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
       },
@@ -3503,7 +3503,7 @@
       "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_scoped_bank_statement_unlink_preserving_transactions", "verify": "same_transaction_statement_absence_and_ungrouped_transaction_reread_and_response_schema_validation", "idempotency": "record_absence_recheck_without_operation_store_or_persistent_tombstone", "reverse": "not_reversible_deleted_statement_must_be_recreated"},
       "tests": {
         "unit": {"status": "implemented", "references": ["tests/unit/test_bank_statement_payment_maintenance_public.py", "tests/unit/test_bank_statement_payment_maintenance_runtime.py", "tests/unit/test_core_writes.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover confirmation, runtime result contract, CLI dispatch, registry descriptor, delete boundary, and schemas."},
-        "integration": {"status": "planned", "references": [], "reason": "The guarded dual-database live write smoke remains pending because the server addon tree is missing account_asset/models/account_asset.py; the attempted worker failed before any capability call or fixture write."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_bank_statement_payment_maintenance_live.py"], "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all six bank/payment-maintenance commands, three immediate replays, native statement/payment readbacks, and fresh-cursor rollback verification."},
         "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
         "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
       },
@@ -4094,7 +4094,7 @@
       "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_scoped_ungrouped_unmatched_bank_transaction_unlink", "verify": "same_transaction_bank_transaction_and_journal_entry_absence_and_response_schema_validation", "idempotency": "record_absence_recheck_without_operation_store_or_persistent_tombstone", "reverse": "not_reversible_deleted_transaction_must_be_recorded_again"},
       "tests": {
         "unit": {"status": "implemented", "references": ["tests/unit/test_bank_statement_payment_maintenance_public.py", "tests/unit/test_bank_statement_payment_maintenance_runtime.py", "tests/unit/test_core_writes.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover confirmation, runtime result contract, CLI dispatch, registry descriptor, delete boundary, and schemas."},
-        "integration": {"status": "planned", "references": [], "reason": "The guarded dual-database live write smoke remains pending because the server addon tree is missing account_asset/models/account_asset.py; the attempted worker failed before any capability call or fixture write."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_bank_statement_payment_maintenance_live.py"], "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all six bank/payment-maintenance commands, three immediate replays, native statement/payment readbacks, and fresh-cursor rollback verification."},
         "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
         "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
       },
@@ -12966,7 +12966,7 @@
       "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_scoped_payment_copy_as_draft_with_source_memo_prefix", "verify": "same_transaction_new_draft_payment_source_values_and_appended_marker_reread_and_response_schema_validation", "idempotency": "stable_source_key_suffix_lookup_and_current_source_memo_recheck_without_concurrent_exactly_once_guarantee", "reverse": "payment.delete"},
       "tests": {
         "unit": {"status": "implemented", "references": ["tests/unit/test_bank_statement_payment_maintenance_public.py", "tests/unit/test_bank_statement_payment_maintenance_runtime.py", "tests/unit/test_core_writes.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover the closed request, exact confirmation, stable marker lookup, preserved source memo prefix, source-linked draft result, CLI dispatch, registry descriptor, and schemas."},
-        "integration": {"status": "planned", "references": [], "reason": "The guarded dual-database live write smoke remains pending because the server addon tree is missing account_asset/models/account_asset.py; the attempted worker failed before any capability call or fixture write."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_bank_statement_payment_maintenance_live.py"], "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all six bank/payment-maintenance commands, three immediate replays, native statement/payment readbacks, and fresh-cursor rollback verification."},
         "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
         "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
       },
@@ -13171,7 +13171,7 @@
       "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_scoped_unreconciled_draft_or_canceled_payment_unlink", "verify": "same_transaction_payment_and_journal_entry_absence_and_response_schema_validation", "idempotency": "record_absence_recheck_without_operation_store_or_persistent_tombstone", "reverse": "not_reversible_deleted_payment_must_be_recreated"},
       "tests": {
         "unit": {"status": "implemented", "references": ["tests/unit/test_bank_statement_payment_maintenance_public.py", "tests/unit/test_bank_statement_payment_maintenance_runtime.py", "tests/unit/test_core_writes.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover confirmation, runtime result contract, CLI dispatch, registry descriptor, deletion boundary, and schemas."},
-        "integration": {"status": "planned", "references": [], "reason": "The guarded dual-database live write smoke remains pending because the server addon tree is missing account_asset/models/account_asset.py; the attempted worker failed before any capability call or fixture write."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_bank_statement_payment_maintenance_live.py"], "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all six bank/payment-maintenance commands, three immediate replays, native statement/payment readbacks, and fresh-cursor rollback verification."},
         "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
         "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
       },
@@ -23252,6 +23252,138 @@
       "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
       "routing": {"object": "invoice.followup", "actions": ["update", "exclude", "include"], "aliases": {"zh_CN": ["排除发票催款", "恢复发票催款", "排除供应商账单催款", "恢复供应商账单催款"], "en_US": ["Exclude invoice from follow-up", "Restore invoice follow-up", "Exclude vendor bill from follow-up", "Restore vendor bill follow-up"]}, "not_for": {"zh_CN": ["发送催款邮件"], "en_US": ["Sending a follow-up email"]}, "required_slots": ["database", "company_id", "user_login"]},
       "handler_key": "accounting_delivery"
+    },
+    "invoice.line.create": {
+      "summary": {"zh_CN": "新增草稿发票或账单业务行", "en_US": "Create a business line on a draft invoice or bill"},
+      "domain": "invoices_and_bills",
+      "access": "write",
+      "source": {
+        "modules": ["account"],
+        "models": ["res.company", "res.partner", "product.product", "account.account", "account.tax", "account.move", "account.move.line", "account.analytic.account"],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "_references/base/models/res_partner.py", "_references/product/models/product_product.py", "account/models/account_account.py", "account/models/account_tax.py", "account/models/account_move.py", "account/models/account_move_line.py"]
+      },
+      "schemas": {"request": "schemas/v1/invoice.line.create.request.schema.json", "response": "schemas/v1/invoice.line.create.response.schema.json"},
+      "requirements": {
+        "modules": ["account"],
+        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "company": "required",
+        "groups": ["account.group_account_invoice"],
+        "acl": ["res.partner:read", "product.product:read", "account.account:read", "account.tax:read", "account.analytic.account:read", "account.move:read", "account.move:write", "account.move.line:read", "account.move.line:create", "account.move.line:write", "account.move.line:unlink"]
+      },
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_native_draft_invoice_business_line_create", "verify": "same_transaction_created_business_line_identity_payload_parent_totals_and_response_schema_validation", "idempotency": "natural_line_payload_recheck_without_database_uniqueness_or_concurrent_exactly_once_guarantee", "reverse": "invoice.line.delete"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_draft_document_maintenance_runtime.py", "tests/unit/test_draft_document_maintenance_schemas.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover the closed rich-line request, draft and business-line boundaries, source-preserving native execution, dynamic-line synchronization, replay, result binding, registry descriptor, and schemas."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_draft_document_maintenance_live.py"], "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all six draft-maintenance commands, five immediate replays, and fresh-cursor business-data and temporary-group rollback verification."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "degraded", "reason_code": "concurrent_idempotency_limit", "reason": "The handler rechecks the natural rich-line payload before creation, but Odoo provides no database uniqueness constraint for concurrent exactly-once business-line creation."},
+      "routing": {"object": "invoice.line", "actions": ["create", "add"], "aliases": {"zh_CN": ["新增发票行", "新增账单行"], "en_US": ["Create invoice line", "Add bill line"]}, "not_for": {"zh_CN": ["替换全部发票行", "新增税行或付款条件行"], "en_US": ["Replacing every invoice line", "Creating tax or payment-term lines"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
+    "invoice.line.update": {
+      "summary": {"zh_CN": "更新草稿发票或账单业务行", "en_US": "Update a business line on a draft invoice or bill"},
+      "domain": "invoices_and_bills",
+      "access": "write",
+      "source": {
+        "modules": ["account"],
+        "models": ["res.company", "res.partner", "product.product", "account.account", "account.tax", "account.move", "account.move.line", "account.analytic.account"],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": ["_references/base/models/res_company.py", "_references/base/models/res_partner.py", "_references/product/models/product_product.py", "account/models/account_account.py", "account/models/account_tax.py", "account/models/account_move.py", "account/models/account_move_line.py"]
+      },
+      "schemas": {"request": "schemas/v1/invoice.line.update.request.schema.json", "response": "schemas/v1/invoice.line.update.response.schema.json"},
+      "requirements": {
+        "modules": ["account"],
+        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "company": "required",
+        "groups": ["account.group_account_invoice"],
+        "acl": ["res.partner:read", "product.product:read", "account.account:read", "account.tax:read", "account.analytic.account:read", "account.move:read", "account.move:write", "account.move.line:read", "account.move.line:create", "account.move.line:write", "account.move.line:unlink"]
+      },
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_native_draft_invoice_business_line_update", "verify": "same_transaction_target_business_line_payload_parent_totals_and_response_schema_validation", "idempotency": "target_line_payload_state_check_before_native_write", "reverse": "repeat_update_with_previous_business_line_values"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_draft_document_maintenance_runtime.py", "tests/unit/test_draft_document_maintenance_schemas.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover the closed non-empty patch, draft and business-line boundaries, source-link preservation, dynamic-line synchronization, target-state replay, result binding, registry descriptor, and schemas."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_draft_document_maintenance_live.py"], "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all six draft-maintenance commands, five immediate replays, and fresh-cursor business-data and temporary-group rollback verification."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
+      "routing": {"object": "invoice.line", "actions": ["update"], "aliases": {"zh_CN": ["更新发票行", "修改账单行"], "en_US": ["Update invoice line", "Change bill line"]}, "not_for": {"zh_CN": ["替换全部发票行", "修改税行或付款条件行"], "en_US": ["Replacing every invoice line", "Changing tax or payment-term lines"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
+    "invoice.line.delete": {
+      "summary": {"zh_CN": "删除草稿发票或账单业务行", "en_US": "Delete a business line from a draft invoice or bill"},
+      "domain": "invoices_and_bills",
+      "access": "write",
+      "source": {"modules": ["account"], "models": ["res.company", "account.move", "account.move.line"], "wizards": [], "report_handlers": [], "locations": ["_references/base/models/res_company.py", "account/models/account_move.py", "account/models/account_move_line.py"]},
+      "schemas": {"request": "schemas/v1/invoice.line.delete.request.schema.json", "response": "schemas/v1/invoice.line.delete.response.schema.json"},
+      "requirements": {"modules": ["account"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["account.group_account_invoice"], "acl": ["account.move:read", "account.move:write", "account.move.line:read", "account.move.line:create", "account.move.line:write", "account.move.line:unlink"]},
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_native_draft_invoice_business_line_unlink", "verify": "same_transaction_target_line_absence_parent_dynamic_lines_totals_and_response_schema_validation", "idempotency": "record_absence_recheck_without_operation_store_or_persistent_tombstone", "reverse": "recreate_the_deleted_business_line_outside_this_capability"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_draft_document_maintenance_runtime.py", "tests/unit/test_draft_document_maintenance_schemas.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover confirmation, draft and business-line boundaries, source-preserving native unlink, dynamic-line synchronization, absence verification, result binding, registry descriptor, and schemas."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_draft_document_maintenance_live.py"], "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all six draft-maintenance commands, five immediate replays, and fresh-cursor business-data and temporary-group rollback verification."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "degraded", "reason_code": "deleted_record_tombstone_unavailable", "reason": "The handler verifies business-line absence and the synchronized parent invoice after deletion, but keeps no persistent tombstone for later retry attribution."},
+      "routing": {"object": "invoice.line", "actions": ["delete", "remove"], "aliases": {"zh_CN": ["删除发票行", "删除账单行"], "en_US": ["Delete invoice line", "Remove bill line"]}, "not_for": {"zh_CN": ["删除税行或付款条件行", "删除整张发票"], "en_US": ["Deleting tax or payment-term lines", "Deleting the whole invoice"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
+    "invoice.delete": {
+      "summary": {"zh_CN": "删除从未过账的草稿发票或账单", "en_US": "Delete a never-posted draft invoice or bill"},
+      "domain": "invoices_and_bills",
+      "access": "write",
+      "source": {"modules": ["account"], "models": ["res.company", "account.move", "account.move.line"], "wizards": [], "report_handlers": [], "locations": ["_references/base/models/res_company.py", "account/models/account_move.py", "account/models/account_move_line.py"]},
+      "schemas": {"request": "schemas/v1/invoice.delete.request.schema.json", "response": "schemas/v1/invoice.delete.response.schema.json"},
+      "requirements": {"modules": ["account"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["account.group_account_invoice"], "acl": ["account.move:read", "account.move:unlink", "account.move.line:read", "account.move.line:unlink"]},
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_native_never_posted_draft_invoice_or_bill_unlink", "verify": "same_transaction_account_move_and_lines_absence_and_response_schema_validation", "idempotency": "record_absence_recheck_without_operation_store_or_persistent_tombstone", "reverse": "not_reversible_deleted_invoice_or_bill_must_be_recreated"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_draft_document_maintenance_runtime.py", "tests/unit/test_draft_document_maintenance_schemas.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover confirmation, invoice-family and never-posted-draft boundaries, native unlink, move-and-line absence verification, result binding, registry descriptor, and schemas."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_draft_document_maintenance_live.py"], "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all six draft-maintenance commands, five immediate replays, and fresh-cursor business-data and temporary-group rollback verification."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "degraded", "reason_code": "deleted_record_tombstone_unavailable", "reason": "The handler verifies invoice-or-bill and line absence after deletion, but keeps no persistent tombstone, so a later retry cannot distinguish its prior deletion from an unrelated disappearance."},
+      "routing": {"object": "invoice", "actions": ["delete"], "aliases": {"zh_CN": ["删除草稿发票", "删除草稿账单"], "en_US": ["Delete draft invoice", "Delete draft bill"]}, "not_for": {"zh_CN": ["删除已过账或曾过账单据", "取消发票"], "en_US": ["Deleting posted or previously posted documents", "Canceling an invoice"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
+    "journal_entry.duplicate": {
+      "summary": {"zh_CN": "复制普通总账分录为新草稿", "en_US": "Duplicate an ordinary journal entry as a new draft"},
+      "domain": "general_ledger",
+      "access": "write",
+      "source": {"modules": ["account"], "models": ["res.company", "account.journal", "account.move", "account.move.line"], "wizards": [], "report_handlers": [], "locations": ["_references/base/models/res_company.py", "account/models/account_journal.py", "account/models/account_move.py", "account/models/account_move_line.py"]},
+      "schemas": {"request": "schemas/v1/journal_entry.duplicate.request.schema.json", "response": "schemas/v1/journal_entry.duplicate.response.schema.json"},
+      "requirements": {"modules": ["account"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["account.group_account_user"], "acl": ["account.journal:read", "account.move:read", "account.move:create", "account.move:write", "account.move.line:read", "account.move.line:create"]},
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_native_ordinary_journal_entry_copy_as_draft_with_persistent_source_marker", "verify": "same_transaction_new_draft_general_entry_source_binding_marker_lines_and_response_schema_validation", "idempotency": "stable_source_and_operation_marker_lookup_without_database_uniqueness_or_concurrent_exactly_once_guarantee", "reverse": "journal_entry.delete"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_draft_document_maintenance_runtime.py", "tests/unit/test_draft_document_maintenance_schemas.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover the closed source request, generated-entry exclusion, native copy, persistent source-bound marker replay, line preservation, result binding, registry descriptor, and schemas."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_draft_document_maintenance_live.py"], "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all six draft-maintenance commands, five immediate replays, and fresh-cursor business-data and temporary-group rollback verification."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "degraded", "reason_code": "concurrent_idempotency_limit", "reason": "The handler persists source-bound idempotency markers and rechecks a matching draft duplicate, but Odoo provides no database uniqueness constraint for concurrent exactly-once duplication."},
+      "routing": {"object": "journal_entry", "actions": ["duplicate", "copy"], "aliases": {"zh_CN": ["复制总账分录", "复制日记账分录为草稿"], "en_US": ["Duplicate journal entry", "Copy general entry as draft"]}, "not_for": {"zh_CN": ["复制付款或银行流水生成的分录", "复制发票"], "en_US": ["Duplicating payment- or bank-generated entries", "Duplicating an invoice"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
+    },
+    "journal_entry.delete": {
+      "summary": {"zh_CN": "删除从未过账的普通草稿总账分录", "en_US": "Delete a never-posted ordinary draft journal entry"},
+      "domain": "general_ledger",
+      "access": "write",
+      "source": {"modules": ["account"], "models": ["res.company", "account.journal", "account.move", "account.move.line"], "wizards": [], "report_handlers": [], "locations": ["_references/base/models/res_company.py", "account/models/account_journal.py", "account/models/account_move.py", "account/models/account_move_line.py"]},
+      "schemas": {"request": "schemas/v1/journal_entry.delete.request.schema.json", "response": "schemas/v1/journal_entry.delete.response.schema.json"},
+      "requirements": {"modules": ["account"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["account.group_account_user"], "acl": ["account.journal:read", "account.move:read", "account.move:unlink", "account.move.line:read", "account.move.line:unlink"]},
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_native_never_posted_ordinary_draft_journal_entry_unlink", "verify": "same_transaction_account_move_and_lines_absence_and_response_schema_validation", "idempotency": "record_absence_recheck_without_operation_store_or_persistent_tombstone", "reverse": "not_reversible_deleted_journal_entry_must_be_recreated"},
+      "tests": {
+        "unit": {"status": "implemented", "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_draft_document_maintenance_runtime.py", "tests/unit/test_draft_document_maintenance_schemas.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover confirmation, ordinary-entry and never-posted-draft boundaries, generated-entry exclusion, native unlink, move-and-line absence verification, result binding, registry descriptor, and schemas."},
+        "integration": {"status": "implemented", "references": ["tests/integration/test_draft_document_maintenance_live.py"], "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all six draft-maintenance commands, five immediate replays, and fresh-cursor business-data and temporary-group rollback verification."},
+        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
+        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+      },
+      "status": {"value": "degraded", "reason_code": "deleted_record_tombstone_unavailable", "reason": "The handler verifies journal-entry and line absence after deletion, but keeps no persistent tombstone, so a later retry cannot distinguish its prior deletion from an unrelated disappearance."},
+      "routing": {"object": "journal_entry", "actions": ["delete"], "aliases": {"zh_CN": ["删除草稿总账分录", "删除草稿日记账分录"], "en_US": ["Delete draft journal entry", "Delete draft general entry"]}, "not_for": {"zh_CN": ["删除已过账或曾过账分录", "删除系统生成分录"], "en_US": ["Deleting posted or previously posted entries", "Deleting system-generated entries"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "handler_key": "core_write"
     }
   }
 }

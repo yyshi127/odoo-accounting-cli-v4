@@ -1,6 +1,37 @@
 # Execution status
 
-## Current accounting phase — 2026-09-03
+## Current accounting phase — 2026-10-01
+
+The working registry has 410 IDs and 395 implemented handlers: 215 reads and
+180 writes, with 796 schema files. Availability descriptors remain 337
+`unconfigured`, 58 `degraded`, and 15 `disabled`. Integration records for the
+implemented handlers are now 391 `implemented`, three `planned`, and one
+`failed`. These totals include historical non-accounting extensions; they are
+not an accounting-completion percentage or a promise that every configured user
+has the necessary Odoo permissions.
+
+The six previously uncommitted draft-maintenance commands are now deployed and
+live verified: `invoice.line.create`, `invoice.line.update`, `invoice.line.delete`,
+`invoice.delete`, `journal_entry.duplicate`, and `journal_entry.delete`.
+The preceding six bank/payment-maintenance commands also passed their deferred
+live verification. Both shared tests passed on `v4-dev` and `v4-e2e` through the
+public CLI with real ORM execution as uid 5 and `su=False`; fresh-cursor checks
+verified rollback. Draft-maintenance temporary accounting groups were rolled back
+as well. Service PID/restart snapshots were unchanged, and no service-control or
+Odoo-source modification was performed.
+
+The former missing-asset-source blocker is no longer present. Bank-maintenance
+verification then exposed two test-fixture defects: missing caller-selected
+creation keys and missing CLI dependency paths in the Odoo worker. Those fixture
+defects were corrected without changing capability permissions or installing
+anything into the Odoo environment.
+
+Next is a candidate eight-command financial-report-budget maintenance batch;
+the installed `account_reports` models have been confirmed. It is distinct from
+the existing analytic-budget commands and is not yet implemented. See the latest
+[handoff checkpoint](HANDOFF.md) for boundaries, evidence, and continuation.
+
+## Previous checkpoint — 2026-09-03
 
 The active objective is capability-first accounting delivery in
 [GOAL_SUMMARY.md](GOAL_SUMMARY.md). Historical sales, purchasing and inventory

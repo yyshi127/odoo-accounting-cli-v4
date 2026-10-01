@@ -151,6 +151,25 @@ PARAMETERS = {
             }
         ],
     },
+    "invoice.line.create": {
+        "move_id": 115,
+        "line": {
+            "name": "Additional invoice line",
+            "product_id": None,
+            "account_id": 31,
+            "quantity": "1",
+            "price_unit": "25.50",
+            "discount": "0",
+            "tax_ids": [8],
+        },
+    },
+    "invoice.line.update": {
+        "move_id": 115,
+        "line_id": 315,
+        "changes": {"quantity": "2", "price_unit": "30"},
+    },
+    "invoice.line.delete": {"move_id": 115, "line_id": 315},
+    "invoice.delete": {"move_id": 115},
     "invoice.cancel": {"move_id": 116},
     "invoice.reset_to_draft": {"move_id": 117},
     "invoice.post": {"move_id": 101},
@@ -168,6 +187,8 @@ PARAMETERS = {
         "move_id": 119,
         "lines": _journal_parameters()["lines"],
     },
+    "journal_entry.duplicate": {"move_id": 119},
+    "journal_entry.delete": {"move_id": 119},
     "journal_entry.cancel": {"move_id": 120},
     "journal_entry.reset_to_draft": {"move_id": 121},
     "journal_entry.post": {"move_id": 102},
@@ -862,6 +883,11 @@ def _key(capability_id: str) -> str:
         "bank.transaction.delete",
         "payment.duplicate",
         "payment.delete",
+        "invoice.line.create",
+        "invoice.line.update",
+        "invoice.line.delete",
+        "invoice.delete",
+        "journal_entry.delete",
     }:
         _, context, parameters = validate_core_write_request(
             capability_id, _request(capability_id)
@@ -897,8 +923,8 @@ def _key(capability_id: str) -> str:
         "budget.create",
     }:
         return f"smoke:{capability_id}:0001"
-    if capability_id == "invoice.duplicate":
-        return "invoice-duplicate-safe-key-001"
+    if capability_id in {"invoice.duplicate", "journal_entry.duplicate"}:
+        return f"{capability_id}-safe-key-001"
     parameters = PARAMETERS[capability_id]
     if capability_id == "invoice.type.switch":
         return (
@@ -1677,6 +1703,20 @@ def _result(capability_id: str, **changes) -> dict:
             move_type=parameters["target_move_type"],
             source_id=parameters["move_id"],
         )
+    elif capability_id.startswith("invoice.line."):
+        line_id = parameters.get("line_id", 915)
+        result.update(
+            state="draft",
+            move_type="out_invoice",
+            source_id=line_id,
+            line_ids=(
+                [901, 902]
+                if capability_id == "invoice.line.delete"
+                else sorted([901, 902, line_id])
+            ),
+        )
+    elif capability_id == "invoice.delete":
+        result.update(state="deleted", move_type="out_invoice")
     elif capability_id == "invoice.post":
         result["move_type"] = "out_invoice"
     elif capability_id.startswith("invoice."):
@@ -1692,6 +1732,14 @@ def _result(capability_id: str, **changes) -> dict:
         result.update(id=505, state="draft", move_type="in_refund", source_id=108)
     elif capability_id == "journal_entry.create":
         result["state"] = "draft"
+    elif capability_id == "journal_entry.duplicate":
+        result.update(
+            id=519,
+            state="draft",
+            source_id=parameters["move_id"],
+        )
+    elif capability_id == "journal_entry.delete":
+        result["state"] = "deleted"
     elif capability_id in {
         "journal_entry.update",
         "journal_entry.lines.replace",
