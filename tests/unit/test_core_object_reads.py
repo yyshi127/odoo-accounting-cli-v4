@@ -4,6 +4,7 @@ from copy import deepcopy
 
 import pytest
 
+from odoo_accounting_cli_v4 import analytic_processing_contracts as analytic_processing
 from odoo_accounting_cli_v4.capabilities.core_object_reads import (
     CORE_OBJECT_GET_CAPABILITY_IDS,
     CORE_OBJECT_READ_CAPABILITY_IDS,
@@ -1067,11 +1068,12 @@ def _required_page_parameters(capability_id: str) -> dict:
 
 def test_public_capability_sets_match_fixed_ids_without_report_execution() -> None:
     assert CORE_OBJECT_GET_CAPABILITY_IDS == frozenset(
-        {*GET_ID_FIELDS, *SUPPORTING_GET_CAPABILITIES}
+        {*GET_ID_FIELDS, *SUPPORTING_GET_CAPABILITIES, *analytic_processing.READ_IDS}
     )
     assert CORE_OBJECT_READ_CAPABILITY_IDS == frozenset(
         {
             *GET_ID_FIELDS,
+            *analytic_processing.READ_IDS,
             *PAGE_CAPABILITIES,
             *FISCAL_POSITION_MAPPING_CAPABILITIES,
             *SUPPORTING_GET_CAPABILITIES,

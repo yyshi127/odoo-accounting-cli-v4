@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 508
-EXPECTED_ENABLED_CAPABILITY_COUNT = 493
-EXPECTED_IMPLEMENTED_READ_COUNT = 234
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 259
+EXPECTED_CAPABILITY_COUNT = 516
+EXPECTED_ENABLED_CAPABILITY_COUNT = 501
+EXPECTED_IMPLEMENTED_READ_COUNT = 238
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 263
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 420
-EXPECTED_DEGRADED_CAPABILITY_COUNT = 73
-EXPECTED_SCHEMA_COUNT = 992
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 427
+EXPECTED_DEGRADED_CAPABILITY_COUNT = 74
+EXPECTED_SCHEMA_COUNT = 1008
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "48e3305a78f000c577835cf5158456b9ae24f3081873927699f5df003a7eb4f5"
+    "38b4567c5b8eac0a49e0b23bd706b09b7bcaff65cdcbb11c24817ae37d3da618"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -157,6 +157,10 @@ IMPLEMENTED_READS = {
     "invoice.layout_line.list": "invoice_layout_line_list",
     "payment.bank_account_candidates.list": "payment_bank_account_candidates_list",
     "payment.duplicate_candidates.list": "payment_duplicate_candidates_list",
+    "analytic.account.balance.inspect": "analytic_account_balance_inspect",
+    "analytic.account.invoice_usage.inspect": "analytic_account_invoice_usage_inspect",
+    "analytic.applicability.resolve": "analytic_applicability_resolve",
+    "analytic.distribution.resolve": "analytic_distribution_resolve",
     "journal.processing_settings.get": "journal_processing_settings_get",
     "account.account.processing_settings.get": "account_account_processing_settings_get",
     "tax.processing_settings.get": "tax_processing_settings_get",
@@ -390,7 +394,10 @@ ACCOUNT_PROCESSING_WRITES = {'account.account.duplicate', 'account.account.non_t
 
 JOURNAL_PROCESSING_WRITES = {'journal.non_deductible_account.assign', 'journal.sequence_policy.update', 'journal.invoice_reference.update', 'journal.group.delete', 'journal.duplicate', 'journal.invoice_template.assign', 'journal.delete'}
 
-IMPLEMENTED_WRITES = JOURNAL_PROCESSING_WRITES | ACCOUNT_PROCESSING_WRITES | TAX_PROCESSING_WRITES | PAYMENT_TERM_PROCESSING_WRITES | RECONCILIATION_PROCESSING_WRITES | PAYMENT_PROCESSING_WRITES | INVOICE_PRESENTATION_WRITES | MOVE_PROCESSING_WRITES | PARTNER_PREFERENCES_WRITES | PAYMENT_CONFIGURATION_WRITES | FISCAL_MAPPING_WRITES | REPORT_BUDGET_WRITES | {
+ANALYTIC_PROCESSING_WRITES = {'analytic.distribution_model.delete', 'analytic.account.duplicate', 'analytic.account.delete', 'analytic.applicability.delete'}
+ANALYTIC_PROCESSING_READS = {'analytic.applicability.resolve', 'analytic.account.balance.inspect', 'analytic.account.invoice_usage.inspect', 'analytic.distribution.resolve'}
+
+IMPLEMENTED_WRITES = ANALYTIC_PROCESSING_WRITES | JOURNAL_PROCESSING_WRITES | ACCOUNT_PROCESSING_WRITES | TAX_PROCESSING_WRITES | PAYMENT_TERM_PROCESSING_WRITES | RECONCILIATION_PROCESSING_WRITES | PAYMENT_PROCESSING_WRITES | INVOICE_PRESENTATION_WRITES | MOVE_PROCESSING_WRITES | PARTNER_PREFERENCES_WRITES | PAYMENT_CONFIGURATION_WRITES | FISCAL_MAPPING_WRITES | REPORT_BUDGET_WRITES | {
     "account.group.create",
     "account.group.update",
     "account.tag.archive",
@@ -897,6 +904,10 @@ CORE_OBJECT_READ_HANDLERS = {
     "invoice.layout_line.list": "invoice_layout_line_list",
     "payment.bank_account_candidates.list": "payment_bank_account_candidates_list",
     "payment.duplicate_candidates.list": "payment_duplicate_candidates_list",
+    "analytic.account.balance.inspect": "analytic_account_balance_inspect",
+    "analytic.account.invoice_usage.inspect": "analytic_account_invoice_usage_inspect",
+    "analytic.applicability.resolve": "analytic_applicability_resolve",
+    "analytic.distribution.resolve": "analytic_distribution_resolve",
     "journal.processing_settings.get": "journal_processing_settings_get",
     "account.account.processing_settings.get": "account_account_processing_settings_get",
     "tax.processing_settings.get": "tax_processing_settings_get",
@@ -1206,6 +1217,11 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
         if capability_id in {'partner.payment_preferences.get', 'partner.invoice_delivery_preferences.get', 'partner.bill_validation_preferences.get'}:
             assert descriptor["tests"]["integration"]["status"] == "implemented"
             assert descriptor["tests"]["integration"]["references"] == ["tests/integration/test_partner_preferences_batch_live.py"]
+            continue
+        if capability_id in ANALYTIC_PROCESSING_READS:
+            assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_analytic_processing_batch.py"]
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == ["tests/integration/test_analytic_processing_batch_live.py"]
             continue
         if capability_id == "journal.processing_settings.get":
             assert descriptor["tests"]["integration"]["status"] == "implemented"
@@ -2737,6 +2753,7 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
     )
 
     assert set(CORE_WRITE_MODELS) == IMPLEMENTED_WRITES
+    extended_modules.update({capability_id: ["account", "analytic", "base", "mail"] for capability_id in ANALYTIC_PROCESSING_WRITES})
     extended_modules.update({capability_id: ["account", "base", "mail"] for capability_id in JOURNAL_PROCESSING_WRITES})
     extended_modules.update({capability_id: ["account"] for capability_id in ACCOUNT_PROCESSING_WRITES})
     extended_modules.update({capability_id: ["account"] for capability_id in TAX_PROCESSING_WRITES})
@@ -2811,7 +2828,10 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             expected_acl.add("res.company:read")
         expected_acl -= runtime_support_acl.get(capability_id, set())
         assert set(descriptor["requirements"]["acl"]) == expected_acl
-        if capability_id in {"partner.invoice_delivery_preferences.update", "partner.bill_validation_preferences.update"}:
+        if capability_id == "analytic.account.duplicate":
+            assert descriptor["status"]["value"] == "degraded"
+            assert descriptor["status"]["reason_code"] == "concurrent_idempotency_limit"
+        elif capability_id in {"partner.invoice_delivery_preferences.update", "partner.bill_validation_preferences.update"}:
             assert descriptor["status"]["value"] == "degraded"
             assert descriptor["status"]["reason_code"] == "shared_partner_global_preference"
         elif capability_id in {
@@ -3109,6 +3129,11 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             assert descriptor["tests"]["integration"]["references"] == [
                 "tests/integration/test_account_transfer_model_write_batch_live.py"
             ]
+            continue
+        if capability_id in ANALYTIC_PROCESSING_WRITES:
+            assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_analytic_processing_batch.py"]
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == ["tests/integration/test_analytic_processing_batch_live.py"]
             continue
         if capability_id in JOURNAL_PROCESSING_WRITES:
             assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_journal_processing_batch.py"]

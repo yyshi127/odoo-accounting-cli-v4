@@ -18,6 +18,7 @@ from time import strftime, strptime
 from typing import Any
 
 from odoo_accounting_cli_v4 import account_processing_contracts as account_processing
+from odoo_accounting_cli_v4 import analytic_processing_contracts as analytic_processing
 from odoo_accounting_cli_v4 import fiscal_mapping_contracts as fiscal_mappings
 from odoo_accounting_cli_v4 import (
     invoice_presentation_contracts as invoice_presentation,
@@ -39,7 +40,7 @@ from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
 from odoo_accounting_cli_v4 import tax_processing_contracts as tax_processing
 
 ACTION = "accounting.core_write.execute"
-CAPABILITIES = journal_processing.CAPABILITY_IDS | account_processing.CAPABILITY_IDS | tax_processing.CAPABILITY_IDS | payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
+CAPABILITIES = analytic_processing.CAPABILITY_IDS | journal_processing.CAPABILITY_IDS | account_processing.CAPABILITY_IDS | tax_processing.CAPABILITY_IDS | payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -3327,6 +3328,19 @@ def _protocol(failure_type: type[Exception]) -> Exception:
     )
 
 
+_PARAMETER_KEYS.update(analytic_processing.PARAMETER_KEYS)
+_GROUPS['analytic.account.delete'] = "account.group_account_manager"
+_MODELS['analytic.account.delete'] = {'res.company', 'account.analytic.account'}
+_ACCESS['analytic.account.delete'] = {('res.company', 'read'), ('account.analytic.account', 'read'), ('account.analytic.account', 'unlink')}
+_GROUPS['analytic.account.duplicate'] = "account.group_account_manager"
+_MODELS['analytic.account.duplicate'] = {'res.company', 'account.analytic.plan', 'account.analytic.account', 'res.partner'}
+_ACCESS['analytic.account.duplicate'] = {('res.company', 'read'), ('account.analytic.account', 'create'), ('res.partner', 'read'), ('account.analytic.account', 'read'), ('account.analytic.plan', 'read')}
+_GROUPS['analytic.applicability.delete'] = "account.group_account_manager"
+_MODELS['analytic.applicability.delete'] = {'account.analytic.applicability', 'res.company'}
+_ACCESS['analytic.applicability.delete'] = {('account.analytic.applicability', 'read'), ('account.analytic.applicability', 'unlink'), ('res.company', 'read')}
+_GROUPS['analytic.distribution_model.delete'] = "account.group_account_manager"
+_MODELS['analytic.distribution_model.delete'] = {'res.company', 'account.analytic.distribution.model'}
+_ACCESS['analytic.distribution_model.delete'] = {('account.analytic.distribution.model', 'read'), ('res.company', 'read'), ('account.analytic.distribution.model', 'unlink')}
 _PARAMETER_KEYS.update(journal_processing.PARAMETER_KEYS)
 _GROUPS['journal.delete'] = "account.group_account_manager"
 _MODELS['journal.delete'] = {'account.journal', 'account.move', 'account.payment.method.line', 'res.company', 'res.partner.bank', 'mail.alias'}
@@ -5516,6 +5530,11 @@ def _valid_parameters(
 ) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id in analytic_processing.CAPABILITY_IDS:
+        try:
+            return analytic_processing.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
     if capability_id in journal_processing.CAPABILITY_IDS:
         try:
             return journal_processing.normalize_parameters(capability_id, parameters) == parameters
@@ -6154,6 +6173,8 @@ def _validated_payload(
 def _deterministic_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in analytic_processing.CAPABILITY_IDS:
+        return analytic_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in journal_processing.CAPABILITY_IDS:
         return journal_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in account_processing.CAPABILITY_IDS:
@@ -17836,6 +17857,50 @@ def _journal_processing_values(journal: Any) -> dict[str, Any]:
     return values
 
 
+def _write_analytic_processing(
+    env: Any, capability_id: str, parameters: dict[str, Any],
+    company_id: int, failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    with env.cr.savepoint():
+        model = analytic_processing.MODELS[capability_id]
+        source = _search_one(env, model, [
+            ("id", "=", parameters[analytic_processing.ID_FIELDS[capability_id]]),
+            ("company_id", "=", company_id),
+        ], company_id, failure_type)
+        if capability_id != "analytic.account.duplicate":
+            result = _deleted_result(_config_result(source, model, company_id))
+            source.unlink()
+            if source.exists():
+                raise _fail(failure_type, "odoo_write_error", "Native analytic deletion failed.", exit_code=6)
+            return result, False
+        expected = {**_analytic_account_values(source), "plan_id": source.plan_id.id}
+        expected.pop("name")
+        _ensure_ids(env, "account.analytic.plan", {expected["plan_id"]}, [], company_id, failure_type)
+        partner_id = expected["partner_id"]
+        _ensure_ids(env, "res.partner", {partner_id} if partner_id else set(), [("company_id", "in", [False, company_id])], company_id, failure_type)
+        candidates = _scoped(env, model, company_id).search([
+            ("company_id", "=", company_id), ("id", "!=", source.id), ("name", "=", parameters["name"]),
+        ], limit=2)
+        replay = bool(candidates)
+        if candidates:
+            values = {**_analytic_account_values(candidates), "plan_id": candidates.plan_id.id} if len(candidates) == 1 else {}
+            values.pop("name", None)
+            if len(candidates) != 1 or values != expected:
+                raise _fail(failure_type, "idempotency_conflict", "The analytic-account name belongs to another configuration.", exit_code=5)
+            target = candidates
+        else:
+            target = source.copy({"name": parameters["name"], "company_id": company_id})
+            target.invalidate_recordset()
+        actual = {**_analytic_account_values(target), "plan_id": target.plan_id.id}
+        actual.pop("name")
+        if (target.id == source.id or target.company_id.id != company_id
+            or target.name != parameters["name"] or actual != expected):
+            raise _fail(failure_type, "odoo_write_error", "Native analytic copy did not preserve its configuration.", exit_code=6)
+        result = _config_result(target, model, company_id)
+        result["source_id"] = source.id
+        return result, replay
+
+
 def _write_journal_processing(
     env: Any, capability_id: str, parameters: dict[str, Any],
     company_id: int, failure_type: type[Exception],
@@ -20271,6 +20336,8 @@ def _dispatch_allowed(
     marker: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if capability_id in analytic_processing.CAPABILITY_IDS:
+        return _write_analytic_processing(env, capability_id, parameters, company_id, failure_type)
     if capability_id in journal_processing.CAPABILITY_IDS:
         return _write_journal_processing(env, capability_id, parameters, company_id, failure_type)
     if capability_id in account_processing.CAPABILITY_IDS:

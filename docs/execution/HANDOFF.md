@@ -1,13 +1,14 @@
 # Odoo Accounting CLI V4 handoff
 
-Updated: 2026-10-01 (Asia/Shanghai)
+Updated: 2026-10-02 (Asia/Shanghai)
 
-## Current authoritative count — 2026-10-01
+## Current authoritative count — 2026-10-02
 
-476 registered IDs; 461 implemented handlers (228 reads, 233 writes);
-928 schemas; 388 unconfigured, 73 degraded, 15 disabled. Enabled-handler integration records:
-457 implemented, three planned, one failed. The latest native-reconciliation-rule
-checkpoint below is authoritative; older snapshots are historical.
+516 registered IDs; 501 implemented handlers (238 reads, 263 writes);
+1008 schemas; 427 unconfigured, 74 degraded, 15 disabled. Enabled-handler
+integration records: 497 implemented, three planned, one failed. The latest
+native analytic-processing checkpoint below is authoritative; older snapshots
+are historical. This is not a complete accounting denominator or percentage.
 
 ## Objective and working rule
 
@@ -5601,3 +5602,83 @@ Final metadata SHA256: `970ba5591e069cf5208d547f7c0279bc6ef39ee8e02ef1d498410bb7
 Registry file SHA256: `2ddeeef984ab43ee3ccc9336a60255b32c38fc1620d4cc4f7e607ee20475f632`.
 Canonical registry SHA256: `45f066e87b617220aa87c21cf88fd46899d1a9cad4a71be8a6cc10a7071d7df3`.
 Passing live log SHA256: `b182184abd5336cfbe4c2bbc48a8a325eb6883c4000f181a2e6b5cb73d039591`.
+
+## Latest checkpoint — native analytic processing, 2026-10-02
+
+516 registered IDs; 501 implemented handlers (238 reads, 263 writes);
+1008 schemas. Availability: 427 unconfigured, 74 degraded, 15 disabled.
+Enabled integrations: 497 implemented, three planned, one failed. Historical
+non-accounting extensions are included; these are not a complete accounting
+denominator, completion percentage or ordinary-runtime permission guarantee.
+
+Eight native analytic capabilities: date-scoped debit/credit/balance and native
+posted invoice/bill usage counts; actual-context applicability and automatic
+distribution resolution; company-owned analytic account duplication/deletion
+and applicability/distribution-model deletion. Existing analytic creates,
+archive/restore, manual-line maintenance and invoice/posting are reused.
+No additional plan mutator, arbitrary ORM dispatcher or dynamic DDL.
+
+Both isolated aliases passed one shared public CLI/real-ORM workflow in
+942.60 seconds as uid 5, su=False, company 1: eight new IDs, ten setup IDs
+and sixteen immediate replays per alias. Native dated sums and all-time cache
+isolation, archived reads and shared-account current-company sums are verified;
+foreign-company shared-account lines do not leak. Output currency is current
+company currency; conversion is the native current-date algorithm, not a new
+historical-FX calculation. Native usage counts distinct posted move IDs:
+two customer lines on one invoice count as one invoice, plus one vendor bill;
+drafts contribute zero. analytic.mixin uses SELECT DISTINCT move_id/account_id
+before aggregation; these are native document counts, not journal-item row counts.
+
+Native account copies preserve code/partner/active/plan/company, create distinct
+IDs, copy no analytic lines and preserve sources. Serial immediate replay,
+different-profile and ambiguous-name conflict, real deletion and fresh archived
+recreation are verified. Names are not unique; replay is neither concurrent
+exactly-once nor original-copy provenance proof. Native restricted analytic-line
+FK deletion denial preserves the account and lines. Removing manual lines then
+permits unused owned-account deletion. Delete has no tombstone/fake replay.
+
+Native applicability scoring honors ledger prefixes and actual product category;
+deleting the owned rule restores native default behavior. Native distribution
+honors ledger prefixes, partner, real tags, product/category, current company and
+model order; removing owned models changes selection and reaches native shared
+fallback. Empty unmatched distribution is valid. Its singleton id and audit model
+refer to the current res.company, not a fictitious distribution-model ID.
+All four writes reject shared and foreign targets; unavailable references and
+missing/deleted IDs are denied. Posted move
+identities/amounts/accounts/residuals/tax/distribution and existing plans remain
+unchanged. The existing project root is used; no multi-root fixture claim.
+
+Fresh cursors verify all synthetic objects and temporary manager/analytic group
+memberships rolled back, including before rethrow on failure. Attempt 1 is not
+acceptance: 106.31 seconds, a test-helper mismatch caught only AssertionError
+after the write helper unwrapped the correctly returned RuntimeFailure conflict.
+One-file fixture repair catches the actual expected failure. Attempt 2 (242.92s)
+had the wrong row-count expectation. A rolled-back public CLI diagnostic proved
+both real invoice lines were present with their distributions but native count
+was one invoice/one bill; native analytic.mixin SQL confirms distinct move IDs.
+Count computation is unchanged; the fixture and unpublished descriptions are
+corrected. A separate response-identity fix reports distribution resolution's
+company singleton under res.company and adds public/native regression checks.
+Failed logs are retained. Initial read-only preflight under root failed peer
+authentication before DB access; corrected runuser preflight passed.
+
+Local: 894 related read/new batch cases; 54 focused analytic/gating write cases;
+19 initial registry cases with one explicit known stale deselection; 18 new unit
+cases on the server before the shared smoke. Final server registry: 19 passed,
+one stale bank_statement_payment_maintenance deselection, not a full-suite pass.
+Ruff/diff and changed/staged-added-line privacy checks passed; full tree retains
+five historical document findings. Initial 31-file SHA allowlist backed up 12
+old files and deployed 19 new files; one fixture repair, four-file count/identity
+correction and two-file metadata closure likewise check prior SHA/backups.
+All 31 final code hashes match.
+Server STATUS/HANDOFF overlays stay untouched. Service PIDs/restarts unchanged;
+no business DB, installed addon/source, Pi/V2/V3, service/configuration or external
+payment/delivery changes. No ordinary-runtime manager/analytic grants persisted.
+
+Remaining limitations are unchanged: asset.validate failed; product accounting
+profile readback and two real external-send integrations remain planned. These
+are not silently converted to accepted capabilities. Continue the practical
+accounting library from native-source-backed gaps, without declaring full coverage.
+
+Reproducibility: registry file SHA256 ef22faaa34f6d4445e08e83bc8a3576f4ed72bc3c8cf50cf241d24596c19d21a;
+canonical registry SHA256 f252fdb993ae559296b51f22532e491b07aafffb25e9475dd539a9373e1d5e2a.

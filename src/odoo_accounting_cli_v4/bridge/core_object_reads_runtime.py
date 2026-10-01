@@ -10,6 +10,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from odoo_accounting_cli_v4 import account_processing_contracts as account_processing
+from odoo_accounting_cli_v4 import analytic_processing_contracts as analytic_processing
 from odoo_accounting_cli_v4 import (
     invoice_presentation_contracts as invoice_presentation,
 )
@@ -77,6 +78,10 @@ CAPABILITY_IDS = frozenset(
         "partner.invoice_delivery_preferences.get",
         "payment.bank_account_candidates.list",
         "payment.duplicate_candidates.list",
+        "analytic.account.balance.inspect",
+        "analytic.account.invoice_usage.inspect",
+        "analytic.applicability.resolve",
+        "analytic.distribution.resolve",
         "journal.processing_settings.get",
         "account.account.processing_settings.get",
         "tax.processing_settings.get",
@@ -817,6 +822,10 @@ _REQUIRED_MODELS = {
     "partner.bill_validation_preferences.get": ('res.company', 'res.partner'),
     "partner.invoice_delivery_preferences.get": ('res.company', 'res.partner', 'account.move', 'ir.actions.report'),
     "partner.payment_preferences.get": ('res.company', 'res.partner', 'account.payment.method.line', 'account.journal'),
+    'analytic.account.balance.inspect': ('res.company', 'account.analytic.account', 'account.analytic.plan', 'account.analytic.line', 'res.currency'),
+    'analytic.account.invoice_usage.inspect': ('res.company', 'account.analytic.account', 'account.move', 'account.move.line'),
+    'analytic.applicability.resolve': ('res.company', 'account.analytic.plan', 'account.analytic.applicability', 'account.account', 'product.product', 'product.category'),
+    'analytic.distribution.resolve': ('res.company', 'account.analytic.distribution.model', 'account.analytic.account', 'account.analytic.plan', 'account.account', 'res.partner', 'res.partner.category', 'product.product', 'product.category'),
     "journal.processing_settings.get": ("res.company", "account.journal", "account.account", "ir.actions.report"),
     "account.account.processing_settings.get": ('res.company', 'account.account', 'account.group', 'account.account.tag', 'account.tax', 'res.currency', 'account.move.line'),
     "tax.processing_settings.get": ('res.company', 'account.tax', 'account.tax.repartition.line', 'account.move.line', 'account.reconcile.model.line'),
@@ -1640,6 +1649,11 @@ def _scope_domain(env: Any, capability_id: str, company_id: int) -> list[Any]:
 def _valid_parameters(capability_id: str, parameters: Any) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id in analytic_processing.READ_IDS:
+        try:
+            return analytic_processing.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
     if capability_id == tax_processing.LIST_ID:
         return set(parameters) == {"tax_id", "after_id", "limit"} and _valid_id(parameters["tax_id"]) and (parameters["after_id"] is None or _valid_id(parameters["after_id"])) and _valid_limit(parameters["limit"])
     if capability_id == payment_term_processing.LIST_ID:
@@ -4635,6 +4649,70 @@ def _normalize_partner_preferences(env: Any, capability_id: str, rows: list[dict
     return result
 
 
+def _analytic_processing_rows(
+    env: Any, capability_id: str, parameters: dict[str, Any], company_id: int,
+) -> list[dict[str, Any]]:
+    def reference(model: str, record_id: int | None, domain: list[Any]) -> Any:
+        records = env[model].with_context(active_test=False, allowed_company_ids=[company_id])
+        return records.search([("id", "=", record_id), *domain], limit=1) if record_id else records.browse()
+
+    company = reference("res.company", company_id, [])
+    if capability_id in {analytic_processing.BALANCE_ID, analytic_processing.USAGE_ID}:
+        account = reference("account.analytic.account", parameters["analytic_account_id"], [("company_id", "in", [False, company_id])])
+        if not account:
+            return []
+        item = {"id": account.id, "company_id": account.company_id.id or None}
+        if capability_id == analytic_processing.BALANCE_ID:
+            metrics = ["debit", "credit", "balance"]
+            account = account.with_context(from_date=parameters["date_from"], to_date=parameters["date_to"])
+            account.invalidate_recordset(metrics)
+            try:
+                account._compute_debit_credit_balance()
+                item.update({field: _decimal_string(getattr(account, field)) for field in metrics})
+                item.update(currency_id=company.currency_id.id, date_from=parameters["date_from"], date_to=parameters["date_to"])
+            finally:
+                account.invalidate_recordset(metrics)
+        else:
+            fields = ["invoice_count", "vendor_bill_count"]
+            account.invalidate_recordset(fields)
+            item.update({field: getattr(account, field) for field in fields})
+    else:
+        ledger = reference("account.account", parameters["account_id"], [("company_ids", "in", [company_id])])
+        product = reference("product.product", parameters["product_id"], [("company_id", "in", [False, company_id])])
+        if parameters["account_id"] and not ledger or parameters["product_id"] and not product:
+            return []
+        if capability_id == analytic_processing.APPLICABILITY_ID:
+            plan = reference("account.analytic.plan", parameters["plan_id"], [])
+            if not plan:
+                return []
+            plan.invalidate_recordset(["applicability_ids"])
+            item = {"id": plan.id, "company_id": company_id, "applicability": plan._get_applicability(
+                company_id=company_id, business_domain=parameters["business_domain"],
+                account=ledger.id or False, product=product.id or False,
+            )}
+        else:
+            partner = reference("res.partner", parameters["partner_id"], [("company_id", "in", [False, company_id])])
+            if parameters["partner_id"] and not partner:
+                return []
+            models = env["account.analytic.distribution.model"].with_context(allowed_company_ids=[company_id])
+            distribution = models._get_distribution({
+                "company_id": company_id, "account_prefix": ledger.code or False,
+                "partner_id": partner.id or False, "partner_category_id": sorted(partner.category_id.ids),
+                "product_id": product.id or False, "product_categ_id": product.categ_id.id or False,
+            })
+            ids = {int(identifier) for key in distribution for identifier in key.split(",")}
+            accounts = env["account.analytic.account"].with_context(active_test=False, allowed_company_ids=[company_id]).search([
+                ("id", "in", sorted(ids)), ("company_id", "in", [False, company_id]),
+            ])
+            if set(accounts.ids) != ids:
+                raise ValueError("native analytic distribution contains unavailable accounts")
+            item = {"id": company_id, "company_id": company_id,
+                    "analytic_distribution": {key: _decimal_string(value) for key, value in distribution.items()}}
+    if not analytic_processing.valid_read_item(capability_id, item, company_id):
+        raise ValueError("invalid native analytic-processing result")
+    return [item]
+
+
 def _normalize_journal_processing(rows: list[dict[str, Any]], company_id: int) -> list[dict[str, Any]]:
     items = []
     for row in rows:
@@ -6418,7 +6496,7 @@ def dispatch(
         required_group = (
             "account.group_account_user"
             if capability_id
-            in {"analytic.applicability.list", "analytic.applicability.get"}
+            in {"analytic.applicability.list", "analytic.applicability.get", analytic_processing.APPLICABILITY_ID}
             else "account.group_account_readonly"
         )
         access_allowed = bool(
@@ -6439,7 +6517,9 @@ def dispatch(
 
         cursor_found = True
         removes_all_taxes = False
-        if capability_id == tax_processing.LIST_ID:
+        if capability_id in analytic_processing.READ_IDS:
+            rows = _analytic_processing_rows(env, capability_id, parameters, company_id)
+        elif capability_id == tax_processing.LIST_ID:
             rows, cursor_found = _tax_usage_rows(env, parameters, company_id)
         elif capability_id == payment_term_processing.LIST_ID:
             rows, cursor_found = _payment_term_usage_rows(env, parameters, company_id)
@@ -6520,7 +6600,9 @@ def dispatch(
                 cursor_found=False,
             )
 
-        if capability_id == journal_processing.GET_ID:
+        if capability_id in analytic_processing.READ_IDS:
+            items = rows
+        elif capability_id == journal_processing.GET_ID:
             items = _normalize_journal_processing(rows, company_id)
         elif capability_id == account_processing.GET_ID:
             items = _normalize_account_processing(rows, company_id)

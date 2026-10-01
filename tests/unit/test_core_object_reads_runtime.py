@@ -16,6 +16,11 @@ from odoo_accounting_cli_v4.capabilities.core_object_reads import (
 
 EXPECTED_CAPABILITY_IDS = frozenset(
     {
+        "analytic.account.balance.inspect",
+        "analytic.account.invoice_usage.inspect",
+        "analytic.applicability.resolve",
+        "analytic.distribution.resolve",
+
         "journal.processing_settings.get",
         "account.account.processing_settings.get",
         "tax.processing_settings.get",
@@ -174,6 +179,10 @@ GET_ID_FIELDS = {
 }
 
 PRIMARY_MODELS = {
+    "analytic.account.balance.inspect": "account.analytic.account",
+    "analytic.account.invoice_usage.inspect": "account.analytic.account",
+    "analytic.applicability.resolve": "account.analytic.plan",
+    "analytic.distribution.resolve": "account.analytic.distribution.model",
     "journal.processing_settings.get": "account.journal",
     "account.account.processing_settings.get": "account.account",
     "tax.processing_settings.get": "account.tax",
@@ -1473,6 +1482,13 @@ def _dispatch(
 
 
 def _parameters(capability_id: str) -> dict[str, Any]:
+    if capability_id in {
+        "analytic.account.balance.inspect", "analytic.account.invoice_usage.inspect",
+        "analytic.applicability.resolve", "analytic.distribution.resolve",
+    }:
+        from test_analytic_processing_batch import READ_PARAMETERS
+
+        return dict(READ_PARAMETERS[capability_id])
     if capability_id == "journal.processing_settings.get":
         return {"journal_id":31}
     if capability_id == "account.account.processing_settings.get":

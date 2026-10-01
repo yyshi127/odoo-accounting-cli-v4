@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 from test_account_processing_batch import PARAMETERS as ACCOUNT_PROCESSING_PARAMETERS
 from test_account_processing_batch import result as account_processing_result
+from test_analytic_processing_batch import PARAMETERS as ANALYTIC_PROCESSING_PARAMETERS
+from test_analytic_processing_batch import result as analytic_processing_result
 from test_fiscal_mapping_writes import PARAMETERS as FISCAL_MAPPING_PARAMETERS
 from test_fiscal_mapping_writes import result as fiscal_mapping_result
 from test_invoice_presentation_batch import (
@@ -856,6 +858,7 @@ PARAMETERS = {
 
 
 PARAMETERS.update(deepcopy(PAYMENT_CONFIGURATION_PARAMETERS))
+PARAMETERS.update(deepcopy(ANALYTIC_PROCESSING_PARAMETERS))
 PARAMETERS.update(deepcopy(JOURNAL_PROCESSING_PARAMETERS))
 PARAMETERS.update(deepcopy(ACCOUNT_PROCESSING_PARAMETERS))
 PARAMETERS.update(deepcopy(TAX_PROCESSING_PARAMETERS))
@@ -886,7 +889,7 @@ def _request(capability_id: str) -> dict:
 
 
 def _key(capability_id: str) -> str:
-    if capability_id in JOURNAL_PROCESSING_PARAMETERS or capability_id in ACCOUNT_PROCESSING_PARAMETERS or capability_id in TAX_PROCESSING_PARAMETERS or capability_id in PAYMENT_TERM_PROCESSING_PARAMETERS or capability_id in RECONCILIATION_PROCESSING_PARAMETERS or capability_id in PAYMENT_PROCESSING_PARAMETERS or capability_id in INVOICE_PRESENTATION_PARAMETERS or capability_id in MOVE_PROCESSING_PARAMETERS or capability_id in PARTNER_PREFERENCES_PARAMETERS or capability_id in PAYMENT_CONFIGURATION_PARAMETERS or capability_id in REPORT_BUDGET_PARAMETERS or capability_id in FISCAL_MAPPING_PARAMETERS:
+    if capability_id in ANALYTIC_PROCESSING_PARAMETERS or capability_id in JOURNAL_PROCESSING_PARAMETERS or capability_id in ACCOUNT_PROCESSING_PARAMETERS or capability_id in TAX_PROCESSING_PARAMETERS or capability_id in PAYMENT_TERM_PROCESSING_PARAMETERS or capability_id in RECONCILIATION_PROCESSING_PARAMETERS or capability_id in PAYMENT_PROCESSING_PARAMETERS or capability_id in INVOICE_PRESENTATION_PARAMETERS or capability_id in MOVE_PROCESSING_PARAMETERS or capability_id in PARTNER_PREFERENCES_PARAMETERS or capability_id in PAYMENT_CONFIGURATION_PARAMETERS or capability_id in REPORT_BUDGET_PARAMETERS or capability_id in FISCAL_MAPPING_PARAMETERS:
         parameters = validate_core_write_request(capability_id, _request(capability_id))[2]
         return _expected_idempotency_key(capability_id, parameters, 7)
     if capability_id in {
@@ -1178,6 +1181,10 @@ def _key(capability_id: str) -> str:
 
 
 def _result(capability_id: str, **changes) -> dict:
+    if capability_id in ANALYTIC_PROCESSING_PARAMETERS:
+        result = analytic_processing_result(capability_id, PARAMETERS[capability_id])
+        result.update(changes)
+        return result
     if capability_id in JOURNAL_PROCESSING_PARAMETERS:
         result = journal_processing_result(capability_id, PARAMETERS[capability_id])
         result.update(changes)

@@ -35467,6 +35467,1001 @@
         ]
       },
       "handler_key": "core_write"
+    },
+    "analytic.account.balance.inspect": {
+      "summary": {
+        "zh_CN": "查看指定期间原生分析借贷和余额",
+        "en_US": "Inspect native date-scoped analytic debit, credit and balance"
+      },
+      "domain": "analytic_accounting",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "analytic",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "account.analytic.account",
+          "account.analytic.plan",
+          "account.analytic.line",
+          "res.currency"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "analytic/models/analytic_account.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/analytic.account.balance.inspect.request.schema.json",
+        "response": "schemas/v1/analytic.account.balance.inspect.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "analytic",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.analytic.account:read",
+          "account.analytic.plan:read",
+          "account.analytic.line:read",
+          "res.currency:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_native_analytic_compute_or_rule_resolution",
+        "verify": "closed_typed_result_and_query_scope_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_analytic_processing_batch.py"
+          ],
+          "reason": "Closed request normalization and schemas, public CLI confirmation and deterministic keys, typed company/query/result binding, malformed input and unavailable/result identity rejection, and no fabricated delete replay. Actual native methods and ACL/constraint behavior are verified by the shared integration workflow, not by these port-level unit fixtures."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_analytic_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs, ten setup IDs and sixteen immediate replays per alias. Native date-scoped debit/credit/balance is exact, archived/shared reads work, foreign-company shared-account lines are excluded and dated computation does not pollute all-time cache. Native posted usage counts distinct move IDs: two matching lines on one customer invoice count as one invoice, plus one vendor bill; drafts contribute zero, reflecting analytic.mixin SELECT DISTINCT move_id/account_id. Native copies preserve code/partner/active/plan/company, do not copy lines, retain the source, support serial replay/profile conflict/ambiguous-name rejection and recreate deleted targets with fresh archived identities. Native analytic-line account FK deletion denial is checked directly and preserves source/lines; unused owned accounts delete with no missing-target replay. Native applicability prefix/product-category scoring and distribution prefix/partner/tags/product/category precedence use actual references; deleting company-owned rules/models changes resolution, including native shared fallback. Distribution resolution binds audit metadata to its company singleton, not a fictitious distribution-model ID. All four writes reject shared/foreign targets; missing references are denied. Posted entries and existing plans are unchanged. Fresh-cursor synthetic data and temporary manager/analytic group rollback verified. Existing project root used, no plan mutation or dynamic DDL; no multi-root fixture coverage or historical dated FX claim. No business DB, addon/source, service or external payment changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability depends on configured database, company and business-user ACLs."
+      },
+      "routing": {
+        "object": "analytic.account",
+        "actions": [
+          "inspect"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "查看指定期间原生分析借贷和余额"
+          ],
+          "en_US": [
+            "Inspect native date-scoped analytic debit, credit and balance"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改分析计划动态字段",
+            "修改其他公司或共享对象",
+            "重写已过账分录"
+          ],
+          "en_US": [
+            "Changing dynamic analytic-plan fields",
+            "Mutating foreign-company or shared targets",
+            "Rewriting posted accounting entries"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "analytic_account_balance_inspect"
+    },
+    "analytic.account.delete": {
+      "summary": {
+        "zh_CN": "原生删除公司分析账户",
+        "en_US": "Delete a company-owned analytic account natively"
+      },
+      "domain": "analytic_accounting",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "analytic",
+          "base",
+          "mail"
+        ],
+        "models": [
+          "account.analytic.account",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "analytic/models/analytic_account.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/analytic.account.delete.request.schema.json",
+        "response": "schemas/v1/analytic.account.delete.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "analytic",
+          "base",
+          "mail"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.analytic.account:read",
+          "account.analytic.account:unlink",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_copy_or_unlink_as_business_user_for_company_owned_targets",
+        "verify": "same_savepoint_identity_and_native_configuration_reread",
+        "idempotency": "serial_company_name_profile_replay_for_copy_and_no_missing_delete_replay",
+        "reverse": "backup_subject_to_native_acl_and_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_analytic_processing_batch.py"
+          ],
+          "reason": "Closed request normalization and schemas, public CLI confirmation and deterministic keys, typed company/query/result binding, malformed input and unavailable/result identity rejection, and no fabricated delete replay. Actual native methods and ACL/constraint behavior are verified by the shared integration workflow, not by these port-level unit fixtures."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_analytic_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs, ten setup IDs and sixteen immediate replays per alias. Native date-scoped debit/credit/balance is exact, archived/shared reads work, foreign-company shared-account lines are excluded and dated computation does not pollute all-time cache. Native posted usage counts distinct move IDs: two matching lines on one customer invoice count as one invoice, plus one vendor bill; drafts contribute zero, reflecting analytic.mixin SELECT DISTINCT move_id/account_id. Native copies preserve code/partner/active/plan/company, do not copy lines, retain the source, support serial replay/profile conflict/ambiguous-name rejection and recreate deleted targets with fresh archived identities. Native analytic-line account FK deletion denial is checked directly and preserves source/lines; unused owned accounts delete with no missing-target replay. Native applicability prefix/product-category scoring and distribution prefix/partner/tags/product/category precedence use actual references; deleting company-owned rules/models changes resolution, including native shared fallback. Distribution resolution binds audit metadata to its company singleton, not a fictitious distribution-model ID. All four writes reject shared/foreign targets; missing references are denied. Posted entries and existing plans are unchanged. Fresh-cursor synthetic data and temporary manager/analytic group rollback verified. Existing project root used, no plan mutation or dynamic DDL; no multi-root fixture coverage or historical dated FX claim. No business DB, addon/source, service or external payment changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability depends on configured database, company and business-user ACLs."
+      },
+      "routing": {
+        "object": "analytic.account",
+        "actions": [
+          "delete"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "原生删除公司分析账户"
+          ],
+          "en_US": [
+            "Delete a company-owned analytic account natively"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改分析计划动态字段",
+            "修改其他公司或共享对象",
+            "重写已过账分录"
+          ],
+          "en_US": [
+            "Changing dynamic analytic-plan fields",
+            "Mutating foreign-company or shared targets",
+            "Rewriting posted accounting entries"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "analytic.account.duplicate": {
+      "summary": {
+        "zh_CN": "原生复制公司分析账户",
+        "en_US": "Duplicate a company-owned analytic account natively"
+      },
+      "domain": "analytic_accounting",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "analytic",
+          "base",
+          "mail"
+        ],
+        "models": [
+          "account.analytic.account",
+          "account.analytic.plan",
+          "res.company",
+          "res.partner"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "analytic/models/analytic_account.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/analytic.account.duplicate.request.schema.json",
+        "response": "schemas/v1/analytic.account.duplicate.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "analytic",
+          "base",
+          "mail"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.analytic.account:create",
+          "account.analytic.account:read",
+          "account.analytic.plan:read",
+          "res.company:read",
+          "res.partner:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_copy_or_unlink_as_business_user_for_company_owned_targets",
+        "verify": "same_savepoint_identity_and_native_configuration_reread",
+        "idempotency": "serial_company_name_profile_replay_for_copy_and_no_missing_delete_replay",
+        "reverse": "backup_subject_to_native_acl_and_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_analytic_processing_batch.py"
+          ],
+          "reason": "Closed request normalization and schemas, public CLI confirmation and deterministic keys, typed company/query/result binding, malformed input and unavailable/result identity rejection, and no fabricated delete replay. Actual native methods and ACL/constraint behavior are verified by the shared integration workflow, not by these port-level unit fixtures."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_analytic_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs, ten setup IDs and sixteen immediate replays per alias. Native date-scoped debit/credit/balance is exact, archived/shared reads work, foreign-company shared-account lines are excluded and dated computation does not pollute all-time cache. Native posted usage counts distinct move IDs: two matching lines on one customer invoice count as one invoice, plus one vendor bill; drafts contribute zero, reflecting analytic.mixin SELECT DISTINCT move_id/account_id. Native copies preserve code/partner/active/plan/company, do not copy lines, retain the source, support serial replay/profile conflict/ambiguous-name rejection and recreate deleted targets with fresh archived identities. Native analytic-line account FK deletion denial is checked directly and preserves source/lines; unused owned accounts delete with no missing-target replay. Native applicability prefix/product-category scoring and distribution prefix/partner/tags/product/category precedence use actual references; deleting company-owned rules/models changes resolution, including native shared fallback. Distribution resolution binds audit metadata to its company singleton, not a fictitious distribution-model ID. All four writes reject shared/foreign targets; missing references are denied. Posted entries and existing plans are unchanged. Fresh-cursor synthetic data and temporary manager/analytic group rollback verified. Existing project root used, no plan mutation or dynamic DDL; no multi-root fixture coverage or historical dated FX claim. No business DB, addon/source, service or external payment changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "degraded",
+        "reason_code": "concurrent_idempotency_limit",
+        "reason": "Native analytic names are not unique: company/name/profile matching supports serial replay, not concurrent exactly-once or original-copy provenance."
+      },
+      "routing": {
+        "object": "analytic.account",
+        "actions": [
+          "duplicate"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "原生复制公司分析账户"
+          ],
+          "en_US": [
+            "Duplicate a company-owned analytic account natively"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改分析计划动态字段",
+            "修改其他公司或共享对象",
+            "重写已过账分录"
+          ],
+          "en_US": [
+            "Changing dynamic analytic-plan fields",
+            "Mutating foreign-company or shared targets",
+            "Rewriting posted accounting entries"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "analytic.account.invoice_usage.inspect": {
+      "summary": {
+        "zh_CN": "查看原生发票和账单分析计数",
+        "en_US": "Inspect native invoice and vendor-bill analytic counts"
+      },
+      "domain": "analytic_accounting",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "analytic",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "account.analytic.account",
+          "account.move",
+          "account.move.line"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_analytic_account.py",
+          "analytic/models/analytic_mixin.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/analytic.account.invoice_usage.inspect.request.schema.json",
+        "response": "schemas/v1/analytic.account.invoice_usage.inspect.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "analytic",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.analytic.account:read",
+          "account.move:read",
+          "account.move.line:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_native_analytic_compute_or_rule_resolution",
+        "verify": "closed_typed_result_and_query_scope_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_analytic_processing_batch.py"
+          ],
+          "reason": "Closed request normalization and schemas, public CLI confirmation and deterministic keys, typed company/query/result binding, malformed input and unavailable/result identity rejection, and no fabricated delete replay. Actual native methods and ACL/constraint behavior are verified by the shared integration workflow, not by these port-level unit fixtures."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_analytic_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs, ten setup IDs and sixteen immediate replays per alias. Native date-scoped debit/credit/balance is exact, archived/shared reads work, foreign-company shared-account lines are excluded and dated computation does not pollute all-time cache. Native posted usage counts distinct move IDs: two matching lines on one customer invoice count as one invoice, plus one vendor bill; drafts contribute zero, reflecting analytic.mixin SELECT DISTINCT move_id/account_id. Native copies preserve code/partner/active/plan/company, do not copy lines, retain the source, support serial replay/profile conflict/ambiguous-name rejection and recreate deleted targets with fresh archived identities. Native analytic-line account FK deletion denial is checked directly and preserves source/lines; unused owned accounts delete with no missing-target replay. Native applicability prefix/product-category scoring and distribution prefix/partner/tags/product/category precedence use actual references; deleting company-owned rules/models changes resolution, including native shared fallback. Distribution resolution binds audit metadata to its company singleton, not a fictitious distribution-model ID. All four writes reject shared/foreign targets; missing references are denied. Posted entries and existing plans are unchanged. Fresh-cursor synthetic data and temporary manager/analytic group rollback verified. Existing project root used, no plan mutation or dynamic DDL; no multi-root fixture coverage or historical dated FX claim. No business DB, addon/source, service or external payment changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability depends on configured database, company and business-user ACLs."
+      },
+      "routing": {
+        "object": "analytic.account",
+        "actions": [
+          "inspect"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "查看原生发票和账单分析计数"
+          ],
+          "en_US": [
+            "Inspect native invoice and vendor-bill analytic counts"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改分析计划动态字段",
+            "修改其他公司或共享对象",
+            "重写已过账分录"
+          ],
+          "en_US": [
+            "Changing dynamic analytic-plan fields",
+            "Mutating foreign-company or shared targets",
+            "Rewriting posted accounting entries"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "analytic_account_invoice_usage_inspect"
+    },
+    "analytic.applicability.delete": {
+      "summary": {
+        "zh_CN": "删除公司分析适用性规则",
+        "en_US": "Delete a company-owned analytic applicability rule"
+      },
+      "domain": "analytic_accounting",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "analytic",
+          "base",
+          "mail"
+        ],
+        "models": [
+          "account.analytic.applicability",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "analytic/models/analytic_plan.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/analytic.applicability.delete.request.schema.json",
+        "response": "schemas/v1/analytic.applicability.delete.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "analytic",
+          "base",
+          "mail"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.analytic.applicability:read",
+          "account.analytic.applicability:unlink",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_copy_or_unlink_as_business_user_for_company_owned_targets",
+        "verify": "same_savepoint_identity_and_native_configuration_reread",
+        "idempotency": "serial_company_name_profile_replay_for_copy_and_no_missing_delete_replay",
+        "reverse": "backup_subject_to_native_acl_and_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_analytic_processing_batch.py"
+          ],
+          "reason": "Closed request normalization and schemas, public CLI confirmation and deterministic keys, typed company/query/result binding, malformed input and unavailable/result identity rejection, and no fabricated delete replay. Actual native methods and ACL/constraint behavior are verified by the shared integration workflow, not by these port-level unit fixtures."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_analytic_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs, ten setup IDs and sixteen immediate replays per alias. Native date-scoped debit/credit/balance is exact, archived/shared reads work, foreign-company shared-account lines are excluded and dated computation does not pollute all-time cache. Native posted usage counts distinct move IDs: two matching lines on one customer invoice count as one invoice, plus one vendor bill; drafts contribute zero, reflecting analytic.mixin SELECT DISTINCT move_id/account_id. Native copies preserve code/partner/active/plan/company, do not copy lines, retain the source, support serial replay/profile conflict/ambiguous-name rejection and recreate deleted targets with fresh archived identities. Native analytic-line account FK deletion denial is checked directly and preserves source/lines; unused owned accounts delete with no missing-target replay. Native applicability prefix/product-category scoring and distribution prefix/partner/tags/product/category precedence use actual references; deleting company-owned rules/models changes resolution, including native shared fallback. Distribution resolution binds audit metadata to its company singleton, not a fictitious distribution-model ID. All four writes reject shared/foreign targets; missing references are denied. Posted entries and existing plans are unchanged. Fresh-cursor synthetic data and temporary manager/analytic group rollback verified. Existing project root used, no plan mutation or dynamic DDL; no multi-root fixture coverage or historical dated FX claim. No business DB, addon/source, service or external payment changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability depends on configured database, company and business-user ACLs."
+      },
+      "routing": {
+        "object": "analytic.applicability",
+        "actions": [
+          "delete"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "删除公司分析适用性规则"
+          ],
+          "en_US": [
+            "Delete a company-owned analytic applicability rule"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改分析计划动态字段",
+            "修改其他公司或共享对象",
+            "重写已过账分录"
+          ],
+          "en_US": [
+            "Changing dynamic analytic-plan fields",
+            "Mutating foreign-company or shared targets",
+            "Rewriting posted accounting entries"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "analytic.applicability.resolve": {
+      "summary": {
+        "zh_CN": "解析原生分析适用性",
+        "en_US": "Resolve native analytic applicability"
+      },
+      "domain": "analytic_accounting",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "analytic",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "account.analytic.plan",
+          "account.analytic.applicability",
+          "account.account",
+          "product.product",
+          "product.category"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "analytic/models/analytic_plan.py",
+          "account/models/account_analytic_plan.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/analytic.applicability.resolve.request.schema.json",
+        "response": "schemas/v1/analytic.applicability.resolve.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "analytic",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_user"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.analytic.plan:read",
+          "account.analytic.applicability:read",
+          "account.account:read",
+          "product.product:read",
+          "product.category:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_native_analytic_compute_or_rule_resolution",
+        "verify": "closed_typed_result_and_query_scope_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_analytic_processing_batch.py"
+          ],
+          "reason": "Closed request normalization and schemas, public CLI confirmation and deterministic keys, typed company/query/result binding, malformed input and unavailable/result identity rejection, and no fabricated delete replay. Actual native methods and ACL/constraint behavior are verified by the shared integration workflow, not by these port-level unit fixtures."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_analytic_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs, ten setup IDs and sixteen immediate replays per alias. Native date-scoped debit/credit/balance is exact, archived/shared reads work, foreign-company shared-account lines are excluded and dated computation does not pollute all-time cache. Native posted usage counts distinct move IDs: two matching lines on one customer invoice count as one invoice, plus one vendor bill; drafts contribute zero, reflecting analytic.mixin SELECT DISTINCT move_id/account_id. Native copies preserve code/partner/active/plan/company, do not copy lines, retain the source, support serial replay/profile conflict/ambiguous-name rejection and recreate deleted targets with fresh archived identities. Native analytic-line account FK deletion denial is checked directly and preserves source/lines; unused owned accounts delete with no missing-target replay. Native applicability prefix/product-category scoring and distribution prefix/partner/tags/product/category precedence use actual references; deleting company-owned rules/models changes resolution, including native shared fallback. Distribution resolution binds audit metadata to its company singleton, not a fictitious distribution-model ID. All four writes reject shared/foreign targets; missing references are denied. Posted entries and existing plans are unchanged. Fresh-cursor synthetic data and temporary manager/analytic group rollback verified. Existing project root used, no plan mutation or dynamic DDL; no multi-root fixture coverage or historical dated FX claim. No business DB, addon/source, service or external payment changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability depends on configured database, company and business-user ACLs."
+      },
+      "routing": {
+        "object": "analytic.applicability",
+        "actions": [
+          "resolve"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "解析原生分析适用性"
+          ],
+          "en_US": [
+            "Resolve native analytic applicability"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改分析计划动态字段",
+            "修改其他公司或共享对象",
+            "重写已过账分录"
+          ],
+          "en_US": [
+            "Changing dynamic analytic-plan fields",
+            "Mutating foreign-company or shared targets",
+            "Rewriting posted accounting entries"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "analytic_applicability_resolve"
+    },
+    "analytic.distribution.resolve": {
+      "summary": {
+        "zh_CN": "解析原生自动分析分配",
+        "en_US": "Resolve native automatic analytic distribution"
+      },
+      "domain": "analytic_accounting",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "analytic",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "account.analytic.distribution.model",
+          "account.analytic.account",
+          "account.analytic.plan",
+          "account.account",
+          "res.partner",
+          "res.partner.category",
+          "product.product",
+          "product.category"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "analytic/models/analytic_distribution_model.py",
+          "account/models/account_analytic_distribution_model.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/analytic.distribution.resolve.request.schema.json",
+        "response": "schemas/v1/analytic.distribution.resolve.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "analytic",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.analytic.distribution.model:read",
+          "account.analytic.account:read",
+          "account.analytic.plan:read",
+          "account.account:read",
+          "res.partner:read",
+          "res.partner.category:read",
+          "product.product:read",
+          "product.category:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_native_analytic_compute_or_rule_resolution",
+        "verify": "closed_typed_result_and_query_scope_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_analytic_processing_batch.py"
+          ],
+          "reason": "Closed request normalization and schemas, public CLI confirmation and deterministic keys, typed company/query/result binding, malformed input and unavailable/result identity rejection, and no fabricated delete replay. Actual native methods and ACL/constraint behavior are verified by the shared integration workflow, not by these port-level unit fixtures."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_analytic_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs, ten setup IDs and sixteen immediate replays per alias. Native date-scoped debit/credit/balance is exact, archived/shared reads work, foreign-company shared-account lines are excluded and dated computation does not pollute all-time cache. Native posted usage counts distinct move IDs: two matching lines on one customer invoice count as one invoice, plus one vendor bill; drafts contribute zero, reflecting analytic.mixin SELECT DISTINCT move_id/account_id. Native copies preserve code/partner/active/plan/company, do not copy lines, retain the source, support serial replay/profile conflict/ambiguous-name rejection and recreate deleted targets with fresh archived identities. Native analytic-line account FK deletion denial is checked directly and preserves source/lines; unused owned accounts delete with no missing-target replay. Native applicability prefix/product-category scoring and distribution prefix/partner/tags/product/category precedence use actual references; deleting company-owned rules/models changes resolution, including native shared fallback. Distribution resolution binds audit metadata to its company singleton, not a fictitious distribution-model ID. All four writes reject shared/foreign targets; missing references are denied. Posted entries and existing plans are unchanged. Fresh-cursor synthetic data and temporary manager/analytic group rollback verified. Existing project root used, no plan mutation or dynamic DDL; no multi-root fixture coverage or historical dated FX claim. No business DB, addon/source, service or external payment changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability depends on configured database, company and business-user ACLs."
+      },
+      "routing": {
+        "object": "analytic.distribution_model",
+        "actions": [
+          "resolve"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "解析原生自动分析分配"
+          ],
+          "en_US": [
+            "Resolve native automatic analytic distribution"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改分析计划动态字段",
+            "修改其他公司或共享对象",
+            "重写已过账分录"
+          ],
+          "en_US": [
+            "Changing dynamic analytic-plan fields",
+            "Mutating foreign-company or shared targets",
+            "Rewriting posted accounting entries"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "analytic_distribution_resolve"
+    },
+    "analytic.distribution_model.delete": {
+      "summary": {
+        "zh_CN": "删除公司分析分配模型",
+        "en_US": "Delete a company-owned analytic distribution model"
+      },
+      "domain": "analytic_accounting",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "analytic",
+          "base",
+          "mail"
+        ],
+        "models": [
+          "account.analytic.distribution.model",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "analytic/models/analytic_distribution_model.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/analytic.distribution_model.delete.request.schema.json",
+        "response": "schemas/v1/analytic.distribution_model.delete.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "analytic",
+          "base",
+          "mail"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.analytic.distribution.model:read",
+          "account.analytic.distribution.model:unlink",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_copy_or_unlink_as_business_user_for_company_owned_targets",
+        "verify": "same_savepoint_identity_and_native_configuration_reread",
+        "idempotency": "serial_company_name_profile_replay_for_copy_and_no_missing_delete_replay",
+        "reverse": "backup_subject_to_native_acl_and_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_analytic_processing_batch.py"
+          ],
+          "reason": "Closed request normalization and schemas, public CLI confirmation and deterministic keys, typed company/query/result binding, malformed input and unavailable/result identity rejection, and no fabricated delete replay. Actual native methods and ACL/constraint behavior are verified by the shared integration workflow, not by these port-level unit fixtures."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_analytic_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs, ten setup IDs and sixteen immediate replays per alias. Native date-scoped debit/credit/balance is exact, archived/shared reads work, foreign-company shared-account lines are excluded and dated computation does not pollute all-time cache. Native posted usage counts distinct move IDs: two matching lines on one customer invoice count as one invoice, plus one vendor bill; drafts contribute zero, reflecting analytic.mixin SELECT DISTINCT move_id/account_id. Native copies preserve code/partner/active/plan/company, do not copy lines, retain the source, support serial replay/profile conflict/ambiguous-name rejection and recreate deleted targets with fresh archived identities. Native analytic-line account FK deletion denial is checked directly and preserves source/lines; unused owned accounts delete with no missing-target replay. Native applicability prefix/product-category scoring and distribution prefix/partner/tags/product/category precedence use actual references; deleting company-owned rules/models changes resolution, including native shared fallback. Distribution resolution binds audit metadata to its company singleton, not a fictitious distribution-model ID. All four writes reject shared/foreign targets; missing references are denied. Posted entries and existing plans are unchanged. Fresh-cursor synthetic data and temporary manager/analytic group rollback verified. Existing project root used, no plan mutation or dynamic DDL; no multi-root fixture coverage or historical dated FX claim. No business DB, addon/source, service or external payment changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability depends on configured database, company and business-user ACLs."
+      },
+      "routing": {
+        "object": "analytic.distribution_model",
+        "actions": [
+          "delete"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "删除公司分析分配模型"
+          ],
+          "en_US": [
+            "Delete a company-owned analytic distribution model"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改分析计划动态字段",
+            "修改其他公司或共享对象",
+            "重写已过账分录"
+          ],
+          "en_US": [
+            "Changing dynamic analytic-plan fields",
+            "Mutating foreign-company or shared targets",
+            "Rewriting posted accounting entries"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
     }
   }
 }

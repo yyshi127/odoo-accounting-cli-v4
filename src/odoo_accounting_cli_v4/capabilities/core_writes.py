@@ -14,6 +14,7 @@ from time import strftime, strptime
 from typing import Any, Protocol
 
 from odoo_accounting_cli_v4 import account_processing_contracts as account_processing
+from odoo_accounting_cli_v4 import analytic_processing_contracts as analytic_processing
 from odoo_accounting_cli_v4 import fiscal_mapping_contracts as fiscal_mappings
 from odoo_accounting_cli_v4 import (
     invoice_presentation_contracts as invoice_presentation,
@@ -34,7 +35,7 @@ from odoo_accounting_cli_v4 import (
 from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
 from odoo_accounting_cli_v4 import tax_processing_contracts as tax_processing
 
-CORE_WRITE_CAPABILITY_IDS = journal_processing.CAPABILITY_IDS | account_processing.CAPABILITY_IDS | tax_processing.CAPABILITY_IDS | payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
+CORE_WRITE_CAPABILITY_IDS = analytic_processing.CAPABILITY_IDS | journal_processing.CAPABILITY_IDS | account_processing.CAPABILITY_IDS | tax_processing.CAPABILITY_IDS | payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -4289,7 +4290,12 @@ def validate_core_write_request(
             code="capability_unavailable",
         )
     request_id, context, parameters = _validate_envelope(request)
-    if capability_id in journal_processing.CAPABILITY_IDS:
+    if capability_id in analytic_processing.CAPABILITY_IDS:
+        try:
+            normalized = analytic_processing.normalize_parameters(capability_id, parameters)
+        except ValueError as exc:
+            raise _invalid(str(exc)) from exc
+    elif capability_id in journal_processing.CAPABILITY_IDS:
         try:
             normalized = journal_processing.normalize_parameters(capability_id, parameters)
         except ValueError as exc:
@@ -4541,6 +4547,8 @@ def validate_core_write_request(
 def _expected_idempotency_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in analytic_processing.CAPABILITY_IDS:
+        return analytic_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in journal_processing.CAPABILITY_IDS:
         return journal_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in account_processing.CAPABILITY_IDS:
@@ -5252,6 +5260,18 @@ def _validate_result(
 ) -> dict[str, Any]:
     if not _valid_result_shape(result) or result["company_id"] != company_id:
         raise _failed("Odoo returned a malformed or out-of-scope core-write result.")
+
+    if capability_id in analytic_processing.CAPABILITY_IDS:
+        duplicate = capability_id == "analytic.account.duplicate"
+        source = parameters[analytic_processing.ID_FIELDS[capability_id]]
+        if (result["model"] != analytic_processing.MODELS[capability_id]
+            or (duplicate and (result["id"] == source or result["source_id"] != source or result["name"] != parameters["name"]))
+            or (not duplicate and (result["id"] != source or result["source_id"] is not None or idempotent_replay))
+            or result["state"] not in ({"active", "archived"} if duplicate else {"deleted"})
+            or result["move_type"] is not None or result["line_ids"] or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None or result["reconciled"]):
+            raise _failed("Odoo returned a mismatched native analytic-maintenance result.")
+        return deepcopy(result)
 
     if capability_id in journal_processing.CAPABILITY_IDS:
         duplicate = capability_id == "journal.duplicate"
