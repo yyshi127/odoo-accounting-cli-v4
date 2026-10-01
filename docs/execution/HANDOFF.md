@@ -4,9 +4,9 @@ Updated: 2026-10-01 (Asia/Shanghai)
 
 ## Current authoritative count — 2026-10-01
 
-451 registered IDs; 436 implemented handlers (221 reads, 215 writes);
-878 schemas; 363 unconfigured, 73 degraded, 15 disabled. Enabled-handler integration records:
-432 implemented, three planned, one failed. The latest invoice/entry-processing
+459 registered IDs; 444 implemented handlers (223 reads, 221 writes);
+894 schemas; 371 unconfigured, 73 degraded, 15 disabled. Enabled-handler integration records:
+440 implemented, three planned, one failed. The latest invoice-presentation/fiscal
 checkpoint below is authoritative; older snapshots are historical.
 
 ## Objective and working rule
@@ -4904,3 +4904,107 @@ frameworks. Asset validation remains failed; product accounting-profile
 readback and two external report sends remain planned. Installed-addon
 repair and actual external delivery need separate authority. The overall
 goal stays active; complete accounting coverage is not yet proven.
+
+## Invoice presentation and fiscal refresh — 2026-10-01
+
+Baseline: `befc58a`. Eight new capability IDs, not aliases: 459 registered;
+444 handlers (223 reads, 221 writes); 894 schemas; 371 unconfigured,
+73 degraded and 15 disabled. Enabled-handler integration records are
+440 implemented, three planned and one failed. These are not pure-accounting
+coverage totals, an overall completion percentage or ordinary ACL guarantees.
+
+### Commands and native semantics
+
+- `invoice.presentation_settings.get` reads company-scoped invoice/receipt
+  state, customer, shipping partner, responsible user, native sanitized HTML
+  terms and fiscal-position IDs. It represents native empty values as null.
+- `invoice.layout_line.list` reads section, subsection and note lines, including
+  native parent, sequence and visibility flags. Its ID-keyset pagination is
+  scoped to one invoice; display order is `(sequence, id)`, not cursor order.
+  Native existing null or long labels remain readable; writer limits do not
+  become invented historical-data read limits.
+- `invoice.presentation_settings.update` patches shipping partner, responsible
+  internal user and HTML terms. Native field sanitization is used for writes,
+  readback and replay comparison; no custom sanitizer or user mutation.
+- `invoice.layout_line.create`, `invoice.layout_line.update` and
+  `invoice.layout_line.delete` operate only on native section/subsection/note
+  lines. They cannot delete financial product lines. Native layout lines have
+  no account and zero debit/credit/balance/amount_currency. Deleting an already
+  missing line returns record_not_found, not an invented successful receipt.
+- `invoice.lines.resequence` requires the exact complete set of invoice lines,
+  including financial product lines and layout lines but not tax/payment-term
+  rows. Supplied order sets sequences 10, 20, ... and native parents recompute.
+- `invoice.fiscal_position.refresh` invokes `action_update_fpos_values` with
+  native balance and dynamic-line synchronization contexts around the whole
+  action. It can restore native product prices, map taxes and change accounts;
+  users must not treat it as a price-preserving display-only refresh.
+- All six writes are draft-only across the six native invoice/refund/receipt
+  types; journal entries are not accepted. Existing ACL, company/user scope,
+  exact confirmation, deterministic keys and payload rechecks are reused.
+  No caller-sudo, arbitrary native-method access or new control framework.
+
+### Shared real workflow and repairs
+
+Both isolated aliases passed the public CLI/in-process real-ORM workflow as
+uid 5 with su=False in 337.46 seconds, on attempt 3. Each alias exercises
+the eight new IDs and customer_invoice.create, invoice.update and invoice.post,
+with seven immediate replays. Native HTML script sanitization, all three layout
+types, zero accounting effects, subsection and product parents, keyset pagination,
+complete ordering and unchanged totals are asserted. Existing native null/long
+labels are read truthfully. Fiscal refresh changes a deliberately manual price
+from 7 to native 25, changes the mapped account and tax, produces tax 2.5 and
+total 27.5, and leaves the journal balanced. Product-line deletion, incomplete
+ordering, foreign-company targeting and posted edits are rejected.
+
+Fresh-cursor checks verify all synthetic business records and temporary manager
+group changes rolled back. Fixture construction uses admin only within the
+dedicated databases; business capability calls remain non-superuser. No real
+mail/EDI, PDF appearance verification, external delivery, cron or service change.
+
+Attempt 1 failed before CLI calls because native context_today expected a user
+record, not an Environment. Its exact fixture correction deployed separately.
+Attempt 2 completed layout checks but native price/tax/account recalculation
+read a tax line already replaced by intermediate dynamic sync. A failing unit
+reproduction preceded the three-line native-context fix. The complete action
+now uses Odoo's own balance and dynamic-sync guards; no check was disabled and
+the financial assertions were retained. Two additional failed-before-fix unit
+reproductions cover native historical empty/long labels. Failed workflows rolled
+back and are not described as acceptance. The private direct-action diagnosis
+also rolled back, but it is not counted as a public CLI acceptance pass.
+
+Local evidence: 46 batch tests, 810 complete read-framework tests, 216 focused
+write-contract cases, one runtime closed-set case, 19 registry cases with one
+explicit known deselection. Two changed registry selections passed after final
+metadata. Server batch: 46; final registry: 19 with the same deselection.
+Ruff and diff checks passed. The excluded historical test is
+test_bank_statement_payment_maintenance_has_closed_registry_and_schemas;
+unchanged HEAD already records those six older integrations implemented.
+
+### Deployment and recovery
+
+Initial allowlist: 31 files; 12 pre-existing backed up and 19 new.
+Initial archive SHA-256: `ca96c409185a9366d791f2db5fb10bd258e264fd8de18ebdf9e3e8ae550ce316`.
+Repair 1 exact one-file SHA-256: `60dd996331dc0eb0e25f9d70fff305d3315ec9acd93e57a98db1a2328916369d`.
+Repair 2 exact five-file SHA-256: `1cd14744a5a5cb4c8696a27e7c5e1014ed418ab7b8499d493930308c39150d90`.
+Final exact two-file metadata SHA-256: `1200bd03042c4038e8018c0992c3350dc05aed7484fb4339753f8dd2af8885d0`.
+Every synchronization verifies the deployed baseline and backs up first.
+All 31 final deployed hashes match. Packages, manifests, backups, diagnostics
+and three attempt logs remain private in `.tooling/invoice-presentation-20261001`;
+never commit them. Server execution documents remain untouched.
+Registry-file SHA-256: `a325bba3df2d4f604e8757f7dfc2ea785f9453259a008520a36dd008c4627073`.
+Canonical registry SHA-256: `0779f98bf8269c92d6db484f4e5bfeaae42d042e3a6458d803b9e16a86f8321c`.
+Passing live-log SHA-256: `f7fff0249f37c9e730dc42c790a9b40adc0f6405c6c7eb8ce112b4e4a47a60bc`.
+
+Changed public code/schema/tests and staged added lines have zero findings.
+The full tree retains five historical document path/IP findings and is not
+described as passing. Odoo stayed PID 25607/NRestarts 6; Nginx stayed
+PID 3309593/NRestarts 0; PostgreSQL remained active. No business database,
+installed addon/source, Pi/V2/V3 chain or service configuration changed.
+
+### Continue
+
+Audit real installed native accounting gaps before another roughly 8-12 related
+commands; avoid aliases, generic field writers and large controls. Asset validation
+remains failed; product accounting-profile readback and two real external report
+sends remain planned. Addon repair and external sends require separate authority.
+The capability-first goal remains active; complete accounting coverage is unproven.

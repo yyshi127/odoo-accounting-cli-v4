@@ -2,6 +2,62 @@
 
 ## Current accounting phase — 2026-10-01
 
+459 registered IDs; 444 implemented handlers (223 reads, 221 writes);
+894 schema files. Availability: 371 unconfigured, 73 degraded, 15 disabled.
+Enabled-handler integration records: 440 implemented, three planned, one failed.
+These counts include historical non-accounting extensions, not full accounting
+coverage, a completion percentage, or a guarantee of ordinary-runtime ACLs.
+
+The latest batch adds eight native invoice presentation/fiscal capabilities:
+two reads and six writes for delivery/responsible/HTML terms, native section,
+subsection and note lines, complete invoice-line ordering, and native fiscal
+position refresh. All six writes are draft-only. No aliases, arbitrary field
+writer, new approval/audit framework or installed-addon changes were added.
+Fiscal refresh is financially significant: it can replace manual product prices
+as well as recompute taxes and accounts. It is not a cosmetic refresh.
+
+The shared rollback-only public CLI/ORM smoke passed both isolated aliases as
+uid 5 with su=False in 337.46 seconds. It covers all eight new IDs, three
+existing setup IDs and seven immediate replays; native HTML sanitization,
+zero-accounting layout lines, section parents, scoped keyset pagination,
+ordering, empty/long native historical labels, unchanged layout totals,
+price/tax/account recomputation, invalid line/order/company/posted-state denial,
+and fresh-cursor business-data and temporary-group rollback. Synthetic setup
+temporarily grants the manager group within the rolled-back transaction;
+ordinary-runtime permissions have not been broadened. No external delivery.
+
+Attempt 1 failed in fixture date setup before CLI operations. Attempt 2 passed
+layout checks, then exposed a deleted tax line during native fiscal refresh.
+The repair wraps the native action with Odoo's own balance and dynamic-line
+sync contexts, retaining actual financial recomputation and balance checks.
+Three added unit reproductions cover this context and historical layout labels.
+Failed attempts also verified rollback; neither is counted as acceptance.
+
+Local tests: batch 46; full read framework 810; focused write contract 216;
+runtime closed-set selection one; registry 19 with one known deselection.
+After final metadata, the two changed registry selections passed again.
+Server batch tests: 46; final registry: 19 with the same known deselection.
+Ruff and diff checks passed. Initial deployment explicitly allowed 31 files:
+12 existing files backed up and 19 new files. A one-file fixture repair,
+five-file native/read repair, and final two-file metadata synchronization
+verified baselines and backed up first. All 31 final deployed hashes match.
+Server STATUS/HANDOFF files were not overwritten.
+
+Odoo/Nginx PID/restart counters stayed unchanged; PostgreSQL stayed active.
+No business database, installed addon, Pi/V2/V3 chain or service configuration
+was changed. Changed code/schema/tests and staged added lines have zero privacy
+findings; the full tree retains five historical document findings. The older
+bank-statement/payment-maintenance registry test has a stale planned expectation
+despite unchanged HEAD already recording implemented; it is explicitly excluded.
+
+Next: audit another small genuine native accounting capability gap batch.
+Older positive integration gaps remain asset.validate (failed), product
+accounting-profile readback and two external report sends (planned). Addon repair
+and real external delivery require separate authority. The capability-first
+goal remains active; a complete accounting-coverage denominator is not proven.
+
+## Previous checkpoint — invoice and entry processing, 2026-10-01
+
 451 registered IDs; 436 implemented handlers (221 reads, 215 writes);
 878 schema files. Availability: 363 unconfigured, 73 degraded, 15 disabled.
 Enabled-handler integration records: 432 implemented, three planned, one failed.

@@ -15,6 +15,7 @@ from odoo_accounting_cli_v4.capabilities.core_object_reads import (
 REQUEST_ID = "7bc39413-0d69-4092-9319-795d33f3167c"
 
 GET_ID_FIELDS = {
+    "invoice.presentation_settings.get": "move_id",
     "accounting_move.processing_settings.get": "move_id",
     "partner.payment_preferences.get": "partner_id",
     "partner.invoice_delivery_preferences.get": "partner_id",
@@ -91,6 +92,7 @@ PAGE_CAPABILITIES = (
     "reconciliation.model.line.list",
     "bank.list",
     "report.catalog.list",
+    "invoice.layout_line.list",
     "invoice.duplicate_candidates.list",
     "recurring.journal_entry.search",
     "account.transfer_model.search",
@@ -205,6 +207,7 @@ PAGE_DEFAULTS = {
         "availability_conditions": None,
         "active": None,
     },
+    "invoice.layout_line.list": {"move_id": 31},
     "invoice.duplicate_candidates.list": {"invoice_id": 31},
     "recurring.journal_entry.search": {
         "states": None,
@@ -258,6 +261,9 @@ def _coded(record_id: int, code: str, name: str) -> dict:
 
 
 def _item(capability_id: str, record_id: int = 31) -> dict:
+    if capability_id in {"invoice.presentation_settings.get", "invoice.layout_line.list"}:
+        from test_invoice_presentation_batch import read_item
+        return read_item(capability_id, record_id)
     if capability_id == "accounting_move.processing_settings.get":
         from test_move_processing_batch import read_item
         return {**read_item(), "id": record_id}
@@ -1008,6 +1014,8 @@ def _page_parameters(capability_id: str, *, after_id: int | None, limit: int) ->
 
 
 def _required_page_parameters(capability_id: str) -> dict:
+    if capability_id == "invoice.layout_line.list":
+        return {"move_id": 31}
     if capability_id == "budget.line.list":
         return {"budget_id": 71}
     if capability_id == "invoice.duplicate_candidates.list":

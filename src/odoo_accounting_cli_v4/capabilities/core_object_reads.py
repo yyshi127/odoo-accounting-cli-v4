@@ -11,6 +11,9 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 
+from odoo_accounting_cli_v4 import (
+    invoice_presentation_contracts as invoice_presentation,
+)
 from odoo_accounting_cli_v4 import move_processing_contracts as move_processing
 from odoo_accounting_cli_v4 import partner_preferences_contracts as partner_preferences
 
@@ -46,6 +49,7 @@ CORE_OBJECT_GET_CAPABILITY_IDS = frozenset(
         "journal.group.get",
         "partner.bill_validation_preferences.get",
         "partner.invoice_delivery_preferences.get",
+        "invoice.presentation_settings.get",
         "accounting_move.processing_settings.get",
         "partner.payment_preferences.get",
         "payment.method_definition.get",
@@ -114,6 +118,7 @@ _CORE_OBJECT_SEARCH_CAPABILITY_IDS = frozenset(
         "reconciliation.model.line.list",
         "bank.list",
         "report.catalog.list",
+        "invoice.layout_line.list",
         "invoice.duplicate_candidates.list",
         "recurring.journal_entry.search",
         "account.transfer_model.search",
@@ -157,6 +162,7 @@ _ID_FIELDS = {
     "journal.group.get": "journal_group_id",
     "partner.bill_validation_preferences.get": "partner_id",
     "partner.invoice_delivery_preferences.get": "partner_id",
+    "invoice.presentation_settings.get": "move_id",
     "accounting_move.processing_settings.get": "move_id",
     "partner.payment_preferences.get": "partner_id",
     "payment.method_definition.get": "payment_method_id",
@@ -232,6 +238,7 @@ _SEARCH_FILTERS = {
     "report.catalog.list": frozenset(
         {"country_id", "root_report_id", "availability_conditions", "active"}
     ),
+    "invoice.layout_line.list": frozenset({"move_id"}),
     "invoice.duplicate_candidates.list": frozenset({"invoice_id"}),
     "recurring.journal_entry.search": frozenset(
         {"states", "auto_post_types", "date_from", "date_to"}
@@ -483,6 +490,10 @@ def validate_core_object_read_request(
         if not set(parameters) <= {"limit", "cursor"}:
             raise _invalid(f"{capability_id} contains an unsupported parameter.")
         filters: dict[str, Any] = {}
+    elif capability_id == "invoice.layout_line.list":
+        if not {"move_id"} <= set(parameters) <= {"move_id", "limit", "cursor"} or not _valid_id(parameters.get("move_id")):
+            raise _invalid("Layout listing requires an invoice move_id and optional pagination only.")
+        filters = {"move_id": parameters["move_id"]}
     elif capability_id == "invoice.duplicate_candidates.list":
         if not set(parameters) <= _SEARCH_FILTERS[capability_id] | {
             "limit",
@@ -2738,6 +2749,8 @@ def _valid_account_status_item(item: Any, company_id: int) -> bool:
 
 
 def _valid_item(capability_id: str, item: Any, company_id: int) -> bool:
+    if capability_id in invoice_presentation.READ_IDS:
+        return invoice_presentation.valid_read_item(capability_id, item, company_id)
     if capability_id == move_processing.READ_ID:
         return move_processing.valid_read_item(item, company_id)
     if capability_id in partner_preferences.READ_CAPABILITY_IDS:
@@ -3028,6 +3041,8 @@ def read_core_object(
         company_id=company_id,
         maximum=limit + 1,
     )
+    if capability_id == invoice_presentation.LIST_ID and any(item["move_id"] != filters["move_id"] for item in items):
+        raise _failed("Odoo returned a layout line from the wrong invoice.")
     if capability_id == "budget.line.list" and any(
         item["budget"]["id"] != filters["budget_id"] for item in items
     ):

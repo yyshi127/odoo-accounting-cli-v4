@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 451
-EXPECTED_ENABLED_CAPABILITY_COUNT = 436
-EXPECTED_IMPLEMENTED_READ_COUNT = 221
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 215
+EXPECTED_CAPABILITY_COUNT = 459
+EXPECTED_ENABLED_CAPABILITY_COUNT = 444
+EXPECTED_IMPLEMENTED_READ_COUNT = 223
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 221
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 363
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 371
 EXPECTED_DEGRADED_CAPABILITY_COUNT = 73
-EXPECTED_SCHEMA_COUNT = 878
+EXPECTED_SCHEMA_COUNT = 894
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "c1313fd75ba8e5a5b4b5ef356366dfe9d20e0a0768612b11d7bbf74b91c25a49"
+    "99295ecf1359b34713033c7c99702ca5e4522aa2a17e24b667662dbcf23a5ab1"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -154,6 +154,8 @@ IMPLEMENTED_READS = {
     "partner.payment_preferences.get": "partner_payment_preferences_get",
     "partner.invoice_delivery_preferences.get": "partner_invoice_delivery_preferences_get",
     "partner.bill_validation_preferences.get": "partner_bill_validation_preferences_get",
+    "invoice.layout_line.list": "invoice_layout_line_list",
+    "invoice.presentation_settings.get": "invoice_presentation_settings_get",
     "accounting_move.processing_settings.get": "accounting_move_processing_settings_get",
     "payment.method_definition.get": "payment_method_definition_get",
     "payment.method_definition.list": "payment_method_definition_list",
@@ -363,7 +365,9 @@ PARTNER_PREFERENCES_WRITES = {'partner.credit_limit.update', 'partner.invoice_de
 
 MOVE_PROCESSING_WRITES = {'invoice.currency_rate.update', 'invoice.cash_rounding.assign', 'accounting_move.autopost.configure', 'invoice.currency_rate.refresh', 'accounting_move.review.set', 'invoice.incoterm.update', 'invoice.payment_method.assign', 'invoice.payment_block.set'}
 
-IMPLEMENTED_WRITES = MOVE_PROCESSING_WRITES | PARTNER_PREFERENCES_WRITES | PAYMENT_CONFIGURATION_WRITES | FISCAL_MAPPING_WRITES | REPORT_BUDGET_WRITES | {
+INVOICE_PRESENTATION_WRITES = {'invoice.layout_line.delete', 'invoice.layout_line.update', 'invoice.fiscal_position.refresh', 'invoice.lines.resequence', 'invoice.layout_line.create', 'invoice.presentation_settings.update'}
+
+IMPLEMENTED_WRITES = INVOICE_PRESENTATION_WRITES | MOVE_PROCESSING_WRITES | PARTNER_PREFERENCES_WRITES | PAYMENT_CONFIGURATION_WRITES | FISCAL_MAPPING_WRITES | REPORT_BUDGET_WRITES | {
     "account.group.create",
     "account.group.update",
     "account.tag.archive",
@@ -867,6 +871,8 @@ CORE_OBJECT_READ_HANDLERS = {
     "partner.payment_preferences.get": "partner_payment_preferences_get",
     "partner.invoice_delivery_preferences.get": "partner_invoice_delivery_preferences_get",
     "partner.bill_validation_preferences.get": "partner_bill_validation_preferences_get",
+    "invoice.layout_line.list": "invoice_layout_line_list",
+    "invoice.presentation_settings.get": "invoice_presentation_settings_get",
     "accounting_move.processing_settings.get": "accounting_move_processing_settings_get",
     "payment.method_definition.get": "payment_method_definition_get",
     "payment.method_definition.list": "payment_method_definition_list",
@@ -1166,6 +1172,10 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
         if capability_id in {'partner.payment_preferences.get', 'partner.invoice_delivery_preferences.get', 'partner.bill_validation_preferences.get'}:
             assert descriptor["tests"]["integration"]["status"] == "implemented"
             assert descriptor["tests"]["integration"]["references"] == ["tests/integration/test_partner_preferences_batch_live.py"]
+            continue
+        if capability_id in {"invoice.presentation_settings.get", "invoice.layout_line.list"}:
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == ["tests/integration/test_invoice_presentation_batch_live.py"]
             continue
         if capability_id == "accounting_move.processing_settings.get":
             assert descriptor["tests"]["integration"]["status"] == "implemented"
@@ -2669,6 +2679,7 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
     )
 
     assert set(CORE_WRITE_MODELS) == IMPLEMENTED_WRITES
+    extended_modules.update({capability_id: ["account", "base"] for capability_id in INVOICE_PRESENTATION_WRITES})
     extended_modules.update({capability_id: ["account", "base"] for capability_id in MOVE_PROCESSING_WRITES})
     extended_modules.update({capability_id: ["account", "base"] for capability_id in PARTNER_PREFERENCES_WRITES})
     extended_modules.update({capability_id: ["account", "base"] for capability_id in PAYMENT_CONFIGURATION_WRITES})
@@ -3034,6 +3045,11 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             assert descriptor["tests"]["integration"]["references"] == [
                 "tests/integration/test_account_transfer_model_write_batch_live.py"
             ]
+            continue
+        if capability_id in INVOICE_PRESENTATION_WRITES:
+            assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_invoice_presentation_batch.py"]
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == ["tests/integration/test_invoice_presentation_batch_live.py"]
             continue
         if capability_id in MOVE_PROCESSING_WRITES:
             assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_move_processing_batch.py"]

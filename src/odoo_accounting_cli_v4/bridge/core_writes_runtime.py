@@ -18,6 +18,9 @@ from time import strftime, strptime
 from typing import Any
 
 from odoo_accounting_cli_v4 import fiscal_mapping_contracts as fiscal_mappings
+from odoo_accounting_cli_v4 import (
+    invoice_presentation_contracts as invoice_presentation,
+)
 from odoo_accounting_cli_v4 import move_processing_contracts as move_processing
 from odoo_accounting_cli_v4 import partner_preferences_contracts as partner_preferences
 from odoo_accounting_cli_v4 import (
@@ -26,7 +29,7 @@ from odoo_accounting_cli_v4 import (
 from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
 
 ACTION = "accounting.core_write.execute"
-CAPABILITIES = move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
+CAPABILITIES = invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -3314,6 +3317,25 @@ def _protocol(failure_type: type[Exception]) -> Exception:
     )
 
 
+_PARAMETER_KEYS.update(invoice_presentation.PARAMETER_KEYS)
+_GROUPS['invoice.fiscal_position.refresh'] = "account.group_account_invoice"
+_MODELS['invoice.fiscal_position.refresh'] = {'res.company', 'account.account', 'product.template', 'account.move', 'res.currency', 'account.move.line', 'product.product', 'account.tax', 'account.fiscal.position'}
+_ACCESS['invoice.fiscal_position.refresh'] = {('account.tax', 'read'), ('account.move.line', 'unlink'), ('res.company', 'read'), ('account.move.line', 'read'), ('product.product', 'read'), ('account.move', 'read'), ('res.currency', 'read'), ('account.account', 'read'), ('account.move.line', 'write'), ('account.move.line', 'create'), ('account.fiscal.position', 'read'), ('product.template', 'read'), ('account.move', 'write')}
+_GROUPS['invoice.layout_line.create'] = "account.group_account_invoice"
+_MODELS['invoice.layout_line.create'] = {'account.move.line', 'res.company', 'account.move'}
+_ACCESS['invoice.layout_line.create'] = {('account.move', 'read'), ('account.move.line', 'create'), ('account.move', 'write'), ('account.move.line', 'read')}
+_GROUPS['invoice.layout_line.delete'] = "account.group_account_invoice"
+_MODELS['invoice.layout_line.delete'] = {'account.move.line', 'res.company', 'account.move'}
+_ACCESS['invoice.layout_line.delete'] = {('account.move', 'read'), ('account.move.line', 'unlink'), ('account.move', 'write'), ('account.move.line', 'read')}
+_GROUPS['invoice.layout_line.update'] = "account.group_account_invoice"
+_MODELS['invoice.layout_line.update'] = {'account.move.line', 'res.company', 'account.move'}
+_ACCESS['invoice.layout_line.update'] = {('account.move', 'read'), ('account.move.line', 'write'), ('account.move', 'write'), ('account.move.line', 'read')}
+_GROUPS['invoice.lines.resequence'] = "account.group_account_invoice"
+_MODELS['invoice.lines.resequence'] = {'account.move.line', 'res.company', 'account.move'}
+_ACCESS['invoice.lines.resequence'] = {('account.move', 'read'), ('account.move.line', 'write'), ('account.move', 'write'), ('account.move.line', 'read')}
+_GROUPS['invoice.presentation_settings.update'] = "account.group_account_invoice"
+_MODELS['invoice.presentation_settings.update'] = {'res.partner', 'account.move.line', 'res.company', 'res.users', 'account.move'}
+_ACCESS['invoice.presentation_settings.update'] = {('res.partner', 'read'), ('account.move.line', 'read'), ('res.users', 'read'), ('account.move', 'write'), ('account.move', 'read')}
 _PARAMETER_KEYS.update(move_processing.PARAMETER_KEYS)
 _GROUPS['accounting_move.autopost.configure'] = 'account.group_account_user'
 _MODELS['accounting_move.autopost.configure'] = {'account.move', 'account.move.line', 'res.company'}
@@ -5364,6 +5386,11 @@ def _valid_parameters(
 ) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id in invoice_presentation.CAPABILITY_IDS:
+        try:
+            return invoice_presentation.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
     if capability_id in move_processing.CAPABILITY_IDS:
         try:
             return move_processing.normalize_parameters(capability_id, parameters) == parameters
@@ -5967,6 +5994,8 @@ def _validated_payload(
 def _deterministic_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in invoice_presentation.CAPABILITY_IDS:
+        return invoice_presentation.idempotency_key(capability_id, parameters, company_id)
     if capability_id in move_processing.CAPABILITY_IDS:
         return move_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in partner_preferences.CAPABILITY_IDS:
@@ -19362,6 +19391,94 @@ def _write_partner_preferences_batch(
     return _partner_result(partner, company_id), replay
 
 
+def _layout_current(line: Any) -> dict[str, Any]:
+    return {field: getattr(line, field) for field in invoice_presentation.LAYOUT_KEYS}
+
+
+def _write_invoice_presentation(
+    env: Any, capability_id: str, parameters: dict[str, Any],
+    company_id: int, failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    move = _search_one(env, "account.move", [
+        ("id", "=", parameters["move_id"]), ("company_id", "=", company_id),
+        ("move_type", "in", sorted(invoice_presentation.INVOICE_TYPES)),
+    ], company_id, failure_type)
+    if move.state != "draft":
+        raise _fail(failure_type, "state_conflict", "Presentation changes require a draft invoice or receipt.", exit_code=6)
+    if capability_id == "invoice.presentation_settings.update":
+        changes = dict(parameters["changes"])
+        shipping = changes.get("partner_shipping_id")
+        if shipping is not None:
+            _ensure_ids(env, "res.partner", {shipping}, [("company_id", "in", [False, company_id]), ("active", "=", True)], company_id, failure_type)
+        user_id = changes.get("invoice_user_id")
+        if user_id is not None:
+            _ensure_ids(env, "res.users", {user_id}, [("company_ids", "in", [company_id]), ("share", "=", False), ("active", "=", True)], company_id, failure_type)
+        if "narration" in changes:
+            changes["narration"] = move._fields["narration"].convert_to_cache(changes["narration"] or False, move) or None
+        def current(field: str) -> Any:
+            value = getattr(move, field)
+            return _relation_id(value) if field.endswith("_id") else value or None
+        replay = all(current(field) == value for field, value in changes.items())
+        if not replay:
+            move.write({field: value if value is not None else False for field, value in changes.items()})
+            move.invalidate_recordset()
+        if any(current(field) != value for field, value in changes.items()):
+            raise _fail(failure_type, "odoo_write_error", "Native presentation settings were not persisted.", exit_code=6)
+        return _move_result(move, company_id), replay
+    if capability_id == "invoice.fiscal_position.refresh":
+        def snapshot() -> list[Any]:
+            return sorted((line.id, _relation_id(line.account_id), tuple(sorted(line.tax_ids.ids)), line.price_unit, line.balance) for line in move.line_ids)
+        before = snapshot()
+        container = {"records": move}
+        with move._check_balanced(container), move._sync_dynamic_lines(container):
+            move.action_update_fpos_values()
+        move.invalidate_recordset()
+        return _move_result(move, company_id), before == snapshot()
+    if capability_id == "invoice.lines.resequence":
+        requested = parameters["line_ids"]
+        if set(requested) != set(move.invoice_line_ids.ids):
+            raise _fail(failure_type, "business_rule_error", "Resequencing requires exactly all invoice product and layout lines, never tax or payment-term lines.", exit_code=6)
+        targets = {line_id: index * 10 for index, line_id in enumerate(requested, 1)}
+        replay = all(line.sequence == targets[line.id] for line in move.invoice_line_ids)
+        if not replay:
+            move.write({"invoice_line_ids": [(1, line_id, {"sequence": sequence}) for line_id, sequence in targets.items()]})
+            move.invalidate_recordset()
+        if any(line.sequence != targets[line.id] for line in move.invoice_line_ids):
+            raise _fail(failure_type, "odoo_write_error", "Native invoice-line ordering was not persisted.", exit_code=6)
+        return _move_result(move, company_id), replay
+    if capability_id == "invoice.layout_line.create":
+        target = parameters["line"]
+        matches = [line for line in move.invoice_line_ids if line.display_type in invoice_presentation.LAYOUT_TYPES and _layout_current(line) == target]
+        if len(matches) > 1:
+            raise _fail(failure_type, "idempotency_conflict", "Multiple layout lines match this create payload; specify a distinct sequence.", exit_code=5)
+        if matches:
+            return _move_result(move, company_id, source_id=matches[0].id), True
+        before_ids = set(move.invoice_line_ids.ids)
+        move.write({"invoice_line_ids": [(0, 0, target)]})
+        created = [line for line in move.invoice_line_ids if line.id not in before_ids and line.display_type in invoice_presentation.LAYOUT_TYPES and _layout_current(line) == target]
+        if len(created) != 1:
+            raise _fail(failure_type, "odoo_write_error", "Native layout creation did not produce exactly one requested line.", exit_code=6)
+        return _move_result(move, company_id, source_id=created[0].id), False
+    line = _search_one(env, "account.move.line", [
+        ("id", "=", parameters["line_id"]), ("move_id", "=", move.id),
+        ("company_id", "=", company_id), ("display_type", "in", sorted(invoice_presentation.LAYOUT_TYPES)),
+    ], company_id, failure_type)
+    line_id = line.id
+    if capability_id == "invoice.layout_line.delete":
+        line.unlink()
+        if _scoped(env, "account.move.line", company_id).search_count([("id", "=", line_id)], limit=1):
+            raise _fail(failure_type, "odoo_write_error", "The native layout line was not deleted.", exit_code=6)
+        return _move_result(move, company_id, source_id=line_id), False
+    changes = parameters["changes"]
+    replay = all(_layout_current(line)[field] == value for field, value in changes.items())
+    if not replay:
+        line.write(changes)
+        line.invalidate_recordset()
+    if any(_layout_current(line)[field] != value for field, value in changes.items()):
+        raise _fail(failure_type, "odoo_write_error", "Native layout changes were not persisted.", exit_code=6)
+    return _move_result(move, company_id, source_id=line_id), replay
+
+
 def _write_move_processing(
     env: Any, capability_id: str, parameters: dict[str, Any],
     company_id: int, failure_type: type[Exception],
@@ -19458,6 +19575,8 @@ def _dispatch_allowed(
     marker: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if capability_id in invoice_presentation.CAPABILITY_IDS:
+        return _write_invoice_presentation(env, capability_id, parameters, company_id, failure_type)
     if capability_id in move_processing.CAPABILITY_IDS:
         return _write_move_processing(env, capability_id, parameters, company_id, failure_type)
     if capability_id in partner_preferences.CAPABILITY_IDS:

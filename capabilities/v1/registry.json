@@ -28323,6 +28323,1000 @@
         ]
       },
       "handler_key": "core_write"
+    },
+    "invoice.fiscal_position.refresh": {
+      "summary": {
+        "zh_CN": "重算发票财税规则",
+        "en_US": "Recompute draft invoice native fiscal-position prices, taxes and accounts"
+      },
+      "domain": "accounting_documents",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "account.fiscal.position",
+          "account.move",
+          "account.move.line",
+          "account.tax",
+          "product.product",
+          "product.template",
+          "res.company",
+          "res.currency"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py",
+          "account/models/account_move_line.py",
+          "account/views/account_move_views.xml",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.fiscal_position.refresh.request.schema.json",
+        "response": "schemas/v1/invoice.fiscal_position.refresh.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.fiscal.position:read",
+          "account.move.line:create",
+          "account.move.line:read",
+          "account.move.line:unlink",
+          "account.move.line:write",
+          "account.move:read",
+          "account.move:write",
+          "account.tax:read",
+          "product.product:read",
+          "product.template:read",
+          "res.company:read",
+          "res.currency:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_invoice_fields_or_fiscal_action",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "native_current_payload_recheck_missing_deleted_line_is_not_found",
+        "reverse": "restore_previous_values_subject_to_native_state_and_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_invoice_presentation_batch.py"
+          ],
+          "reason": "Shared closed schemas, public/runtime contracts, native layout and fiscal actions, replay and scope boundaries."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_invoice_presentation_batch_live.py"
+          ],
+          "reason": "The shared rollback-only public CLI/real-ORM smoke passed both isolated aliases as uid 5 with su=False: all eight new IDs and seven immediate replays; native sanitized terms, shipping/responsible settings; sections, subsections, notes, native zero-accounting/parent/order and scoped keyset pagination; existing empty/long native labels; layout edits preserve totals; native fiscal price/tax/account recomputation with native balance and dynamic-sync guards; product-line deletion, incomplete ordering, posted and foreign-company denial; fresh-cursor business-record and temporary-group rollback. No external delivery, cron, addon modification or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company scope and native ACLs. Writes require a draft invoice or receipt. Terms use native HTML sanitization. Sections/subsections/notes are non-accountable native lines; layout deletion never deletes product, tax or payment-term lines. Resequencing requires all native invoice lines and only changes sequence. Fiscal refresh calls the native price/tax/account recomputation and may overwrite manual financial values. No external delivery, cron or caller-sudo."
+      },
+      "routing": {
+        "object": "invoice",
+        "actions": [
+          "refresh"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "重算发票财税规则"
+          ],
+          "en_US": [
+            "Recompute draft invoice native fiscal-position prices, taxes and accounts"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改已过账单据",
+            "任意修改记账行或金额",
+            "操作其他公司单据"
+          ],
+          "en_US": [
+            "Changing posted documents",
+            "Arbitrary accounting-line or amount edits",
+            "Another company invoice"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "invoice.layout_line.create": {
+      "summary": {
+        "zh_CN": "添加发票章节和备注行",
+        "en_US": "Create a native draft invoice section, subsection or note"
+      },
+      "domain": "accounting_documents",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.move",
+          "account.move.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py",
+          "account/models/account_move_line.py",
+          "account/views/account_move_views.xml",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.layout_line.create.request.schema.json",
+        "response": "schemas/v1/invoice.layout_line.create.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.move.line:create",
+          "account.move.line:read",
+          "account.move:read",
+          "account.move:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_invoice_fields_or_fiscal_action",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "native_current_payload_recheck_missing_deleted_line_is_not_found",
+        "reverse": "restore_previous_values_subject_to_native_state_and_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_invoice_presentation_batch.py"
+          ],
+          "reason": "Shared closed schemas, public/runtime contracts, native layout and fiscal actions, replay and scope boundaries."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_invoice_presentation_batch_live.py"
+          ],
+          "reason": "The shared rollback-only public CLI/real-ORM smoke passed both isolated aliases as uid 5 with su=False: all eight new IDs and seven immediate replays; native sanitized terms, shipping/responsible settings; sections, subsections, notes, native zero-accounting/parent/order and scoped keyset pagination; existing empty/long native labels; layout edits preserve totals; native fiscal price/tax/account recomputation with native balance and dynamic-sync guards; product-line deletion, incomplete ordering, posted and foreign-company denial; fresh-cursor business-record and temporary-group rollback. No external delivery, cron, addon modification or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company scope and native ACLs. Writes require a draft invoice or receipt. Terms use native HTML sanitization. Sections/subsections/notes are non-accountable native lines; layout deletion never deletes product, tax or payment-term lines. Resequencing requires all native invoice lines and only changes sequence. Fiscal refresh calls the native price/tax/account recomputation and may overwrite manual financial values. No external delivery, cron or caller-sudo."
+      },
+      "routing": {
+        "object": "invoice",
+        "actions": [
+          "create"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "添加发票章节和备注行"
+          ],
+          "en_US": [
+            "Create a native draft invoice section, subsection or note"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改已过账单据",
+            "任意修改记账行或金额",
+            "操作其他公司单据"
+          ],
+          "en_US": [
+            "Changing posted documents",
+            "Arbitrary accounting-line or amount edits",
+            "Another company invoice"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "invoice.layout_line.delete": {
+      "summary": {
+        "zh_CN": "删除发票章节和备注行",
+        "en_US": "Delete a native draft invoice layout line"
+      },
+      "domain": "accounting_documents",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.move",
+          "account.move.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py",
+          "account/models/account_move_line.py",
+          "account/views/account_move_views.xml",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.layout_line.delete.request.schema.json",
+        "response": "schemas/v1/invoice.layout_line.delete.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.move.line:read",
+          "account.move.line:unlink",
+          "account.move:read",
+          "account.move:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_invoice_fields_or_fiscal_action",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "native_current_payload_recheck_missing_deleted_line_is_not_found",
+        "reverse": "recreate_layout_line_explicitly_with_new_native_identifier"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_invoice_presentation_batch.py"
+          ],
+          "reason": "Shared closed schemas, public/runtime contracts, native layout and fiscal actions, replay and scope boundaries."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_invoice_presentation_batch_live.py"
+          ],
+          "reason": "The shared rollback-only public CLI/real-ORM smoke passed both isolated aliases as uid 5 with su=False: all eight new IDs and seven immediate replays; native sanitized terms, shipping/responsible settings; sections, subsections, notes, native zero-accounting/parent/order and scoped keyset pagination; existing empty/long native labels; layout edits preserve totals; native fiscal price/tax/account recomputation with native balance and dynamic-sync guards; product-line deletion, incomplete ordering, posted and foreign-company denial; fresh-cursor business-record and temporary-group rollback. No external delivery, cron, addon modification or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company scope and native ACLs. Writes require a draft invoice or receipt. Terms use native HTML sanitization. Sections/subsections/notes are non-accountable native lines; layout deletion never deletes product, tax or payment-term lines. Resequencing requires all native invoice lines and only changes sequence. Fiscal refresh calls the native price/tax/account recomputation and may overwrite manual financial values. No external delivery, cron or caller-sudo."
+      },
+      "routing": {
+        "object": "invoice",
+        "actions": [
+          "delete"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "删除发票章节和备注行"
+          ],
+          "en_US": [
+            "Delete a native draft invoice layout line"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改已过账单据",
+            "任意修改记账行或金额",
+            "操作其他公司单据"
+          ],
+          "en_US": [
+            "Changing posted documents",
+            "Arbitrary accounting-line or amount edits",
+            "Another company invoice"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "invoice.layout_line.list": {
+      "summary": {
+        "zh_CN": "查询发票章节和备注行",
+        "en_US": "List native invoice sections, subsections and notes"
+      },
+      "domain": "accounting_documents",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "account.move",
+          "account.move.line"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py",
+          "account/models/account_move_line.py",
+          "account/views/account_move_views.xml",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.layout_line.list.request.schema.json",
+        "response": "schemas/v1/invoice.layout_line.list.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.move:read",
+          "account.move.line:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_native_invoice_presentation_read",
+        "verify": "closed_response_schema_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_invoice_presentation_batch.py"
+          ],
+          "reason": "Shared closed schemas, public/runtime contracts, native layout and fiscal actions, replay and scope boundaries."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_invoice_presentation_batch_live.py"
+          ],
+          "reason": "The shared rollback-only public CLI/real-ORM smoke passed both isolated aliases as uid 5 with su=False: all eight new IDs and seven immediate replays; native sanitized terms, shipping/responsible settings; sections, subsections, notes, native zero-accounting/parent/order and scoped keyset pagination; existing empty/long native labels; layout edits preserve totals; native fiscal price/tax/account recomputation with native balance and dynamic-sync guards; product-line deletion, incomplete ordering, posted and foreign-company denial; fresh-cursor business-record and temporary-group rollback. No external delivery, cron, addon modification or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples are deferred until the capability library reaches target coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing is outside this capability batch."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company scope and native ACLs. Writes require a draft invoice or receipt. Terms use native HTML sanitization. Sections/subsections/notes are non-accountable native lines; layout deletion never deletes product, tax or payment-term lines. Resequencing requires all native invoice lines and only changes sequence. Fiscal refresh calls the native price/tax/account recomputation and may overwrite manual financial values. No external delivery, cron or caller-sudo."
+      },
+      "routing": {
+        "object": "invoice",
+        "actions": [
+          "list"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "查询发票章节和备注行"
+          ],
+          "en_US": [
+            "List native invoice sections, subsections and notes"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改已过账单据",
+            "任意修改记账行或金额",
+            "操作其他公司单据"
+          ],
+          "en_US": [
+            "Changing posted documents",
+            "Arbitrary accounting-line or amount edits",
+            "Another company invoice"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "invoice_layout_line_list"
+    },
+    "invoice.layout_line.update": {
+      "summary": {
+        "zh_CN": "修改发票章节和备注行",
+        "en_US": "Update a native draft invoice layout line"
+      },
+      "domain": "accounting_documents",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.move",
+          "account.move.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py",
+          "account/models/account_move_line.py",
+          "account/views/account_move_views.xml",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.layout_line.update.request.schema.json",
+        "response": "schemas/v1/invoice.layout_line.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.move.line:read",
+          "account.move.line:write",
+          "account.move:read",
+          "account.move:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_invoice_fields_or_fiscal_action",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "native_current_payload_recheck_missing_deleted_line_is_not_found",
+        "reverse": "restore_previous_values_subject_to_native_state_and_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_invoice_presentation_batch.py"
+          ],
+          "reason": "Shared closed schemas, public/runtime contracts, native layout and fiscal actions, replay and scope boundaries."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_invoice_presentation_batch_live.py"
+          ],
+          "reason": "The shared rollback-only public CLI/real-ORM smoke passed both isolated aliases as uid 5 with su=False: all eight new IDs and seven immediate replays; native sanitized terms, shipping/responsible settings; sections, subsections, notes, native zero-accounting/parent/order and scoped keyset pagination; existing empty/long native labels; layout edits preserve totals; native fiscal price/tax/account recomputation with native balance and dynamic-sync guards; product-line deletion, incomplete ordering, posted and foreign-company denial; fresh-cursor business-record and temporary-group rollback. No external delivery, cron, addon modification or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company scope and native ACLs. Writes require a draft invoice or receipt. Terms use native HTML sanitization. Sections/subsections/notes are non-accountable native lines; layout deletion never deletes product, tax or payment-term lines. Resequencing requires all native invoice lines and only changes sequence. Fiscal refresh calls the native price/tax/account recomputation and may overwrite manual financial values. No external delivery, cron or caller-sudo."
+      },
+      "routing": {
+        "object": "invoice",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "修改发票章节和备注行"
+          ],
+          "en_US": [
+            "Update a native draft invoice layout line"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改已过账单据",
+            "任意修改记账行或金额",
+            "操作其他公司单据"
+          ],
+          "en_US": [
+            "Changing posted documents",
+            "Arbitrary accounting-line or amount edits",
+            "Another company invoice"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "invoice.lines.resequence": {
+      "summary": {
+        "zh_CN": "调整发票展示行顺序",
+        "en_US": "Resequence all native draft invoice product and layout lines"
+      },
+      "domain": "accounting_documents",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.move",
+          "account.move.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py",
+          "account/models/account_move_line.py",
+          "account/views/account_move_views.xml",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.lines.resequence.request.schema.json",
+        "response": "schemas/v1/invoice.lines.resequence.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.move.line:read",
+          "account.move.line:write",
+          "account.move:read",
+          "account.move:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_invoice_fields_or_fiscal_action",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "native_current_payload_recheck_missing_deleted_line_is_not_found",
+        "reverse": "restore_previous_values_subject_to_native_state_and_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_invoice_presentation_batch.py"
+          ],
+          "reason": "Shared closed schemas, public/runtime contracts, native layout and fiscal actions, replay and scope boundaries."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_invoice_presentation_batch_live.py"
+          ],
+          "reason": "The shared rollback-only public CLI/real-ORM smoke passed both isolated aliases as uid 5 with su=False: all eight new IDs and seven immediate replays; native sanitized terms, shipping/responsible settings; sections, subsections, notes, native zero-accounting/parent/order and scoped keyset pagination; existing empty/long native labels; layout edits preserve totals; native fiscal price/tax/account recomputation with native balance and dynamic-sync guards; product-line deletion, incomplete ordering, posted and foreign-company denial; fresh-cursor business-record and temporary-group rollback. No external delivery, cron, addon modification or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company scope and native ACLs. Writes require a draft invoice or receipt. Terms use native HTML sanitization. Sections/subsections/notes are non-accountable native lines; layout deletion never deletes product, tax or payment-term lines. Resequencing requires all native invoice lines and only changes sequence. Fiscal refresh calls the native price/tax/account recomputation and may overwrite manual financial values. No external delivery, cron or caller-sudo."
+      },
+      "routing": {
+        "object": "invoice",
+        "actions": [
+          "resequence"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "调整发票展示行顺序"
+          ],
+          "en_US": [
+            "Resequence all native draft invoice product and layout lines"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改已过账单据",
+            "任意修改记账行或金额",
+            "操作其他公司单据"
+          ],
+          "en_US": [
+            "Changing posted documents",
+            "Arbitrary accounting-line or amount edits",
+            "Another company invoice"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "invoice.presentation_settings.get": {
+      "summary": {
+        "zh_CN": "读取发票展示设置",
+        "en_US": "Get native invoice presentation settings"
+      },
+      "domain": "accounting_documents",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "account.move",
+          "res.partner",
+          "res.users"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py",
+          "account/models/account_move_line.py",
+          "account/views/account_move_views.xml",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.presentation_settings.get.request.schema.json",
+        "response": "schemas/v1/invoice.presentation_settings.get.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.move:read",
+          "res.partner:read",
+          "res.users:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_native_invoice_presentation_read",
+        "verify": "closed_response_schema_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_invoice_presentation_batch.py"
+          ],
+          "reason": "Shared closed schemas, public/runtime contracts, native layout and fiscal actions, replay and scope boundaries."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_invoice_presentation_batch_live.py"
+          ],
+          "reason": "The shared rollback-only public CLI/real-ORM smoke passed both isolated aliases as uid 5 with su=False: all eight new IDs and seven immediate replays; native sanitized terms, shipping/responsible settings; sections, subsections, notes, native zero-accounting/parent/order and scoped keyset pagination; existing empty/long native labels; layout edits preserve totals; native fiscal price/tax/account recomputation with native balance and dynamic-sync guards; product-line deletion, incomplete ordering, posted and foreign-company denial; fresh-cursor business-record and temporary-group rollback. No external delivery, cron, addon modification or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company scope and native ACLs. Writes require a draft invoice or receipt. Terms use native HTML sanitization. Sections/subsections/notes are non-accountable native lines; layout deletion never deletes product, tax or payment-term lines. Resequencing requires all native invoice lines and only changes sequence. Fiscal refresh calls the native price/tax/account recomputation and may overwrite manual financial values. No external delivery, cron or caller-sudo."
+      },
+      "routing": {
+        "object": "invoice",
+        "actions": [
+          "get"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "读取发票展示设置"
+          ],
+          "en_US": [
+            "Get native invoice presentation settings"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改已过账单据",
+            "任意修改记账行或金额",
+            "操作其他公司单据"
+          ],
+          "en_US": [
+            "Changing posted documents",
+            "Arbitrary accounting-line or amount edits",
+            "Another company invoice"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "invoice_presentation_settings_get"
+    },
+    "invoice.presentation_settings.update": {
+      "summary": {
+        "zh_CN": "修改发票展示设置",
+        "en_US": "Update draft invoice shipping partner, responsible user and terms"
+      },
+      "domain": "accounting_documents",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.move",
+          "account.move.line",
+          "res.company",
+          "res.partner",
+          "res.users"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py",
+          "account/models/account_move_line.py",
+          "account/views/account_move_views.xml",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.presentation_settings.update.request.schema.json",
+        "response": "schemas/v1/invoice.presentation_settings.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.move.line:read",
+          "account.move:read",
+          "account.move:write",
+          "res.partner:read",
+          "res.users:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_invoice_fields_or_fiscal_action",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "native_current_payload_recheck_missing_deleted_line_is_not_found",
+        "reverse": "restore_previous_values_subject_to_native_state_and_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_invoice_presentation_batch.py"
+          ],
+          "reason": "Shared closed schemas, public/runtime contracts, native layout and fiscal actions, replay and scope boundaries."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_invoice_presentation_batch_live.py"
+          ],
+          "reason": "The shared rollback-only public CLI/real-ORM smoke passed both isolated aliases as uid 5 with su=False: all eight new IDs and seven immediate replays; native sanitized terms, shipping/responsible settings; sections, subsections, notes, native zero-accounting/parent/order and scoped keyset pagination; existing empty/long native labels; layout edits preserve totals; native fiscal price/tax/account recomputation with native balance and dynamic-sync guards; product-line deletion, incomplete ordering, posted and foreign-company denial; fresh-cursor business-record and temporary-group rollback. No external delivery, cron, addon modification or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured caller/company scope and native ACLs. Writes require a draft invoice or receipt. Terms use native HTML sanitization. Sections/subsections/notes are non-accountable native lines; layout deletion never deletes product, tax or payment-term lines. Resequencing requires all native invoice lines and only changes sequence. Fiscal refresh calls the native price/tax/account recomputation and may overwrite manual financial values. No external delivery, cron or caller-sudo."
+      },
+      "routing": {
+        "object": "invoice",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "修改发票展示设置"
+          ],
+          "en_US": [
+            "Update draft invoice shipping partner, responsible user and terms"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改已过账单据",
+            "任意修改记账行或金额",
+            "操作其他公司单据"
+          ],
+          "en_US": [
+            "Changing posted documents",
+            "Arbitrary accounting-line or amount edits",
+            "Another company invoice"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
     }
   }
 }

@@ -9,6 +9,9 @@ from datetime import date as date_type
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from odoo_accounting_cli_v4 import (
+    invoice_presentation_contracts as invoice_presentation,
+)
 from odoo_accounting_cli_v4 import move_processing_contracts as move_processing
 from odoo_accounting_cli_v4 import partner_preferences_contracts as partner_preferences
 
@@ -62,6 +65,8 @@ CAPABILITY_IDS = frozenset(
         "incoterm.list",
         "partner.bill_validation_preferences.get",
         "partner.invoice_delivery_preferences.get",
+        "invoice.presentation_settings.get",
+        "invoice.layout_line.list",
         "accounting_move.processing_settings.get",
         "partner.payment_preferences.get",
         "payment.method_definition.get",
@@ -148,6 +153,7 @@ _GET_IDS = {
     "journal.group.get": ("account.journal.group", "journal_group_id"),
     "partner.bill_validation_preferences.get": ("res.partner", "partner_id"),
     "partner.invoice_delivery_preferences.get": ("res.partner", "partner_id"),
+    "invoice.presentation_settings.get": ("account.move", "move_id"),
     "accounting_move.processing_settings.get": ("account.move", "move_id"),
     "partner.payment_preferences.get": ("res.partner", "partner_id"),
     "payment.method_definition.get": ("account.payment.method", "payment_method_id"),
@@ -277,6 +283,7 @@ _REFERENCE_KINDS = {
     "payment.method_definition.list": "payment_method_definition",
     "partner.bill_validation_preferences.get": "partner.bill_validation_preferences.get",
     "partner.invoice_delivery_preferences.get": "partner.invoice_delivery_preferences.get",
+    "invoice.presentation_settings.get": "invoice_presentation",
     "accounting_move.processing_settings.get": "move_processing",
     "partner.payment_preferences.get": "partner.payment_preferences.get",
     "payment.method_definition.get": "payment_method_definition",
@@ -382,6 +389,7 @@ _REFERENCE_FIELDS = {
     "partner.bill_validation_preferences.get": ('id', 'name', 'company_id', 'commercial_partner_id', 'autopost_bills', 'ignore_abnormal_invoice_date', 'ignore_abnormal_invoice_amount'),
     "partner.invoice_delivery_preferences.get": ('id', 'name', 'company_id', 'commercial_partner_id', 'invoice_sending_method', 'invoice_edi_format', 'invoice_template_pdf_report_id'),
     "partner.payment_preferences.get": ('id', 'name', 'company_id', 'commercial_partner_id', 'property_inbound_payment_method_line_id', 'property_outbound_payment_method_line_id'),
+    "invoice_presentation": ('id', 'name', 'company_id', 'move_type', 'state', 'partner_id', 'partner_shipping_id', 'invoice_user_id', 'narration', 'fiscal_position_id'),
     "move_processing": ('id', 'name', 'company_id', 'move_type', 'state', 'date', 'currency_id', 'company_currency_id', 'invoice_currency_rate', 'expected_currency_rate', 'invoice_cash_rounding_id', 'invoice_incoterm_id', 'incoterm_location', 'preferred_payment_method_line_id', 'auto_post', 'auto_post_until', 'auto_post_origin_id', 'checked', 'payment_state'),
     "payment_method_definition": ("id", "name", "code", "payment_type"),
     "incoterm": ("id", "code", "name", "active"),
@@ -778,6 +786,8 @@ _REQUIRED_MODELS = {
     "partner.bill_validation_preferences.get": ('res.company', 'res.partner'),
     "partner.invoice_delivery_preferences.get": ('res.company', 'res.partner', 'account.move', 'ir.actions.report'),
     "partner.payment_preferences.get": ('res.company', 'res.partner', 'account.payment.method.line', 'account.journal'),
+    "invoice.presentation_settings.get": ("res.company", "account.move", "res.partner", "res.users"),
+    "invoice.layout_line.list": ("res.company", "account.move", "account.move.line"),
     "accounting_move.processing_settings.get": ("res.company", "account.move", "res.currency", "account.cash.rounding", "account.incoterms", "account.payment.method.line"),
     "payment.method_definition.get": ("res.company", "account.payment.method"),
     "incoterm.list": ("res.company", "account.incoterms"),
@@ -1448,6 +1458,8 @@ def _owner_company_ids(
 
 
 def _scope_domain(env: Any, capability_id: str, company_id: int) -> list[Any]:
+    if capability_id == invoice_presentation.GET_ID:
+        return [("company_id", "=", company_id), ("move_type", "in", sorted(invoice_presentation.INVOICE_TYPES))]
     if capability_id == move_processing.READ_ID:
         return [("company_id", "=", company_id), ("move_type", "in", sorted(move_processing.MOVE_TYPES))]
     if capability_id == "account.account.get":
@@ -1582,6 +1594,8 @@ def _scope_domain(env: Any, capability_id: str, company_id: int) -> list[Any]:
 def _valid_parameters(capability_id: str, parameters: Any) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id == invoice_presentation.LIST_ID:
+        return set(parameters) == {"move_id", "after_id", "limit"} and _valid_id(parameters["move_id"]) and (parameters["after_id"] is None or _valid_id(parameters["after_id"])) and _valid_limit(parameters["limit"])
     if capability_id in _GET_IDS:
         id_field = _GET_IDS[capability_id][1]
         return set(parameters) == {id_field} and _valid_id(parameters[id_field])
@@ -2395,7 +2409,7 @@ def _raw_get_rows(
         ]
     )
     model = raw_model.with_context(active_test=False, allowed_company_ids=[company_id])
-    if capability_id == move_processing.READ_ID or capability_id in partner_preferences.READ_CAPABILITY_IDS or capability_id in {"cash_rounding.get", "account.transfer_model.get"}:
+    if capability_id == invoice_presentation.GET_ID or capability_id == move_processing.READ_ID or capability_id in partner_preferences.READ_CAPABILITY_IDS or capability_id in {"cash_rounding.get", "account.transfer_model.get"}:
         model = model.with_company(env["res.company"].browse(company_id))
     return model.search_read(
         domain,
@@ -4554,6 +4568,24 @@ def _normalize_partner_preferences(env: Any, capability_id: str, rows: list[dict
     return result
 
 
+def _presentation_layout_rows(env: Any, parameters: dict[str, Any], company_id: int) -> tuple[list[dict[str, Any]], bool]:
+    model = env["account.move.line"].with_context(allowed_company_ids=[company_id])
+    domain = [("company_id", "=", company_id), ("move_id", "=", parameters["move_id"]),
+              ("move_id.move_type", "in", sorted(invoice_presentation.INVOICE_TYPES)),
+              ("display_type", "in", sorted(invoice_presentation.LAYOUT_TYPES))]
+    return _id_page_rows(model, domain, after_id=parameters["after_id"], limit=parameters["limit"], fields=invoice_presentation.LINE_FIELDS)
+
+
+def _normalize_invoice_presentation(capability_id: str, rows: list[dict[str, Any]], company_id: int) -> list[dict[str, Any]]:
+    items = []
+    for row in rows:
+        item = {field: _reference_id(value) if field.endswith("_id") else _optional_text(value) if field in {"name", "narration"} else value for field, value in row.items()}
+        if not invoice_presentation.valid_read_item(capability_id, item, company_id):
+            raise ValueError("invalid native invoice presentation")
+        items.append(item)
+    return items
+
+
 def _normalize_move_processing(env: Any, rows: list[dict[str, Any]], company_id: int) -> list[dict[str, Any]]:
     result = []
     for row in rows:
@@ -6145,7 +6177,9 @@ def dispatch(
 
         cursor_found = True
         removes_all_taxes = False
-        if capability_id == "invoice.duplicate_candidates.list":
+        if capability_id == invoice_presentation.LIST_ID:
+            rows, cursor_found = _presentation_layout_rows(env, parameters, company_id)
+        elif capability_id == "invoice.duplicate_candidates.list":
             rows, cursor_found = _duplicate_candidate_rows(env, parameters, company_id)
         elif capability_id == "invoice.tax_breakdown.inspect":
             rows = _tax_breakdown_rows(env, parameters, company_id)
@@ -6216,7 +6250,9 @@ def dispatch(
                 cursor_found=False,
             )
 
-        if capability_id == "invoice.duplicate_candidates.list":
+        if capability_id in invoice_presentation.READ_IDS:
+            items = _normalize_invoice_presentation(capability_id, rows, company_id)
+        elif capability_id == "invoice.duplicate_candidates.list":
             items = _normalize_duplicate_candidates(env, rows, company_id)
         elif capability_id == "invoice.tax_breakdown.inspect":
             items = _normalize_tax_breakdown(env, rows, company_id)
