@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/accounting_move.autopost.configure.request.schema.json",
+  "title": "accounting_move.autopost.configure request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "context",
+    "parameters"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v1"
+    },
+    "request_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "context": {
+      "$ref": "request.schema.json#/$defs/context"
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "auto_post": { "enum": ["no", "at_date"] } } },
+          "then": { "properties": { "auto_post_until": { "type": "null" } } }
+        }
+      ],
+      "required": [
+        "auto_post",
+        "auto_post_until",
+        "move_id"
+      ],
+      "properties": {
+        "move_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "auto_post": {
+          "enum": [
+            "at_date",
+            "monthly",
+            "no",
+            "quarterly",
+            "yearly"
+          ]
+        },
+        "auto_post_until": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\\s\\S])"
+        }
+      }
+    }
+  }
+}

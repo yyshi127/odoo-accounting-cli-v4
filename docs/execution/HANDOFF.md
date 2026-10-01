@@ -4,9 +4,9 @@ Updated: 2026-10-01 (Asia/Shanghai)
 
 ## Current authoritative count — 2026-10-01
 
-442 registered IDs; 427 implemented handlers (220 reads, 207 writes);
-860 schemas; 354 unconfigured, 73 degraded, 15 disabled. Enabled-handler integration records:
-423 implemented, three planned, one failed. The latest partner-preferences
+451 registered IDs; 436 implemented handlers (221 reads, 215 writes);
+878 schemas; 363 unconfigured, 73 degraded, 15 disabled. Enabled-handler integration records:
+432 implemented, three planned, one failed. The latest invoice/entry-processing
 checkpoint below is authoritative; older snapshots are historical.
 
 ## Objective and working rule
@@ -4797,3 +4797,110 @@ positive integration gaps remain asset validation (native failure), product
 accounting-profile readback, and two external report-send commands (planned).
 Addon repair and real external delivery require separate authority. The overall
 goal remains active; no verified denominator for complete coverage exists yet.
+
+## Invoice and entry processing — 2026-10-01
+
+Baseline: `6e05d45`. This checkpoint adds nine IDs, not nine aliases:
+451 IDs; 436 handlers (221 read, 215 write); 878 schemas;
+363 unconfigured, 73 degraded, 15 disabled. Enabled-handler integration:
+432 implemented, three planned, one failed. Totals include historical
+non-accounting extensions and are not a complete-coverage percentage.
+
+### Native command semantics
+
+- `accounting_move.processing_settings.get` reads the scoped move's two rates,
+  native currency IDs, cash rounding, incoterm/location, invoice payment
+  method, review/payment status and recurring schedule/origin. Date objects
+  become ISO JSON dates; detached historical payment methods are reported
+  truthfully, and foreign-company methods/origins are rejected.
+- `invoice.currency_rate.update` stores a strictly positive decimal-string
+  manual rate on a draft invoice/receipt. The rate is company-to-document,
+  so company balance is document amount divided by rate. A same-currency
+  document uses rate 1. Native dynamic lines and balance checks remain active.
+- `invoice.currency_rate.refresh` invokes the native refresh method, restoring
+  the current expected rate for the invoice date rather than an invented value.
+- `invoice.cash_rounding.assign` assigns/clears an existing native method on
+  a draft invoice. Native profit/loss accounts are checked in the current
+  company; native dynamic rounding lines, not custom arithmetic, are used.
+- `invoice.incoterm.update` patches native incoterm and location on a draft
+  invoice. It does not update stock transfers or create a duplicate term API.
+- `invoice.payment_method.assign` assigns/clears a native configured line on
+  a draft invoice. The line needs an active same-company journal and the
+  inbound/outbound direction used by the native invoice form.
+- `invoice.payment_block.set` makes the native toggle into an idempotent
+  desired-state operation. Blocking paid/in-payment invoices is rejected;
+  requesting unblocked never accidentally toggles an unblocked invoice on.
+- `accounting_move.review.set` calls the native posted-only reviewed method,
+  including its false/unreview direction; it does not create an approval flow.
+- `accounting_move.autopost.configure` saves native no/at_date/monthly/
+  quarterly/yearly fields on a draft move. Nonrecurring modes have no end
+  date. It does not execute a cron, post a move or create recurring copies.
+  Future native scheduling effects must not be represented as a no-op.
+- All commands reuse existing native ACLs, company/user scope, exact
+  confirmation, deterministic keys and same-transaction payload rechecks.
+  No caller-sudo, arbitrary field writer or installed-addon modification.
+
+### Real workflow and failure-driven repairs
+
+The shared workflow passed both dedicated aliases as ordinary uid 5 with
+su=False in 425.01 seconds on the third attempt. Each alias exercises
+all nine new IDs, five existing setup/regression IDs and eight immediate
+replays. It uses a genuine foreign-currency invoice, checks balance changes
+and restoration, verifies a 0.05 native rounding line, invoice term/method,
+payment block/unblock and reviewed=false, and leaves the recurring entry in
+draft without posting/copying it. Invalid direction, invalid draft/posted
+states and foreign-company targeting are rejected. A fresh cursor verifies
+business records, temporary groups and pre-existing currency/rate fixture
+state all rolled back. Admin setup stays inside synthetic databases; business
+capability calls stay non-superuser. No mail, EDI, cron or service change.
+
+Attempt 1 failed in settings GET because native dates were not normalized.
+Two unit reproductions were added before the date conversion fix.
+Attempt 2 progressed through foreign-rate and rounding operations, then
+revealed an older create/replace line adapter writing explicit JSON null
+currency as False into a required native column. The fix changes only the
+two payload-inclusion conditions, leaving native same-currency defaults
+effective. A regression was added before the fix. The final shared smoke
+deliberately retains null currency/amount_currency in both entry creation
+and replacement and checks native currency equals company currency and
+native amount_currency equals signed balance. No input or functionality
+was narrowed merely to pass. Failed workflows also rolled back.
+
+Local evidence: 65 batch cases; 17 focused framework cases; 67 batch/entry
+regression cases; 799 full read-framework cases; 19 relevant registry cases,
+one explicit stale-baseline deselection. Final server batch/entry/closed-set
+selection passed 68 cases; registry selection passed 19 with the same one
+deselection. Ruff and diff checks passed. The historical stale test is
+test_bank_statement_payment_maintenance_has_closed_registry_and_schemas;
+HEAD already recorded its six old integration entries implemented.
+
+### Deployment and recovery evidence
+
+Initial explicit allowlist: 33 files, 12 existing files backed up, 21 new.
+Initial archive SHA-256: `d2b137cdd29127da2ce07e1f482a76167ddf28772139dcca1d033691f2b12fb3`.
+Repair 1 exact three-file archive SHA-256: `cbb570bf163c5a623fdd383d87afe879f218db9a55de5df5c778306d27998793`.
+Repair 2 exact three-file archive SHA-256: `310da096ea5615eb2f9910143474eca82f6fd509f93677b97d907d4635f0e5a8`.
+Final exact two-file metadata archive SHA-256: `9f322f8c8546dc380f9f1abd8f6df5ab3626244a94a21a47cd87088d60297261`.
+Every synchronization checks deployed baselines and makes another backup.
+All 33 final deployed hashes match. Private packages, manifests, pre-change
+backups and all three live logs are under `.tooling/move-processing-20261001`;
+never commit them. Server execution documents remain untouched.
+Registry-file SHA-256: `dae7656553ff3e985c892e6627e9044a52efa7b6d01c13f0ec0b668a28ff81ff`.
+Canonical registry SHA-256: `4f624d5a46e91d66e08597db808e8d937d2f587fec2ef85ddddd90ae184318d0`.
+Passing live-log SHA-256: `a8e7a44888bc3fcfa7bc3d38640e924be8dbc0ba72df0098b2cedee37225a05b`.
+
+Changed public code/schema/tests and staged added lines have zero findings;
+the full tree still has five historical path/IP document findings and is
+not described as passing. Odoo remained PID 25607/NRestarts 6; Nginx
+3309593/NRestarts 0; PostgreSQL remained active. No business database,
+installed source/addon, Pi bridge, V2/V3 chain or service configuration changed.
+
+### Continue
+
+Audit real installed accounting models/actions against existing IDs before
+another roughly 8-12 related commands; reuse one shared rollback-only smoke.
+Do not count aliases or existing fields again, and defer large control
+frameworks. Asset validation remains failed; product accounting-profile
+readback and two external report sends remain planned. Installed-addon
+repair and actual external delivery need separate authority. The overall
+goal stays active; complete accounting coverage is not yet proven.

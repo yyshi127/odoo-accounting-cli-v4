@@ -2,6 +2,61 @@
 
 ## Current accounting phase — 2026-10-01
 
+451 registered IDs; 436 implemented handlers (221 reads, 215 writes);
+878 schema files. Availability: 363 unconfigured, 73 degraded, 15 disabled.
+Enabled-handler integration records: 432 implemented, three planned, one failed.
+These counts include historical non-accounting extensions, not full accounting
+coverage, a completion percentage, or a guarantee of ordinary-runtime ACLs.
+
+The latest batch adds nine native invoice/entry processing capabilities:
+one processing-settings GET and eight writes for manual/default currency rate,
+cash rounding, incoterm/location, preferred invoice payment method, payment
+blocking, posted review and draft auto-post scheduling. No redundant aliases,
+generic field/method dispatcher or new approval/audit framework were added.
+The schedule command only saves native fields; it never runs a cron or posts
+the scheduled move. Rates are document-currency units per company-currency unit.
+
+The shared rollback-only CLI/ORM smoke passed both isolated aliases as uid 5
+with su=False in 425.01 seconds after two real failure-driven repairs.
+It covers all nine new IDs, eight immediate replays, actual foreign-currency
+balance recomputation/restoration, a native rounding line, invoice method/term,
+payment block/unblock, native review, a still-draft recurring schedule,
+direction/state/company denial, and fresh-cursor rollback of business data,
+temporary groups and currency/rate fixtures. No external delivery occurred.
+
+The first attempt exposed native date-object serialization; two reproductions
+now pass. The second exposed an existing nullable-currency adapter bug in
+journal entry create/replace: JSON null was written as False to a native
+required field. Only the two mappings were corrected to preserve native
+defaults. The final smoke keeps explicit null inputs and verifies both create
+and replacement, rather than removing that case to obtain a pass.
+
+Local tests: batch 65; focused framework 17; entry-regression selection 67;
+complete read framework 799; relevant registry selection 19 with one known
+historical deselection. Server final batch/entry/closed-set selection: 68;
+registry selection: 19 with the same deselection. Ruff and diff checks passed.
+The initial 33-file deployment backed up 12 existing files and added 21.
+Both three-file repairs and final two-file metadata sync checked deployed
+baselines and backed them up first. All 33 final hashes match local files.
+Server STATUS/HANDOFF files were not overwritten.
+
+Odoo/Nginx PID/restart counters stayed unchanged; PostgreSQL stayed active.
+No business database, installed addon, Pi/V2/V3 chain or service configuration
+was changed. Changed code/schema/tests and staged added lines have no privacy
+findings; the full-tree scan retains five historical document path/IP findings.
+The older bank-statement/payment-maintenance registry test has a stale planned
+expectation despite unchanged HEAD already recording implemented; it is
+explicitly excluded, not silently repaired or described as passing.
+
+Next: audit another small genuine native accounting capability gap batch.
+Older positive integration gaps remain asset.validate (failed), and product
+accounting-profile readback plus two external report-send commands (planned).
+Addon repair and real external delivery require separate authority.
+The capability-first goal remains active; no complete-coverage denominator
+has yet been verified.
+
+## Previous checkpoint — partner accounting preferences, 2026-10-01
+
 The registry has 442 IDs and 427 implemented handlers: 220 reads and 207
 writes, with 860 schema files. Availability descriptors are 354
 `unconfigured`, 73 `degraded`, and 15 `disabled`. Enabled-handler integration records are

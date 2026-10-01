@@ -24,6 +24,7 @@ CAPABILITY_IDS = frozenset(
         "journal.group.list",
         "partner.bill_validation_preferences.get",
         "partner.invoice_delivery_preferences.get",
+        "accounting_move.processing_settings.get",
         "partner.payment_preferences.get",
         "payment.method_definition.get",
         "incoterm.get",

@@ -1,0 +1,260 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/accounting_move.processing_settings.get.response.schema.json",
+  "title": "accounting_move.processing_settings.get response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "success",
+    "capability",
+    "status",
+    "data",
+    "warnings",
+    "error",
+    "odoo",
+    "audit"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v1"
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "success": {
+      "type": "boolean"
+    },
+    "capability": {
+      "const": "accounting_move.processing_settings.get"
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "data": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/item"
+        }
+      ]
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "error": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "response.schema.json#/$defs/error"
+        }
+      ]
+    },
+    "odoo": {
+      "$ref": "response.schema.json#/$defs/odoo"
+    },
+    "audit": {
+      "$ref": "response.schema.json#/$defs/audit"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "success": {
+            "const": true
+          }
+        },
+        "required": [
+          "success"
+        ]
+      },
+      "then": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "const": "verified"
+          },
+          "data": {
+            "$ref": "#/$defs/item"
+          },
+          "error": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "data": {
+            "type": "null"
+          },
+          "error": {
+            "$ref": "response.schema.json#/$defs/error"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "auto_post",
+        "auto_post_origin_id",
+        "auto_post_until",
+        "checked",
+        "company_currency_id",
+        "company_id",
+        "currency_id",
+        "date",
+        "expected_currency_rate",
+        "id",
+        "incoterm_location",
+        "invoice_cash_rounding_id",
+        "invoice_currency_rate",
+        "invoice_incoterm_id",
+        "move_type",
+        "name",
+        "payment_state",
+        "preferred_payment_method_line_id",
+        "state"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "company_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "move_type": {
+          "enum": [
+            "entry",
+            "in_invoice",
+            "in_receipt",
+            "in_refund",
+            "out_invoice",
+            "out_receipt",
+            "out_refund"
+          ]
+        },
+        "state": {
+          "enum": [
+            "draft",
+            "posted",
+            "cancel"
+          ]
+        },
+        "date": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\\s\\S])"
+        },
+        "currency_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "company_currency_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "invoice_currency_rate": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
+        },
+        "expected_currency_rate": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
+        },
+        "invoice_cash_rounding_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "invoice_incoterm_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "incoterm_location": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "preferred_payment_method_line_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "auto_post": {
+          "enum": [
+            "at_date",
+            "monthly",
+            "no",
+            "quarterly",
+            "yearly"
+          ]
+        },
+        "auto_post_until": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\\s\\S])"
+        },
+        "auto_post_origin_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "checked": {
+          "type": "boolean"
+        },
+        "payment_state": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

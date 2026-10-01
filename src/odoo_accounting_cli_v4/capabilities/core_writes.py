@@ -14,13 +14,14 @@ from time import strftime, strptime
 from typing import Any, Protocol
 
 from odoo_accounting_cli_v4 import fiscal_mapping_contracts as fiscal_mappings
+from odoo_accounting_cli_v4 import move_processing_contracts as move_processing
 from odoo_accounting_cli_v4 import partner_preferences_contracts as partner_preferences
 from odoo_accounting_cli_v4 import (
     payment_configuration_contracts as payment_configuration,
 )
 from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
 
-CORE_WRITE_CAPABILITY_IDS = partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
+CORE_WRITE_CAPABILITY_IDS = move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -4275,7 +4276,12 @@ def validate_core_write_request(
             code="capability_unavailable",
         )
     request_id, context, parameters = _validate_envelope(request)
-    if capability_id in partner_preferences.CAPABILITY_IDS:
+    if capability_id in move_processing.CAPABILITY_IDS:
+        try:
+            normalized = move_processing.normalize_parameters(capability_id, parameters)
+        except ValueError as exc:
+            raise _invalid(str(exc)) from exc
+    elif capability_id in partner_preferences.CAPABILITY_IDS:
         try:
             normalized = partner_preferences.normalize_parameters(capability_id, parameters)
         except ValueError as exc:
@@ -4487,6 +4493,8 @@ def validate_core_write_request(
 def _expected_idempotency_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in move_processing.CAPABILITY_IDS:
+        return move_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in partner_preferences.CAPABILITY_IDS:
         return partner_preferences.idempotency_key(capability_id, parameters, company_id)
     if capability_id in payment_configuration.CAPABILITY_IDS:
@@ -5182,6 +5190,15 @@ def _validate_result(
 ) -> dict[str, Any]:
     if not _valid_result_shape(result) or result["company_id"] != company_id:
         raise _failed("Odoo returned a malformed or out-of-scope core-write result.")
+
+    if capability_id in move_processing.CAPABILITY_IDS:
+        types = move_processing.INVOICE_TYPES if capability_id.startswith("invoice.") else move_processing.MOVE_TYPES
+        if (result["model"] != "account.move" or result["id"] != parameters["move_id"]
+            or result["move_type"] not in types or result["state"] not in {"draft", "posted", "cancel"}
+            or result["source_id"] is not None or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None):
+            raise _failed("Odoo returned a mismatched processing-settings result.")
+        return deepcopy(result)
 
     if capability_id in partner_preferences.CAPABILITY_IDS:
         if (result["model"] != "res.partner" or result["id"] != parameters["partner_id"]

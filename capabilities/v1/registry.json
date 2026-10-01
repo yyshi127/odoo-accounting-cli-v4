@@ -27192,6 +27192,1137 @@
         ]
       },
       "handler_key": "core_write"
+    },
+    "accounting_move.autopost.configure": {
+      "summary": {
+        "zh_CN": "设置分录自动过账计划",
+        "en_US": "Configure a draft move native auto-post schedule"
+      },
+      "domain": "accounting_documents",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.move",
+          "account.move.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py",
+          "account/models/account_move_line.py",
+          "account/models/account_cash_rounding.py",
+          "account/views/account_move_views.xml",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/accounting_move.autopost.configure.request.schema.json",
+        "response": "schemas/v1/accounting_move.autopost.configure.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_user"
+        ],
+        "acl": [
+          "account.move.line:read",
+          "account.move:read",
+          "account.move:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_move_field_patch_or_native_action",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "native_current_payload_recheck",
+        "reverse": "restore_previous_setting_subject_to_native_state_and_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_move_processing_batch.py"
+          ],
+          "reason": "Shared closed contracts, native methods, fixed public/runtime/schema and company/user boundaries."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_move_processing_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all nine new capabilities, eight immediate replays, actual foreign-currency balance recomputation and native rate refresh, native cash-rounding line, incoterm and invoice method, native payment block/unblock and posted review, a saved unposted recurring schedule, direction/state/company denial, and fresh-cursor business-data, currency/rate fixture and temporary-group rollback verification. No cron, external delivery or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires explicit runtime company/user scope and native ACLs. Currency/rounding/term/method/schedule changes require draft moves; review uses the native posted-only method. Auto-post configuration schedules native future work but never runs a cron or posts a move in this command. No arbitrary field/method calls or external delivery."
+      },
+      "routing": {
+        "object": "accounting_move",
+        "actions": [
+          "configure"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置分录自动过账计划"
+          ],
+          "en_US": [
+            "Configure a draft move native auto-post schedule"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "运行自动过账任务",
+            "修改已过账发票的汇率或金额",
+            "操作其他公司单据"
+          ],
+          "en_US": [
+            "Running an auto-post cron",
+            "Changing posted invoice rates or amounts",
+            "Another company move"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "accounting_move.processing_settings.get": {
+      "summary": {
+        "zh_CN": "读取发票分录处理设置",
+        "en_US": "Get native invoice and entry processing settings"
+      },
+      "domain": "accounting_documents",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "account.move",
+          "res.currency",
+          "account.cash.rounding",
+          "account.incoterms",
+          "account.payment.method.line"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py",
+          "account/models/account_move_line.py",
+          "account/models/account_cash_rounding.py",
+          "account/views/account_move_views.xml",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/accounting_move.processing_settings.get.request.schema.json",
+        "response": "schemas/v1/accounting_move.processing_settings.get.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.move:read",
+          "res.currency:read",
+          "account.cash.rounding:read",
+          "account.incoterms:read",
+          "account.payment.method.line:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_native_move_processing_settings_read",
+        "verify": "closed_response_schema_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_move_processing_batch.py"
+          ],
+          "reason": "Shared closed contracts, native methods, fixed public/runtime/schema and company/user boundaries."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_move_processing_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all nine new capabilities, eight immediate replays, actual foreign-currency balance recomputation and native rate refresh, native cash-rounding line, incoterm and invoice method, native payment block/unblock and posted review, a saved unposted recurring schedule, direction/state/company denial, and fresh-cursor business-data, currency/rate fixture and temporary-group rollback verification. No cron, external delivery or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires explicit runtime company/user scope and native ACLs. Currency/rounding/term/method/schedule changes require draft moves; review uses the native posted-only method. Auto-post configuration schedules native future work but never runs a cron or posts a move in this command. No arbitrary field/method calls or external delivery."
+      },
+      "routing": {
+        "object": "accounting_move",
+        "actions": [
+          "get"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "读取发票分录处理设置"
+          ],
+          "en_US": [
+            "Get native invoice and entry processing settings"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "运行自动过账任务",
+            "修改已过账发票的汇率或金额",
+            "操作其他公司单据"
+          ],
+          "en_US": [
+            "Running an auto-post cron",
+            "Changing posted invoice rates or amounts",
+            "Another company move"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "accounting_move_processing_settings_get"
+    },
+    "accounting_move.review.set": {
+      "summary": {
+        "zh_CN": "设置分录复核状态",
+        "en_US": "Set a posted move native reviewed flag"
+      },
+      "domain": "accounting_documents",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.move",
+          "account.move.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py",
+          "account/models/account_move_line.py",
+          "account/models/account_cash_rounding.py",
+          "account/views/account_move_views.xml",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/accounting_move.review.set.request.schema.json",
+        "response": "schemas/v1/accounting_move.review.set.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_user"
+        ],
+        "acl": [
+          "account.move.line:read",
+          "account.move:read",
+          "account.move:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_move_field_patch_or_native_action",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "native_current_payload_recheck",
+        "reverse": "restore_previous_setting_subject_to_native_state_and_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_move_processing_batch.py"
+          ],
+          "reason": "Shared closed contracts, native methods, fixed public/runtime/schema and company/user boundaries."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_move_processing_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all nine new capabilities, eight immediate replays, actual foreign-currency balance recomputation and native rate refresh, native cash-rounding line, incoterm and invoice method, native payment block/unblock and posted review, a saved unposted recurring schedule, direction/state/company denial, and fresh-cursor business-data, currency/rate fixture and temporary-group rollback verification. No cron, external delivery or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires explicit runtime company/user scope and native ACLs. Currency/rounding/term/method/schedule changes require draft moves; review uses the native posted-only method. Auto-post configuration schedules native future work but never runs a cron or posts a move in this command. No arbitrary field/method calls or external delivery."
+      },
+      "routing": {
+        "object": "accounting_move",
+        "actions": [
+          "set"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置分录复核状态"
+          ],
+          "en_US": [
+            "Set a posted move native reviewed flag"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "运行自动过账任务",
+            "修改已过账发票的汇率或金额",
+            "操作其他公司单据"
+          ],
+          "en_US": [
+            "Running an auto-post cron",
+            "Changing posted invoice rates or amounts",
+            "Another company move"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "invoice.cash_rounding.assign": {
+      "summary": {
+        "zh_CN": "设置发票现金舍入方式",
+        "en_US": "Assign or clear a draft invoice cash-rounding method"
+      },
+      "domain": "accounting_documents",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "account.cash.rounding",
+          "account.move",
+          "account.move.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py",
+          "account/models/account_move_line.py",
+          "account/models/account_cash_rounding.py",
+          "account/views/account_move_views.xml",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.cash_rounding.assign.request.schema.json",
+        "response": "schemas/v1/invoice.cash_rounding.assign.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.cash.rounding:read",
+          "account.move.line:create",
+          "account.move.line:read",
+          "account.move.line:unlink",
+          "account.move.line:write",
+          "account.move:read",
+          "account.move:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_move_field_patch_or_native_action",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "native_current_payload_recheck",
+        "reverse": "restore_previous_setting_subject_to_native_state_and_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_move_processing_batch.py"
+          ],
+          "reason": "Shared closed contracts, native methods, fixed public/runtime/schema and company/user boundaries."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_move_processing_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all nine new capabilities, eight immediate replays, actual foreign-currency balance recomputation and native rate refresh, native cash-rounding line, incoterm and invoice method, native payment block/unblock and posted review, a saved unposted recurring schedule, direction/state/company denial, and fresh-cursor business-data, currency/rate fixture and temporary-group rollback verification. No cron, external delivery or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires explicit runtime company/user scope and native ACLs. Currency/rounding/term/method/schedule changes require draft moves; review uses the native posted-only method. Auto-post configuration schedules native future work but never runs a cron or posts a move in this command. No arbitrary field/method calls or external delivery."
+      },
+      "routing": {
+        "object": "invoice",
+        "actions": [
+          "assign"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置发票现金舍入方式"
+          ],
+          "en_US": [
+            "Assign or clear a draft invoice cash-rounding method"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "运行自动过账任务",
+            "修改已过账发票的汇率或金额",
+            "操作其他公司单据"
+          ],
+          "en_US": [
+            "Running an auto-post cron",
+            "Changing posted invoice rates or amounts",
+            "Another company move"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "invoice.currency_rate.refresh": {
+      "summary": {
+        "zh_CN": "恢复发票原生默认汇率",
+        "en_US": "Refresh a draft invoice native expected currency rate"
+      },
+      "domain": "accounting_documents",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.move",
+          "account.move.line",
+          "res.company",
+          "res.currency",
+          "res.currency.rate"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py",
+          "account/models/account_move_line.py",
+          "account/models/account_cash_rounding.py",
+          "account/views/account_move_views.xml",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.currency_rate.refresh.request.schema.json",
+        "response": "schemas/v1/invoice.currency_rate.refresh.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.move.line:create",
+          "account.move.line:read",
+          "account.move.line:unlink",
+          "account.move.line:write",
+          "account.move:read",
+          "account.move:write",
+          "res.currency.rate:read",
+          "res.currency:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_move_field_patch_or_native_action",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "native_current_payload_recheck",
+        "reverse": "restore_previous_setting_subject_to_native_state_and_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_move_processing_batch.py"
+          ],
+          "reason": "Shared closed contracts, native methods, fixed public/runtime/schema and company/user boundaries."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_move_processing_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all nine new capabilities, eight immediate replays, actual foreign-currency balance recomputation and native rate refresh, native cash-rounding line, incoterm and invoice method, native payment block/unblock and posted review, a saved unposted recurring schedule, direction/state/company denial, and fresh-cursor business-data, currency/rate fixture and temporary-group rollback verification. No cron, external delivery or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires explicit runtime company/user scope and native ACLs. Currency/rounding/term/method/schedule changes require draft moves; review uses the native posted-only method. Auto-post configuration schedules native future work but never runs a cron or posts a move in this command. No arbitrary field/method calls or external delivery."
+      },
+      "routing": {
+        "object": "invoice",
+        "actions": [
+          "refresh"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "恢复发票原生默认汇率"
+          ],
+          "en_US": [
+            "Refresh a draft invoice native expected currency rate"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "运行自动过账任务",
+            "修改已过账发票的汇率或金额",
+            "操作其他公司单据"
+          ],
+          "en_US": [
+            "Running an auto-post cron",
+            "Changing posted invoice rates or amounts",
+            "Another company move"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "invoice.currency_rate.update": {
+      "summary": {
+        "zh_CN": "设置发票手工汇率",
+        "en_US": "Set a draft invoice manual currency rate"
+      },
+      "domain": "accounting_documents",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.move",
+          "account.move.line",
+          "res.company",
+          "res.currency",
+          "res.currency.rate"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py",
+          "account/models/account_move_line.py",
+          "account/models/account_cash_rounding.py",
+          "account/views/account_move_views.xml",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.currency_rate.update.request.schema.json",
+        "response": "schemas/v1/invoice.currency_rate.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.move.line:create",
+          "account.move.line:read",
+          "account.move.line:unlink",
+          "account.move.line:write",
+          "account.move:read",
+          "account.move:write",
+          "res.currency.rate:read",
+          "res.currency:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_move_field_patch_or_native_action",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "native_current_payload_recheck",
+        "reverse": "restore_previous_setting_subject_to_native_state_and_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_move_processing_batch.py"
+          ],
+          "reason": "Shared closed contracts, native methods, fixed public/runtime/schema and company/user boundaries."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_move_processing_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all nine new capabilities, eight immediate replays, actual foreign-currency balance recomputation and native rate refresh, native cash-rounding line, incoterm and invoice method, native payment block/unblock and posted review, a saved unposted recurring schedule, direction/state/company denial, and fresh-cursor business-data, currency/rate fixture and temporary-group rollback verification. No cron, external delivery or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires explicit runtime company/user scope and native ACLs. Currency/rounding/term/method/schedule changes require draft moves; review uses the native posted-only method. Auto-post configuration schedules native future work but never runs a cron or posts a move in this command. No arbitrary field/method calls or external delivery."
+      },
+      "routing": {
+        "object": "invoice",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置发票手工汇率"
+          ],
+          "en_US": [
+            "Set a draft invoice manual currency rate"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "运行自动过账任务",
+            "修改已过账发票的汇率或金额",
+            "操作其他公司单据"
+          ],
+          "en_US": [
+            "Running an auto-post cron",
+            "Changing posted invoice rates or amounts",
+            "Another company move"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "invoice.incoterm.update": {
+      "summary": {
+        "zh_CN": "修改发票贸易术语",
+        "en_US": "Update draft invoice incoterm and location"
+      },
+      "domain": "accounting_documents",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.incoterms",
+          "account.move",
+          "account.move.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py",
+          "account/models/account_move_line.py",
+          "account/models/account_cash_rounding.py",
+          "account/views/account_move_views.xml",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.incoterm.update.request.schema.json",
+        "response": "schemas/v1/invoice.incoterm.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.incoterms:read",
+          "account.move.line:read",
+          "account.move:read",
+          "account.move:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_move_field_patch_or_native_action",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "native_current_payload_recheck",
+        "reverse": "restore_previous_setting_subject_to_native_state_and_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_move_processing_batch.py"
+          ],
+          "reason": "Shared closed contracts, native methods, fixed public/runtime/schema and company/user boundaries."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_move_processing_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all nine new capabilities, eight immediate replays, actual foreign-currency balance recomputation and native rate refresh, native cash-rounding line, incoterm and invoice method, native payment block/unblock and posted review, a saved unposted recurring schedule, direction/state/company denial, and fresh-cursor business-data, currency/rate fixture and temporary-group rollback verification. No cron, external delivery or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires explicit runtime company/user scope and native ACLs. Currency/rounding/term/method/schedule changes require draft moves; review uses the native posted-only method. Auto-post configuration schedules native future work but never runs a cron or posts a move in this command. No arbitrary field/method calls or external delivery."
+      },
+      "routing": {
+        "object": "invoice",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "修改发票贸易术语"
+          ],
+          "en_US": [
+            "Update draft invoice incoterm and location"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "运行自动过账任务",
+            "修改已过账发票的汇率或金额",
+            "操作其他公司单据"
+          ],
+          "en_US": [
+            "Running an auto-post cron",
+            "Changing posted invoice rates or amounts",
+            "Another company move"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "invoice.payment_block.set": {
+      "summary": {
+        "zh_CN": "设置发票付款阻止状态",
+        "en_US": "Set or clear native invoice payment blocking"
+      },
+      "domain": "accounting_documents",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.move",
+          "account.move.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py",
+          "account/models/account_move_line.py",
+          "account/models/account_cash_rounding.py",
+          "account/views/account_move_views.xml",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.payment_block.set.request.schema.json",
+        "response": "schemas/v1/invoice.payment_block.set.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.move.line:read",
+          "account.move:read",
+          "account.move:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_move_field_patch_or_native_action",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "native_current_payload_recheck",
+        "reverse": "restore_previous_setting_subject_to_native_state_and_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_move_processing_batch.py"
+          ],
+          "reason": "Shared closed contracts, native methods, fixed public/runtime/schema and company/user boundaries."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_move_processing_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all nine new capabilities, eight immediate replays, actual foreign-currency balance recomputation and native rate refresh, native cash-rounding line, incoterm and invoice method, native payment block/unblock and posted review, a saved unposted recurring schedule, direction/state/company denial, and fresh-cursor business-data, currency/rate fixture and temporary-group rollback verification. No cron, external delivery or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires explicit runtime company/user scope and native ACLs. Currency/rounding/term/method/schedule changes require draft moves; review uses the native posted-only method. Auto-post configuration schedules native future work but never runs a cron or posts a move in this command. No arbitrary field/method calls or external delivery."
+      },
+      "routing": {
+        "object": "invoice",
+        "actions": [
+          "set"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置发票付款阻止状态"
+          ],
+          "en_US": [
+            "Set or clear native invoice payment blocking"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "运行自动过账任务",
+            "修改已过账发票的汇率或金额",
+            "操作其他公司单据"
+          ],
+          "en_US": [
+            "Running an auto-post cron",
+            "Changing posted invoice rates or amounts",
+            "Another company move"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "invoice.payment_method.assign": {
+      "summary": {
+        "zh_CN": "设置发票付款方式",
+        "en_US": "Assign or clear a draft invoice preferred payment method"
+      },
+      "domain": "accounting_documents",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.journal",
+          "account.move",
+          "account.move.line",
+          "account.payment.method.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py",
+          "account/models/account_move_line.py",
+          "account/models/account_cash_rounding.py",
+          "account/views/account_move_views.xml",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.payment_method.assign.request.schema.json",
+        "response": "schemas/v1/invoice.payment_method.assign.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.journal:read",
+          "account.move.line:read",
+          "account.move:read",
+          "account.move:write",
+          "account.payment.method.line:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_move_field_patch_or_native_action",
+        "verify": "same_transaction_native_payload_recheck",
+        "idempotency": "native_current_payload_recheck",
+        "reverse": "restore_previous_setting_subject_to_native_state_and_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_move_processing_batch.py"
+          ],
+          "reason": "Shared closed contracts, native methods, fixed public/runtime/schema and company/user boundaries."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_move_processing_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all nine new capabilities, eight immediate replays, actual foreign-currency balance recomputation and native rate refresh, native cash-rounding line, incoterm and invoice method, native payment block/unblock and posted review, a saved unposted recurring schedule, direction/state/company denial, and fresh-cursor business-data, currency/rate fixture and temporary-group rollback verification. No cron, external delivery or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires explicit runtime company/user scope and native ACLs. Currency/rounding/term/method/schedule changes require draft moves; review uses the native posted-only method. Auto-post configuration schedules native future work but never runs a cron or posts a move in this command. No arbitrary field/method calls or external delivery."
+      },
+      "routing": {
+        "object": "invoice",
+        "actions": [
+          "assign"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置发票付款方式"
+          ],
+          "en_US": [
+            "Assign or clear a draft invoice preferred payment method"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "运行自动过账任务",
+            "修改已过账发票的汇率或金额",
+            "操作其他公司单据"
+          ],
+          "en_US": [
+            "Running an auto-post cron",
+            "Changing posted invoice rates or amounts",
+            "Another company move"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
     }
   }
 }

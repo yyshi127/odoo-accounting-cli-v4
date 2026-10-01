@@ -11,6 +11,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 
+from odoo_accounting_cli_v4 import move_processing_contracts as move_processing
 from odoo_accounting_cli_v4 import partner_preferences_contracts as partner_preferences
 
 DEFAULT_LIMIT = 100
@@ -45,6 +46,7 @@ CORE_OBJECT_GET_CAPABILITY_IDS = frozenset(
         "journal.group.get",
         "partner.bill_validation_preferences.get",
         "partner.invoice_delivery_preferences.get",
+        "accounting_move.processing_settings.get",
         "partner.payment_preferences.get",
         "payment.method_definition.get",
         "incoterm.get",
@@ -155,6 +157,7 @@ _ID_FIELDS = {
     "journal.group.get": "journal_group_id",
     "partner.bill_validation_preferences.get": "partner_id",
     "partner.invoice_delivery_preferences.get": "partner_id",
+    "accounting_move.processing_settings.get": "move_id",
     "partner.payment_preferences.get": "partner_id",
     "payment.method_definition.get": "payment_method_id",
     "incoterm.get": "incoterm_id",
@@ -2735,6 +2738,8 @@ def _valid_account_status_item(item: Any, company_id: int) -> bool:
 
 
 def _valid_item(capability_id: str, item: Any, company_id: int) -> bool:
+    if capability_id == move_processing.READ_ID:
+        return move_processing.valid_read_item(item, company_id)
     if capability_id in partner_preferences.READ_CAPABILITY_IDS:
         return partner_preferences.valid_read_item(capability_id, item, company_id)
     if capability_id == "account.account.get":

@@ -18,6 +18,7 @@ from time import strftime, strptime
 from typing import Any
 
 from odoo_accounting_cli_v4 import fiscal_mapping_contracts as fiscal_mappings
+from odoo_accounting_cli_v4 import move_processing_contracts as move_processing
 from odoo_accounting_cli_v4 import partner_preferences_contracts as partner_preferences
 from odoo_accounting_cli_v4 import (
     payment_configuration_contracts as payment_configuration,
@@ -25,7 +26,7 @@ from odoo_accounting_cli_v4 import (
 from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
 
 ACTION = "accounting.core_write.execute"
-CAPABILITIES = partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
+CAPABILITIES = move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -3313,6 +3314,31 @@ def _protocol(failure_type: type[Exception]) -> Exception:
     )
 
 
+_PARAMETER_KEYS.update(move_processing.PARAMETER_KEYS)
+_GROUPS['accounting_move.autopost.configure'] = 'account.group_account_user'
+_MODELS['accounting_move.autopost.configure'] = {'account.move', 'account.move.line', 'res.company'}
+_ACCESS['accounting_move.autopost.configure'] = {('account.move.line', 'read'), ('account.move', 'read'), ('account.move', 'write')}
+_GROUPS['accounting_move.review.set'] = 'account.group_account_user'
+_MODELS['accounting_move.review.set'] = {'account.move', 'account.move.line', 'res.company'}
+_ACCESS['accounting_move.review.set'] = {('account.move.line', 'read'), ('account.move', 'read'), ('account.move', 'write')}
+_GROUPS['invoice.cash_rounding.assign'] = 'account.group_account_invoice'
+_MODELS['invoice.cash_rounding.assign'] = {'account.move', 'account.cash.rounding', 'res.company', 'account.account', 'account.move.line'}
+_ACCESS['invoice.cash_rounding.assign'] = {('account.move.line', 'read'), ('account.cash.rounding', 'read'), ('account.move', 'read'), ('account.move.line', 'unlink'), ('account.move', 'write'), ('account.move.line', 'write'), ('account.account', 'read'), ('account.move.line', 'create')}
+_GROUPS['invoice.currency_rate.refresh'] = 'account.group_account_invoice'
+_MODELS['invoice.currency_rate.refresh'] = {'account.move', 'res.company', 'res.currency', 'res.currency.rate', 'account.move.line'}
+_ACCESS['invoice.currency_rate.refresh'] = {('account.move.line', 'read'), ('account.move', 'read'), ('account.move.line', 'unlink'), ('account.move', 'write'), ('account.move.line', 'write'), ('res.currency', 'read'), ('account.move.line', 'create'), ('res.currency.rate', 'read')}
+_GROUPS['invoice.currency_rate.update'] = 'account.group_account_invoice'
+_MODELS['invoice.currency_rate.update'] = {'account.move', 'res.company', 'res.currency', 'res.currency.rate', 'account.move.line'}
+_ACCESS['invoice.currency_rate.update'] = {('account.move.line', 'read'), ('account.move', 'read'), ('account.move.line', 'unlink'), ('account.move', 'write'), ('account.move.line', 'write'), ('res.currency', 'read'), ('account.move.line', 'create'), ('res.currency.rate', 'read')}
+_GROUPS['invoice.incoterm.update'] = 'account.group_account_invoice'
+_MODELS['invoice.incoterm.update'] = {'account.incoterms', 'account.move', 'account.move.line', 'res.company'}
+_ACCESS['invoice.incoterm.update'] = {('account.move.line', 'read'), ('account.move', 'read'), ('account.incoterms', 'read'), ('account.move', 'write')}
+_GROUPS['invoice.payment_block.set'] = 'account.group_account_invoice'
+_MODELS['invoice.payment_block.set'] = {'account.move', 'account.move.line', 'res.company'}
+_ACCESS['invoice.payment_block.set'] = {('account.move.line', 'read'), ('account.move', 'read'), ('account.move', 'write')}
+_GROUPS['invoice.payment_method.assign'] = 'account.group_account_invoice'
+_MODELS['invoice.payment_method.assign'] = {'account.move', 'account.payment.method.line', 'account.journal', 'res.company', 'account.move.line'}
+_ACCESS['invoice.payment_method.assign'] = {('account.move.line', 'read'), ('account.move', 'read'), ('account.journal', 'read'), ('account.payment.method.line', 'read'), ('account.move', 'write')}
 _PARAMETER_KEYS.update(partner_preferences.PARAMETER_KEYS)
 _GROUPS['partner.bill_validation_preferences.update'] = "account.group_account_user"
 _MODELS['partner.bill_validation_preferences.update'] = {'res.company', 'res.partner'}
@@ -5338,6 +5364,11 @@ def _valid_parameters(
 ) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id in move_processing.CAPABILITY_IDS:
+        try:
+            return move_processing.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
     if capability_id in partner_preferences.CAPABILITY_IDS:
         try:
             return partner_preferences.normalize_parameters(capability_id, parameters) == parameters
@@ -5936,6 +5967,8 @@ def _validated_payload(
 def _deterministic_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in move_processing.CAPABILITY_IDS:
+        return move_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in partner_preferences.CAPABILITY_IDS:
         return partner_preferences.idempotency_key(capability_id, parameters, company_id)
     if capability_id in payment_configuration.CAPABILITY_IDS:
@@ -10951,7 +10984,7 @@ def _create_entry(
                                 else False
                             ),
                         }
-                        if "currency_id" in line
+                        if line.get("currency_id") is not None
                         else {}
                     ),
                     **(
@@ -11457,7 +11490,7 @@ def _replacement_commands(
                             else False
                         ),
                     }
-                    if "currency_id" in line
+                    if line.get("currency_id") is not None
                     else {}
                 ),
                 "analytic_distribution": _odoo_analytic_distribution(
@@ -19329,6 +19362,93 @@ def _write_partner_preferences_batch(
     return _partner_result(partner, company_id), replay
 
 
+def _write_move_processing(
+    env: Any, capability_id: str, parameters: dict[str, Any],
+    company_id: int, failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    invoice = capability_id.startswith("invoice.")
+    move = _search_one(env, "account.move", [
+        ("id", "=", parameters["move_id"]), ("company_id", "=", company_id),
+        ("move_type", "in", sorted(move_processing.INVOICE_TYPES if invoice else move_processing.MOVE_TYPES)),
+    ], company_id, failure_type)
+    if capability_id == "accounting_move.review.set":
+        if move.state != "posted":
+            raise _fail(failure_type, "state_conflict", "Only a posted move can be reviewed.", exit_code=6)
+        expected = parameters["checked"]
+        replay = move.checked == expected
+        if not replay:
+            move.set_moves_checked(expected)
+        move.invalidate_recordset(["checked"])
+        if move.checked != expected:
+            raise _fail(failure_type, "odoo_write_error", "Native review state was not persisted.", exit_code=6)
+        return _move_result(move, company_id), replay
+    if capability_id == "invoice.payment_block.set":
+        expected = parameters["blocked"]
+        replay = (move.payment_state == "blocked") == expected
+        if not replay:
+            if expected and move.payment_state in {"paid", "in_payment"}:
+                raise _fail(failure_type, "business_rule_error", "A paid or in-payment invoice cannot be blocked.", exit_code=6)
+            move.action_toggle_block_payment()
+        move.invalidate_recordset(["payment_state"])
+        if (move.payment_state == "blocked") != expected:
+            raise _fail(failure_type, "odoo_write_error", "Native payment block state was not persisted.", exit_code=6)
+        return _move_result(move, company_id), replay
+    if move.state != "draft":
+        raise _fail(failure_type, "state_conflict", "Processing settings require a draft move.", exit_code=6)
+    if capability_id.startswith("invoice.currency_rate."):
+        expected = float(parameters["rate"]) if capability_id.endswith(".update") else move.expected_currency_rate
+        if move.currency_id == move.company_id.currency_id and expected != 1:
+            raise _fail(failure_type, "business_rule_error", "A same-currency document uses rate 1.", exit_code=6)
+        replay = move.invoice_currency_rate == expected
+        if not replay:
+            if capability_id.endswith(".refresh"):
+                move.refresh_invoice_currency_rate()
+            else:
+                move.write({"invoice_currency_rate": expected})
+        move.invalidate_recordset(["invoice_currency_rate"])
+        if move.invoice_currency_rate != expected:
+            raise _fail(failure_type, "odoo_write_error", "Native currency rate was not persisted.", exit_code=6)
+        return _move_result(move, company_id), replay
+    if capability_id == "invoice.cash_rounding.assign":
+        rounding_id = parameters["cash_rounding_id"]
+        if rounding_id is not None:
+            rounding = _search_one(env, "account.cash.rounding", [("id", "=", rounding_id)], company_id, failure_type)
+            rounding = rounding.with_company(move.company_id)
+            accounts = set((rounding.profit_account_id | rounding.loss_account_id).ids)
+            if accounts:
+                _ensure_ids(env, "account.account", accounts, [("company_ids", "in", [company_id])], company_id, failure_type)
+        changes = {"invoice_cash_rounding_id": rounding_id}
+    elif capability_id == "invoice.payment_method.assign":
+        line_id = parameters["payment_method_line_id"]
+        if line_id is not None:
+            line = _payment_line_config_record(env, line_id, company_id, failure_type)
+            direction = "inbound" if move.move_type.startswith("out_") else "outbound"
+            if line.payment_type != direction or not line.journal_id.active:
+                raise _fail(failure_type, "business_rule_error", "Invoice payment method needs a matching direction and active same-company journal.", exit_code=6)
+        changes = {"preferred_payment_method_line_id": line_id}
+    elif capability_id == "invoice.incoterm.update":
+        changes = {"invoice_incoterm_id" if field == "incoterm_id" else field: value for field, value in parameters["changes"].items()}
+        incoterm_id = changes.get("invoice_incoterm_id")
+        if incoterm_id is not None:
+            _ensure_ids(env, "account.incoterms", {incoterm_id}, [], company_id, failure_type)
+    else:
+        changes = {field: parameters[field] for field in ("auto_post", "auto_post_until")}
+    def current(field: str) -> Any:
+        value = getattr(move, field)
+        if field.endswith("_id"):
+            return _relation_id(value)
+        if field == "auto_post_until":
+            return value.isoformat() if value else None
+        return value or None
+    replay = all(current(field) == value for field, value in changes.items())
+    if not replay:
+        move.write({field: value if value is not None else False for field, value in changes.items()})
+        move.invalidate_recordset()
+    if any(current(field) != value for field, value in changes.items()):
+        raise _fail(failure_type, "odoo_write_error", "Native processing settings were not persisted.", exit_code=6)
+    return _move_result(move, company_id), replay
+
+
 def _dispatch_allowed(
     env: Any,
     capability_id: str,
@@ -19338,6 +19458,8 @@ def _dispatch_allowed(
     marker: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if capability_id in move_processing.CAPABILITY_IDS:
+        return _write_move_processing(env, capability_id, parameters, company_id, failure_type)
     if capability_id in partner_preferences.CAPABILITY_IDS:
         return _write_partner_preferences_batch(env, capability_id, parameters, company_id, failure_type)
     if capability_id in payment_configuration.CAPABILITY_IDS:

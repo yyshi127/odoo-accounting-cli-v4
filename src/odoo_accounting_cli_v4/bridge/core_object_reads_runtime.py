@@ -9,6 +9,7 @@ from datetime import date as date_type
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from odoo_accounting_cli_v4 import move_processing_contracts as move_processing
 from odoo_accounting_cli_v4 import partner_preferences_contracts as partner_preferences
 
 ACTION = "accounting.core_object.read"
@@ -61,6 +62,7 @@ CAPABILITY_IDS = frozenset(
         "incoterm.list",
         "partner.bill_validation_preferences.get",
         "partner.invoice_delivery_preferences.get",
+        "accounting_move.processing_settings.get",
         "partner.payment_preferences.get",
         "payment.method_definition.get",
         "incoterm.get",
@@ -146,6 +148,7 @@ _GET_IDS = {
     "journal.group.get": ("account.journal.group", "journal_group_id"),
     "partner.bill_validation_preferences.get": ("res.partner", "partner_id"),
     "partner.invoice_delivery_preferences.get": ("res.partner", "partner_id"),
+    "accounting_move.processing_settings.get": ("account.move", "move_id"),
     "partner.payment_preferences.get": ("res.partner", "partner_id"),
     "payment.method_definition.get": ("account.payment.method", "payment_method_id"),
     "incoterm.get": ("account.incoterms", "incoterm_id"),
@@ -274,6 +277,7 @@ _REFERENCE_KINDS = {
     "payment.method_definition.list": "payment_method_definition",
     "partner.bill_validation_preferences.get": "partner.bill_validation_preferences.get",
     "partner.invoice_delivery_preferences.get": "partner.invoice_delivery_preferences.get",
+    "accounting_move.processing_settings.get": "move_processing",
     "partner.payment_preferences.get": "partner.payment_preferences.get",
     "payment.method_definition.get": "payment_method_definition",
     "incoterm.list": "incoterm",
@@ -378,6 +382,7 @@ _REFERENCE_FIELDS = {
     "partner.bill_validation_preferences.get": ('id', 'name', 'company_id', 'commercial_partner_id', 'autopost_bills', 'ignore_abnormal_invoice_date', 'ignore_abnormal_invoice_amount'),
     "partner.invoice_delivery_preferences.get": ('id', 'name', 'company_id', 'commercial_partner_id', 'invoice_sending_method', 'invoice_edi_format', 'invoice_template_pdf_report_id'),
     "partner.payment_preferences.get": ('id', 'name', 'company_id', 'commercial_partner_id', 'property_inbound_payment_method_line_id', 'property_outbound_payment_method_line_id'),
+    "move_processing": ('id', 'name', 'company_id', 'move_type', 'state', 'date', 'currency_id', 'company_currency_id', 'invoice_currency_rate', 'expected_currency_rate', 'invoice_cash_rounding_id', 'invoice_incoterm_id', 'incoterm_location', 'preferred_payment_method_line_id', 'auto_post', 'auto_post_until', 'auto_post_origin_id', 'checked', 'payment_state'),
     "payment_method_definition": ("id", "name", "code", "payment_type"),
     "incoterm": ("id", "code", "name", "active"),
     "partner_bank": (
@@ -773,6 +778,7 @@ _REQUIRED_MODELS = {
     "partner.bill_validation_preferences.get": ('res.company', 'res.partner'),
     "partner.invoice_delivery_preferences.get": ('res.company', 'res.partner', 'account.move', 'ir.actions.report'),
     "partner.payment_preferences.get": ('res.company', 'res.partner', 'account.payment.method.line', 'account.journal'),
+    "accounting_move.processing_settings.get": ("res.company", "account.move", "res.currency", "account.cash.rounding", "account.incoterms", "account.payment.method.line"),
     "payment.method_definition.get": ("res.company", "account.payment.method"),
     "incoterm.list": ("res.company", "account.incoterms"),
     "incoterm.get": ("res.company", "account.incoterms"),
@@ -1442,6 +1448,8 @@ def _owner_company_ids(
 
 
 def _scope_domain(env: Any, capability_id: str, company_id: int) -> list[Any]:
+    if capability_id == move_processing.READ_ID:
+        return [("company_id", "=", company_id), ("move_type", "in", sorted(move_processing.MOVE_TYPES))]
     if capability_id == "account.account.get":
         return [("company_ids", "in", [company_id])]
     if capability_id in {"asset.group.search", "asset.group.get"}:
@@ -2387,7 +2395,7 @@ def _raw_get_rows(
         ]
     )
     model = raw_model.with_context(active_test=False, allowed_company_ids=[company_id])
-    if capability_id in partner_preferences.READ_CAPABILITY_IDS or capability_id in {"cash_rounding.get", "account.transfer_model.get"}:
+    if capability_id == move_processing.READ_ID or capability_id in partner_preferences.READ_CAPABILITY_IDS or capability_id in {"cash_rounding.get", "account.transfer_model.get"}:
         model = model.with_company(env["res.company"].browse(company_id))
     return model.search_read(
         domain,
@@ -4546,6 +4554,40 @@ def _normalize_partner_preferences(env: Any, capability_id: str, rows: list[dict
     return result
 
 
+def _normalize_move_processing(env: Any, rows: list[dict[str, Any]], company_id: int) -> list[dict[str, Any]]:
+    result = []
+    for row in rows:
+        if _reference_id(row["company_id"]) != company_id:
+            raise ValueError("move processing outside company")
+        item = dict(row)
+        for field in move_processing.READ_FIELDS:
+            value = row[field]
+            if field.endswith("_id"):
+                item[field] = _reference_id(value)
+            elif field in {"invoice_currency_rate", "expected_currency_rate"}:
+                item[field] = move_processing.native_decimal(value)
+            elif field == "date":
+                item[field] = _date_string(value)
+            elif field == "auto_post_until":
+                item[field] = _optional_date_string(value)
+            elif field in {"name", "incoterm_location", "payment_state"}:
+                item[field] = _optional_text(value)
+        line_id = item["preferred_payment_method_line_id"]
+        if line_id is not None:
+            related = _related_rows(env, "account.payment.method.line", {line_id}, ("company_id",))
+            if _reference_id(related[line_id]["company_id"]) not in {None, company_id}:
+                raise ValueError("invoice payment method outside company")
+        origin = item["auto_post_origin_id"]
+        if origin is not None:
+            related = _related_rows(env, "account.move", {origin}, ("company_id",))
+            if _reference_id(related[origin]["company_id"]) != company_id:
+                raise ValueError("recurring origin outside company")
+        if not move_processing.valid_read_item(item, company_id):
+            raise ValueError("invalid native processing settings")
+        result.append(item)
+    return result
+
+
 def _normalize_reference_items(
     env: Any,
     capability_id: str,
@@ -4553,6 +4595,8 @@ def _normalize_reference_items(
     company_id: int,
 ) -> list[dict[str, Any]]:
     kind = _REFERENCE_KINDS[capability_id]
+    if capability_id == move_processing.READ_ID:
+        return _normalize_move_processing(env, rows, company_id)
     if capability_id in partner_preferences.READ_CAPABILITY_IDS:
         return _normalize_partner_preferences(env, capability_id, rows, company_id)
     if kind == "partner":

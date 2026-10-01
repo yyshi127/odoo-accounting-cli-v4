@@ -16,6 +16,7 @@ from odoo_accounting_cli_v4.capabilities.core_object_reads import (
 
 EXPECTED_CAPABILITY_IDS = frozenset(
     {
+        "accounting_move.processing_settings.get",
         "partner.payment_preferences.get",
         "partner.invoice_delivery_preferences.get",
         "partner.bill_validation_preferences.get",
@@ -156,6 +157,7 @@ GET_ID_FIELDS = {
 }
 
 PRIMARY_MODELS = {
+    "accounting_move.processing_settings.get": "account.move",
     "partner.payment_preferences.get": "res.partner",
     "partner.invoice_delivery_preferences.get": "res.partner",
     "partner.bill_validation_preferences.get": "res.partner",
@@ -1436,6 +1438,8 @@ def _dispatch(
 
 
 def _parameters(capability_id: str) -> dict[str, Any]:
+    if capability_id == "accounting_move.processing_settings.get":
+        return {"move_id": 31}
     if capability_id in {
         "partner.payment_preferences.get",
         "partner.invoice_delivery_preferences.get",
