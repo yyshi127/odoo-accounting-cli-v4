@@ -13,6 +13,7 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from time import strftime, strptime
 from typing import Any, Protocol
 
+from odoo_accounting_cli_v4 import account_processing_contracts as account_processing
 from odoo_accounting_cli_v4 import fiscal_mapping_contracts as fiscal_mappings
 from odoo_accounting_cli_v4 import (
     invoice_presentation_contracts as invoice_presentation,
@@ -32,7 +33,7 @@ from odoo_accounting_cli_v4 import (
 from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
 from odoo_accounting_cli_v4 import tax_processing_contracts as tax_processing
 
-CORE_WRITE_CAPABILITY_IDS = tax_processing.CAPABILITY_IDS | payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
+CORE_WRITE_CAPABILITY_IDS = account_processing.CAPABILITY_IDS | tax_processing.CAPABILITY_IDS | payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -4287,7 +4288,12 @@ def validate_core_write_request(
             code="capability_unavailable",
         )
     request_id, context, parameters = _validate_envelope(request)
-    if capability_id in tax_processing.CAPABILITY_IDS:
+    if capability_id in account_processing.CAPABILITY_IDS:
+        try:
+            normalized = account_processing.normalize_parameters(capability_id, parameters)
+        except ValueError as exc:
+            raise _invalid(str(exc)) from exc
+    elif capability_id in tax_processing.CAPABILITY_IDS:
         try:
             normalized = tax_processing.normalize_parameters(capability_id, parameters)
         except ValueError as exc:
@@ -4529,6 +4535,8 @@ def validate_core_write_request(
 def _expected_idempotency_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in account_processing.CAPABILITY_IDS:
+        return account_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in tax_processing.CAPABILITY_IDS:
         return tax_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in payment_term_processing.CAPABILITY_IDS:
@@ -5236,6 +5244,20 @@ def _validate_result(
 ) -> dict[str, Any]:
     if not _valid_result_shape(result) or result["company_id"] != company_id:
         raise _failed("Odoo returned a malformed or out-of-scope core-write result.")
+
+    if capability_id in account_processing.CAPABILITY_IDS:
+        duplicate = capability_id == "account.account.duplicate"
+        deleted = capability_id in {"account.account.delete", "account.group.delete"}
+        source = parameters["account_id"] if duplicate else None
+        target = parameters.get("account_id", parameters.get("account_group_id"))
+        if (result["model"] != ("account.group" if capability_id == "account.group.delete" else "account.account")
+            or (not duplicate and result["id"] != target) or (duplicate and (result["id"] == source or result["name"] != parameters["name"]))
+            or result["source_id"] != source or not _is_text(result["name"])
+            or result["state"] not in ({"deleted"} if deleted else {"active", "archived"})
+            or result["move_type"] is not None or result["line_ids"] or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None or result["reconciled"] or deleted and idempotent_replay):
+            raise _failed("Odoo returned a mismatched native account-maintenance result.")
+        return deepcopy(result)
 
     if capability_id in tax_processing.CAPABILITY_IDS:
         deleted = capability_id == "tax.delete"

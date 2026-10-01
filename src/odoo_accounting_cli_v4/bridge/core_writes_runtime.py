@@ -17,6 +17,7 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from time import strftime, strptime
 from typing import Any
 
+from odoo_accounting_cli_v4 import account_processing_contracts as account_processing
 from odoo_accounting_cli_v4 import fiscal_mapping_contracts as fiscal_mappings
 from odoo_accounting_cli_v4 import (
     invoice_presentation_contracts as invoice_presentation,
@@ -37,7 +38,7 @@ from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
 from odoo_accounting_cli_v4 import tax_processing_contracts as tax_processing
 
 ACTION = "accounting.core_write.execute"
-CAPABILITIES = tax_processing.CAPABILITY_IDS | payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
+CAPABILITIES = account_processing.CAPABILITY_IDS | tax_processing.CAPABILITY_IDS | payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -3325,6 +3326,28 @@ def _protocol(failure_type: type[Exception]) -> Exception:
     )
 
 
+_PARAMETER_KEYS.update(account_processing.PARAMETER_KEYS)
+_GROUPS['account.account.default_taxes.assign'] = "account.group_account_manager"
+_MODELS['account.account.default_taxes.assign'] = {'res.company', 'account.tax', 'account.account'}
+_ACCESS['account.account.default_taxes.assign'] = {('account.account', 'write'), ('account.tax', 'read'), ('res.company', 'read'), ('account.account', 'read')}
+_GROUPS['account.account.delete'] = "account.group_account_manager"
+_MODELS['account.account.delete'] = {'account.fiscal.position.account', 'account.move.line', 'account.code.mapping', 'account.account', 'res.company', 'account.tax.repartition.line'}
+_ACCESS['account.account.delete'] = {('account.fiscal.position.account', 'read'), ('account.move.line', 'read'), ('account.tax.repartition.line', 'read'), ('account.account', 'read'), ('account.code.mapping', 'read'), ('res.company', 'read'), ('account.account', 'unlink')}
+_GROUPS['account.account.duplicate'] = "account.group_account_manager"
+_MODELS['account.account.duplicate'] = {'res.currency', 'account.tax', 'account.code.mapping', 'account.account', 'res.company', 'account.account.tag'}
+_ACCESS['account.account.duplicate'] = {('account.account.tag', 'read'), ('account.account', 'read'), ('account.code.mapping', 'read'), ('account.account', 'create'), ('res.company', 'read'), ('res.currency', 'read'), ('account.tax', 'read')}
+_GROUPS['account.account.non_trade.set'] = "account.group_account_manager"
+_MODELS['account.account.non_trade.set'] = {'res.company', 'account.account'}
+_ACCESS['account.account.non_trade.set'] = {('account.account', 'write'), ('res.company', 'read'), ('account.account', 'read')}
+_GROUPS['account.account.notes.update'] = "account.group_account_manager"
+_MODELS['account.account.notes.update'] = {'res.company', 'account.account'}
+_ACCESS['account.account.notes.update'] = {('account.account', 'write'), ('res.company', 'read'), ('account.account', 'read')}
+_GROUPS['account.account.tags.assign'] = "account.group_account_manager"
+_MODELS['account.account.tags.assign'] = {'res.company', 'account.account', 'account.account.tag'}
+_ACCESS['account.account.tags.assign'] = {('account.account', 'write'), ('res.company', 'read'), ('account.account.tag', 'read'), ('account.account', 'read')}
+_GROUPS['account.group.delete'] = "account.group_account_manager"
+_MODELS['account.group.delete'] = {'res.company', 'account.group'}
+_ACCESS['account.group.delete'] = {('account.group', 'read'), ('res.company', 'read'), ('account.group', 'write'), ('account.group', 'unlink')}
 _PARAMETER_KEYS.update(tax_processing.PARAMETER_KEYS)
 _GROUPS['tax.delete'] = "account.group_account_manager"
 _MODELS['tax.delete'] = {'account.move.line', 'account.tax', 'res.company', 'account.tax.repartition.line'}
@@ -5470,6 +5493,11 @@ def _valid_parameters(
 ) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id in account_processing.CAPABILITY_IDS:
+        try:
+            return account_processing.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
     if capability_id in tax_processing.CAPABILITY_IDS:
         try:
             return tax_processing.normalize_parameters(capability_id, parameters) == parameters
@@ -6098,6 +6126,8 @@ def _validated_payload(
 def _deterministic_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in account_processing.CAPABILITY_IDS:
+        return account_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in tax_processing.CAPABILITY_IDS:
         return tax_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in payment_term_processing.CAPABILITY_IDS:
@@ -9790,6 +9820,16 @@ def _config_result(record: Any, model: str, company_id: int) -> dict[str, Any]:
     return result
 
 
+def _account_is_single_company(env: Any, account_id: int, company_id: int) -> bool:
+    from odoo.fields import Domain
+
+    # company_ids values hide inaccessible companies; only inspect the relation
+    # predicate, without reading foreign company records or elevating the user.
+    domain = Domain("id", "=", account_id) & Domain("company_ids", "in", [company_id])
+    domain &= Domain("company_ids", "not any!", Domain("id", "!=", company_id))
+    return bool(_scoped(env, "account.account", company_id).search_count(domain, limit=1))
+
+
 def _account_config_record(
     env: Any,
     account_id: int,
@@ -9806,7 +9846,7 @@ def _account_config_record(
         company_id,
         failure_type,
     )
-    if set(_record_ids(account.company_ids)) != {company_id}:
+    if not _account_is_single_company(env, account.id, company_id):
         raise _fail(
             failure_type,
             "record_not_found",
@@ -9910,7 +9950,7 @@ def _create_account_config(
         limit=2,
     )
     if existing:
-        if len(existing) != 1 or not _account_config_matches(
+        if len(existing) != 1 or not _account_is_single_company(env, existing.id, company_id) or not _account_config_matches(
             existing, parameters, company_id, exact_company=True
         ):
             raise _fail(
@@ -9924,7 +9964,7 @@ def _create_account_config(
     values = _account_config_values(parameters)
     values["company_ids"] = [(6, 0, [company_id])]
     account = model.create(values)
-    if not _account_config_matches(account, parameters, company_id, exact_company=True):
+    if not _account_is_single_company(env, account.id, company_id) or not _account_config_matches(account, parameters, company_id, exact_company=True):
         raise _fail(
             failure_type,
             "odoo_write_error",
@@ -17749,6 +17789,70 @@ def _validate_tax_repartition_references(
     )
 
 
+def _account_processing_values(account: Any) -> dict[str, Any]:
+    values = {field: getattr(account, field) for field in account_processing.COPY_FIELDS}
+    values["currency_id"] = _relation_id(values["currency_id"])
+    for field in ("tax_ids", "tag_ids"):
+        values[field] = _record_ids(values[field])
+    for field in ("description", "note"):
+        values[field] = values[field] or None
+    return values
+
+
+def _write_account_processing(
+    env: Any, capability_id: str, parameters: dict[str, Any],
+    company_id: int, failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    with env.cr.savepoint():
+        group = capability_id == "account.group.delete"
+        duplicate = capability_id == "account.account.duplicate"
+        record = _account_group(env, parameters["account_group_id"], company_id, failure_type) if group else (
+            _search_one(env, "account.account", [("id", "=", parameters["account_id"]), ("company_ids", "in", [company_id])], company_id, failure_type)
+            if duplicate else _account_config_record(env, parameters["account_id"], company_id, failure_type))
+        model = "account.group" if group else "account.account"
+        if group or capability_id == "account.account.delete":
+            result = _deleted_result(_config_result(record, model, company_id))
+            record.unlink()
+            if record.exists():
+                raise _fail(failure_type, "odoo_write_error", "Native account/group deletion failed.", exit_code=6)
+            return result, False
+        if duplicate:
+            expected = _account_processing_values(record)
+            candidates = _scoped(env, model, company_id).search([
+                ("code", "=", parameters["code"]), ("company_ids", "in", [company_id]),
+            ], limit=2)
+            replay = bool(candidates)
+            if candidates:
+                if (len(candidates) != 1 or candidates.id == record.id or not _account_is_single_company(env, candidates.id, company_id)
+                    or candidates.name != parameters["name"] or _account_processing_values(candidates) != expected):
+                    raise _fail(failure_type, "idempotency_conflict", "The account code already belongs to a different configuration.", exit_code=5)
+                target = candidates
+            else:
+                target = record.copy({"code": parameters["code"], "name": parameters["name"],
+                                      "company_ids": [(6, 0, [company_id])], "code_mapping_ids": []})
+            if (target.id == record.id or not _account_is_single_company(env, target.id, company_id) or target.code != parameters["code"]
+                or target.name != parameters["name"] or _account_processing_values(target) != expected):
+                raise _fail(failure_type, "odoo_write_error", "Native account copy did not preserve isolated configuration.", exit_code=6)
+            result = _config_result(target, model, company_id)
+            result["source_id"] = record.id
+            return result, replay
+        changes = parameters["changes"] if "changes" in parameters else {
+            field: parameters[field] for field in ("tax_ids", "tag_ids", "non_trade") if field in parameters}
+        if "tax_ids" in changes:
+            _ensure_ids(env, "account.tax", set(changes["tax_ids"]), [("company_id", "=", company_id), ("active", "=", True)], company_id, failure_type)
+        if "tag_ids" in changes:
+            _ensure_ids(env, "account.account.tag", set(changes["tag_ids"]), [("applicability", "=", "accounts"), ("active", "=", True)], company_id, failure_type)
+        current = _account_processing_values(record)
+        replay = all(current[field] == value for field, value in changes.items())
+        if not replay:
+            record.write({field: [(6, 0, value)] if field in {"tax_ids", "tag_ids"} else False if value is None else value for field, value in changes.items()})
+            record.invalidate_recordset()
+        actual = _account_processing_values(record)
+        if any(actual[field] != value for field, value in changes.items()):
+            raise _fail(failure_type, "odoo_write_error", "Native account update did not preserve requested fields.", exit_code=6)
+        return _config_result(record, model, company_id), replay
+
+
 def _write_tax_processing(
     env: Any, capability_id: str, parameters: dict[str, Any],
     company_id: int, failure_type: type[Exception],
@@ -20068,6 +20172,8 @@ def _dispatch_allowed(
     marker: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if capability_id in account_processing.CAPABILITY_IDS:
+        return _write_account_processing(env, capability_id, parameters, company_id, failure_type)
     if capability_id in tax_processing.CAPABILITY_IDS:
         return _write_tax_processing(env, capability_id, parameters, company_id, failure_type)
     if capability_id in payment_term_processing.CAPABILITY_IDS:

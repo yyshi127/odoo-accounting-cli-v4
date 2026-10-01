@@ -2,6 +2,82 @@
 
 ## Current accounting phase — 2026-10-01
 
+500 registered IDs; 485 implemented handlers (233 reads, 252 writes);
+976 schema files. Availability: 412 unconfigured, 73 degraded, 15 disabled.
+Enabled-handler integration records: 481 implemented, three planned, one failed.
+These include historical non-accounting extensions, not a complete accounting
+denominator, completion percentage or ordinary-runtime permission guarantee.
+
+Eight new native chart-of-accounts capabilities: advanced settings/current
+balance reading; account duplication/deletion, default-tax and reporting-tag
+assignment, description/internal-note updates, non-trade flags and group deletion.
+Existing basic code/name/type/reconcile/currency edits and account-filtered
+journal-item search are reused, not added again as aliases. Group association
+remains native-computed from account prefixes; no forced group-field writer.
+
+One shared public CLI/real-ORM workflow passed both isolated aliases as uid 5,
+su=False in 842.29 seconds: eight new IDs, seven setup IDs and ten immediate
+replays per alias. Owned/shared copies have independent identities and only the
+current company; deleted copies recreated with fresh IDs. Fixed tax/tag/notes/
+non-trade updates persist. Actual draft entries affect native used, not posted
+balance; posting affects the native all-time current-company/company-currency
+balance. Native used is an all-company usage flag; balance is current-company
+only. Archived owned accounts remain readable. Non-stored native fields are
+refreshed before reading to avoid old same-transaction caches. No custom balance
+calculation or date-filtered trial-balance claim. Configuration edits preserve
+posted identities/accounts/maturities/amounts/residuals/tax links.
+Native current-year-earnings copy constraints roll back failed creation; journal,
+fiscal mapping and tax-repartition deletion guards are independently exercised.
+Group deletion reparents surviving child groups, and deleting the child clears
+computed account groups without deleting accounts. Foreign/shared mutation,
+bad references, missing targets and fake deletion replays are denied. Fresh
+cursors verify synthetic business records and temporary manager groups rolled back.
+
+Attempt 1 failed in 139.25 seconds at rollback verification: account.code.mapping
+is a virtual UI model that cannot be searched by arbitrary IDs. The verifier
+error masked the earlier worker outcome; it is not acceptance or full cleanup
+proof. The repair verifies actual account storage rather than virtual mappings,
+separates fiscal/tax guard fixtures, and adds explicit native computed-field
+refresh plus a regression test. Attempt 2 failed in 139.63 seconds at shared-account
+fixture creation: native Odoo requires a code in each company. A fixture-only
+repair supplies both native mappings; this failed run verified full rollback.
+Attempt 3 failed in 154.44 seconds: user-visible company_ids hid a foreign
+company, so the old ownership check wrongly allowed an isolated-fixture shared
+account notes write. It verified full rollback. Fixed native ORM relation
+predicates now inspect complete ownership as a boolean, including invisible
+companies, without reading foreign company objects or elevating the business
+user. Account ACL/record rules remain; only this fixed relation predicate bypasses
+comodel visibility. The same fix protects existing account create/update/archive
+paths and duplicate collision/postconditions. Hidden-membership regressions and
+real legacy create/archive/shared collision denials are included. No failed or
+partial run counts as acceptance; native constraints unchanged.
+Attempt 4 failed in 139.86 seconds on an unordered company-ID fixture assertion.
+Native rollback-only diagnosis confirmed admin IDs [2,1], business IDs [1], and
+the complete ownership predicate false as uid 5/su=False; diagnostic cleanup was
+verified. Only the fixture changed to set comparison; implementation unchanged.
+
+Local: 1107 batch/config/read/runtime cases (43 + 22 + 865 + 177), 247 focused writes and
+19 planned-baseline registry cases with one known deselection, then two changed
+registry selections after closure. Server: 41 initial/42 earlier/65 final batch/config cases
+and 19 final registry cases with the same stale bank_statement_payment_maintenance
+deselection. Ruff/diff passed. Initial 31-file deployment backed up 12 existing
+files and added 19; three-file repair, two one-file fixture repairs, four-file scope fix
+and final metadata closure checked baselines/backups first. All 32 final hashes match.
+The legacy server fixture lacked only its committed fake with_company method;
+the exact delta was checked before pinning that file's baseline and backup.
+The failed preflight wrote no code. Server STATUS/HANDOFF overlays
+were left untouched; service PIDs/restart counts stayed unchanged. No business
+database, installed addon/source, Pi/V2/V3, service or configuration changed.
+
+Changed code/schema/tests and staged added lines have zero privacy findings;
+the full tree retains five historical document findings, not a full scan pass.
+Next: another genuine native accounting gap batch. Older asset validation stays
+failed; product accounting-profile readback and two real external report sends
+stay planned. Addon repairs/actual sends require separate authority. Keep the
+capability-first goal active; complete accounting coverage is unproven.
+
+## Previous checkpoint — native tax and repartition processing, 2026-10-01
+
 492 registered IDs; 477 implemented handlers (232 reads, 245 writes);
 960 schema files. Availability: 404 unconfigured, 73 degraded, 15 disabled.
 Enabled-handler integration records: 473 implemented, three planned, one failed.

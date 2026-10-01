@@ -5405,3 +5405,103 @@ Continue another small genuine native accounting gap batch. Asset validation
 remains failed; product accounting-profile readback and two actual external
 report sends remain planned. Addon fixes/real sends need separate authority.
 Keep the capability-first goal active; complete accounting coverage is unproven.
+
+## Native account and chart-group maintenance — 2026-10-01
+
+Baseline: `c4de234`. Eight new IDs: 500 registered, 485 handlers (233 reads,
+252 writes), 976 schemas; 412 unconfigured, 73 degraded, 15 disabled.
+Enabled integrations: 481 implemented, three planned, one failed. These totals
+include historical non-accounting extensions, not full accounting coverage.
+
+- `account.account.processing_settings.get`: native description/note, non-trade,
+  used, currencies, default taxes/reporting tags, computed group/internal group/
+  initial-balance flag, related-tax count and all-time posted current-company
+  balance in company currency. Native non-stored used/balance/tax-count/group
+  caches are invalidated before each read, retaining native calculation. Visible
+  shared and archived accounts can be read; missing/foreign targets are typed
+  errors. Existing basic reads and account-filtered journal-item search are reused.
+- `account.account.duplicate`: native copy with explicit target name/code, only
+  the current company and cleared cross-company code mappings. Owned/shared
+  sources remain unchanged. Native type/reconcile/currency/defaults/tags/notes/
+  flags are compared; company_ids returned by ORM contain only visible companies,
+  not full ownership evidence. A fixed native ORM relation predicate checks actual
+  complete ownership for edits/deletion and copy collision/postconditions. It
+  bypasses only comodel visibility for a boolean condition, not account ACL/record
+  rules, and returns no foreign company records. Serial target-code/profile matching supports replay/conflict
+  but is not concurrent exactly-once or copy-provenance proof. Recreating a deleted
+  target creates fresh IDs; no operation-store memo for deleted records.
+- `account.account.default_taxes.assign`, `account.account.tags.assign` replace
+  published ID sets only; taxes active/current-company, tags active/account-
+  applicable. Empty arrays clear; IDs normalize uniquely without input mutation.
+- `account.account.notes.update` patches nullable description/note only, bounded
+  to 4096 characters; empty text clears. `account.account.non_trade.set` sets the
+  native reporting flag, not ledger amounts or a claim about rendered reports.
+- `account.account.delete` uses native unlink and retains journal/fiscal/tax
+  reference guards. Updates/deletion require an exact single-company account.
+- `account.group.delete` reuses native root-company scope and unlink child-group
+  reparenting. Account-group association stays native-computed; accounts remain.
+- Writes retain native ACL/user/company, exact confirmation/deterministic keys and
+  one savepoint. Deletes have no tombstone/replay. No arbitrary model fields,
+  historical entry rewrite, external payment, caller-sudo or control framework.
+
+Both aliases passed the shared public CLI/real-ORM workflow in 842.29 seconds
+as uid 5, su=False, company 1: eight new IDs, seven setup IDs and ten replays
+per alias. It verifies owned/shared isolated copies, conflict/fresh identities,
+default references, nullable notes and actual receivable non-trade flag; draft/
+posted journal-item usage and actual negative posted balance; preserved posted
+accounts/IDs/maturities/amounts/residuals/tax links; native current-year-earnings
+copy failure rollback; independent journal/fiscal/tax unlink denials; actual child
+reparenting and computed account-group clearing without account deletion.
+Foreign/shared edits, wrong-applicability/foreign references and missing targets
+are denied. Fresh cursors verify all synthetic records and temporary groups gone.
+
+Attempt 1 failed in 139.25 seconds at unsupported arbitrary-ID searching on
+virtual account.code.mapping; that verifier error masked the worker outcome and
+is not accepted or full cleanup proof. Native source confirms mapping codes are
+stored on account.code_store, not independent table rows. Three-file repair uses
+actual account-storage cleanup checks, separates fiscal/tax fixture references,
+and refreshes native non-stored computed fields with a regression test. Attempt 2
+failed in 139.63 seconds at shared-account fixture creation because codes were
+missing per company. One-file fixture repair supplies both native code mappings;
+that failed run verified full business/group rollback. Neither partial run is
+acceptance. Attempt 3 failed in 154.44 seconds because user-visible company_ids
+hid a foreign company and the old helper allowed shared-fixture notes mutation.
+Full rollback verified. The four-file scope fix uses the native ORM internal
+relation predicate on complete ownership (no foreign company objects returned,
+no caller-sudo) and protects existing account create/update/archive and new copy
+collision/postconditions. Regression fixtures hide foreign memberships like Odoo;
+the real workflow exercises shared legacy archive/create and duplicate collisions.
+Account ACL/record rules and native constraints remain; retain all failed logs.
+Attempt 4 failed in 139.86 seconds because the fixture assumed company-ID order.
+A native rollback-only diagnosis verified admin [2,1] vs uid 5 [1] and complete
+ownership predicate false with su=False, followed by fresh-cursor cleanup.
+The one-file repair compares company membership as a set, without weakening it.
+
+Local: 1107 cases (43 batch + 22 legacy config + 865 reads + 177 runtime), 247 focused writes, 19 registry
+cases with one known deselection then two post-closure selections. Server: 41
+initial/42 earlier/65 final batch/config cases and 19 final registry cases with the same explicit
+stale bank_statement_payment_maintenance deselection. Ruff/diff passed. Initial
+31-file deployment: 12 existing backed up, 19 new; three-file repair, two one-file
+fixture repair, four-file scope fix and final
+two-file metadata closure checked baselines/backups first. All 32 final deployed
+hashes match. The legacy server fixture was only missing its committed fake
+with_company method; exact delta checked before baseline/backup, with no writes
+from the failed preflight. Server document overlays untouched; service PIDs/restart counts
+unchanged. No business DB/addon/source/Pi/V2/V3/service/configuration changes.
+Private artifacts: `.tooling/account-processing-20261001`; never stage them.
+Initial archive SHA-256: `f0e064c02afd9cbaa588eb63c757b2a7df77e1e0fd60184301f6673e82c1119b`.
+Repair SHA-256: `bed8374bc1c39e78d21e4b5dbb11d5bffdc7cc1cd8608d7c65a887f6fb3284a0`.
+Fixture repair SHA-256: `f865c70e280f5b374a1e62fbdee844c1aad86630163a9e89b4370dc5a2ce6652`.
+Scope-fix SHA-256: `defed60c4f903d865db0acd408a5c4e331b94168c52ffacbe2e5995401d9e7b6`.
+Ordering-fixture repair SHA-256: `27507dd26f97ccb92bd0490bf27e282190ea4e5c98c85737e7f62f7ecc61eaaf`.
+Final metadata SHA-256: `2788260f0790bee8794fd919da2b085ba18ff86de925609031225cde389deb2d`.
+Registry-file SHA-256: `0e9248c90865324e750e87e65a07488df320c6b4c0cfbeb56a10a13df9fa8b72`.
+Canonical registry SHA-256: `2f2f3de05396b7c35ebf64de6a5b6271e233161f76de4e4ad26b1771de0fc68e`.
+Passing live-log SHA-256: `5452b8ec3ac9744f131a29945c7bc4f74b6cfe7ac1d75bbc4e2ccbef866f9cff`.
+Changed code/schema/tests and staged added lines: zero privacy findings; full tree
+still has five historical document findings, not a full scan pass.
+
+Continue another small genuine native accounting gap batch. Asset validation
+still failed; product accounting-profile readback/two external report sends still
+planned. Addon fixes/actual sends need separate authority. Goal stays active;
+complete accounting coverage remains unproven.

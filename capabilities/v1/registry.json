@@ -33493,6 +33493,980 @@
         ]
       },
       "handler_key": "tax_usage_lines_list"
+    },
+    "account.account.default_taxes.assign": {
+      "summary": {
+        "zh_CN": "设置科目默认税种",
+        "en_US": "Assign default taxes to an account"
+      },
+      "domain": "chart_of_accounts",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.account",
+          "account.tax",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_account.py",
+          "account/models/account_account_tag.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/account.account.default_taxes.assign.request.schema.json",
+        "response": "schemas/v1/account.account.default_taxes.assign.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.account:write",
+          "account.tax:read",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_account_copy_unlink_or_configuration_write",
+        "verify": "native_identity_and_requested_configuration_reread_in_one_savepoint",
+        "idempotency": "serial_account_code_profile_or_current_requested_fields_with_missing_delete_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_account_processing_batch.py"
+          ],
+          "reason": "Closed public CLI/schemas, deterministic keys, native account and result/company scope, fixed reference and access denials, read normalization and native copy/edit/delete semantics."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_account_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: eight new IDs, seven setup IDs and ten immediate replays. Native owned/shared copies are isolated with independent identities, serial replay/conflict and fresh IDs after deletion; default taxes/tags, nullable descriptions/notes and non-trade receivable flags persist. Actual draft journal items set native used while only posted current-company entries affect the native all-time company-currency balance; archived owned accounts remain readable. Configuration edits preserve posted identities/accounts/maturities/amounts/residuals/tax links. Native current-year-earnings copy constraint rolls back the failed creation; journal, fiscal mapping and tax-repartition deletion restrictions are independently exercised. Native parent group deletion reparents surviving child groups and child deletion clears computed account groups without deleting accounts. Foreign/shared mutation, wrong-applicability/foreign references, missing/deleted targets and fake deletion replay are denied. Fresh-cursor synthetic business-data and temporary manager-group rollback verified; no external payment, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured company/user/native ACLs. Advanced reads expose native used/configuration and same-current-company all-time posted balance in company currency, not a dated trial balance or settlement proof. Account updates/deletion require an exact single-company account. Native copies from visible owned/shared accounts create only the current company and clear cross-company code mappings; serial code/profile matching does not guarantee concurrent exactly-once creation or copy provenance. Taxes are active/current-company and tags active/account-applicable. Notes are nullable fixed fields; non_trade is the native reporting flag. Group deletion reuses root-company scope and native child reparenting, not a forced account group assignment. Deletes retain native journal/fiscal/tax reference guards and have no fake replay. One savepoint per mutation; no posted-entry rewrite, external payment, caller-sudo or new control framework. Fixed native ORM ownership predicates check complete company membership, including invisible companies; company_ids read values expose only visible companies and are not full ownership evidence. Only the fixed boolean relation predicate bypasses comodel visibility; target account ACL/record rules and business user remain unchanged."
+      },
+      "routing": {
+        "object": "account.account",
+        "actions": [
+          "assign"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置科目默认税种"
+          ],
+          "en_US": [
+            "Assign default taxes to an account"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "重写已过账分录",
+            "跨公司修改共享科目",
+            "强制指定计算科目组",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Rewriting posted entries",
+            "Cross-company editing of shared accounts",
+            "Forcing computed account groups",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "account.account.delete": {
+      "summary": {
+        "zh_CN": "删除未被原生引用阻止的科目",
+        "en_US": "Delete an account subject to native reference guards"
+      },
+      "domain": "chart_of_accounts",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.account",
+          "account.code.mapping",
+          "account.fiscal.position.account",
+          "account.move.line",
+          "account.tax.repartition.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_account.py",
+          "account/models/account_account_tag.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/account.account.delete.request.schema.json",
+        "response": "schemas/v1/account.account.delete.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.account:unlink",
+          "account.code.mapping:read",
+          "account.fiscal.position.account:read",
+          "account.move.line:read",
+          "account.tax.repartition.line:read",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_account_copy_unlink_or_configuration_write",
+        "verify": "native_identity_and_requested_configuration_reread_in_one_savepoint",
+        "idempotency": "serial_account_code_profile_or_current_requested_fields_with_missing_delete_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_account_processing_batch.py"
+          ],
+          "reason": "Closed public CLI/schemas, deterministic keys, native account and result/company scope, fixed reference and access denials, read normalization and native copy/edit/delete semantics."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_account_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: eight new IDs, seven setup IDs and ten immediate replays. Native owned/shared copies are isolated with independent identities, serial replay/conflict and fresh IDs after deletion; default taxes/tags, nullable descriptions/notes and non-trade receivable flags persist. Actual draft journal items set native used while only posted current-company entries affect the native all-time company-currency balance; archived owned accounts remain readable. Configuration edits preserve posted identities/accounts/maturities/amounts/residuals/tax links. Native current-year-earnings copy constraint rolls back the failed creation; journal, fiscal mapping and tax-repartition deletion restrictions are independently exercised. Native parent group deletion reparents surviving child groups and child deletion clears computed account groups without deleting accounts. Foreign/shared mutation, wrong-applicability/foreign references, missing/deleted targets and fake deletion replay are denied. Fresh-cursor synthetic business-data and temporary manager-group rollback verified; no external payment, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured company/user/native ACLs. Advanced reads expose native used/configuration and same-current-company all-time posted balance in company currency, not a dated trial balance or settlement proof. Account updates/deletion require an exact single-company account. Native copies from visible owned/shared accounts create only the current company and clear cross-company code mappings; serial code/profile matching does not guarantee concurrent exactly-once creation or copy provenance. Taxes are active/current-company and tags active/account-applicable. Notes are nullable fixed fields; non_trade is the native reporting flag. Group deletion reuses root-company scope and native child reparenting, not a forced account group assignment. Deletes retain native journal/fiscal/tax reference guards and have no fake replay. One savepoint per mutation; no posted-entry rewrite, external payment, caller-sudo or new control framework. Fixed native ORM ownership predicates check complete company membership, including invisible companies; company_ids read values expose only visible companies and are not full ownership evidence. Only the fixed boolean relation predicate bypasses comodel visibility; target account ACL/record rules and business user remain unchanged."
+      },
+      "routing": {
+        "object": "account.account",
+        "actions": [
+          "delete"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "删除未被原生引用阻止的科目"
+          ],
+          "en_US": [
+            "Delete an account subject to native reference guards"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "重写已过账分录",
+            "跨公司修改共享科目",
+            "强制指定计算科目组",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Rewriting posted entries",
+            "Cross-company editing of shared accounts",
+            "Forcing computed account groups",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "account.account.duplicate": {
+      "summary": {
+        "zh_CN": "复制会计科目配置",
+        "en_US": "Duplicate accounting account configuration"
+      },
+      "domain": "chart_of_accounts",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.account",
+          "account.account.tag",
+          "account.code.mapping",
+          "account.tax",
+          "res.company",
+          "res.currency"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_account.py",
+          "account/models/account_account_tag.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/account.account.duplicate.request.schema.json",
+        "response": "schemas/v1/account.account.duplicate.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account.tag:read",
+          "account.account:create",
+          "account.account:read",
+          "account.code.mapping:read",
+          "account.tax:read",
+          "res.company:read",
+          "res.currency:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_account_copy_unlink_or_configuration_write",
+        "verify": "native_identity_and_requested_configuration_reread_in_one_savepoint",
+        "idempotency": "serial_account_code_profile_or_current_requested_fields_with_missing_delete_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_account_processing_batch.py"
+          ],
+          "reason": "Closed public CLI/schemas, deterministic keys, native account and result/company scope, fixed reference and access denials, read normalization and native copy/edit/delete semantics."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_account_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: eight new IDs, seven setup IDs and ten immediate replays. Native owned/shared copies are isolated with independent identities, serial replay/conflict and fresh IDs after deletion; default taxes/tags, nullable descriptions/notes and non-trade receivable flags persist. Actual draft journal items set native used while only posted current-company entries affect the native all-time company-currency balance; archived owned accounts remain readable. Configuration edits preserve posted identities/accounts/maturities/amounts/residuals/tax links. Native current-year-earnings copy constraint rolls back the failed creation; journal, fiscal mapping and tax-repartition deletion restrictions are independently exercised. Native parent group deletion reparents surviving child groups and child deletion clears computed account groups without deleting accounts. Foreign/shared mutation, wrong-applicability/foreign references, missing/deleted targets and fake deletion replay are denied. Fresh-cursor synthetic business-data and temporary manager-group rollback verified; no external payment, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured company/user/native ACLs. Advanced reads expose native used/configuration and same-current-company all-time posted balance in company currency, not a dated trial balance or settlement proof. Account updates/deletion require an exact single-company account. Native copies from visible owned/shared accounts create only the current company and clear cross-company code mappings; serial code/profile matching does not guarantee concurrent exactly-once creation or copy provenance. Taxes are active/current-company and tags active/account-applicable. Notes are nullable fixed fields; non_trade is the native reporting flag. Group deletion reuses root-company scope and native child reparenting, not a forced account group assignment. Deletes retain native journal/fiscal/tax reference guards and have no fake replay. One savepoint per mutation; no posted-entry rewrite, external payment, caller-sudo or new control framework. Fixed native ORM ownership predicates check complete company membership, including invisible companies; company_ids read values expose only visible companies and are not full ownership evidence. Only the fixed boolean relation predicate bypasses comodel visibility; target account ACL/record rules and business user remain unchanged."
+      },
+      "routing": {
+        "object": "account.account",
+        "actions": [
+          "duplicate"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "复制会计科目配置"
+          ],
+          "en_US": [
+            "Duplicate accounting account configuration"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "重写已过账分录",
+            "跨公司修改共享科目",
+            "强制指定计算科目组",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Rewriting posted entries",
+            "Cross-company editing of shared accounts",
+            "Forcing computed account groups",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "account.account.non_trade.set": {
+      "summary": {
+        "zh_CN": "设置科目非贸易标记",
+        "en_US": "Set the native account non-trade flag"
+      },
+      "domain": "chart_of_accounts",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.account",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_account.py",
+          "account/models/account_account_tag.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/account.account.non_trade.set.request.schema.json",
+        "response": "schemas/v1/account.account.non_trade.set.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.account:write",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_account_copy_unlink_or_configuration_write",
+        "verify": "native_identity_and_requested_configuration_reread_in_one_savepoint",
+        "idempotency": "serial_account_code_profile_or_current_requested_fields_with_missing_delete_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_account_processing_batch.py"
+          ],
+          "reason": "Closed public CLI/schemas, deterministic keys, native account and result/company scope, fixed reference and access denials, read normalization and native copy/edit/delete semantics."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_account_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: eight new IDs, seven setup IDs and ten immediate replays. Native owned/shared copies are isolated with independent identities, serial replay/conflict and fresh IDs after deletion; default taxes/tags, nullable descriptions/notes and non-trade receivable flags persist. Actual draft journal items set native used while only posted current-company entries affect the native all-time company-currency balance; archived owned accounts remain readable. Configuration edits preserve posted identities/accounts/maturities/amounts/residuals/tax links. Native current-year-earnings copy constraint rolls back the failed creation; journal, fiscal mapping and tax-repartition deletion restrictions are independently exercised. Native parent group deletion reparents surviving child groups and child deletion clears computed account groups without deleting accounts. Foreign/shared mutation, wrong-applicability/foreign references, missing/deleted targets and fake deletion replay are denied. Fresh-cursor synthetic business-data and temporary manager-group rollback verified; no external payment, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured company/user/native ACLs. Advanced reads expose native used/configuration and same-current-company all-time posted balance in company currency, not a dated trial balance or settlement proof. Account updates/deletion require an exact single-company account. Native copies from visible owned/shared accounts create only the current company and clear cross-company code mappings; serial code/profile matching does not guarantee concurrent exactly-once creation or copy provenance. Taxes are active/current-company and tags active/account-applicable. Notes are nullable fixed fields; non_trade is the native reporting flag. Group deletion reuses root-company scope and native child reparenting, not a forced account group assignment. Deletes retain native journal/fiscal/tax reference guards and have no fake replay. One savepoint per mutation; no posted-entry rewrite, external payment, caller-sudo or new control framework. Fixed native ORM ownership predicates check complete company membership, including invisible companies; company_ids read values expose only visible companies and are not full ownership evidence. Only the fixed boolean relation predicate bypasses comodel visibility; target account ACL/record rules and business user remain unchanged."
+      },
+      "routing": {
+        "object": "account.account",
+        "actions": [
+          "set"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置科目非贸易标记"
+          ],
+          "en_US": [
+            "Set the native account non-trade flag"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "重写已过账分录",
+            "跨公司修改共享科目",
+            "强制指定计算科目组",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Rewriting posted entries",
+            "Cross-company editing of shared accounts",
+            "Forcing computed account groups",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "account.account.notes.update": {
+      "summary": {
+        "zh_CN": "更新科目说明和内部备注",
+        "en_US": "Update account description and internal notes"
+      },
+      "domain": "chart_of_accounts",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.account",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_account.py",
+          "account/models/account_account_tag.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/account.account.notes.update.request.schema.json",
+        "response": "schemas/v1/account.account.notes.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.account:write",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_account_copy_unlink_or_configuration_write",
+        "verify": "native_identity_and_requested_configuration_reread_in_one_savepoint",
+        "idempotency": "serial_account_code_profile_or_current_requested_fields_with_missing_delete_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_account_processing_batch.py"
+          ],
+          "reason": "Closed public CLI/schemas, deterministic keys, native account and result/company scope, fixed reference and access denials, read normalization and native copy/edit/delete semantics."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_account_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: eight new IDs, seven setup IDs and ten immediate replays. Native owned/shared copies are isolated with independent identities, serial replay/conflict and fresh IDs after deletion; default taxes/tags, nullable descriptions/notes and non-trade receivable flags persist. Actual draft journal items set native used while only posted current-company entries affect the native all-time company-currency balance; archived owned accounts remain readable. Configuration edits preserve posted identities/accounts/maturities/amounts/residuals/tax links. Native current-year-earnings copy constraint rolls back the failed creation; journal, fiscal mapping and tax-repartition deletion restrictions are independently exercised. Native parent group deletion reparents surviving child groups and child deletion clears computed account groups without deleting accounts. Foreign/shared mutation, wrong-applicability/foreign references, missing/deleted targets and fake deletion replay are denied. Fresh-cursor synthetic business-data and temporary manager-group rollback verified; no external payment, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured company/user/native ACLs. Advanced reads expose native used/configuration and same-current-company all-time posted balance in company currency, not a dated trial balance or settlement proof. Account updates/deletion require an exact single-company account. Native copies from visible owned/shared accounts create only the current company and clear cross-company code mappings; serial code/profile matching does not guarantee concurrent exactly-once creation or copy provenance. Taxes are active/current-company and tags active/account-applicable. Notes are nullable fixed fields; non_trade is the native reporting flag. Group deletion reuses root-company scope and native child reparenting, not a forced account group assignment. Deletes retain native journal/fiscal/tax reference guards and have no fake replay. One savepoint per mutation; no posted-entry rewrite, external payment, caller-sudo or new control framework. Fixed native ORM ownership predicates check complete company membership, including invisible companies; company_ids read values expose only visible companies and are not full ownership evidence. Only the fixed boolean relation predicate bypasses comodel visibility; target account ACL/record rules and business user remain unchanged."
+      },
+      "routing": {
+        "object": "account.account",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "更新科目说明和内部备注"
+          ],
+          "en_US": [
+            "Update account description and internal notes"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "重写已过账分录",
+            "跨公司修改共享科目",
+            "强制指定计算科目组",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Rewriting posted entries",
+            "Cross-company editing of shared accounts",
+            "Forcing computed account groups",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "account.account.processing_settings.get": {
+      "summary": {
+        "zh_CN": "查看科目高级设置及原生余额",
+        "en_US": "Inspect native advanced account settings and balance"
+      },
+      "domain": "chart_of_accounts",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "res.company",
+          "account.account",
+          "account.group",
+          "account.account.tag",
+          "account.tax",
+          "res.currency",
+          "account.move.line"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_account.py",
+          "account/models/account_account_tag.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/account.account.processing_settings.get.request.schema.json",
+        "response": "schemas/v1/account.account.processing_settings.get.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.account:read",
+          "account.group:read",
+          "account.account.tag:read",
+          "account.tax:read",
+          "res.currency:read",
+          "account.move.line:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_native_account_settings_and_balance_read",
+        "verify": "closed_response_schema_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_account_processing_batch.py"
+          ],
+          "reason": "Closed public CLI/schemas, deterministic keys, native account and result/company scope, fixed reference and access denials, read normalization and native copy/edit/delete semantics."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_account_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: eight new IDs, seven setup IDs and ten immediate replays. Native owned/shared copies are isolated with independent identities, serial replay/conflict and fresh IDs after deletion; default taxes/tags, nullable descriptions/notes and non-trade receivable flags persist. Actual draft journal items set native used while only posted current-company entries affect the native all-time company-currency balance; archived owned accounts remain readable. Configuration edits preserve posted identities/accounts/maturities/amounts/residuals/tax links. Native current-year-earnings copy constraint rolls back the failed creation; journal, fiscal mapping and tax-repartition deletion restrictions are independently exercised. Native parent group deletion reparents surviving child groups and child deletion clears computed account groups without deleting accounts. Foreign/shared mutation, wrong-applicability/foreign references, missing/deleted targets and fake deletion replay are denied. Fresh-cursor synthetic business-data and temporary manager-group rollback verified; no external payment, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured company/user/native ACLs. Advanced reads expose native used/configuration and same-current-company all-time posted balance in company currency, not a dated trial balance or settlement proof. Account updates/deletion require an exact single-company account. Native copies from visible owned/shared accounts create only the current company and clear cross-company code mappings; serial code/profile matching does not guarantee concurrent exactly-once creation or copy provenance. Taxes are active/current-company and tags active/account-applicable. Notes are nullable fixed fields; non_trade is the native reporting flag. Group deletion reuses root-company scope and native child reparenting, not a forced account group assignment. Deletes retain native journal/fiscal/tax reference guards and have no fake replay. One savepoint per mutation; no posted-entry rewrite, external payment, caller-sudo or new control framework. Fixed native ORM ownership predicates check complete company membership, including invisible companies; company_ids read values expose only visible companies and are not full ownership evidence. Only the fixed boolean relation predicate bypasses comodel visibility; target account ACL/record rules and business user remain unchanged."
+      },
+      "routing": {
+        "object": "account.account",
+        "actions": [
+          "get"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "查看科目高级设置及原生余额"
+          ],
+          "en_US": [
+            "Inspect native advanced account settings and balance"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "重写已过账分录",
+            "跨公司修改共享科目",
+            "强制指定计算科目组",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Rewriting posted entries",
+            "Cross-company editing of shared accounts",
+            "Forcing computed account groups",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "account_account_processing_settings_get"
+    },
+    "account.account.tags.assign": {
+      "summary": {
+        "zh_CN": "设置科目报表标签",
+        "en_US": "Assign account reporting tags"
+      },
+      "domain": "chart_of_accounts",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.account",
+          "account.account.tag",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_account.py",
+          "account/models/account_account_tag.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/account.account.tags.assign.request.schema.json",
+        "response": "schemas/v1/account.account.tags.assign.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account.tag:read",
+          "account.account:read",
+          "account.account:write",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_account_copy_unlink_or_configuration_write",
+        "verify": "native_identity_and_requested_configuration_reread_in_one_savepoint",
+        "idempotency": "serial_account_code_profile_or_current_requested_fields_with_missing_delete_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_account_processing_batch.py"
+          ],
+          "reason": "Closed public CLI/schemas, deterministic keys, native account and result/company scope, fixed reference and access denials, read normalization and native copy/edit/delete semantics."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_account_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: eight new IDs, seven setup IDs and ten immediate replays. Native owned/shared copies are isolated with independent identities, serial replay/conflict and fresh IDs after deletion; default taxes/tags, nullable descriptions/notes and non-trade receivable flags persist. Actual draft journal items set native used while only posted current-company entries affect the native all-time company-currency balance; archived owned accounts remain readable. Configuration edits preserve posted identities/accounts/maturities/amounts/residuals/tax links. Native current-year-earnings copy constraint rolls back the failed creation; journal, fiscal mapping and tax-repartition deletion restrictions are independently exercised. Native parent group deletion reparents surviving child groups and child deletion clears computed account groups without deleting accounts. Foreign/shared mutation, wrong-applicability/foreign references, missing/deleted targets and fake deletion replay are denied. Fresh-cursor synthetic business-data and temporary manager-group rollback verified; no external payment, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured company/user/native ACLs. Advanced reads expose native used/configuration and same-current-company all-time posted balance in company currency, not a dated trial balance or settlement proof. Account updates/deletion require an exact single-company account. Native copies from visible owned/shared accounts create only the current company and clear cross-company code mappings; serial code/profile matching does not guarantee concurrent exactly-once creation or copy provenance. Taxes are active/current-company and tags active/account-applicable. Notes are nullable fixed fields; non_trade is the native reporting flag. Group deletion reuses root-company scope and native child reparenting, not a forced account group assignment. Deletes retain native journal/fiscal/tax reference guards and have no fake replay. One savepoint per mutation; no posted-entry rewrite, external payment, caller-sudo or new control framework. Fixed native ORM ownership predicates check complete company membership, including invisible companies; company_ids read values expose only visible companies and are not full ownership evidence. Only the fixed boolean relation predicate bypasses comodel visibility; target account ACL/record rules and business user remain unchanged."
+      },
+      "routing": {
+        "object": "account.account",
+        "actions": [
+          "assign"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置科目报表标签"
+          ],
+          "en_US": [
+            "Assign account reporting tags"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "重写已过账分录",
+            "跨公司修改共享科目",
+            "强制指定计算科目组",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Rewriting posted entries",
+            "Cross-company editing of shared accounts",
+            "Forcing computed account groups",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "account.group.delete": {
+      "summary": {
+        "zh_CN": "删除科目组并原生调整子组",
+        "en_US": "Delete an account group with native child reparenting"
+      },
+      "domain": "chart_of_accounts",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.group",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_account.py",
+          "account/models/account_account_tag.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/account.group.delete.request.schema.json",
+        "response": "schemas/v1/account.group.delete.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.group:read",
+          "account.group:unlink",
+          "account.group:write",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_account_copy_unlink_or_configuration_write",
+        "verify": "native_identity_and_requested_configuration_reread_in_one_savepoint",
+        "idempotency": "serial_account_code_profile_or_current_requested_fields_with_missing_delete_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_account_processing_batch.py"
+          ],
+          "reason": "Closed public CLI/schemas, deterministic keys, native account and result/company scope, fixed reference and access denials, read normalization and native copy/edit/delete semantics."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_account_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: eight new IDs, seven setup IDs and ten immediate replays. Native owned/shared copies are isolated with independent identities, serial replay/conflict and fresh IDs after deletion; default taxes/tags, nullable descriptions/notes and non-trade receivable flags persist. Actual draft journal items set native used while only posted current-company entries affect the native all-time company-currency balance; archived owned accounts remain readable. Configuration edits preserve posted identities/accounts/maturities/amounts/residuals/tax links. Native current-year-earnings copy constraint rolls back the failed creation; journal, fiscal mapping and tax-repartition deletion restrictions are independently exercised. Native parent group deletion reparents surviving child groups and child deletion clears computed account groups without deleting accounts. Foreign/shared mutation, wrong-applicability/foreign references, missing/deleted targets and fake deletion replay are denied. Fresh-cursor synthetic business-data and temporary manager-group rollback verified; no external payment, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured company/user/native ACLs. Advanced reads expose native used/configuration and same-current-company all-time posted balance in company currency, not a dated trial balance or settlement proof. Account updates/deletion require an exact single-company account. Native copies from visible owned/shared accounts create only the current company and clear cross-company code mappings; serial code/profile matching does not guarantee concurrent exactly-once creation or copy provenance. Taxes are active/current-company and tags active/account-applicable. Notes are nullable fixed fields; non_trade is the native reporting flag. Group deletion reuses root-company scope and native child reparenting, not a forced account group assignment. Deletes retain native journal/fiscal/tax reference guards and have no fake replay. One savepoint per mutation; no posted-entry rewrite, external payment, caller-sudo or new control framework. Fixed native ORM ownership predicates check complete company membership, including invisible companies; company_ids read values expose only visible companies and are not full ownership evidence. Only the fixed boolean relation predicate bypasses comodel visibility; target account ACL/record rules and business user remain unchanged."
+      },
+      "routing": {
+        "object": "account.group",
+        "actions": [
+          "delete"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "删除科目组并原生调整子组"
+          ],
+          "en_US": [
+            "Delete an account group with native child reparenting"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "重写已过账分录",
+            "跨公司修改共享科目",
+            "强制指定计算科目组",
+            "任意模型字段修改"
+          ],
+          "en_US": [
+            "Rewriting posted entries",
+            "Cross-company editing of shared accounts",
+            "Forcing computed account groups",
+            "Arbitrary model-field writes"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
     }
   }
 }

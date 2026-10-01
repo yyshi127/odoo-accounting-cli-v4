@@ -11,6 +11,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 
+from odoo_accounting_cli_v4 import account_processing_contracts as account_processing
 from odoo_accounting_cli_v4 import (
     invoice_presentation_contracts as invoice_presentation,
 )
@@ -57,6 +58,7 @@ CORE_OBJECT_GET_CAPABILITY_IDS = frozenset(
         "journal.group.get",
         "partner.bill_validation_preferences.get",
         "partner.invoice_delivery_preferences.get",
+        "account.account.processing_settings.get",
         "tax.processing_settings.get",
         "invoice.payment_schedule.inspect",
         "reconciliation.model.processing_settings.get",
@@ -179,6 +181,7 @@ _ID_FIELDS = {
     "journal.group.get": "journal_group_id",
     "partner.bill_validation_preferences.get": "partner_id",
     "partner.invoice_delivery_preferences.get": "partner_id",
+    "account.account.processing_settings.get": "account_id",
     "tax.processing_settings.get": "tax_id",
     "invoice.payment_schedule.inspect": "invoice_id",
     "reconciliation.model.processing_settings.get": "reconciliation_model_id",
@@ -2791,6 +2794,8 @@ def _valid_account_status_item(item: Any, company_id: int) -> bool:
 
 
 def _valid_item(capability_id: str, item: Any, company_id: int) -> bool:
+    if capability_id == account_processing.GET_ID:
+        return account_processing.valid_read_item(item, company_id)
     if capability_id in tax_processing.READ_IDS:
         return tax_processing.valid_read_item(capability_id, item, company_id)
     if capability_id in payment_term_processing.READ_IDS:

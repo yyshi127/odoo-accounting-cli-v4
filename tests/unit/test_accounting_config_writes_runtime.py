@@ -8,6 +8,15 @@ import pytest
 from odoo_accounting_cli_v4.bridge import core_writes_runtime as writes
 
 
+@pytest.fixture(autouse=True)
+def native_account_scope(monkeypatch):
+    # These legacy fake records expose all companies; the shared native smoke
+    # additionally exercises ORM-filtered company_ids and the internal predicate.
+    monkeypatch.setattr(writes, "_account_is_single_company", lambda env, account_id, company_id:
+        any(record.id == account_id and set(_ids(record.company_ids)) == {company_id}
+            for record in env["account.account"].records))
+
+
 class Failure(RuntimeError):
     def __init__(
         self,

@@ -9,6 +9,7 @@ from datetime import date as date_type
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from odoo_accounting_cli_v4 import account_processing_contracts as account_processing
 from odoo_accounting_cli_v4 import (
     invoice_presentation_contracts as invoice_presentation,
 )
@@ -75,6 +76,7 @@ CAPABILITY_IDS = frozenset(
         "partner.invoice_delivery_preferences.get",
         "payment.bank_account_candidates.list",
         "payment.duplicate_candidates.list",
+        "account.account.processing_settings.get",
         "tax.processing_settings.get",
         "tax.usage_lines.list",
         "invoice.payment_schedule.inspect",
@@ -170,6 +172,7 @@ _GET_IDS = {
     "journal.group.get": ("account.journal.group", "journal_group_id"),
     "partner.bill_validation_preferences.get": ("res.partner", "partner_id"),
     "partner.invoice_delivery_preferences.get": ("res.partner", "partner_id"),
+    "account.account.processing_settings.get": ("account.account", "account_id"),
     "tax.processing_settings.get": ("account.tax", "tax_id"),
     "invoice.payment_schedule.inspect": ("account.move", "invoice_id"),
     "reconciliation.model.processing_settings.get": ("account.reconcile.model", "reconciliation_model_id"),
@@ -811,6 +814,7 @@ _REQUIRED_MODELS = {
     "partner.bill_validation_preferences.get": ('res.company', 'res.partner'),
     "partner.invoice_delivery_preferences.get": ('res.company', 'res.partner', 'account.move', 'ir.actions.report'),
     "partner.payment_preferences.get": ('res.company', 'res.partner', 'account.payment.method.line', 'account.journal'),
+    "account.account.processing_settings.get": ('res.company', 'account.account', 'account.group', 'account.account.tag', 'account.tax', 'res.currency', 'account.move.line'),
     "tax.processing_settings.get": ('res.company', 'account.tax', 'account.tax.repartition.line', 'account.move.line', 'account.reconcile.model.line'),
     "tax.usage_lines.list": ('res.company', 'account.tax', 'account.move.line', 'account.move', 'account.account', 'res.currency'),
     "invoice.payment_schedule.inspect": ('res.company', 'account.move', 'account.move.line', 'account.payment.term', 'account.payment.term.line', 'res.currency', 'account.cash.rounding', 'account.tax'),
@@ -2283,6 +2287,11 @@ def _available_reference_fields(model: Any, kind: str) -> tuple[str, ...]:
 def _raw_get_rows(
     env: Any, capability_id: str, company_id: int, parameters: dict[str, Any]
 ) -> list[dict[str, Any]]:
+    if capability_id == account_processing.GET_ID:
+        account = env["account.account"].with_context(active_test=False, allowed_company_ids=[company_id]).search([("id", "=", parameters["account_id"]), ("company_ids", "in", [company_id])], limit=1)
+        # Native non-stored fields have no dependency on intervening journal writes.
+        account.invalidate_recordset(["used", "current_balance", "related_taxes_amount", "group_id"])
+        return account.read(list(account_processing.GET_FIELDS))
     if capability_id == tax_processing.GET_ID:
         return _tax_processing_settings_rows(env, parameters, company_id)
     if capability_id == payment_term_processing.GET_ID:
@@ -4618,6 +4627,23 @@ def _normalize_partner_preferences(env: Any, capability_id: str, rows: list[dict
     return result
 
 
+def _normalize_account_processing(rows: list[dict[str, Any]], company_id: int) -> list[dict[str, Any]]:
+    items = []
+    for row in rows:
+        item = {**row, "company_id": company_id}
+        for field in ("currency_id", "company_currency_id", "group_id"):
+            item[field] = _reference_id(item[field])
+        for field in ("description", "note"):
+            item[field] = _optional_text(item[field])
+        for field in ("company_ids", "tax_ids", "tag_ids"):
+            item[field] = sorted(item[field])
+        item["current_balance"] = _decimal_string(item["current_balance"])
+        if not account_processing.valid_read_item(item, company_id):
+            raise ValueError("invalid native account-processing read")
+        items.append(item)
+    return items
+
+
 def _tax_processing_settings_rows(env: Any, parameters: dict[str, Any], company_id: int) -> list[dict[str, Any]]:
     taxes = env["account.tax"].with_context(active_test=False, allowed_company_ids=[company_id])
     tax = taxes.search([("id", "=", parameters["tax_id"]), ("company_id", "=", company_id)], limit=1)
@@ -6473,7 +6499,9 @@ def dispatch(
                 cursor_found=False,
             )
 
-        if capability_id in tax_processing.READ_IDS:
+        if capability_id == account_processing.GET_ID:
+            items = _normalize_account_processing(rows, company_id)
+        elif capability_id in tax_processing.READ_IDS:
             items = _normalize_tax_processing(capability_id, rows, company_id)
         elif capability_id in payment_term_processing.READ_IDS:
             items = _normalize_payment_term_processing(capability_id, rows, company_id)

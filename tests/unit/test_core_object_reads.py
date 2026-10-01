@@ -15,6 +15,7 @@ from odoo_accounting_cli_v4.capabilities.core_object_reads import (
 REQUEST_ID = "7bc39413-0d69-4092-9319-795d33f3167c"
 
 GET_ID_FIELDS = {
+    "account.account.processing_settings.get": "account_id",
     "tax.processing_settings.get": "tax_id",
     "invoice.payment_schedule.inspect": "invoice_id",
     "reconciliation.model.processing_settings.get": "reconciliation_model_id",
@@ -275,6 +276,9 @@ def _coded(record_id: int, code: str, name: str) -> dict:
 
 
 def _item(capability_id: str, record_id: int = 31) -> dict:
+    if capability_id == 'account.account.processing_settings.get':
+        from test_account_processing_batch import read_item
+        return read_item(capability_id,record_id)
     if capability_id in {'tax.processing_settings.get', 'tax.usage_lines.list'}:
         from test_tax_processing_batch import read_item
         return read_item(capability_id,record_id)
