@@ -5236,3 +5236,86 @@ Asset validation remains failed; product accounting-profile readback and two
 external report sends remain planned. Addon repairs and real external sends
 need separate authority. The capability-first goal remains active; full accounting
 coverage has not been proven against a complete denominator.
+
+## Native payment-term and installment processing — 2026-10-01
+
+Baseline: `87f16a5`. Eight new IDs: 484 registered, 469 handlers
+(230 reads, 239 writes), 944 schemas; 396 unconfigured, 73 degraded, 15 disabled.
+Enabled integrations: 465 implemented, three planned, one failed. These totals
+include historical non-accounting extensions, not full accounting coverage.
+
+### Command boundaries
+
+- `invoice.payment_schedule.inspect` reads an actual invoice's native computed
+  needed_terms: maturity/discount dates, company/foreign-currency and discount
+  amounts. It returns current-configuration forecasts, not stored historical
+  installments or proof of payment/residual settlement. Missing/non-invoice/
+  foreign targets have no visible result and GET raises record_not_found.
+- `payment_term.usage_moves.list` reads same-company documents using a visible
+  own/shared parent, including archived terms, through scoped ID-keyset paging.
+  Missing/invisible/deleted parents have no visible rows.
+- `payment_term.duplicate` uses native copy, preserves published header/line
+  configuration, corrects native copy_data's forced name and writable computed
+  discount policy, and creates independent same-company parent/child IDs. Shared
+  terms may be copied but not mutated. A unique same-name exact payload replays;
+  conflicting/ambiguous copies or a changed source cause idempotency_conflict.
+- `payment_term.line.create/update/delete` append, patch or remove native lines
+  through one parent write, preserving sibling IDs/order. Unique payload create
+  and desired-value update replay; missing deletion targets remain errors. Four
+  native delay types, signed fixed amounts/days and native day 0-31 are supported.
+- `payment_term.lines.update` atomically patches 2-100 distinct existing native
+  IDs, preflighting every parent link before any write. It preserves IDs rather
+  than replacing all lines. One parent write and savepoint enforce native final
+  percentage totals and single-line early-discount constraints and roll failures
+  back immediately. There is no child sequence/resequence capability: native
+  ordering is by ID and the final line is the residual regardless of amount type.
+- `payment_term.delete` uses native unlink. Unused-term children cascade, while
+  any actual document reference triggers the native deletion guard. Missing
+  targets are errors, not successful replays. No posted entry is rewritten.
+- All new writes reuse ACL/company/user scope, exact confirmation, deterministic
+  keys and native result checks; no caller-sudo or generic model dispatcher.
+
+### Evidence and recovery
+
+Both isolated aliases passed one shared public CLI/in-process real-ORM workflow
+in 493.82 seconds on attempt 2. Business calls use uid 5, su=False, company 1;
+each exercises eight new IDs, five setup IDs and six immediate replays. Real
+taxed invoices verify foreign-currency installments and excluded-tax early
+discounts. Failed native sum/early-discount mutations roll back per call;
+configuration edits leave previously posted line IDs, maturities, amounts and
+residuals unchanged. Usage paging/archive, copy identity, actual deletion/cascade,
+referenced-delete denial, foreign/wrong-parent/shared-mutation denials, changed-
+source conflicts and missing targets are exercised. Fresh cursors verify all
+synthetic business records and temporary manager memberships rolled back.
+No actual payment, reconciliation, external delivery or permanent group grant.
+
+Attempt 1 failed in 2.38 seconds before business execution because an existing
+setup command accepts caller-provided keys rather than generating a key. Only
+the fixture changed: those setup calls now use explicit per-object keys through
+the public CLI. New writes still use the existing deterministic-key helper.
+The failed run verified rollback; it is retained, not counted as acceptance.
+
+Local: 1078 batch/read/runtime cases (54 + 847 + 177), 234 focused writes,
+19 planned-baseline registry cases with one known deselection, then two changed
+registry selections after closure. Server: 54 batch and 19 final registry cases,
+with the same explicit stale bank_statement_payment_maintenance deselection.
+Ruff/diff passed. Initial 31-file deployment backed up 12 existing files and
+added 19 new ones. Exact one-file fixture and final two-file metadata deployments
+verified baselines and backed up first; all 31 final hashes match local files.
+Server document overlays were preserved. Private archives, manifests/backups and
+native logs stay under `.tooling/payment-term-processing-20261001`, never in Git.
+Initial archive SHA-256: `37bfa7f20aa695e1d3b8f1ce9117ba464b1d61f61300d467c066bdce9f9a3c60`.
+Fixture repair SHA-256: `76c0f492cdc7c0fddf30efeffbdcc501e0ead51fdc89f0999156af150921929c`.
+Final metadata SHA-256: `18e5ad74950f861d5a074d0ef56f9074654cc917240c211eb090972e96d76df4`.
+Registry-file SHA-256: `705ebf0238de66448ebcb8e773f77fd180ec4f1fd2c2bf872375c1abfbcac914`.
+Canonical registry SHA-256: `09e1fd0573a5d062f8b8acc8a13aa255b190f7983af9fdd7d8279c23c49c968b`.
+Passing live-log SHA-256: `e2d316eb5558b62bc3f023c57418eb3a3a1f3057d6beb82d44fd8833a045c220`.
+Changed code/schema/tests and staged added lines have zero privacy findings;
+the full tree retains five historical document findings, not a full scan pass.
+Odoo/Nginx/PostgreSQL PIDs and restart counts remain at the prior baseline;
+no business database, installed source/addon, Pi/V2/V3, service or config change.
+
+Continue another small genuine native accounting gap batch. Asset validation is
+still failed; product accounting-profile readback and two real external report
+sends remain planned. Addon fixes/real sends require separate authority. Keep
+the capability-first goal active; a complete accounting denominator is unproven.

@@ -31528,6 +31528,987 @@
         ]
       },
       "handler_key": "reconciliation_model_usage_lines_list"
+    },
+    "invoice.payment_schedule.inspect": {
+      "summary": {
+        "zh_CN": "查看发票原生分期到期计划",
+        "en_US": "Inspect an actual invoice native installment schedule"
+      },
+      "domain": "invoices_and_bills",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "res.company",
+          "account.move",
+          "account.move.line",
+          "account.payment.term",
+          "account.payment.term.line",
+          "res.currency",
+          "account.cash.rounding",
+          "account.tax"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment_term.py",
+          "account/models/account_move.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.payment_schedule.inspect.request.schema.json",
+        "response": "schemas/v1/invoice.payment_schedule.inspect.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.move:read",
+          "account.move.line:read",
+          "account.payment.term:read",
+          "account.payment.term.line:read",
+          "res.currency:read",
+          "account.cash.rounding:read",
+          "account.tax:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_native_needed_terms_or_scoped_usage_read",
+        "verify": "closed_response_schema_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_term_processing_batch.py"
+          ],
+          "reason": "Closed request/result ownership, native line shapes, atomic ID-preserving updates, fixed routing, schemas, access denials and actual invoice schedule normalization."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_term_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, five existing setup IDs and six immediate replays; native owned/shared term copies with independent child IDs, individual and atomic line edits preserving IDs, native failed percentage/early-discount mutations rolled back per call, actual taxed foreign-currency installment and early-discount schedules, posted entries unchanged by configuration changes, scoped ID-keyset usage reads including archived terms, unused-term deletion/cascade and native referenced-term deletion denial. Wrong-parent/company, shared-term mutation, changed-source copy and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No payment, external delivery, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured user/company and native ACLs. Reads actual invoice needed_terms including native currencies, maturity/discount dates and amounts; this is a computed plan, not actual payment or residual proof. Usage is scoped to visible shared/own terms and same-company documents. Mutations only target owned terms; duplicate may read a shared term and create an independent company-owned copy. Child writes use one parent write and native savepoint, preserving IDs/order and native total/early-discount constraints; fixed amounts and days follow native signed semantics. Native final line is the residual regardless of its amount type; there is no invented sequence/order field. Referenced-term deletion and missing targets remain native errors, not fake replay. No posted-entry rewrite, external delivery, arbitrary fields/methods or caller-sudo."
+      },
+      "routing": {
+        "object": "invoice.payment_schedule",
+        "actions": [
+          "inspect"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "查看发票原生分期到期计划"
+          ],
+          "en_US": [
+            "Inspect an actual invoice native installment schedule"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "执行付款或转账",
+            "重写已过账分录",
+            "任意模型字段修改",
+            "使用不存在的分期排序字段"
+          ],
+          "en_US": [
+            "Executing payments or transfers",
+            "Rewriting posted entries",
+            "Arbitrary model-field writes",
+            "Using a nonexistent payment-term sequence field"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "invoice_payment_schedule_inspect"
+    },
+    "payment_term.delete": {
+      "summary": {
+        "zh_CN": "删除未被单据引用的付款条件",
+        "en_US": "Delete a natively unreferenced payment term"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.move",
+          "account.payment.term",
+          "account.payment.term.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment_term.py",
+          "account/models/account_move.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment_term.delete.request.schema.json",
+        "response": "schemas/v1/payment_term.delete.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.move:read",
+          "account.payment.term.line:read",
+          "account.payment.term.line:unlink",
+          "account.payment.term:read",
+          "account.payment.term:unlink",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_term_copy_or_atomic_parent_line_commands",
+        "verify": "native_payload_reread_in_one_savepoint",
+        "idempotency": "serial_native_payload_matching_with_ambiguous_or_missing_target_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_term_processing_batch.py"
+          ],
+          "reason": "Closed request/result ownership, native line shapes, atomic ID-preserving updates, fixed routing, schemas, access denials and actual invoice schedule normalization."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_term_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, five existing setup IDs and six immediate replays; native owned/shared term copies with independent child IDs, individual and atomic line edits preserving IDs, native failed percentage/early-discount mutations rolled back per call, actual taxed foreign-currency installment and early-discount schedules, posted entries unchanged by configuration changes, scoped ID-keyset usage reads including archived terms, unused-term deletion/cascade and native referenced-term deletion denial. Wrong-parent/company, shared-term mutation, changed-source copy and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No payment, external delivery, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured user/company and native ACLs. Reads actual invoice needed_terms including native currencies, maturity/discount dates and amounts; this is a computed plan, not actual payment or residual proof. Usage is scoped to visible shared/own terms and same-company documents. Mutations only target owned terms; duplicate may read a shared term and create an independent company-owned copy. Child writes use one parent write and native savepoint, preserving IDs/order and native total/early-discount constraints; fixed amounts and days follow native signed semantics. Native final line is the residual regardless of its amount type; there is no invented sequence/order field. Referenced-term deletion and missing targets remain native errors, not fake replay. No posted-entry rewrite, external delivery, arbitrary fields/methods or caller-sudo."
+      },
+      "routing": {
+        "object": "payment_term",
+        "actions": [
+          "delete"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "删除未被单据引用的付款条件"
+          ],
+          "en_US": [
+            "Delete a natively unreferenced payment term"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "执行付款或转账",
+            "重写已过账分录",
+            "任意模型字段修改",
+            "使用不存在的分期排序字段"
+          ],
+          "en_US": [
+            "Executing payments or transfers",
+            "Rewriting posted entries",
+            "Arbitrary model-field writes",
+            "Using a nonexistent payment-term sequence field"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "payment_term.duplicate": {
+      "summary": {
+        "zh_CN": "复制付款条件和分期行",
+        "en_US": "Duplicate a native payment term and its lines"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.payment.term",
+          "account.payment.term.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment_term.py",
+          "account/models/account_move.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment_term.duplicate.request.schema.json",
+        "response": "schemas/v1/payment_term.duplicate.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.payment.term.line:create",
+          "account.payment.term.line:read",
+          "account.payment.term:create",
+          "account.payment.term:read",
+          "account.payment.term:write",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_term_copy_or_atomic_parent_line_commands",
+        "verify": "native_payload_reread_in_one_savepoint",
+        "idempotency": "serial_native_payload_matching_with_ambiguous_or_missing_target_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_term_processing_batch.py"
+          ],
+          "reason": "Closed request/result ownership, native line shapes, atomic ID-preserving updates, fixed routing, schemas, access denials and actual invoice schedule normalization."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_term_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, five existing setup IDs and six immediate replays; native owned/shared term copies with independent child IDs, individual and atomic line edits preserving IDs, native failed percentage/early-discount mutations rolled back per call, actual taxed foreign-currency installment and early-discount schedules, posted entries unchanged by configuration changes, scoped ID-keyset usage reads including archived terms, unused-term deletion/cascade and native referenced-term deletion denial. Wrong-parent/company, shared-term mutation, changed-source copy and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No payment, external delivery, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured user/company and native ACLs. Reads actual invoice needed_terms including native currencies, maturity/discount dates and amounts; this is a computed plan, not actual payment or residual proof. Usage is scoped to visible shared/own terms and same-company documents. Mutations only target owned terms; duplicate may read a shared term and create an independent company-owned copy. Child writes use one parent write and native savepoint, preserving IDs/order and native total/early-discount constraints; fixed amounts and days follow native signed semantics. Native final line is the residual regardless of its amount type; there is no invented sequence/order field. Referenced-term deletion and missing targets remain native errors, not fake replay. No posted-entry rewrite, external delivery, arbitrary fields/methods or caller-sudo."
+      },
+      "routing": {
+        "object": "payment_term",
+        "actions": [
+          "duplicate"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "复制付款条件和分期行"
+          ],
+          "en_US": [
+            "Duplicate a native payment term and its lines"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "执行付款或转账",
+            "重写已过账分录",
+            "任意模型字段修改",
+            "使用不存在的分期排序字段"
+          ],
+          "en_US": [
+            "Executing payments or transfers",
+            "Rewriting posted entries",
+            "Arbitrary model-field writes",
+            "Using a nonexistent payment-term sequence field"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "payment_term.line.create": {
+      "summary": {
+        "zh_CN": "新增付款条件分期行",
+        "en_US": "Create a native payment-term line"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.payment.term",
+          "account.payment.term.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment_term.py",
+          "account/models/account_move.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment_term.line.create.request.schema.json",
+        "response": "schemas/v1/payment_term.line.create.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.payment.term.line:create",
+          "account.payment.term.line:read",
+          "account.payment.term:read",
+          "account.payment.term:write",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_term_copy_or_atomic_parent_line_commands",
+        "verify": "native_payload_reread_in_one_savepoint",
+        "idempotency": "serial_native_payload_matching_with_ambiguous_or_missing_target_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_term_processing_batch.py"
+          ],
+          "reason": "Closed request/result ownership, native line shapes, atomic ID-preserving updates, fixed routing, schemas, access denials and actual invoice schedule normalization."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_term_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, five existing setup IDs and six immediate replays; native owned/shared term copies with independent child IDs, individual and atomic line edits preserving IDs, native failed percentage/early-discount mutations rolled back per call, actual taxed foreign-currency installment and early-discount schedules, posted entries unchanged by configuration changes, scoped ID-keyset usage reads including archived terms, unused-term deletion/cascade and native referenced-term deletion denial. Wrong-parent/company, shared-term mutation, changed-source copy and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No payment, external delivery, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured user/company and native ACLs. Reads actual invoice needed_terms including native currencies, maturity/discount dates and amounts; this is a computed plan, not actual payment or residual proof. Usage is scoped to visible shared/own terms and same-company documents. Mutations only target owned terms; duplicate may read a shared term and create an independent company-owned copy. Child writes use one parent write and native savepoint, preserving IDs/order and native total/early-discount constraints; fixed amounts and days follow native signed semantics. Native final line is the residual regardless of its amount type; there is no invented sequence/order field. Referenced-term deletion and missing targets remain native errors, not fake replay. No posted-entry rewrite, external delivery, arbitrary fields/methods or caller-sudo."
+      },
+      "routing": {
+        "object": "payment_term",
+        "actions": [
+          "create"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "新增付款条件分期行"
+          ],
+          "en_US": [
+            "Create a native payment-term line"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "执行付款或转账",
+            "重写已过账分录",
+            "任意模型字段修改",
+            "使用不存在的分期排序字段"
+          ],
+          "en_US": [
+            "Executing payments or transfers",
+            "Rewriting posted entries",
+            "Arbitrary model-field writes",
+            "Using a nonexistent payment-term sequence field"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "payment_term.line.delete": {
+      "summary": {
+        "zh_CN": "删除付款条件分期行",
+        "en_US": "Delete a native payment-term line"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.payment.term",
+          "account.payment.term.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment_term.py",
+          "account/models/account_move.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment_term.line.delete.request.schema.json",
+        "response": "schemas/v1/payment_term.line.delete.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.payment.term.line:read",
+          "account.payment.term.line:unlink",
+          "account.payment.term:read",
+          "account.payment.term:write",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_term_copy_or_atomic_parent_line_commands",
+        "verify": "native_payload_reread_in_one_savepoint",
+        "idempotency": "serial_native_payload_matching_with_ambiguous_or_missing_target_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_term_processing_batch.py"
+          ],
+          "reason": "Closed request/result ownership, native line shapes, atomic ID-preserving updates, fixed routing, schemas, access denials and actual invoice schedule normalization."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_term_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, five existing setup IDs and six immediate replays; native owned/shared term copies with independent child IDs, individual and atomic line edits preserving IDs, native failed percentage/early-discount mutations rolled back per call, actual taxed foreign-currency installment and early-discount schedules, posted entries unchanged by configuration changes, scoped ID-keyset usage reads including archived terms, unused-term deletion/cascade and native referenced-term deletion denial. Wrong-parent/company, shared-term mutation, changed-source copy and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No payment, external delivery, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured user/company and native ACLs. Reads actual invoice needed_terms including native currencies, maturity/discount dates and amounts; this is a computed plan, not actual payment or residual proof. Usage is scoped to visible shared/own terms and same-company documents. Mutations only target owned terms; duplicate may read a shared term and create an independent company-owned copy. Child writes use one parent write and native savepoint, preserving IDs/order and native total/early-discount constraints; fixed amounts and days follow native signed semantics. Native final line is the residual regardless of its amount type; there is no invented sequence/order field. Referenced-term deletion and missing targets remain native errors, not fake replay. No posted-entry rewrite, external delivery, arbitrary fields/methods or caller-sudo."
+      },
+      "routing": {
+        "object": "payment_term",
+        "actions": [
+          "delete"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "删除付款条件分期行"
+          ],
+          "en_US": [
+            "Delete a native payment-term line"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "执行付款或转账",
+            "重写已过账分录",
+            "任意模型字段修改",
+            "使用不存在的分期排序字段"
+          ],
+          "en_US": [
+            "Executing payments or transfers",
+            "Rewriting posted entries",
+            "Arbitrary model-field writes",
+            "Using a nonexistent payment-term sequence field"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "payment_term.line.update": {
+      "summary": {
+        "zh_CN": "修改付款条件分期行",
+        "en_US": "Patch a native payment-term line"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.payment.term",
+          "account.payment.term.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment_term.py",
+          "account/models/account_move.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment_term.line.update.request.schema.json",
+        "response": "schemas/v1/payment_term.line.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.payment.term.line:read",
+          "account.payment.term.line:write",
+          "account.payment.term:read",
+          "account.payment.term:write",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_term_copy_or_atomic_parent_line_commands",
+        "verify": "native_payload_reread_in_one_savepoint",
+        "idempotency": "serial_native_payload_matching_with_ambiguous_or_missing_target_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_term_processing_batch.py"
+          ],
+          "reason": "Closed request/result ownership, native line shapes, atomic ID-preserving updates, fixed routing, schemas, access denials and actual invoice schedule normalization."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_term_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, five existing setup IDs and six immediate replays; native owned/shared term copies with independent child IDs, individual and atomic line edits preserving IDs, native failed percentage/early-discount mutations rolled back per call, actual taxed foreign-currency installment and early-discount schedules, posted entries unchanged by configuration changes, scoped ID-keyset usage reads including archived terms, unused-term deletion/cascade and native referenced-term deletion denial. Wrong-parent/company, shared-term mutation, changed-source copy and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No payment, external delivery, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured user/company and native ACLs. Reads actual invoice needed_terms including native currencies, maturity/discount dates and amounts; this is a computed plan, not actual payment or residual proof. Usage is scoped to visible shared/own terms and same-company documents. Mutations only target owned terms; duplicate may read a shared term and create an independent company-owned copy. Child writes use one parent write and native savepoint, preserving IDs/order and native total/early-discount constraints; fixed amounts and days follow native signed semantics. Native final line is the residual regardless of its amount type; there is no invented sequence/order field. Referenced-term deletion and missing targets remain native errors, not fake replay. No posted-entry rewrite, external delivery, arbitrary fields/methods or caller-sudo."
+      },
+      "routing": {
+        "object": "payment_term",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "修改付款条件分期行"
+          ],
+          "en_US": [
+            "Patch a native payment-term line"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "执行付款或转账",
+            "重写已过账分录",
+            "任意模型字段修改",
+            "使用不存在的分期排序字段"
+          ],
+          "en_US": [
+            "Executing payments or transfers",
+            "Rewriting posted entries",
+            "Arbitrary model-field writes",
+            "Using a nonexistent payment-term sequence field"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "payment_term.lines.update": {
+      "summary": {
+        "zh_CN": "成组修改付款条件分期行",
+        "en_US": "Atomically patch native payment-term lines retaining their IDs"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.payment.term",
+          "account.payment.term.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment_term.py",
+          "account/models/account_move.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment_term.lines.update.request.schema.json",
+        "response": "schemas/v1/payment_term.lines.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.payment.term.line:read",
+          "account.payment.term.line:write",
+          "account.payment.term:read",
+          "account.payment.term:write",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_native_term_copy_or_atomic_parent_line_commands",
+        "verify": "native_payload_reread_in_one_savepoint",
+        "idempotency": "serial_native_payload_matching_with_ambiguous_or_missing_target_denial",
+        "reverse": "previous_configuration_or_backup_subject_to_native_acl"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_term_processing_batch.py"
+          ],
+          "reason": "Closed request/result ownership, native line shapes, atomic ID-preserving updates, fixed routing, schemas, access denials and actual invoice schedule normalization."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_term_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, five existing setup IDs and six immediate replays; native owned/shared term copies with independent child IDs, individual and atomic line edits preserving IDs, native failed percentage/early-discount mutations rolled back per call, actual taxed foreign-currency installment and early-discount schedules, posted entries unchanged by configuration changes, scoped ID-keyset usage reads including archived terms, unused-term deletion/cascade and native referenced-term deletion denial. Wrong-parent/company, shared-term mutation, changed-source copy and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No payment, external delivery, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured user/company and native ACLs. Reads actual invoice needed_terms including native currencies, maturity/discount dates and amounts; this is a computed plan, not actual payment or residual proof. Usage is scoped to visible shared/own terms and same-company documents. Mutations only target owned terms; duplicate may read a shared term and create an independent company-owned copy. Child writes use one parent write and native savepoint, preserving IDs/order and native total/early-discount constraints; fixed amounts and days follow native signed semantics. Native final line is the residual regardless of its amount type; there is no invented sequence/order field. Referenced-term deletion and missing targets remain native errors, not fake replay. No posted-entry rewrite, external delivery, arbitrary fields/methods or caller-sudo."
+      },
+      "routing": {
+        "object": "payment_term",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "成组修改付款条件分期行"
+          ],
+          "en_US": [
+            "Atomically patch native payment-term lines retaining their IDs"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "执行付款或转账",
+            "重写已过账分录",
+            "任意模型字段修改",
+            "使用不存在的分期排序字段"
+          ],
+          "en_US": [
+            "Executing payments or transfers",
+            "Rewriting posted entries",
+            "Arbitrary model-field writes",
+            "Using a nonexistent payment-term sequence field"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "payment_term.usage_moves.list": {
+      "summary": {
+        "zh_CN": "查询付款条件使用单据",
+        "en_US": "List native accounting documents using a payment term"
+      },
+      "domain": "accounting_configuration",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "res.company",
+          "account.payment.term",
+          "account.move",
+          "res.partner",
+          "res.currency"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment_term.py",
+          "account/models/account_move.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment_term.usage_moves.list.request.schema.json",
+        "response": "schemas/v1/payment_term.usage_moves.list.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.payment.term:read",
+          "account.move:read",
+          "res.partner:read",
+          "res.currency:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_native_needed_terms_or_scoped_usage_read",
+        "verify": "closed_response_schema_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_term_processing_batch.py"
+          ],
+          "reason": "Closed request/result ownership, native line shapes, atomic ID-preserving updates, fixed routing, schemas, access denials and actual invoice schedule normalization."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_term_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5 with su=False: all eight new IDs, five existing setup IDs and six immediate replays; native owned/shared term copies with independent child IDs, individual and atomic line edits preserving IDs, native failed percentage/early-discount mutations rolled back per call, actual taxed foreign-currency installment and early-discount schedules, posted entries unchanged by configuration changes, scoped ID-keyset usage reads including archived terms, unused-term deletion/cascade and native referenced-term deletion denial. Wrong-parent/company, shared-term mutation, changed-source copy and missing targets denied. Fresh-cursor business-data and temporary-group rollback verified. No payment, external delivery, addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples are deferred until the capability library reaches target coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing is outside this capability batch."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires configured user/company and native ACLs. Reads actual invoice needed_terms including native currencies, maturity/discount dates and amounts; this is a computed plan, not actual payment or residual proof. Usage is scoped to visible shared/own terms and same-company documents. Mutations only target owned terms; duplicate may read a shared term and create an independent company-owned copy. Child writes use one parent write and native savepoint, preserving IDs/order and native total/early-discount constraints; fixed amounts and days follow native signed semantics. Native final line is the residual regardless of its amount type; there is no invented sequence/order field. Referenced-term deletion and missing targets remain native errors, not fake replay. No posted-entry rewrite, external delivery, arbitrary fields/methods or caller-sudo."
+      },
+      "routing": {
+        "object": "payment_term",
+        "actions": [
+          "list"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "查询付款条件使用单据"
+          ],
+          "en_US": [
+            "List native accounting documents using a payment term"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "执行付款或转账",
+            "重写已过账分录",
+            "任意模型字段修改",
+            "使用不存在的分期排序字段"
+          ],
+          "en_US": [
+            "Executing payments or transfers",
+            "Rewriting posted entries",
+            "Arbitrary model-field writes",
+            "Using a nonexistent payment-term sequence field"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "payment_term_usage_moves_list"
     }
   }
 }

@@ -28,12 +28,15 @@ from odoo_accounting_cli_v4 import (
 )
 from odoo_accounting_cli_v4 import payment_processing_contracts as payment_processing
 from odoo_accounting_cli_v4 import (
+    payment_term_processing_contracts as payment_term_processing,
+)
+from odoo_accounting_cli_v4 import (
     reconciliation_processing_contracts as reconciliation_processing,
 )
 from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
 
 ACTION = "accounting.core_write.execute"
-CAPABILITIES = reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
+CAPABILITIES = payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -3321,6 +3324,25 @@ def _protocol(failure_type: type[Exception]) -> Exception:
     )
 
 
+_PARAMETER_KEYS.update(payment_term_processing.PARAMETER_KEYS)
+_GROUPS['payment_term.delete'] = "account.group_account_manager"
+_MODELS['payment_term.delete'] = {'account.payment.term.line', 'account.move', 'account.payment.term', 'res.company'}
+_ACCESS['payment_term.delete'] = {('account.move', 'read'), ('account.payment.term', 'unlink'), ('res.company', 'read'), ('account.payment.term.line', 'unlink'), ('account.payment.term', 'read'), ('account.payment.term.line', 'read')}
+_GROUPS['payment_term.duplicate'] = "account.group_account_manager"
+_MODELS['payment_term.duplicate'] = {'account.payment.term.line', 'account.payment.term', 'res.company'}
+_ACCESS['payment_term.duplicate'] = {('account.payment.term.line', 'create'), ('res.company', 'read'), ('account.payment.term', 'read'), ('account.payment.term', 'create'), ('account.payment.term.line', 'read'), ('account.payment.term', 'write')}
+_GROUPS['payment_term.line.create'] = "account.group_account_manager"
+_MODELS['payment_term.line.create'] = {'account.payment.term.line', 'account.payment.term', 'res.company'}
+_ACCESS['payment_term.line.create'] = {('account.payment.term.line', 'create'), ('res.company', 'read'), ('account.payment.term', 'read'), ('account.payment.term.line', 'read'), ('account.payment.term', 'write')}
+_GROUPS['payment_term.line.delete'] = "account.group_account_manager"
+_MODELS['payment_term.line.delete'] = {'account.payment.term.line', 'account.payment.term', 'res.company'}
+_ACCESS['payment_term.line.delete'] = {('res.company', 'read'), ('account.payment.term.line', 'unlink'), ('account.payment.term', 'read'), ('account.payment.term.line', 'read'), ('account.payment.term', 'write')}
+_GROUPS['payment_term.line.update'] = "account.group_account_manager"
+_MODELS['payment_term.line.update'] = {'account.payment.term.line', 'account.payment.term', 'res.company'}
+_ACCESS['payment_term.line.update'] = {('res.company', 'read'), ('account.payment.term', 'read'), ('account.payment.term.line', 'write'), ('account.payment.term.line', 'read'), ('account.payment.term', 'write')}
+_GROUPS['payment_term.lines.update'] = "account.group_account_manager"
+_MODELS['payment_term.lines.update'] = {'account.payment.term.line', 'account.payment.term', 'res.company'}
+_ACCESS['payment_term.lines.update'] = {('res.company', 'read'), ('account.payment.term', 'read'), ('account.payment.term.line', 'write'), ('account.payment.term.line', 'read'), ('account.payment.term', 'write')}
 _PARAMETER_KEYS.update(reconciliation_processing.PARAMETER_KEYS)
 _GROUPS['reconciliation.model.activity_type.assign'] = "account.group_account_manager"
 _MODELS['reconciliation.model.activity_type.assign'] = {'res.company', 'account.reconcile.model', 'account.reconcile.model.line', 'mail.activity.type'}
@@ -5428,6 +5450,11 @@ def _valid_parameters(
 ) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id in payment_term_processing.CAPABILITY_IDS:
+        try:
+            return payment_term_processing.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
     if capability_id in reconciliation_processing.CAPABILITY_IDS:
         try:
             return reconciliation_processing.normalize_parameters(capability_id, parameters) == parameters
@@ -6046,6 +6073,8 @@ def _validated_payload(
 def _deterministic_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in payment_term_processing.CAPABILITY_IDS:
+        return payment_term_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in reconciliation_processing.CAPABILITY_IDS:
         return reconciliation_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in payment_processing.CAPABILITY_IDS:
@@ -16692,6 +16721,116 @@ def _payment_term(
     )
 
 
+def _normalized_payment_term_line(line: Any) -> dict[str, Any]:
+    return {"value": line.value, "value_amount": _canonical_decimal_text(line.value_amount),
+            "delay_type": line.delay_type, "nb_days": line.nb_days,
+            "days_next_month": int(line.days_next_month)}
+
+
+def _payment_term_copy_values(term: Any) -> dict[str, Any]:
+    return {"active": bool(term.active), "sequence": term.sequence, "note": term.note or None,
+            "display_on_invoice": bool(term.display_on_invoice), "early_discount": bool(term.early_discount),
+            "discount_percentage": _canonical_decimal_text(term.discount_percentage), "discount_days": term.discount_days,
+            "early_pay_discount_computation": term.early_pay_discount_computation,
+            "lines": [_normalized_payment_term_line(line) for line in term.line_ids.sorted("id")]}
+
+
+def _write_payment_term_processing(
+    env: Any, capability_id: str, parameters: dict[str, Any],
+    company_id: int, failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    with env.cr.savepoint():
+        source_id, replay = None, False
+        duplicate = capability_id == "payment_term.duplicate"
+        term = _search_one(env, "account.payment.term", [
+            ("id", "=", parameters["payment_term_id"]),
+            ("company_id", "in", [False, company_id]) if duplicate else ("company_id", "=", company_id),
+        ], company_id, failure_type)
+        if duplicate:
+            expected = _payment_term_copy_values(term)
+            candidates = _scoped(env, "account.payment.term", company_id).search([
+                ("company_id", "=", company_id), ("name", "=", parameters["name"]),
+            ], limit=2)
+            if candidates:
+                if len(candidates) != 1 or candidates.id == term.id or _payment_term_copy_values(candidates) != expected:
+                    raise _fail(failure_type, "idempotency_conflict", "The duplicate name already belongs to different payment-term configuration.", exit_code=5)
+                target, replay = candidates, True
+            else:
+                target = term.copy({"company_id": company_id})
+                # Native copy_data always substitutes its own name, even with a name default.
+                target.write({**_payment_term_header_values(expected), "name": parameters["name"], "active": term.active})
+                target.invalidate_recordset()
+            if (target.id == term.id or _relation_id(target.company_id) != company_id
+                or target.name != parameters["name"] or _payment_term_copy_values(target) != expected
+                or set(target.line_ids.ids) & set(term.line_ids.ids)):
+                raise _fail(failure_type, "odoo_write_error", "Native payment-term copy did not preserve independent configuration.", exit_code=6)
+            result = _payment_term_result(target, company_id)
+            result["source_id"] = term.id
+            return result, replay
+        if capability_id == "payment_term.delete":
+            result = _deleted_result(_payment_term_result(term, company_id))
+            result["line_ids"] = []
+            term.unlink()
+            if term.exists():
+                raise _fail(failure_type, "odoo_write_error", "Native payment-term deletion failed.", exit_code=6)
+            return result, False
+        create = capability_id == "payment_term.line.create"
+        remove = capability_id == "payment_term.line.delete"
+        if create:
+            changes = parameters["line"]
+            expected = {**changes, "value_amount": _canonical_decimal_text(float(Decimal(changes["value_amount"])))}
+            matches = term.line_ids.filtered(lambda line: _normalized_payment_term_line(line) == expected)
+            if len(matches) > 1:
+                raise _fail(failure_type, "idempotency_conflict", "Multiple native lines match this create payload.", exit_code=5)
+            if matches:
+                source_id, replay = matches.id, True
+            else:
+                before = set(term.line_ids.ids)
+                term.write({"line_ids": _payment_term_line_commands([changes])[1:]})
+                term.invalidate_recordset()
+                new = term.line_ids.filtered(lambda line: line.id not in before)
+                if len(new) != 1 or _normalized_payment_term_line(new) != expected:
+                    raise _fail(failure_type, "odoo_write_error", "Native payment-term line creation did not preserve its payload.", exit_code=6)
+                source_id = new.id
+        else:
+            patches = parameters["lines"] if capability_id == "payment_term.lines.update" else [
+                {"line_id": parameters["line_id"], "changes": parameters.get("changes", {})},
+            ]
+            rows, targets, commands = {}, {}, []
+            for patch in patches:
+                row = _search_one(env, "account.payment.term.line", [
+                    ("id", "=", patch["line_id"]), ("payment_id", "=", term.id),
+                ], company_id, failure_type)
+                rows[row.id] = row
+                if remove:
+                    commands.append((2, row.id, 0))
+                    source_id = row.id
+                else:
+                    target = {**_normalized_payment_term_line(row), **patch["changes"]}
+                    try:
+                        payment_term_processing.line_values(target)
+                    except ValueError as exc:
+                        raise _fail(failure_type, "business_rule_error", str(exc), exit_code=6) from exc
+                    targets[row.id] = {**target, "value_amount": _canonical_decimal_text(float(Decimal(target["value_amount"])))}
+                    values = _payment_term_line_commands([target])[1][2]
+                    commands.append((1, row.id, {field: value for field, value in values.items() if field in patch["changes"]}))
+            if capability_id == "payment_term.line.update":
+                source_id = parameters["line_id"]
+            replay = not remove and all(_normalized_payment_term_line(rows[row_id]) == target for row_id, target in targets.items())
+            if not replay:
+                # One parent write validates the final total/discount after all native child commands.
+                term.write({"line_ids": commands})
+                term.invalidate_recordset()
+            if remove:
+                if source_id in term.line_ids.ids:
+                    raise _fail(failure_type, "odoo_write_error", "Native payment-term line deletion failed.", exit_code=6)
+            elif any(_normalized_payment_term_line(rows[row_id]) != target for row_id, target in targets.items()):
+                raise _fail(failure_type, "odoo_write_error", "Native payment-term line changes did not preserve their payloads.", exit_code=6)
+        result = _payment_term_result(term, company_id)
+        result["source_id"] = source_id
+        return result, replay
+
+
 def _payment_term_header_values(parameters: dict[str, Any]) -> dict[str, Any]:
     values = {
         key: value
@@ -19817,6 +19956,8 @@ def _dispatch_allowed(
     marker: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if capability_id in payment_term_processing.CAPABILITY_IDS:
+        return _write_payment_term_processing(env, capability_id, parameters, company_id, failure_type)
     if capability_id in reconciliation_processing.CAPABILITY_IDS:
         return _write_reconciliation_processing(env, capability_id, parameters, company_id, failure_type)
     if capability_id in payment_processing.CAPABILITY_IDS:

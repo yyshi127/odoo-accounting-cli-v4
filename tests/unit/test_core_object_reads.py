@@ -15,6 +15,7 @@ from odoo_accounting_cli_v4.capabilities.core_object_reads import (
 REQUEST_ID = "7bc39413-0d69-4092-9319-795d33f3167c"
 
 GET_ID_FIELDS = {
+    "invoice.payment_schedule.inspect": "invoice_id",
     "reconciliation.model.processing_settings.get": "reconciliation_model_id",
     "payment.processing_settings.get": "payment_id",
     "invoice.presentation_settings.get": "move_id",
@@ -94,6 +95,7 @@ PAGE_CAPABILITIES = (
     "reconciliation.model.line.list",
     "bank.list",
     "report.catalog.list",
+    "payment_term.usage_moves.list",
     "reconciliation.model.usage_lines.list",
     "payment.bank_account_candidates.list",
     "payment.duplicate_candidates.list",
@@ -212,6 +214,7 @@ PAGE_DEFAULTS = {
         "availability_conditions": None,
         "active": None,
     },
+    "payment_term.usage_moves.list": {"payment_term_id": 71},
     "reconciliation.model.usage_lines.list": {"reconciliation_model_id": 71},
     "payment.bank_account_candidates.list": {"payment_id": 71},
     "payment.duplicate_candidates.list": {"payment_id": 71},
@@ -269,6 +272,9 @@ def _coded(record_id: int, code: str, name: str) -> dict:
 
 
 def _item(capability_id: str, record_id: int = 31) -> dict:
+    if capability_id in {'invoice.payment_schedule.inspect', 'payment_term.usage_moves.list'}:
+        from test_payment_term_processing_batch import read_item
+        return read_item(capability_id, record_id)
     if capability_id in {'reconciliation.model.processing_settings.get', 'reconciliation.model.usage_lines.list'}:
         from test_reconciliation_processing_batch import read_item
         return read_item(capability_id, record_id)
@@ -1028,6 +1034,8 @@ def _page_parameters(capability_id: str, *, after_id: int | None, limit: int) ->
 
 
 def _required_page_parameters(capability_id: str) -> dict:
+    if capability_id == "payment_term.usage_moves.list":
+        return {"payment_term_id": 71}
     if capability_id == "reconciliation.model.usage_lines.list":
         return {"reconciliation_model_id": 71}
     if capability_id in {'payment.bank_account_candidates.list', 'payment.duplicate_candidates.list'}:

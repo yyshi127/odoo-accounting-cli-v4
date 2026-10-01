@@ -22,6 +22,10 @@ from test_payment_configuration_batch import (
 from test_payment_configuration_batch import result as payment_configuration_result
 from test_payment_processing_batch import PARAMETERS as PAYMENT_PROCESSING_PARAMETERS
 from test_payment_processing_batch import result as payment_processing_result
+from test_payment_term_processing_batch import (
+    PARAMETERS as PAYMENT_TERM_PROCESSING_PARAMETERS,
+)
+from test_payment_term_processing_batch import result as payment_term_processing_result
 from test_reconciliation_processing_batch import (
     PARAMETERS as RECONCILIATION_PROCESSING_PARAMETERS,
 )
@@ -846,6 +850,7 @@ PARAMETERS = {
 
 
 PARAMETERS.update(deepcopy(PAYMENT_CONFIGURATION_PARAMETERS))
+PARAMETERS.update(deepcopy(PAYMENT_TERM_PROCESSING_PARAMETERS))
 PARAMETERS.update(deepcopy(RECONCILIATION_PROCESSING_PARAMETERS))
 PARAMETERS.update(deepcopy(PAYMENT_PROCESSING_PARAMETERS))
 PARAMETERS.update(deepcopy(INVOICE_PRESENTATION_PARAMETERS))
@@ -872,7 +877,7 @@ def _request(capability_id: str) -> dict:
 
 
 def _key(capability_id: str) -> str:
-    if capability_id in RECONCILIATION_PROCESSING_PARAMETERS or capability_id in PAYMENT_PROCESSING_PARAMETERS or capability_id in INVOICE_PRESENTATION_PARAMETERS or capability_id in MOVE_PROCESSING_PARAMETERS or capability_id in PARTNER_PREFERENCES_PARAMETERS or capability_id in PAYMENT_CONFIGURATION_PARAMETERS or capability_id in REPORT_BUDGET_PARAMETERS or capability_id in FISCAL_MAPPING_PARAMETERS:
+    if capability_id in PAYMENT_TERM_PROCESSING_PARAMETERS or capability_id in RECONCILIATION_PROCESSING_PARAMETERS or capability_id in PAYMENT_PROCESSING_PARAMETERS or capability_id in INVOICE_PRESENTATION_PARAMETERS or capability_id in MOVE_PROCESSING_PARAMETERS or capability_id in PARTNER_PREFERENCES_PARAMETERS or capability_id in PAYMENT_CONFIGURATION_PARAMETERS or capability_id in REPORT_BUDGET_PARAMETERS or capability_id in FISCAL_MAPPING_PARAMETERS:
         parameters = validate_core_write_request(capability_id, _request(capability_id))[2]
         return _expected_idempotency_key(capability_id, parameters, 7)
     if capability_id in {
@@ -1164,6 +1169,10 @@ def _key(capability_id: str) -> str:
 
 
 def _result(capability_id: str, **changes) -> dict:
+    if capability_id in PAYMENT_TERM_PROCESSING_PARAMETERS:
+        result = payment_term_processing_result(capability_id, PARAMETERS[capability_id])
+        result.update(changes)
+        return result
     if capability_id in RECONCILIATION_PROCESSING_PARAMETERS:
         result = reconciliation_processing_result(capability_id, PARAMETERS[capability_id])
         result.update(changes)
@@ -2052,6 +2061,8 @@ def test_each_core_write_validates_and_calls_one_fixed_port_operation(
     )
 
     expected_parameters = deepcopy(PARAMETERS[capability_id])
+    if capability_id == "payment_term.lines.update":
+        expected_parameters = validate_core_write_request(capability_id, request)[2]
     if capability_id in {
         "reconciliation.apply",
         "reconciliation.undo",

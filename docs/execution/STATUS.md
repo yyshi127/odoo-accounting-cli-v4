@@ -2,6 +2,57 @@
 
 ## Current accounting phase — 2026-10-01
 
+484 registered IDs; 469 implemented handlers (230 reads, 239 writes);
+944 schema files. Availability: 396 unconfigured, 73 degraded, 15 disabled.
+Enabled-handler integration records: 465 implemented, three planned, one failed.
+These totals include historical non-accounting extensions, not a full accounting
+denominator, completion percentage or ordinary-runtime permission guarantee.
+
+The latest batch adds eight native payment-term capabilities: actual invoice
+installment-plan and term-usage reads; term duplication/deletion, individual
+line creation/update/deletion and atomic existing-line updates preserving IDs.
+It reuses existing CLI/contracts/ORM paths, without aliases, invented child
+sequence fields, arbitrary writes, actual payments or a new control framework.
+
+One shared public CLI/real-ORM workflow passed both isolated aliases as uid 5
+with su=False in 493.82 seconds: all eight new IDs, five existing setup IDs
+and six immediate replays per alias. It verifies owned/shared copies, native
+line IDs and percentage/early-discount constraints, per-call failed-mutation
+rollback, real taxed foreign-currency installments and early-discount amounts,
+scoped usage paging including archived terms, unused-term deletion/cascade and
+native referenced-term deletion denial. Posted entries remain unchanged after
+term edits. The schedule is a computed plan from current configuration, not
+historical posted installments, actual payments or settlement proof. Fresh
+cursors verify synthetic business data and temporary manager-group rollback.
+
+Attempt 1 failed in 2.38 seconds before business CLI execution: the shared
+test helper required a generated key for an existing caller-key setup command.
+A one-file fixture repair supplies explicit per-object keys only for those
+existing setup calls; all six new write paths and access checks are unchanged.
+The failed run also verified rollback and is not counted as acceptance.
+
+Local evidence: 1078 batch/read/runtime cases (54 + 847 + 177), 234 focused
+write-contract cases, 19 registry cases with one known deselection at the
+planned baseline, then the two changed selections after metadata closure.
+Server: 54 batch cases and 19 final registry cases with the same deselection.
+Ruff/diff checks passed. Initial deployment allowed 31 files, backed up 12
+existing files and added 19 new files; the one-file fixture repair and final
+two-file metadata closure checked baselines and backed up first. All 31 final
+deployed hashes match. Server STATUS/HANDOFF overlays were left untouched.
+Service PIDs/restart counters stayed unchanged. No business database, installed
+addon/source, Pi/V2/V3 chain, service or configuration changed.
+
+Changed code/schema/tests and staged added lines have zero privacy findings;
+the full tree retains five historical document findings. The older bank-statement/
+payment-maintenance registry test has a stale planned expectation although
+unchanged HEAD records implemented; it is excluded, not claimed passing.
+Next: another small genuine native accounting gap batch. Asset validation remains
+failed; product accounting-profile readback and two actual external report sends
+remain planned. Addon repairs and real sends need separate authority. The
+capability-first goal stays active; complete accounting coverage is unproven.
+
+## Previous checkpoint — native reconciliation-rule processing, 2026-10-01
+
 476 registered IDs; 461 implemented handlers (228 reads, 233 writes);
 928 schema files. Availability: 388 unconfigured, 73 degraded, 15 disabled.
 Enabled-handler integration records: 457 implemented, three planned, one failed.

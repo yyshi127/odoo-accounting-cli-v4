@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 476
-EXPECTED_ENABLED_CAPABILITY_COUNT = 461
-EXPECTED_IMPLEMENTED_READ_COUNT = 228
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 233
+EXPECTED_CAPABILITY_COUNT = 484
+EXPECTED_ENABLED_CAPABILITY_COUNT = 469
+EXPECTED_IMPLEMENTED_READ_COUNT = 230
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 239
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 388
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 396
 EXPECTED_DEGRADED_CAPABILITY_COUNT = 73
-EXPECTED_SCHEMA_COUNT = 928
+EXPECTED_SCHEMA_COUNT = 944
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "17930fb0bf396c18595c8dcc46e518e0906f7c797d94c93ba6e23e070c7e5c61"
+    "97de3e9ce448f761aed1876b0e46be51266adc7d5f4f72da578ae5ee4eef1a79"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -157,6 +157,8 @@ IMPLEMENTED_READS = {
     "invoice.layout_line.list": "invoice_layout_line_list",
     "payment.bank_account_candidates.list": "payment_bank_account_candidates_list",
     "payment.duplicate_candidates.list": "payment_duplicate_candidates_list",
+    "invoice.payment_schedule.inspect": "invoice_payment_schedule_inspect",
+    "payment_term.usage_moves.list": "payment_term_usage_moves_list",
     "reconciliation.model.processing_settings.get": "reconciliation_model_processing_settings_get",
     "reconciliation.model.usage_lines.list": "reconciliation_model_usage_lines_list",
     "payment.processing_settings.get": "payment_processing_settings_get",
@@ -376,7 +378,9 @@ PAYMENT_PROCESSING_WRITES = {'payment.reject', 'payment.destination_account.assi
 
 RECONCILIATION_PROCESSING_WRITES = {'reconciliation.model.delete', 'reconciliation.model.line.create', 'reconciliation.model.line.delete', 'reconciliation.model.line.update', 'reconciliation.model.lines.resequence', 'reconciliation.model.activity_type.assign', 'reconciliation.model.duplicate'}
 
-IMPLEMENTED_WRITES = RECONCILIATION_PROCESSING_WRITES | PAYMENT_PROCESSING_WRITES | INVOICE_PRESENTATION_WRITES | MOVE_PROCESSING_WRITES | PARTNER_PREFERENCES_WRITES | PAYMENT_CONFIGURATION_WRITES | FISCAL_MAPPING_WRITES | REPORT_BUDGET_WRITES | {
+PAYMENT_TERM_PROCESSING_WRITES = {'payment_term.line.create', 'payment_term.duplicate', 'payment_term.line.update', 'payment_term.lines.update', 'payment_term.line.delete', 'payment_term.delete'}
+
+IMPLEMENTED_WRITES = PAYMENT_TERM_PROCESSING_WRITES | RECONCILIATION_PROCESSING_WRITES | PAYMENT_PROCESSING_WRITES | INVOICE_PRESENTATION_WRITES | MOVE_PROCESSING_WRITES | PARTNER_PREFERENCES_WRITES | PAYMENT_CONFIGURATION_WRITES | FISCAL_MAPPING_WRITES | REPORT_BUDGET_WRITES | {
     "account.group.create",
     "account.group.update",
     "account.tag.archive",
@@ -883,6 +887,8 @@ CORE_OBJECT_READ_HANDLERS = {
     "invoice.layout_line.list": "invoice_layout_line_list",
     "payment.bank_account_candidates.list": "payment_bank_account_candidates_list",
     "payment.duplicate_candidates.list": "payment_duplicate_candidates_list",
+    "invoice.payment_schedule.inspect": "invoice_payment_schedule_inspect",
+    "payment_term.usage_moves.list": "payment_term_usage_moves_list",
     "reconciliation.model.processing_settings.get": "reconciliation_model_processing_settings_get",
     "reconciliation.model.usage_lines.list": "reconciliation_model_usage_lines_list",
     "payment.processing_settings.get": "payment_processing_settings_get",
@@ -1186,6 +1192,10 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
         if capability_id in {'partner.payment_preferences.get', 'partner.invoice_delivery_preferences.get', 'partner.bill_validation_preferences.get'}:
             assert descriptor["tests"]["integration"]["status"] == "implemented"
             assert descriptor["tests"]["integration"]["references"] == ["tests/integration/test_partner_preferences_batch_live.py"]
+            continue
+        if capability_id in {'invoice.payment_schedule.inspect', 'payment_term.usage_moves.list'}:
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == ["tests/integration/test_payment_term_processing_batch_live.py"]
             continue
         if capability_id in {'reconciliation.model.processing_settings.get', 'reconciliation.model.usage_lines.list'}:
             assert descriptor["tests"]["integration"]["status"] == "implemented"
@@ -2701,6 +2711,7 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
     )
 
     assert set(CORE_WRITE_MODELS) == IMPLEMENTED_WRITES
+    extended_modules.update({capability_id: ["account"] for capability_id in PAYMENT_TERM_PROCESSING_WRITES})
     extended_modules.update({capability_id: ["account", "base", "mail"] for capability_id in RECONCILIATION_PROCESSING_WRITES})
     extended_modules.update({capability_id: ["account", "base"] for capability_id in PAYMENT_PROCESSING_WRITES})
     extended_modules.update({capability_id: ["account", "base"] for capability_id in INVOICE_PRESENTATION_WRITES})
@@ -3069,6 +3080,11 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             assert descriptor["tests"]["integration"]["references"] == [
                 "tests/integration/test_account_transfer_model_write_batch_live.py"
             ]
+            continue
+        if capability_id in PAYMENT_TERM_PROCESSING_WRITES:
+            assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_payment_term_processing_batch.py"]
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == ["tests/integration/test_payment_term_processing_batch_live.py"]
             continue
         if capability_id in RECONCILIATION_PROCESSING_WRITES:
             assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_reconciliation_processing_batch.py"]

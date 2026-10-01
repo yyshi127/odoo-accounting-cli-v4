@@ -18,6 +18,9 @@ from odoo_accounting_cli_v4 import move_processing_contracts as move_processing
 from odoo_accounting_cli_v4 import partner_preferences_contracts as partner_preferences
 from odoo_accounting_cli_v4 import payment_processing_contracts as payment_processing
 from odoo_accounting_cli_v4 import (
+    payment_term_processing_contracts as payment_term_processing,
+)
+from odoo_accounting_cli_v4 import (
     reconciliation_processing_contracts as reconciliation_processing,
 )
 
@@ -53,6 +56,7 @@ CORE_OBJECT_GET_CAPABILITY_IDS = frozenset(
         "journal.group.get",
         "partner.bill_validation_preferences.get",
         "partner.invoice_delivery_preferences.get",
+        "invoice.payment_schedule.inspect",
         "reconciliation.model.processing_settings.get",
         "payment.processing_settings.get",
         "invoice.presentation_settings.get",
@@ -124,6 +128,7 @@ _CORE_OBJECT_SEARCH_CAPABILITY_IDS = frozenset(
         "reconciliation.model.line.list",
         "bank.list",
         "report.catalog.list",
+        "payment_term.usage_moves.list",
         "reconciliation.model.usage_lines.list",
         "payment.bank_account_candidates.list",
         "payment.duplicate_candidates.list",
@@ -171,6 +176,7 @@ _ID_FIELDS = {
     "journal.group.get": "journal_group_id",
     "partner.bill_validation_preferences.get": "partner_id",
     "partner.invoice_delivery_preferences.get": "partner_id",
+    "invoice.payment_schedule.inspect": "invoice_id",
     "reconciliation.model.processing_settings.get": "reconciliation_model_id",
     "payment.processing_settings.get": "payment_id",
     "invoice.presentation_settings.get": "move_id",
@@ -249,6 +255,7 @@ _SEARCH_FILTERS = {
     "report.catalog.list": frozenset(
         {"country_id", "root_report_id", "availability_conditions", "active"}
     ),
+    "payment_term.usage_moves.list": frozenset({"payment_term_id"}),
     "reconciliation.model.usage_lines.list": frozenset({"reconciliation_model_id"}),
     "payment.bank_account_candidates.list": frozenset({"payment_id"}),
     "payment.duplicate_candidates.list": frozenset({"payment_id"}),
@@ -504,6 +511,10 @@ def validate_core_object_read_request(
         if not set(parameters) <= {"limit", "cursor"}:
             raise _invalid(f"{capability_id} contains an unsupported parameter.")
         filters: dict[str, Any] = {}
+    elif capability_id == payment_term_processing.LIST_ID:
+        if not {"payment_term_id"} <= set(parameters) <= {"payment_term_id", "limit", "cursor"} or not _valid_id(parameters.get("payment_term_id")):
+            raise _invalid("Payment-term usage requires payment_term_id and optional pagination only.")
+        filters = {"payment_term_id": parameters["payment_term_id"]}
     elif capability_id == reconciliation_processing.LIST_ID:
         if not {"reconciliation_model_id"} <= set(parameters) <= {"reconciliation_model_id", "limit", "cursor"} or not _valid_id(parameters.get("reconciliation_model_id")):
             raise _invalid("Native rule usage requires reconciliation_model_id and optional pagination only.")
@@ -2771,6 +2782,8 @@ def _valid_account_status_item(item: Any, company_id: int) -> bool:
 
 
 def _valid_item(capability_id: str, item: Any, company_id: int) -> bool:
+    if capability_id in payment_term_processing.READ_IDS:
+        return payment_term_processing.valid_read_item(capability_id, item, company_id)
     if capability_id in reconciliation_processing.READ_IDS:
         return reconciliation_processing.valid_read_item(capability_id, item, company_id)
     if capability_id in payment_processing.READ_IDS:
@@ -3067,6 +3080,8 @@ def read_core_object(
         company_id=company_id,
         maximum=limit + 1,
     )
+    if capability_id == payment_term_processing.LIST_ID and any(item["invoice_payment_term_id"] != filters["payment_term_id"] for item in items):
+        raise _failed("Odoo returned usage from the wrong payment term.")
     if capability_id == reconciliation_processing.LIST_ID and any(item["reconcile_model_id"] != filters["reconciliation_model_id"] for item in items):
         raise _failed("Odoo returned usage from the wrong reconciliation model.")
     if capability_id in payment_processing.LIST_IDS and any(item["payment_id"] != filters["payment_id"] for item in items):

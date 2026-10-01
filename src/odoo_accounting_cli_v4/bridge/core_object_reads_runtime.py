@@ -16,6 +16,9 @@ from odoo_accounting_cli_v4 import move_processing_contracts as move_processing
 from odoo_accounting_cli_v4 import partner_preferences_contracts as partner_preferences
 from odoo_accounting_cli_v4 import payment_processing_contracts as payment_processing
 from odoo_accounting_cli_v4 import (
+    payment_term_processing_contracts as payment_term_processing,
+)
+from odoo_accounting_cli_v4 import (
     reconciliation_processing_contracts as reconciliation_processing,
 )
 
@@ -71,6 +74,8 @@ CAPABILITY_IDS = frozenset(
         "partner.invoice_delivery_preferences.get",
         "payment.bank_account_candidates.list",
         "payment.duplicate_candidates.list",
+        "invoice.payment_schedule.inspect",
+        "payment_term.usage_moves.list",
         "reconciliation.model.processing_settings.get",
         "reconciliation.model.usage_lines.list",
         "payment.processing_settings.get",
@@ -162,6 +167,7 @@ _GET_IDS = {
     "journal.group.get": ("account.journal.group", "journal_group_id"),
     "partner.bill_validation_preferences.get": ("res.partner", "partner_id"),
     "partner.invoice_delivery_preferences.get": ("res.partner", "partner_id"),
+    "invoice.payment_schedule.inspect": ("account.move", "invoice_id"),
     "reconciliation.model.processing_settings.get": ("account.reconcile.model", "reconciliation_model_id"),
     "payment.processing_settings.get": ("account.payment", "payment_id"),
     "invoice.presentation_settings.get": ("account.move", "move_id"),
@@ -801,6 +807,8 @@ _REQUIRED_MODELS = {
     "partner.bill_validation_preferences.get": ('res.company', 'res.partner'),
     "partner.invoice_delivery_preferences.get": ('res.company', 'res.partner', 'account.move', 'ir.actions.report'),
     "partner.payment_preferences.get": ('res.company', 'res.partner', 'account.payment.method.line', 'account.journal'),
+    "invoice.payment_schedule.inspect": ('res.company', 'account.move', 'account.move.line', 'account.payment.term', 'account.payment.term.line', 'res.currency', 'account.cash.rounding', 'account.tax'),
+    "payment_term.usage_moves.list": ('res.company', 'account.payment.term', 'account.move', 'res.partner', 'res.currency'),
     "reconciliation.model.processing_settings.get": ('res.company', 'account.reconcile.model', 'account.reconcile.model.line', 'res.partner', 'mail.activity.type'),
     "reconciliation.model.usage_lines.list": ('res.company', 'account.reconcile.model', 'account.move.line', 'account.move', 'account.account', 'res.partner', 'res.currency'),
     "payment.bank_account_candidates.list": ('res.company', 'account.payment', 'res.partner.bank'),
@@ -1618,6 +1626,8 @@ def _scope_domain(env: Any, capability_id: str, company_id: int) -> list[Any]:
 def _valid_parameters(capability_id: str, parameters: Any) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id == payment_term_processing.LIST_ID:
+        return set(parameters) == {"payment_term_id", "after_id", "limit"} and _valid_id(parameters["payment_term_id"]) and (parameters["after_id"] is None or _valid_id(parameters["after_id"])) and _valid_limit(parameters["limit"])
     if capability_id == reconciliation_processing.LIST_ID:
         return set(parameters) == {"reconciliation_model_id", "after_id", "limit"} and _valid_id(parameters["reconciliation_model_id"]) and (parameters["after_id"] is None or _valid_id(parameters["after_id"])) and _valid_limit(parameters["limit"])
     if capability_id in payment_processing.LIST_IDS:
@@ -2265,6 +2275,8 @@ def _available_reference_fields(model: Any, kind: str) -> tuple[str, ...]:
 def _raw_get_rows(
     env: Any, capability_id: str, company_id: int, parameters: dict[str, Any]
 ) -> list[dict[str, Any]]:
+    if capability_id == payment_term_processing.GET_ID:
+        return _invoice_payment_schedule_rows(env, parameters, company_id)
     model_name, id_field = _GET_IDS[capability_id]
     raw_model = env[model_name]
     if capability_id in _REFERENCE_KINDS:
@@ -4596,6 +4608,63 @@ def _normalize_partner_preferences(env: Any, capability_id: str, rows: list[dict
     return result
 
 
+def _invoice_payment_schedule_rows(env: Any, parameters: dict[str, Any], company_id: int) -> list[dict[str, Any]]:
+    invoices = env["account.move"].with_context(allowed_company_ids=[company_id])
+    invoice = invoices.search([("id", "=", parameters["invoice_id"]), ("company_id", "=", company_id),
+                               ("move_type", "in", sorted(payment_term_processing.INVOICE_TYPES))], limit=1)
+    if not invoice:
+        return []
+    lines = []
+    for key, values in (invoice.needed_terms or {}).items():
+        if key["move_id"] != invoice.id:
+            raise ValueError("native schedule belongs to another invoice")
+        line = {}
+        for field in ("date_maturity", "discount_date"):
+            value = values.get(field, key.get(field))
+            line[field] = value.isoformat() if isinstance(value, date_type) else value or None
+        for field in ("balance", "amount_currency", "discount_balance", "discount_amount_currency"):
+            line[field] = _decimal_string(values.get(field, key.get(field, 0)) or 0)
+        lines.append(line)
+    return [{"id": invoice.id, "company_id": invoice.company_id.id, "move_type": invoice.move_type,
+             "state": invoice.state, "currency_id": invoice.currency_id.id,
+             "company_currency_id": invoice.company_id.currency_id.id,
+             "payment_term_id": invoice.invoice_payment_term_id.id or None,
+             "lines": sorted(lines, key=lambda line: (line["date_maturity"] or "", line["discount_date"] or ""))}]
+
+
+def _payment_term_usage_rows(env: Any, parameters: dict[str, Any], company_id: int) -> tuple[list[dict[str, Any]], bool]:
+    terms = env["account.payment.term"].with_context(active_test=False, allowed_company_ids=[company_id])
+    parent = terms.search([("id", "=", parameters["payment_term_id"]), ("company_id", "in", [False, company_id])], limit=1)
+    if not parent:
+        return [], parameters["after_id"] is None
+    moves = env["account.move"].with_context(allowed_company_ids=[company_id])
+    return _id_page_rows(moves, [("invoice_payment_term_id", "=", parent.id), ("company_id", "=", company_id)],
+                         after_id=parameters["after_id"], limit=parameters["limit"], fields=payment_term_processing.USAGE_FIELDS)
+
+
+def _normalize_payment_term_processing(capability_id: str, rows: list[dict[str, Any]], company_id: int) -> list[dict[str, Any]]:
+    items = []
+    for row in rows:
+        if capability_id == payment_term_processing.GET_ID:
+            item = row
+        else:
+            item = {}
+            for field, value in row.items():
+                if field.endswith("_id"):
+                    value = _reference_id(value)
+                elif field == "name":
+                    value = _optional_text(value)
+                elif field in {"date", "invoice_date"}:
+                    value = value.isoformat() if isinstance(value, date_type) else value or None
+                elif field in {"amount_total", "amount_residual"}:
+                    value = _decimal_string(value)
+                item[field] = value
+        if not payment_term_processing.valid_read_item(capability_id, item, company_id):
+            raise ValueError("invalid native payment-term processing")
+        items.append(item)
+    return items
+
+
 def _reconciliation_usage_rows(env: Any, parameters: dict[str, Any], company_id: int) -> tuple[list[dict[str, Any]], bool]:
     models = env["account.reconcile.model"].with_context(active_test=False, allowed_company_ids=[company_id])
     parent = models.search([("id", "=", parameters["reconciliation_model_id"]), ("company_id", "=", company_id)], limit=1)
@@ -6272,7 +6341,9 @@ def dispatch(
 
         cursor_found = True
         removes_all_taxes = False
-        if capability_id == reconciliation_processing.LIST_ID:
+        if capability_id == payment_term_processing.LIST_ID:
+            rows, cursor_found = _payment_term_usage_rows(env, parameters, company_id)
+        elif capability_id == reconciliation_processing.LIST_ID:
             rows, cursor_found = _reconciliation_usage_rows(env, parameters, company_id)
         elif capability_id in payment_processing.LIST_IDS:
             rows, cursor_found = _payment_candidate_rows(env, capability_id, parameters, company_id)
@@ -6349,7 +6420,9 @@ def dispatch(
                 cursor_found=False,
             )
 
-        if capability_id in reconciliation_processing.READ_IDS:
+        if capability_id in payment_term_processing.READ_IDS:
+            items = _normalize_payment_term_processing(capability_id, rows, company_id)
+        elif capability_id in reconciliation_processing.READ_IDS:
             items = _normalize_reconciliation_processing(capability_id, rows, company_id)
         elif capability_id in payment_processing.READ_IDS:
             items = _normalize_payment_processing(capability_id, rows, company_id)

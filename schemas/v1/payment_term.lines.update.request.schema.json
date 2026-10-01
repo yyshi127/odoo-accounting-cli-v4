@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/payment_term.lines.update.request.schema.json",
+  "title": "payment_term.lines.update request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "context",
+    "parameters"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v1"
+    },
+    "request_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "context": {
+      "$ref": "request.schema.json#/$defs/context"
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "payment_term_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "lines": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "line_id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "changes": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "value": {
+                    "enum": [
+                      "percent",
+                      "fixed"
+                    ]
+                  },
+                  "value_amount": {
+                    "type": "string",
+                    "maxLength": 256,
+                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
+                  },
+                  "delay_type": {
+                    "enum": [
+                      "days_after",
+                      "days_after_end_of_month",
+                      "days_after_end_of_next_month",
+                      "days_end_of_month_on_the"
+                    ]
+                  },
+                  "nb_days": {
+                    "type": "integer",
+                    "minimum": -2147483648,
+                    "maximum": 2147483647
+                  },
+                  "days_next_month": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 31
+                  }
+                },
+                "required": [],
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "value": {
+                          "const": "percent"
+                        }
+                      },
+                      "required": [
+                        "value"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "value_amount": {
+                          "type": "string",
+                          "maxLength": 256,
+                          "pattern": "^(?:100(?:\\.0+)?|(?:[0-9]|[1-9][0-9])(?:\\.[0-9]+)?)$(?![\\s\\S])"
+                        }
+                      }
+                    }
+                  }
+                ],
+                "minProperties": 1
+              }
+            },
+            "required": [
+              "changes",
+              "line_id"
+            ]
+          }
+        }
+      },
+      "required": [
+        "lines",
+        "payment_term_id"
+      ]
+    }
+  }
+}
