@@ -47,7 +47,9 @@ EXPECTED_CAPABILITY_IDS = frozenset(
         "cash_rounding.get",
         "journal.group.list",
         "journal.group.get",
+        "payment.method_definition.list",
         "incoterm.list",
+        "payment.method_definition.get",
         "incoterm.get",
         "partner.bank_account.search",
         "partner.bank_account.get",
@@ -136,6 +138,7 @@ GET_ID_FIELDS = {
     "reconciliation.model.get": "reconciliation_model_id",
     "cash_rounding.get": "cash_rounding_id",
     "journal.group.get": "journal_group_id",
+    "payment.method_definition.get": "payment_method_id",
     "incoterm.get": "incoterm_id",
     "partner.bank_account.get": "partner_bank_id",
     "bank.statement.get": "bank_statement_id",
@@ -182,6 +185,8 @@ PRIMARY_MODELS = {
     "journal.group.list": "account.journal.group",
     "journal.group.get": "account.journal.group",
     "incoterm.list": "account.incoterms",
+    "payment.method_definition.get": "account.payment.method",
+    "payment.method_definition.list": "account.payment.method",
     "incoterm.get": "account.incoterms",
     "partner.bank_account.search": "res.partner.bank",
     "partner.bank_account.get": "res.partner.bank",
@@ -233,6 +238,7 @@ GET_OBJECT_IDS = {
     "reconciliation.model.get": 31,
     "cash_rounding.get": 31,
     "journal.group.get": 31,
+    "payment.method_definition.get": 31,
     "incoterm.get": 31,
     "partner.bank_account.get": 31,
     "bank.statement.get": 31,
@@ -279,6 +285,7 @@ REFERENCE_PAGE_DEFAULTS = {
     "tax.group.list": {},
     "cash_rounding.list": {},
     "journal.group.list": {},
+    "payment.method_definition.list": {},
     "incoterm.list": {},
     "partner.bank_account.search": {"partner_id": None, "active": None},
     "bank.statement.search": {
@@ -933,7 +940,7 @@ def _fixture() -> tuple[Env, dict[str, Any]]:
         line.full_reconcile_id = full_reconciles[0]
     for partial in partial_reconciles:
         partial.full_reconcile_id = full_reconciles[0]
-    payment_method = _record(2, code="manual", name="Manual")
+    payment_method = _record(2, code="manual", name="Manual", payment_type="inbound")
 
     def payment_method_line(record_id: int) -> Record:
         return _record(
@@ -1343,7 +1350,7 @@ def _fixture() -> tuple[Env, dict[str, Any]]:
             "account.partial.reconcile", partial_reconciles
         ),
         "account.full.reconcile": Model("account.full.reconcile", full_reconciles),
-        "account.payment.method": Model("account.payment.method", [payment_method]),
+        "account.payment.method": Model("account.payment.method", [payment_method, _record(31, name="Manual", code="manual", payment_type="inbound"), _record(32, name="Manual", code="manual", payment_type="inbound")]),
         "account.payment.method.line": Model(
             "account.payment.method.line", payment_method_lines
         ),
@@ -1774,6 +1781,8 @@ def _expected_item(capability_id: str, record_id: int = 31) -> dict[str, Any]:
                 _coded(9, "BNK1", "Bank"),
             ],
         }
+    if capability_id in {"payment.method_definition.list", "payment.method_definition.get"}:
+        return {"id": record_id, "name": "Manual", "code": "manual", "payment_type": "inbound"}
     if capability_id in {"incoterm.list", "incoterm.get"}:
         return {
             "id": record_id,
@@ -2119,7 +2128,7 @@ def test_reference_pages_are_normalized_id_ascending_and_limited(
 
     page = _dispatch(env, capability_id, parameters)
 
-    first_id = 5 if capability_id == "tax.group.list" else 31
+    first_id = 5 if capability_id == "tax.group.list" else 2 if capability_id == "payment.method_definition.list" else 31
     assert page["items"] == [_expected_item(capability_id, first_id)]
     call = _search_call(env.models[PRIMARY_MODELS[capability_id]])
     assert call[2:4] == ("id", 1)

@@ -41,6 +41,7 @@ CORE_OBJECT_GET_CAPABILITY_IDS = frozenset(
         "reconciliation.model.get",
         "cash_rounding.get",
         "journal.group.get",
+        "payment.method_definition.get",
         "incoterm.get",
         "partner.bank_account.get",
         "bank.statement.get",
@@ -81,6 +82,7 @@ CORE_OBJECT_LIST_CAPABILITY_IDS = frozenset(
         "tax.group.list",
         "cash_rounding.list",
         "journal.group.list",
+        "payment.method_definition.list",
         "incoterm.list",
         "reconciliation.partial.list",
         "reconciliation.full.list",
@@ -146,6 +148,7 @@ _ID_FIELDS = {
     "reconciliation.model.get": "reconciliation_model_id",
     "cash_rounding.get": "cash_rounding_id",
     "journal.group.get": "journal_group_id",
+    "payment.method_definition.get": "payment_method_id",
     "incoterm.get": "incoterm_id",
     "partner.bank_account.get": "partner_bank_id",
     "bank.statement.get": "bank_statement_id",
@@ -2756,6 +2759,10 @@ def _valid_item(capability_id: str, item: Any, company_id: int) -> bool:
         return _valid_cash_rounding_item(item)
     if capability_id in {"journal.group.list", "journal.group.get"}:
         return _valid_journal_group_item(item, company_id)
+    if capability_id in {"payment.method_definition.list", "payment.method_definition.get"}:
+        return bool(isinstance(item, dict) and set(item) == {"id", "name", "code", "payment_type"}
+                    and _valid_id(item["id"]) and _nonempty(item["name"]) and _nonempty(item["code"])
+                    and isinstance(item["payment_type"], str) and item["payment_type"] in {"inbound", "outbound"})
     if capability_id in {"incoterm.list", "incoterm.get"}:
         return _valid_incoterm_item(item)
     if capability_id in {

@@ -25280,6 +25280,958 @@
         ]
       },
       "handler_key": "core_write"
+    },
+    "payment.method_definition.get": {
+      "summary": {
+        "zh_CN": "读取付款方式定义",
+        "en_US": "Get a native payment method definition"
+      },
+      "domain": "accounting_configuration",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "account.payment.method"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment_method.py",
+          "account/models/account_journal.py",
+          "base/models/res_bank.py",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment.method_definition.get.request.schema.json",
+        "response": "schemas/v1/payment.method_definition.get.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.payment.method:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_native_payment_method_definition_read",
+        "verify": "response_schema_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_configuration_batch.py"
+          ],
+          "reason": "Shared batch contract, schema, public CLI, native copy/remove semantics and ACL tests."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_configuration_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all eight capabilities, five immediate replays, native account reconcile enablement, copy=False account preservation, unused-line deletion, used-line detachment retaining posted payment history, company isolation, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires an explicit isolated runtime/company/user configuration."
+      },
+      "routing": {
+        "object": "payment_method_definition",
+        "actions": [
+          "get"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "读取付款方式定义"
+          ],
+          "en_US": [
+            "Get a native payment method definition"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "任意模型调用或生产数据测试"
+          ],
+          "en_US": [
+            "Arbitrary model calls or production-data testing"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "payment_method_definition_get"
+    },
+    "payment.method_definition.list": {
+      "summary": {
+        "zh_CN": "列出付款方式定义",
+        "en_US": "List native payment method definitions"
+      },
+      "domain": "accounting_configuration",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "account.payment.method"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment_method.py",
+          "account/models/account_journal.py",
+          "base/models/res_bank.py",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment.method_definition.list.request.schema.json",
+        "response": "schemas/v1/payment.method_definition.list.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.payment.method:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_native_payment_method_definition_read",
+        "verify": "response_schema_validation",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_configuration_batch.py"
+          ],
+          "reason": "Shared batch contract, schema, public CLI, native copy/remove semantics and ACL tests."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_configuration_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all eight capabilities, five immediate replays, native account reconcile enablement, copy=False account preservation, unused-line deletion, used-line detachment retaining posted payment history, company isolation, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires an explicit isolated runtime/company/user configuration."
+      },
+      "routing": {
+        "object": "payment_method_definition",
+        "actions": [
+          "list"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "列出付款方式定义"
+          ],
+          "en_US": [
+            "List native payment method definitions"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "任意模型调用或生产数据测试"
+          ],
+          "en_US": [
+            "Arbitrary model calls or production-data testing"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "payment_method_definition_list"
+    },
+    "journal.bank_account.assign": {
+      "summary": {
+        "zh_CN": "绑定公司银行账户",
+        "en_US": "Assign or clear a journal company bank account"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.journal",
+          "res.company",
+          "res.partner.bank"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment_method.py",
+          "account/models/account_journal.py",
+          "base/models/res_bank.py",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/journal.bank_account.assign.request.schema.json",
+        "response": "schemas/v1/journal.bank_account.assign.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.journal:read",
+          "account.journal:write",
+          "res.partner.bank:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_payment_configuration",
+        "verify": "same_transaction_native_payload_or_detach_absence_recheck",
+        "idempotency": "native_current_payload_recheck",
+        "reverse": "restore_previous_configuration"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_configuration_batch.py"
+          ],
+          "reason": "Shared batch contract, schema, public CLI, native copy/remove semantics and ACL tests."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_configuration_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all eight capabilities, five immediate replays, native account reconcile enablement, copy=False account preservation, unused-line deletion, used-line detachment retaining posted payment history, company isolation, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires an explicit isolated runtime/company/user configuration."
+      },
+      "routing": {
+        "object": "journal",
+        "actions": [
+          "assign"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "绑定公司银行账户"
+          ],
+          "en_US": [
+            "Assign or clear a journal company bank account"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "任意模型调用或生产数据测试"
+          ],
+          "en_US": [
+            "Arbitrary model calls or production-data testing"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "journal.liquidity_configuration.update": {
+      "summary": {
+        "zh_CN": "配置日记账流动性科目",
+        "en_US": "Update journal suspense, profit and loss accounts"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "account.journal",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment_method.py",
+          "account/models/account_journal.py",
+          "base/models/res_bank.py",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/journal.liquidity_configuration.update.request.schema.json",
+        "response": "schemas/v1/journal.liquidity_configuration.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.journal:read",
+          "account.journal:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_payment_configuration",
+        "verify": "same_transaction_native_payload_or_detach_absence_recheck",
+        "idempotency": "native_current_payload_recheck",
+        "reverse": "restore_previous_configuration"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_configuration_batch.py"
+          ],
+          "reason": "Shared batch contract, schema, public CLI, native copy/remove semantics and ACL tests."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_configuration_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all eight capabilities, five immediate replays, native account reconcile enablement, copy=False account preservation, unused-line deletion, used-line detachment retaining posted payment history, company isolation, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires an explicit isolated runtime/company/user configuration."
+      },
+      "routing": {
+        "object": "journal",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "配置日记账流动性科目"
+          ],
+          "en_US": [
+            "Update journal suspense, profit and loss accounts"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "任意模型调用或生产数据测试"
+          ],
+          "en_US": [
+            "Arbitrary model calls or production-data testing"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "payment.method_line.create": {
+      "summary": {
+        "zh_CN": "创建日记账付款方式行",
+        "en_US": "Create a configured journal payment method line"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "account.journal",
+          "account.payment.method",
+          "account.payment.method.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment_method.py",
+          "account/models/account_journal.py",
+          "base/models/res_bank.py",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment.method_line.create.request.schema.json",
+        "response": "schemas/v1/payment.method_line.create.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.account:write",
+          "account.journal:read",
+          "account.payment.method.line:create",
+          "account.payment.method.line:read",
+          "account.payment.method:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_payment_configuration",
+        "verify": "same_transaction_native_payload_or_detach_absence_recheck",
+        "idempotency": "natural_key_payload_recheck_without_operation_store",
+        "reverse": "restore_previous_configuration"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_configuration_batch.py"
+          ],
+          "reason": "Shared batch contract, schema, public CLI, native copy/remove semantics and ACL tests."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_configuration_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all eight capabilities, five immediate replays, native account reconcile enablement, copy=False account preservation, unused-line deletion, used-line detachment retaining posted payment history, company isolation, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "degraded",
+        "reason_code": "natural_key_replay_attribution_limit",
+        "reason": "Natural-key replay attribution and concurrent exactly-once execution are not proven."
+      },
+      "routing": {
+        "object": "payment_method_line",
+        "actions": [
+          "create"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "创建日记账付款方式行"
+          ],
+          "en_US": [
+            "Create a configured journal payment method line"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "任意模型调用或生产数据测试"
+          ],
+          "en_US": [
+            "Arbitrary model calls or production-data testing"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "payment.method_line.duplicate": {
+      "summary": {
+        "zh_CN": "复制日记账付款方式行",
+        "en_US": "Duplicate a configured payment method line retaining its account"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "account.journal",
+          "account.payment.method",
+          "account.payment.method.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment_method.py",
+          "account/models/account_journal.py",
+          "base/models/res_bank.py",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment.method_line.duplicate.request.schema.json",
+        "response": "schemas/v1/payment.method_line.duplicate.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.account:write",
+          "account.journal:read",
+          "account.payment.method.line:create",
+          "account.payment.method.line:read",
+          "account.payment.method:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_payment_configuration",
+        "verify": "same_transaction_native_payload_or_detach_absence_recheck",
+        "idempotency": "natural_key_payload_recheck_without_operation_store",
+        "reverse": "restore_previous_configuration"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_configuration_batch.py"
+          ],
+          "reason": "Shared batch contract, schema, public CLI, native copy/remove semantics and ACL tests."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_configuration_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all eight capabilities, five immediate replays, native account reconcile enablement, copy=False account preservation, unused-line deletion, used-line detachment retaining posted payment history, company isolation, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "degraded",
+        "reason_code": "natural_key_replay_attribution_limit",
+        "reason": "Natural-key replay attribution and concurrent exactly-once execution are not proven."
+      },
+      "routing": {
+        "object": "payment_method_line",
+        "actions": [
+          "duplicate"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "复制日记账付款方式行"
+          ],
+          "en_US": [
+            "Duplicate a configured payment method line retaining its account"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "任意模型调用或生产数据测试"
+          ],
+          "en_US": [
+            "Arbitrary model calls or production-data testing"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "payment.method_line.remove": {
+      "summary": {
+        "zh_CN": "移除日记账付款方式行",
+        "en_US": "Remove a payment method line, retaining used payment history"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "account.journal",
+          "account.payment.method",
+          "account.payment.method.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment_method.py",
+          "account/models/account_journal.py",
+          "base/models/res_bank.py",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment.method_line.remove.request.schema.json",
+        "response": "schemas/v1/payment.method_line.remove.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.journal:read",
+          "account.payment.method.line:read",
+          "account.payment.method.line:unlink",
+          "account.payment.method.line:write",
+          "account.payment.method:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_payment_configuration",
+        "verify": "same_transaction_native_payload_or_detach_absence_recheck",
+        "idempotency": "target_lookup_without_persistent_tombstone",
+        "reverse": "not_reversible"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_configuration_batch.py"
+          ],
+          "reason": "Shared batch contract, schema, public CLI, native copy/remove semantics and ACL tests."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_configuration_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all eight capabilities, five immediate replays, native account reconcile enablement, copy=False account preservation, unused-line deletion, used-line detachment retaining posted payment history, company isolation, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "degraded",
+        "reason_code": "deleted_record_tombstone_unavailable",
+        "reason": "Used lines are natively detached, unused lines deleted; no persistent tombstone or automatic reversal."
+      },
+      "routing": {
+        "object": "payment_method_line",
+        "actions": [
+          "remove"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "移除日记账付款方式行"
+          ],
+          "en_US": [
+            "Remove a payment method line, retaining used payment history"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "任意模型调用或生产数据测试"
+          ],
+          "en_US": [
+            "Arbitrary model calls or production-data testing"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "payment.method_line.update": {
+      "summary": {
+        "zh_CN": "修改日记账付款方式行",
+        "en_US": "Update a payment method line name, sequence or payment account"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "account.journal",
+          "account.payment.method",
+          "account.payment.method.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment_method.py",
+          "account/models/account_journal.py",
+          "base/models/res_bank.py",
+          "account/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment.method_line.update.request.schema.json",
+        "response": "schemas/v1/payment.method_line.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.account:write",
+          "account.journal:read",
+          "account.payment.method.line:read",
+          "account.payment.method.line:write",
+          "account.payment.method:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_payment_configuration",
+        "verify": "same_transaction_native_payload_or_detach_absence_recheck",
+        "idempotency": "native_current_payload_recheck",
+        "reverse": "restore_previous_configuration"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_payment_configuration_batch.py"
+          ],
+          "reason": "Shared batch contract, schema, public CLI, native copy/remove semantics and ACL tests."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_payment_configuration_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all eight capabilities, five immediate replays, native account reconcile enablement, copy=False account preservation, unused-line deletion, used-line detachment retaining posted payment history, company isolation, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Requires an explicit isolated runtime/company/user configuration."
+      },
+      "routing": {
+        "object": "payment_method_line",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "修改日记账付款方式行"
+          ],
+          "en_US": [
+            "Update a payment method line name, sequence or payment account"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "任意模型调用或生产数据测试"
+          ],
+          "en_US": [
+            "Arbitrary model calls or production-data testing"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
     }
   }
 }

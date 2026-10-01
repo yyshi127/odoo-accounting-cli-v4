@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/payment.method_line.create.request.schema.json",
+  "title": "payment.method_line.create request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "context",
+    "parameters"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v1"
+    },
+    "request_id": {
+      "$ref": "request.schema.json#/properties/request_id"
+    },
+    "context": {
+      "$ref": "request.schema.json#/$defs/context"
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "journal_id",
+        "name",
+        "payment_account_id",
+        "payment_method_id",
+        "sequence"
+      ],
+      "properties": {
+        "journal_id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "payment_account_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "payment_method_id": {
+          "$ref": "#/$defs/id"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"
+    }
+  }
+}

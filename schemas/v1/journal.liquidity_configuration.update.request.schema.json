@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/journal.liquidity_configuration.update.request.schema.json",
+  "title": "journal.liquidity_configuration.update request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "context",
+    "parameters"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v1"
+    },
+    "request_id": {
+      "$ref": "request.schema.json#/properties/request_id"
+    },
+    "context": {
+      "$ref": "request.schema.json#/$defs/context"
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changes",
+        "journal_id"
+      ],
+      "properties": {
+        "changes": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "loss_account_id": {
+              "$ref": "#/$defs/id"
+            },
+            "profit_account_id": {
+              "$ref": "#/$defs/id"
+            },
+            "suspense_account_id": {
+              "$ref": "#/$defs/id"
+            }
+          }
+        },
+        "journal_id": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"
+    }
+  }
+}

@@ -4597,3 +4597,106 @@ The older positive integration gaps remain `asset.validate` (failed),
 `product.accounting_profile.get`, `report.customer_statement.send`, and
 `report.followup.send` (planned). The full capability-first objective remains
 active; this related batch alone does not prove complete accounting coverage.
+
+## Bank and payment configuration — 2026-10-01
+
+This checkpoint continues from `08524d3` and adds eight IDs. Totals are 434
+registered IDs, 419 implemented handlers (217 reads, 202 writes), and 844
+schemas. Availability is 348 `unconfigured`, 71 `degraded`, 15 `disabled`;
+integration records are 415 `implemented`, three `planned`, one `failed`.
+The historical non-accounting handlers remain included in these totals;
+complete accounting coverage still has no verified denominator.
+
+### Delivered native boundaries
+
+- `payment.method_definition.list/get` reads the global native
+  `account.payment.method` definitions: ID, name, code and inbound/outbound
+  payment type. The list reuses bounded pagination and scoped cursor binding.
+  Existing `payment.method.list/get` reads configured journal lines, not these
+  definitions; it is not recounted.
+- `payment.method_line.create` configures an existing native definition on a
+  company-scoped journal, with name, sequence and nullable payment account.
+  Native method-domain and unique/electronic-provider rules remain effective.
+  No arbitrary definition creation, provider installation or native bypass is
+  exposed. Setting a payment account can natively enable its `reconcile` flag;
+  the existing gate therefore checks account-write access as well.
+- `payment.method_line.update` patches name, sequence and payment account only.
+  It cannot silently move the line to another journal or change its definition.
+- `payment.method_line.duplicate` uses native copy, explicitly retaining the
+  payment account because that native field is `copy=False`. It verifies an
+  independent ID, the requested payload and an unchanged source.
+- `payment.method_line.remove` uses native unlink: unused lines are deleted;
+  lines referenced by payments are detached from the journal and kept. The
+  response distinguishes `deleted` and `detached`. It does not delete payment
+  history. After deletion/detachment there is no persistent scoped operation
+  tombstone, so a later replay cannot claim exactly-once success.
+- `journal.liquidity_configuration.update` assigns company-isolated suspense,
+  profit and loss accounts with their native account-type domains, for
+  bank/cash/credit journals. `journal.bank_account.assign` binds or clears an
+  existing bank account on a bank journal; the active account holder must be
+  the journal company's partner. Neither command creates a bank master or
+  changes another company's bank-account holder.
+- The two natural-key create/copy commands and the remove command remain
+  `degraded` for attribution/concurrency or tombstone limits after acceptance.
+  Company/user scope, native ACLs, deterministic keys and exact confirmation
+  reuse the current framework; no new control framework or caller-sudo is added.
+- Two misleading candidates were rejected before implementation: native bank
+  account unlink only archives (already covered), and the supposed journal
+  allowed-account field does not exist in the installed version.
+
+### Evidence, deployment and backup
+
+The shared rollback-only workflow passed both isolated aliases as ordinary
+uid 5 with `su=False` in 200.64 seconds, without a fixture or implementation
+retry. It exercises all eight new capabilities and four existing setup
+commands, five immediate replays, native account-reconcile enablement, copy
+account preservation, unused-line deletion, a posted payment followed by used
+line detachment with its history intact, cross-company denial, and fresh-cursor
+rollback of business records and both temporary native groups. Administrative
+fixture setup is confined to those synthetic databases; business calls use
+the ordinary user. No external report delivery is performed.
+
+Local batch unit tests passed 32 cases; focused framework tests passed 57;
+the complete read-framework selection passed 771. The initial server focused
+selection passed 57, and the final synchronized batch tests passed 32. The
+server registry selection passed 19 cases with the stale baseline test below
+explicitly deselected. Ruff
+and `git diff --check` passed. The older registry test
+`test_bank_statement_payment_maintenance_has_closed_registry_and_schemas`
+has a stale `planned` expectation: the unchanged HEAD registry already marks
+its six old commands' integration evidence `implemented`. That pre-existing
+failure is explicitly excluded, not fixed incidentally or claimed to pass.
+
+The initial 31-file allowlist deployment backed up 12 existing files and
+added 19. Archive SHA-256:
+`1faf593dd6276a485e4b9f78f9481c8da7e61bc5a5a2cfa2affec235fa89616d`.
+Final synchronization updates six exact code/test/metadata paths, checking
+their deployed baselines and backing them up first. Final archive SHA-256:
+`197bd249220e29fcb34d7d6d3ac3475c984bea7e430db0f4482a42a00494d360`.
+All 31 final deployed file hashes match. Private manifests, backups and live
+logs are in `.tooling/payment-configuration-20261001`; never commit them.
+The server's divergent STATUS/HANDOFF documents remain untouched.
+
+Final registry-file SHA-256:
+`4465765c33ebb083a7bfd15cbc7d70909292161903329206c749b3ef724d4b01`.
+Canonical registry SHA-256:
+`96adf1429f86f303676556bf2b2a9e14295597c14a9ba9f7686d118f76a5ce4c`.
+Passing live-log SHA-256:
+`f5f042b8ed877d1c307c15e1801f4ac3568e78f65b336e897972ae05bd62eb60`.
+
+The changed code/schema/test public-material scan has zero findings. The
+full-tree scan retains the same five historical document path/IP findings;
+do not describe it as passing. Odoo remained PID `25607`, `NRestarts=6`;
+Nginx remained PID `3309593`, `NRestarts=0`; PostgreSQL stayed active.
+No installed addon, business database or existing service was changed.
+
+### Continue from here
+
+Audit actual installed accounting fields/methods against existing IDs before
+the next related batch of roughly 8–12 capabilities; do not inflate counts
+with aliases or archive-as-delete wrappers. Keep tests rollback-only inside
+the two synthetic databases. The older positive integration gaps remain
+`asset.validate` (native validation failed), `product.accounting_profile.get`,
+`report.customer_statement.send`, and `report.followup.send` (planned).
+Installed-addon repair and real external report delivery require separate
+authority. The overall capability-first goal remains active.

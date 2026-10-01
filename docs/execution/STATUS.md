@@ -2,6 +2,53 @@
 
 ## Current accounting phase — 2026-10-01
 
+The registry has 434 IDs and 419 implemented handlers: 217 reads and 202
+writes, with 844 schema files. Availability descriptors are 348
+`unconfigured`, 71 `degraded`, and 15 `disabled`. Integration records are
+415 `implemented`, three `planned`, and one `failed`. These counts include
+historical non-accounting extensions; they are not an accounting-completion
+percentage or a guarantee of native permissions for a configured user.
+
+The latest batch adds eight native bank/payment configuration capabilities:
+payment-method definition list/get, configured journal payment-method line
+create/update/duplicate/remove, journal liquidity-account configuration, and
+company-bank-account assignment. Definitions are `account.payment.method`;
+existing `payment.method.list/get` reads `account.payment.method.line` and is
+not counted again. No new approval, audit or operation-store framework was added.
+
+The shared real-ORM smoke passed both isolated aliases through the public CLI
+as uid 5 with `su=False` in 200.64 seconds. It covered all eight capabilities,
+five immediate replays, company isolation, native account reconciliation
+enablement, payment-account preservation during copy, unused-line deletion,
+used-line detachment without losing posted payment history, and fresh-cursor
+business-data and temporary-group rollback verification.
+
+The batch unit tests passed 32 cases; the focused shared-framework selection
+passed 57 cases locally and on the server; the complete read-framework tests
+passed 771 cases locally. The relevant registry selection passed 19 cases on
+the server, excluding the single known stale baseline assertion below.
+The initial deployment backed up 12 existing files and added 19 files.
+Six final code/test/metadata files were synchronized with
+baseline/hash checks and another backup; all 31 deployed files match their
+final manifest hashes. Server execution documents were left untouched.
+
+One pre-existing registry test still incorrectly expects the older
+bank-statement/payment-maintenance integration records to be `planned`,
+although HEAD already records them as `implemented`. It is excluded from
+the relevant registry selection, not silently repaired or described as passing.
+The full-tree privacy scan also retains five pre-existing document findings;
+the changed code/schema/test scan has no findings.
+
+Odoo and Nginx PID/restart counters stayed unchanged; PostgreSQL remained
+active. No business database, installed addon, or service configuration was
+changed. Next: audit another small native accounting capability gap batch.
+The older positive integration gaps remain `asset.validate` (failed),
+`product.accounting_profile.get`, `report.customer_statement.send`, and
+`report.followup.send` (planned); do not send external reports or repair
+installed addons without authority. See the latest [handoff](HANDOFF.md).
+
+## Previous checkpoint — fiscal-position and tax mappings, 2026-10-01
+
 The registry has 426 IDs and 411 implemented handlers: 215 reads and 196
 writes, with 828 schema files. Availability descriptors are 343
 `unconfigured`, 68 `degraded`, and 15 `disabled`. Integration records are

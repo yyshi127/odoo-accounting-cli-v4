@@ -18,10 +18,13 @@ from time import strftime, strptime
 from typing import Any
 
 from odoo_accounting_cli_v4 import fiscal_mapping_contracts as fiscal_mappings
+from odoo_accounting_cli_v4 import (
+    payment_configuration_contracts as payment_configuration,
+)
 from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
 
 ACTION = "accounting.core_write.execute"
-CAPABILITIES = fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
+CAPABILITIES = payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -3309,6 +3312,25 @@ def _protocol(failure_type: type[Exception]) -> Exception:
     )
 
 
+_PARAMETER_KEYS.update(payment_configuration.PARAMETER_KEYS)
+_GROUPS['journal.bank_account.assign'] = "account.group_account_manager"
+_MODELS['journal.bank_account.assign'] = {'res.company', 'account.journal', 'res.partner.bank'}
+_ACCESS['journal.bank_account.assign'] = {('account.journal', 'read'), ('res.partner.bank', 'read'), ('account.journal', 'write')}
+_GROUPS['journal.liquidity_configuration.update'] = "account.group_account_manager"
+_MODELS['journal.liquidity_configuration.update'] = {'res.company', 'account.journal', 'account.account'}
+_ACCESS['journal.liquidity_configuration.update'] = {('account.journal', 'read'), ('account.account', 'read'), ('account.journal', 'write')}
+_GROUPS['payment.method_line.create'] = "account.group_account_manager"
+_MODELS['payment.method_line.create'] = {'account.account', 'account.payment.method.line', 'res.company', 'account.journal', 'account.payment.method'}
+_ACCESS['payment.method_line.create'] = {('account.payment.method.line', 'read'), ('account.payment.method', 'read'), ('account.account', 'write'), ('account.journal', 'read'), ('account.account', 'read'), ('account.payment.method.line', 'create')}
+_GROUPS['payment.method_line.duplicate'] = "account.group_account_manager"
+_MODELS['payment.method_line.duplicate'] = {'account.account', 'account.payment.method.line', 'res.company', 'account.journal', 'account.payment.method'}
+_ACCESS['payment.method_line.duplicate'] = {('account.payment.method.line', 'read'), ('account.payment.method', 'read'), ('account.account', 'write'), ('account.journal', 'read'), ('account.account', 'read'), ('account.payment.method.line', 'create')}
+_GROUPS['payment.method_line.remove'] = "account.group_account_manager"
+_MODELS['payment.method_line.remove'] = {'account.account', 'account.payment.method.line', 'res.company', 'account.journal', 'account.payment.method'}
+_ACCESS['payment.method_line.remove'] = {('account.payment.method.line', 'unlink'), ('account.payment.method.line', 'write'), ('account.payment.method.line', 'read'), ('account.payment.method', 'read'), ('account.journal', 'read'), ('account.account', 'read')}
+_GROUPS['payment.method_line.update'] = "account.group_account_manager"
+_MODELS['payment.method_line.update'] = {'account.account', 'account.payment.method.line', 'res.company', 'account.journal', 'account.payment.method'}
+_ACCESS['payment.method_line.update'] = {('account.payment.method.line', 'write'), ('account.payment.method.line', 'read'), ('account.payment.method', 'read'), ('account.account', 'write'), ('account.journal', 'read'), ('account.account', 'read')}
 _PARAMETER_KEYS.update(fiscal_mappings.PARAMETER_KEYS)
 _GROUPS["fiscal_position.taxes.replace"] = "account.group_account_manager"
 _MODELS["fiscal_position.taxes.replace"] = {"account.fiscal.position","account.fiscal.position.account","account.tax","res.company"}
@@ -5299,6 +5321,11 @@ def _valid_parameters(
 ) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id in payment_configuration.CAPABILITY_IDS:
+        try:
+            return payment_configuration.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
     if capability_id in fiscal_mappings.CAPABILITY_IDS:
         try:
             return fiscal_mappings.normalize_parameters(capability_id, parameters) == parameters
@@ -5887,6 +5914,8 @@ def _validated_payload(
 def _deterministic_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in payment_configuration.CAPABILITY_IDS:
+        return payment_configuration.idempotency_key(capability_id, parameters, company_id)
     if capability_id in fiscal_mappings.CAPABILITY_IDS:
         return fiscal_mappings.idempotency_key(capability_id, parameters, company_id)
     if capability_id in report_budgets.CAPABILITY_IDS:
@@ -19097,6 +19126,115 @@ def _write_fiscal_mapping_batch(
     return result, bool(replay)
 
 
+def _payment_line_config_record(env, line_id, company_id, failure_type):
+    return _search_one(env, "account.payment.method.line", [
+        ("id", "=", line_id), ("journal_id.company_id", "=", company_id),
+    ], company_id, failure_type)
+
+
+def _payment_line_signature(line):
+    return {
+        "journal_id": _relation_id(line.journal_id),
+        "payment_method_id": _relation_id(line.payment_method_id),
+        "name": line.name,
+        "sequence": line.sequence,
+        "payment_account_id": _relation_id(line.payment_account_id),
+    }
+
+
+def _validate_payment_account(env, journal, account_id, company_id, failure_type):
+    if account_id is None:
+        return
+    account = _account_config_record(env, account_id, company_id, failure_type)
+    if account.account_type not in {"asset_current", "liability_current"} and account.id != journal.default_account_id.id:
+        raise _fail(failure_type, "business_rule_error", "The payment account must be a current asset/liability or the journal default account.", exit_code=6)
+
+
+def _write_payment_configuration_batch(env, capability_id, parameters, company_id, failure_type):
+    if capability_id.startswith("journal."):
+        journal = _journal_config_record(env, parameters["journal_id"], company_id, failure_type)
+        if capability_id == "journal.bank_account.assign":
+            if journal.type != "bank":
+                raise _fail(failure_type, "business_rule_error", "Bank-account assignment requires a bank journal.", exit_code=6)
+            bank_id = parameters["partner_bank_id"]
+            if bank_id is not None:
+                bank = _partner_bank(env, bank_id, company_id, failure_type)
+                if not bank.active or bank.partner_id.id != journal.company_id.partner_id.id:
+                    raise _fail(failure_type, "business_rule_error", "The bank account must be active and belong to the journal company partner.", exit_code=6)
+            values = {"bank_account_id": bank_id}
+        else:
+            if journal.type not in {"bank", "cash", "credit"}:
+                raise _fail(failure_type, "business_rule_error", "Liquidity configuration requires a liquidity journal.", exit_code=6)
+            values = parameters["changes"]
+            types = {"suspense_account_id": {"asset_current"}, "profit_account_id": {"income", "income_other"}, "loss_account_id": {"expense"}}
+            for field, account_id in values.items():
+                account = _account_config_record(env, account_id, company_id, failure_type)
+                if account.account_type not in types[field]:
+                    raise _fail(failure_type, "business_rule_error", "The liquidity account has an incompatible account type.", exit_code=6)
+        replay = all(_relation_id(getattr(journal, field)) == value for field, value in values.items())
+        if not replay:
+            journal.write({field: value if value is not None else False for field, value in values.items()})
+            journal.invalidate_recordset()
+        if any(_relation_id(getattr(journal, field)) != value for field, value in values.items()):
+            raise _fail(failure_type, "odoo_write_error", "Odoo did not persist the journal configuration.", exit_code=6)
+        return _config_result(journal, "account.journal", company_id), replay
+
+    source = None
+    if capability_id != "payment.method_line.create":
+        source = _payment_line_config_record(env, parameters["payment_method_line_id"], company_id, failure_type)
+        journal = source.journal_id
+    else:
+        journal = _journal_config_record(env, parameters["journal_id"], company_id, failure_type)
+    if capability_id == "payment.method_line.remove":
+        result = _config_result(source, "account.payment.method.line", company_id)
+        source.unlink()
+        remaining = source.exists()
+        if remaining:
+            remaining.invalidate_recordset()
+            if remaining.journal_id:
+                raise _fail(failure_type, "odoo_write_error", "Odoo did not remove the configured payment method.", exit_code=6)
+        result["state"] = "detached" if remaining else "deleted"
+        return result, False
+
+    before = _payment_line_signature(source) if source is not None else None
+    if capability_id == "payment.method_line.update":
+        values = parameters["changes"]
+        if "payment_account_id" in values:
+            _validate_payment_account(env, journal, values["payment_account_id"], company_id, failure_type)
+        replay = all(before[field] == value for field, value in values.items())
+        if not replay:
+            source.write({field: value if value is not None else False for field, value in values.items()})
+            source.invalidate_recordset()
+        if any(_payment_line_signature(source)[field] != value for field, value in values.items()):
+            raise _fail(failure_type, "odoo_write_error", "Odoo did not update the payment method line.", exit_code=6)
+        return _config_result(source, "account.payment.method.line", company_id), replay
+
+    values = dict(parameters) if source is None else {**before, "name": parameters["name"]}
+    method = _search_one(env, "account.payment.method", [("id", "=", values["payment_method_id"])], company_id, failure_type)
+    if method.code not in method._get_payment_method_information() or not journal.filtered_domain(method._get_payment_method_domain(method.code)):
+        raise _fail(failure_type, "business_rule_error", "The payment method is not supported by this journal.", exit_code=6)
+    _validate_payment_account(env, journal, values["payment_account_id"], company_id, failure_type)
+    model = _scoped(env, "account.payment.method.line", company_id)
+    conflicts = model.search([(field, "=", values[field]) for field in ("journal_id", "payment_method_id", "name")], limit=2)
+    replay = bool(conflicts)
+    if replay:
+        if len(conflicts) != 1 or _payment_line_signature(conflicts) != values or (source is not None and conflicts.id == source.id):
+            raise _fail(failure_type, "idempotency_conflict", "A conflicting payment method line already exists.", exit_code=5)
+        line = conflicts
+    elif source is None:
+        line = model.create({field: value if value is not None else False for field, value in values.items()})
+    else:
+        # Native payment_account_id is copy=False; retain the configured account explicitly.
+        line = source.copy({"name": values["name"], "payment_account_id": values["payment_account_id"] or False})
+    line.invalidate_recordset()
+    if _payment_line_signature(line) != values or (source is not None and (line.id == source.id or _payment_line_signature(source) != before)):
+        raise _fail(failure_type, "odoo_write_error", "Odoo did not preserve the requested payment method configuration.", exit_code=6)
+    result = _config_result(line, "account.payment.method.line", company_id)
+    if source is not None:
+        result["source_id"] = source.id
+    return result, replay
+
+
 def _dispatch_allowed(
     env: Any,
     capability_id: str,
@@ -19106,6 +19244,8 @@ def _dispatch_allowed(
     marker: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if capability_id in payment_configuration.CAPABILITY_IDS:
+        return _write_payment_configuration_batch(env, capability_id, parameters, company_id, failure_type)
     if capability_id in fiscal_mappings.CAPABILITY_IDS:
         return _write_fiscal_mapping_batch(env, capability_id, parameters, company_id, failure_type)
     if capability_id in report_budgets.CAPABILITY_IDS:

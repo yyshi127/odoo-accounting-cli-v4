@@ -1293,6 +1293,12 @@ def _asset_parameters(env: Env) -> dict[str, Any]:
 def test_public_action_and_closed_capability_batch_are_exact() -> None:
     assert writes.ACTION == "accounting.core_write.execute"
     assert writes.CAPABILITIES == {
+        "journal.bank_account.assign",
+        "journal.liquidity_configuration.update",
+        "payment.method_line.create",
+        "payment.method_line.duplicate",
+        "payment.method_line.remove",
+        "payment.method_line.update",
         "fiscal_position.taxes.replace",
         "tax.original_taxes.replace",
         "fiscal_position.account_mapping.create",

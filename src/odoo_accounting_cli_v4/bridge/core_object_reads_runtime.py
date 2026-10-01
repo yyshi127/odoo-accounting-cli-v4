@@ -55,7 +55,9 @@ CAPABILITY_IDS = frozenset(
         "cash_rounding.get",
         "journal.group.list",
         "journal.group.get",
+        "payment.method_definition.list",
         "incoterm.list",
+        "payment.method_definition.get",
         "incoterm.get",
         "partner.bank_account.search",
         "partner.bank_account.get",
@@ -137,6 +139,7 @@ _GET_IDS = {
     ),
     "cash_rounding.get": ("account.cash.rounding", "cash_rounding_id"),
     "journal.group.get": ("account.journal.group", "journal_group_id"),
+    "payment.method_definition.get": ("account.payment.method", "payment_method_id"),
     "incoterm.get": ("account.incoterms", "incoterm_id"),
     "partner.bank_account.get": ("res.partner.bank", "partner_bank_id"),
     "bank.statement.get": ("account.bank.statement", "bank_statement_id"),
@@ -234,6 +237,7 @@ _PAGED_REFERENCE_MODELS = {
     "tax.group.list": "account.tax.group",
     "cash_rounding.list": "account.cash.rounding",
     "journal.group.list": "account.journal.group",
+    "payment.method_definition.list": "account.payment.method",
     "incoterm.list": "account.incoterms",
     "partner.bank_account.search": "res.partner.bank",
     "bank.statement.search": "account.bank.statement",
@@ -259,6 +263,8 @@ _REFERENCE_KINDS = {
     "cash_rounding.get": "cash_rounding",
     "journal.group.list": "journal_group",
     "journal.group.get": "journal_group",
+    "payment.method_definition.list": "payment_method_definition",
+    "payment.method_definition.get": "payment_method_definition",
     "incoterm.list": "incoterm",
     "incoterm.get": "incoterm",
     "partner.bank_account.search": "partner_bank",
@@ -358,6 +364,7 @@ _REFERENCE_FIELDS = {
         "company_id",
         "excluded_journal_ids",
     ),
+    "payment_method_definition": ("id", "name", "code", "payment_type"),
     "incoterm": ("id", "code", "name", "active"),
     "partner_bank": (
         "id",
@@ -748,6 +755,8 @@ _REQUIRED_MODELS = {
         "account.journal.group",
         "account.journal",
     ),
+    "payment.method_definition.list": ("res.company", "account.payment.method"),
+    "payment.method_definition.get": ("res.company", "account.payment.method"),
     "incoterm.list": ("res.company", "account.incoterms"),
     "incoterm.get": ("res.company", "account.incoterms"),
     "product.search": (
@@ -1778,6 +1787,7 @@ def _valid_parameters(capability_id: str, parameters: Any) -> bool:
         "payment.method.list",
         "reconciliation.model.list",
         "analytic.plan.list",
+        "payment.method_definition.list",
         "account.tag.list",
         "tax.group.list",
         "cash_rounding.list",
@@ -4500,6 +4510,8 @@ def _normalize_reference_items(
         return _normalize_cash_roundings(env, rows, company_id)
     if kind == "journal_group":
         return _normalize_journal_groups(env, rows, company_id)
+    if kind == "payment_method_definition":
+        return [{field: row[field] for field in ("id", "name", "code", "payment_type")} for row in rows]
     if kind == "incoterm":
         return _normalize_incoterms(rows)
     if kind == "partner_bank":

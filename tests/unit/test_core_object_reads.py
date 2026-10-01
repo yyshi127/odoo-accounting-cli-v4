@@ -34,6 +34,7 @@ GET_ID_FIELDS = {
     "reconciliation.model.get": "reconciliation_model_id",
     "cash_rounding.get": "cash_rounding_id",
     "journal.group.get": "journal_group_id",
+    "payment.method_definition.get": "payment_method_id",
     "incoterm.get": "incoterm_id",
     "partner.bank_account.get": "partner_bank_id",
     "bank.statement.get": "bank_statement_id",
@@ -70,6 +71,7 @@ PAGE_CAPABILITIES = (
     "tax.group.list",
     "cash_rounding.list",
     "journal.group.list",
+    "payment.method_definition.list",
     "incoterm.list",
     "partner.bank_account.search",
     "bank.statement.search",
@@ -148,6 +150,7 @@ PAGE_DEFAULTS = {
     "tax.group.list": {},
     "cash_rounding.list": {},
     "journal.group.list": {},
+    "payment.method_definition.list": {},
     "incoterm.list": {},
     "partner.bank_account.search": {"partner_id": None, "active": None},
     "bank.statement.search": {
@@ -521,6 +524,8 @@ def _item(capability_id: str, record_id: int = 31) -> dict:
                 _coded(9, "BNK1", "Bank"),
             ],
         }
+    if capability_id in {"payment.method_definition.list", "payment.method_definition.get"}:
+        return {"id": record_id, "name": "Manual", "code": "manual", "payment_type": "inbound"}
     if capability_id in {"incoterm.list", "incoterm.get"}:
         return {
             "id": record_id,
