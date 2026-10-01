@@ -23384,6 +23384,967 @@
       "status": {"value": "degraded", "reason_code": "deleted_record_tombstone_unavailable", "reason": "The handler verifies journal-entry and line absence after deletion, but keeps no persistent tombstone, so a later retry cannot distinguish its prior deletion from an unrelated disappearance."},
       "routing": {"object": "journal_entry", "actions": ["delete"], "aliases": {"zh_CN": ["删除草稿总账分录", "删除草稿日记账分录"], "en_US": ["Delete draft journal entry", "Delete draft general entry"]}, "not_for": {"zh_CN": ["删除已过账或曾过账分录", "删除系统生成分录"], "en_US": ["Deleting posted or previously posted entries", "Deleting system-generated entries"]}, "required_slots": ["database", "company_id", "user_login"]},
       "handler_key": "core_write"
+    },
+    "report.budget_definition.create": {
+      "summary": {
+        "zh_CN": "创建财务报表预算",
+        "en_US": "Create a financial-report budget"
+      },
+      "domain": "financial_reports",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "account_reports",
+          "base"
+        ],
+        "models": [
+          "account.report.budget",
+          "account.report.budget.item",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "_references/base/models/res_company.py",
+          "account_reports/models/budget.py",
+          "account_reports/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/report.budget_definition.create.request.schema.json",
+        "response": "schemas/v1/report.budget_definition.create.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "account_reports",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.report.budget.item:read",
+          "account.report.budget:create",
+          "account.report.budget:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_report_budget_create",
+        "verify": "same_transaction_native_record_payload_or_absence_and_response_schema_validation",
+        "idempotency": "natural_name_or_account_date_payload_recheck_without_persistent_attribution",
+        "reverse": "repeat_native_update_with_previous_configuration"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_report_budget_writes.py"
+          ],
+          "reason": "Shared batch unit tests cover closed contracts, CLI dispatch, company/group and ACL gates, deterministic replay keys, result binding, and schemas; native workflows require the shared live smoke."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_report_budget_write_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all eight report-budget writes, two readbacks, six immediate replays, company isolation, native monthly allocation/copy/cascade deletion, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "degraded",
+        "reason_code": "natural_key_replay_attribution_limit",
+        "reason": "Natural name/account-date lookup may adopt an existing matching record; no persistent operation attribution or database uniqueness guarantees concurrent exactly-once creation."
+      },
+      "routing": {
+        "object": "report.budget_definition",
+        "actions": [
+          "create"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "创建财务报表预算"
+          ],
+          "en_US": [
+            "Create a financial-report budget"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "分析预算的 budget.* 对象"
+          ],
+          "en_US": [
+            "Analytic budget.* objects"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "report.budget_definition.update": {
+      "summary": {
+        "zh_CN": "更新财务报表预算",
+        "en_US": "Update a financial-report budget"
+      },
+      "domain": "financial_reports",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "account_reports",
+          "base"
+        ],
+        "models": [
+          "account.report.budget",
+          "account.report.budget.item",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "_references/base/models/res_company.py",
+          "account_reports/models/budget.py",
+          "account_reports/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/report.budget_definition.update.request.schema.json",
+        "response": "schemas/v1/report.budget_definition.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "account_reports",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.report.budget.item:read",
+          "account.report.budget:read",
+          "account.report.budget:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_report_budget_update",
+        "verify": "same_transaction_native_record_payload_or_absence_and_response_schema_validation",
+        "idempotency": "requested_target_state_recheck_before_native_write",
+        "reverse": "repeat_native_update_with_previous_configuration"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_report_budget_writes.py"
+          ],
+          "reason": "Shared batch unit tests cover closed contracts, CLI dispatch, company/group and ACL gates, deterministic replay keys, result binding, and schemas; native workflows require the shared live smoke."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_report_budget_write_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all eight report-budget writes, two readbacks, six immediate replays, company isolation, native monthly allocation/copy/cascade deletion, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user."
+      },
+      "routing": {
+        "object": "report.budget_definition",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "更新财务报表预算"
+          ],
+          "en_US": [
+            "Update a financial-report budget"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "分析预算的 budget.* 对象"
+          ],
+          "en_US": [
+            "Analytic budget.* objects"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "report.budget_definition.duplicate": {
+      "summary": {
+        "zh_CN": "复制财务报表预算及预算项",
+        "en_US": "Duplicate a financial-report budget and its items"
+      },
+      "domain": "financial_reports",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "account_reports",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "account.report.budget",
+          "account.report.budget.item",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "_references/base/models/res_company.py",
+          "account_reports/models/budget.py",
+          "account_reports/security/ir.model.access.csv",
+          "account/models/account_account.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/report.budget_definition.duplicate.request.schema.json",
+        "response": "schemas/v1/report.budget_definition.duplicate.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "account_reports",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.report.budget.item:create",
+          "account.report.budget.item:read",
+          "account.report.budget:create",
+          "account.report.budget:read",
+          "account.report.budget:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_report_budget_duplicate",
+        "verify": "same_transaction_native_record_payload_or_absence_and_response_schema_validation",
+        "idempotency": "natural_name_or_account_date_payload_recheck_without_persistent_attribution",
+        "reverse": "repeat_native_update_with_previous_configuration"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_report_budget_writes.py"
+          ],
+          "reason": "Shared batch unit tests cover closed contracts, CLI dispatch, company/group and ACL gates, deterministic replay keys, result binding, and schemas; native workflows require the shared live smoke."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_report_budget_write_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all eight report-budget writes, two readbacks, six immediate replays, company isolation, native monthly allocation/copy/cascade deletion, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "degraded",
+        "reason_code": "natural_key_replay_attribution_limit",
+        "reason": "Natural name/account-date lookup may adopt an existing matching record; no persistent operation attribution or database uniqueness guarantees concurrent exactly-once creation."
+      },
+      "routing": {
+        "object": "report.budget_definition",
+        "actions": [
+          "duplicate"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "复制财务报表预算及预算项"
+          ],
+          "en_US": [
+            "Duplicate a financial-report budget and its items"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "分析预算的 budget.* 对象"
+          ],
+          "en_US": [
+            "Analytic budget.* objects"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "report.budget_definition.delete": {
+      "summary": {
+        "zh_CN": "删除财务报表预算及预算项",
+        "en_US": "Delete a financial-report budget and its items"
+      },
+      "domain": "financial_reports",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "account_reports",
+          "base"
+        ],
+        "models": [
+          "account.report.budget",
+          "account.report.budget.item",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "_references/base/models/res_company.py",
+          "account_reports/models/budget.py",
+          "account_reports/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/report.budget_definition.delete.request.schema.json",
+        "response": "schemas/v1/report.budget_definition.delete.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "account_reports",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.report.budget.item:read",
+          "account.report.budget.item:unlink",
+          "account.report.budget:read",
+          "account.report.budget:unlink"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_report_budget_delete",
+        "verify": "same_transaction_native_record_payload_or_absence_and_response_schema_validation",
+        "idempotency": "record_absence_check_without_persistent_tombstone",
+        "reverse": "not_reversible_deleted_configuration_must_be_recreated"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_report_budget_writes.py"
+          ],
+          "reason": "Shared batch unit tests cover closed contracts, CLI dispatch, company/group and ACL gates, deterministic replay keys, result binding, and schemas; native workflows require the shared live smoke."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_report_budget_write_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all eight report-budget writes, two readbacks, six immediate replays, company isolation, native monthly allocation/copy/cascade deletion, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "degraded",
+        "reason_code": "deleted_record_tombstone_unavailable",
+        "reason": "Native deletion is verified, but no persistent tombstone attributes a later missing-record retry to this operation."
+      },
+      "routing": {
+        "object": "report.budget_definition",
+        "actions": [
+          "delete"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "删除财务报表预算及预算项"
+          ],
+          "en_US": [
+            "Delete a financial-report budget and its items"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "分析预算的 budget.* 对象"
+          ],
+          "en_US": [
+            "Analytic budget.* objects"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "report.budget_item.create": {
+      "summary": {
+        "zh_CN": "创建财务报表预算项",
+        "en_US": "Create a financial-report budget item"
+      },
+      "domain": "financial_reports",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "account_reports",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "account.report.budget",
+          "account.report.budget.item",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "_references/base/models/res_company.py",
+          "account_reports/models/budget.py",
+          "account_reports/security/ir.model.access.csv",
+          "account/models/account_account.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/report.budget_item.create.request.schema.json",
+        "response": "schemas/v1/report.budget_item.create.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "account_reports",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.report.budget.item:create",
+          "account.report.budget.item:read",
+          "account.report.budget:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_report_budget_create",
+        "verify": "same_transaction_native_record_payload_or_absence_and_response_schema_validation",
+        "idempotency": "natural_name_or_account_date_payload_recheck_without_persistent_attribution",
+        "reverse": "repeat_native_update_with_previous_configuration"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_report_budget_writes.py"
+          ],
+          "reason": "Shared batch unit tests cover closed contracts, CLI dispatch, company/group and ACL gates, deterministic replay keys, result binding, and schemas; native workflows require the shared live smoke."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_report_budget_write_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all eight report-budget writes, two readbacks, six immediate replays, company isolation, native monthly allocation/copy/cascade deletion, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "degraded",
+        "reason_code": "natural_key_replay_attribution_limit",
+        "reason": "Natural name/account-date lookup may adopt an existing matching record; no persistent operation attribution or database uniqueness guarantees concurrent exactly-once creation."
+      },
+      "routing": {
+        "object": "report.budget_item",
+        "actions": [
+          "create"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "创建财务报表预算项"
+          ],
+          "en_US": [
+            "Create a financial-report budget item"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "分析预算的 budget.* 对象"
+          ],
+          "en_US": [
+            "Analytic budget.* objects"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "report.budget_item.update": {
+      "summary": {
+        "zh_CN": "更新财务报表预算项",
+        "en_US": "Update a financial-report budget item"
+      },
+      "domain": "financial_reports",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "account_reports",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "account.report.budget",
+          "account.report.budget.item",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "_references/base/models/res_company.py",
+          "account_reports/models/budget.py",
+          "account_reports/security/ir.model.access.csv",
+          "account/models/account_account.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/report.budget_item.update.request.schema.json",
+        "response": "schemas/v1/report.budget_item.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "account_reports",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.report.budget.item:read",
+          "account.report.budget.item:write",
+          "account.report.budget:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_report_budget_update",
+        "verify": "same_transaction_native_record_payload_or_absence_and_response_schema_validation",
+        "idempotency": "requested_target_state_recheck_before_native_write",
+        "reverse": "repeat_native_update_with_previous_configuration"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_report_budget_writes.py"
+          ],
+          "reason": "Shared batch unit tests cover closed contracts, CLI dispatch, company/group and ACL gates, deterministic replay keys, result binding, and schemas; native workflows require the shared live smoke."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_report_budget_write_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all eight report-budget writes, two readbacks, six immediate replays, company isolation, native monthly allocation/copy/cascade deletion, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user."
+      },
+      "routing": {
+        "object": "report.budget_item",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "更新财务报表预算项"
+          ],
+          "en_US": [
+            "Update a financial-report budget item"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "分析预算的 budget.* 对象"
+          ],
+          "en_US": [
+            "Analytic budget.* objects"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "report.budget_item.delete": {
+      "summary": {
+        "zh_CN": "删除财务报表预算项",
+        "en_US": "Delete a financial-report budget item"
+      },
+      "domain": "financial_reports",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "account_reports",
+          "base"
+        ],
+        "models": [
+          "account.report.budget",
+          "account.report.budget.item",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "_references/base/models/res_company.py",
+          "account_reports/models/budget.py",
+          "account_reports/security/ir.model.access.csv"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/report.budget_item.delete.request.schema.json",
+        "response": "schemas/v1/report.budget_item.delete.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "account_reports",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.report.budget.item:read",
+          "account.report.budget.item:unlink",
+          "account.report.budget:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_report_budget_delete",
+        "verify": "same_transaction_native_record_payload_or_absence_and_response_schema_validation",
+        "idempotency": "record_absence_check_without_persistent_tombstone",
+        "reverse": "not_reversible_deleted_configuration_must_be_recreated"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_report_budget_writes.py"
+          ],
+          "reason": "Shared batch unit tests cover closed contracts, CLI dispatch, company/group and ACL gates, deterministic replay keys, result binding, and schemas; native workflows require the shared live smoke."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_report_budget_write_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all eight report-budget writes, two readbacks, six immediate replays, company isolation, native monthly allocation/copy/cascade deletion, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "degraded",
+        "reason_code": "deleted_record_tombstone_unavailable",
+        "reason": "Native deletion is verified, but no persistent tombstone attributes a later missing-record retry to this operation."
+      },
+      "routing": {
+        "object": "report.budget_item",
+        "actions": [
+          "delete"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "删除财务报表预算项"
+          ],
+          "en_US": [
+            "Delete a financial-report budget item"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "分析预算的 budget.* 对象"
+          ],
+          "en_US": [
+            "Analytic budget.* objects"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "report.budget_account_period.set_total": {
+      "summary": {
+        "zh_CN": "设置科目期间预算总额并按月分配",
+        "en_US": "Set an account-period budget total using native monthly allocation"
+      },
+      "domain": "financial_reports",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "account_reports",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "account.report.budget",
+          "account.report.budget.item",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "_references/base/models/res_company.py",
+          "account_reports/models/budget.py",
+          "account_reports/security/ir.model.access.csv",
+          "account/models/account_account.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/report.budget_account_period.set_total.request.schema.json",
+        "response": "schemas/v1/report.budget_account_period.set_total.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "account_reports",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.report.budget.item:create",
+          "account.report.budget.item:read",
+          "account.report.budget.item:write",
+          "account.report.budget:read",
+          "account.report.budget:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_scoped_native_report_budget_set_total",
+        "verify": "same_transaction_native_record_payload_or_absence_and_response_schema_validation",
+        "idempotency": "requested_target_state_recheck_before_native_write",
+        "reverse": "repeat_native_update_with_previous_configuration"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_report_budget_writes.py"
+          ],
+          "reason": "Shared batch unit tests cover closed contracts, CLI dispatch, company/group and ACL gates, deterministic replay keys, result binding, and schemas; native workflows require the shared live smoke."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_report_budget_write_batch_live.py"
+          ],
+          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all eight report-budget writes, two readbacks, six immediate replays, company isolation, native monthly allocation/copy/cascade deletion, and fresh-cursor business-data and temporary-group rollback verification."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples follow capability coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing follows capability coverage."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user."
+      },
+      "routing": {
+        "object": "report.budget_account_period",
+        "actions": [
+          "set_total"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置科目期间预算总额并按月分配"
+          ],
+          "en_US": [
+            "Set an account-period budget total using native monthly allocation"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "分析预算的 budget.* 对象"
+          ],
+          "en_US": [
+            "Analytic budget.* objects"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
     }
   }
 }

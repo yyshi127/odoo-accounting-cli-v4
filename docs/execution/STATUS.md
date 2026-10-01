@@ -2,6 +2,38 @@
 
 ## Current accounting phase — 2026-10-01
 
+The registry has 418 IDs and 403 implemented handlers: 215 reads and 188
+writes, with 812 schema files. Availability descriptors are 340
+`unconfigured`, 63 `degraded`, and 15 `disabled`. Integration records for
+implemented handlers are 399 `implemented`, three `planned`, and one
+`failed`. These totals include historical non-accounting extensions; they
+are not an accounting-completion percentage or proof of a user's permissions.
+
+The latest batch adds eight financial-report-budget maintenance commands:
+budget-definition create/update/duplicate/delete, budget-item
+create/update/delete, and account-period total allocation. They use the installed
+`account_reports` models and native ORM methods, not analytic `budget.*`
+objects or inventory operations.
+
+The shared smoke passed both isolated aliases through the public CLI as uid 5
+with `su=False`, including all eight writes, two readbacks, six immediate
+replays, company isolation, native monthly allocation/copy/cascade deletion,
+and fresh-cursor business-data and temporary-group rollback verification.
+The first attempt exposed a test read-field mismatch, corrected only in the
+test fixture. Both local and server runtime selections passed 208 tests;
+the local focused public/schema selection passed 16 tests. Service PID/restart
+snapshots were unchanged. No business database, installed addon, or service
+was changed by this work.
+
+Next: continue auditing installed native accounting models and the existing
+registry before delivering another related capability batch. Four older
+positive integration gaps remain: `asset.validate` (failed),
+`product.accounting_profile.get`, `report.customer_statement.send`,
+and `report.followup.send` (planned). See the latest
+[handoff checkpoint](HANDOFF.md) for the exact boundaries and evidence.
+
+## Previous checkpoint — draft maintenance, 2026-10-01
+
 The working registry has 410 IDs and 395 implemented handlers: 215 reads and
 180 writes, with 796 schema files. Availability descriptors remain 337
 `unconfigured`, 58 `degraded`, and 15 `disabled`. Integration records for the

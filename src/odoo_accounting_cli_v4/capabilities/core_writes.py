@@ -13,7 +13,9 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from time import strftime, strptime
 from typing import Any, Protocol
 
-CORE_WRITE_CAPABILITY_IDS = frozenset(
+from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
+
+CORE_WRITE_CAPABILITY_IDS = report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -4268,7 +4270,12 @@ def validate_core_write_request(
             code="capability_unavailable",
         )
     request_id, context, parameters = _validate_envelope(request)
-    if capability_id in _ACCOUNT_RETURN_WRITE_CAPABILITIES:
+    if capability_id in report_budgets.CAPABILITY_IDS:
+        try:
+            normalized = report_budgets.normalize_parameters(capability_id, parameters)
+        except ValueError as exc:
+            raise _invalid(str(exc)) from exc
+    elif capability_id in _ACCOUNT_RETURN_WRITE_CAPABILITIES:
         normalized = _validate_account_return_parameters(capability_id, parameters)
     elif capability_id in _TRANSFER_MODEL_WRITE_CAPABILITIES:
         normalized = _validate_transfer_model_parameters(capability_id, parameters)
@@ -4460,6 +4467,8 @@ def validate_core_write_request(
 def _expected_idempotency_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in report_budgets.CAPABILITY_IDS:
+        return report_budgets.idempotency_key(capability_id, parameters, company_id)
     if capability_id in _BATCH_LIFECYCLE_CAPABILITIES and (
         "move_ids" in parameters or "payment_ids" in parameters
     ):
@@ -5147,6 +5156,51 @@ def _validate_result(
 ) -> dict[str, Any]:
     if not _valid_result_shape(result) or result["company_id"] != company_id:
         raise _failed("Odoo returned a malformed or out-of-scope core-write result.")
+
+    if capability_id in report_budgets.CAPABILITY_IDS:
+        item_action = capability_id.startswith("report.budget_item.")
+        creates = capability_id.endswith((".create", ".duplicate"))
+        deleted = capability_id.endswith(".delete")
+        expected_id = (
+            result["id"] if creates
+            else parameters["budget_item_id"] if item_action
+            else parameters["budget_definition_id"]
+        )
+        source_id = (
+            parameters["budget_definition_id"]
+            if capability_id in {
+                "report.budget_definition.duplicate", "report.budget_item.create"
+            }
+            else result["source_id"] if item_action
+            else parameters["account_id"]
+            if capability_id == "report.budget_account_period.set_total"
+            else None
+        )
+        if (
+            result["model"] != (
+                "account.report.budget.item" if item_action else "account.report.budget"
+            )
+            or not _valid_id(result["id"])
+            or result["id"] != expected_id
+            or result["state"] != (
+                "deleted" if deleted else "recorded" if item_action else "configured"
+            )
+            or result["source_id"] != source_id
+            or (item_action and not _valid_id(result["source_id"]))
+            or (
+                capability_id == "report.budget_definition.duplicate"
+                and result["id"] == parameters["budget_definition_id"]
+            )
+            or result["move_type"] is not None
+            or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None
+            or result["reconciled"]
+            or (item_action and result["line_ids"])
+            or (not item_action and not _is_text(result["name"]))
+            or (deleted and idempotent_replay)
+        ):
+            raise _failed("Odoo returned a mismatched financial-report budget result.")
+        return deepcopy(result)
 
     if capability_id in _ACCOUNT_RETURN_WRITE_CAPABILITIES:
         check_update = capability_id == "account.return.check.result.update"

@@ -4418,3 +4418,94 @@ shared rollback-only dual-database smoke before recording this next batch as
 live verified. Remaining older integration gaps are `asset.validate` (failed),
 `product.accounting_profile.get`, `report.customer_statement.send`, and
 `report.followup.send` (planned).
+
+## Financial-report budget maintenance — 2026-10-01
+
+This checkpoint continues from `7bb6f3f`. It adds eight capability IDs rather
+than recounting the four existing budget reads. The registry now contains 418
+IDs and 403 implemented handlers (215 reads, 188 writes), with 812 schemas.
+Availability descriptors are 340 `unconfigured`, 63 `degraded`, and 15
+`disabled`. Integration metadata is 399 `implemented`, three `planned`,
+and one `failed`. These are implementation totals including historical
+non-accounting extensions, not a percentage of complete Odoo accounting.
+
+### Delivered boundary
+
+- `report.budget_definition.create/update/duplicate/delete` operate on
+  `account.report.budget`, using native create/write/copy/unlink.
+- `report.budget_item.create/update/delete` operate on
+  `account.report.budget.item`, scoped through the parent budget company.
+  Items use native signed Float amounts, canonical date/decimal inputs, and
+  company-visible profit-and-loss accounts.
+- `report.budget_account_period.set_total` calls the installed native monthly
+  allocation method. Mid-month starts advance to the next month, as native
+  Odoo does. A request covers 1-120 included month starts and explicit precision
+  0-6. Existing duplicate dates or non-month-start items in the selected period
+  are rejected because the native allocation would be ambiguous. Items outside
+  the selected period are untouched.
+- Native copy overrides its default name; the adapter therefore copies first,
+  applies the requested name, and verifies independent child records and an
+  unchanged source. Budget deletion uses native item cascade deletion.
+- All operations retain ordinary-user ORM execution, company scope, the native
+  accounting-manager requirement, ACL checks, deterministic replay keys, and
+  exact capability confirmation. No new approval or audit framework was added.
+- Creation/copy natural-key adoption cannot prove attribution or exactly-once
+  concurrent execution. Deletes have no persistent tombstone or reversal.
+  Their five `degraded` descriptors remain unchanged after live acceptance.
+  This model is financial-report budgeting, not analytic `budget.*`.
+
+### Verification and deployment
+
+The local shared runtime/contract selection and synchronized server selection
+each passed 208 tests; the focused public/schema selection passed 16 tests.
+Three local central registry checks passed. Ruff and `git diff --check`
+passed. The guarded shared smoke passed both synthetic aliases as uid 5 with
+`su=False`, including eight writes, two native readbacks, six immediate
+replays, cross-company rejection, three monthly allocations, independent
+four-item copying, native deletion/cascade, and fresh-cursor rollback checks.
+Temporary manager-group membership was also rolled back. The shared smoke
+passed in 178.85 seconds after the fixture correction.
+
+The first live run failed in a test assertion: it referenced `budget` instead
+of the existing read contract's `budget_definition`. Its worker completed
+rollback verification before surfacing the error. Only that test field name
+was corrected; no capability permission or installed Odoo code was changed.
+
+Deployment used an exact 26-file archive, backing up seven existing files and
+adding 19 files. Initial archive SHA-256:
+`df9afd66beab04731c598b8d5707d4b02cb44e6e2d71026e3db9ebf5acf8e76e`.
+The live fixture was separately backed up before correction. Private logs,
+archives, and manifests remain in
+`.tooling/report-budget-maintenance-20261001-live1`.
+Final metadata synchronization affects only the registry and its unit test.
+The divergent server STATUS/HANDOFF documents remain untouched.
+
+Final registry-file SHA-256:
+`ef7364dd180e577b488c8bc3255cd9820cbdc6a6217fc31ac70ce4c9fe712307`.
+Canonical registry SHA-256:
+`e240ee8b7ff80ac6f0d447b97d42bd2f4f671effb7360cf3da930de95891d2e2`.
+Passing live-log SHA-256:
+`3bad31fd0918517aae80bb2c45955803bcd10281c9df1c8fc26b894f6244e944`.
+
+Odoo stayed on PID `25607` with `NRestarts=6`, Nginx stayed on PID
+`3309593` with `NRestarts=0`, and PostgreSQL remained active. Before/after
+service snapshots were byte-identical. No service-control command, installed
+source modification, or business-database write was performed.
+
+The 26 changed code/schema/test files passed the public-material scan.
+The full-tree scan still has five pre-existing path/IP findings in historical
+execution documents; it did not pass. Private archives, runtime configuration,
+logs, and Odoo source snapshots remain excluded from the commit.
+
+### Continue from here
+
+Continue capability-first accounting delivery: audit actual installed native
+models and existing IDs before choosing another related high-frequency batch.
+Do not count aliases or existing reads again. A full accounting percentage
+still has no verified denominator.
+
+The four older positive integration gaps remain: `asset.validate` (native
+validation failed), `product.accounting_profile.get`,
+`report.customer_statement.send`, and `report.followup.send` (planned).
+Do not repair installed addons or perform external report delivery without the
+necessary authority. Keep write verification inside the two synthetic databases.

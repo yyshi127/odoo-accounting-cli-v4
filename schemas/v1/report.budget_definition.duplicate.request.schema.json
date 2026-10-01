@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/report.budget_definition.duplicate.request.schema.json",
+  "title": "report.budget_definition.duplicate request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "context",
+    "parameters"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v1"
+    },
+    "request_id": {
+      "$ref": "request.schema.json#/properties/request_id"
+    },
+    "context": {
+      "$ref": "request.schema.json#/$defs/context"
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "budget_definition_id",
+        "name"
+      ],
+      "properties": {
+        "budget_definition_id": {
+          "$ref": "report.budget_definition.create.request.schema.json#/$defs/id"
+        },
+        "name": {
+          "$ref": "report.budget_definition.create.request.schema.json#/$defs/name"
+        }
+      }
+    }
+  }
+}

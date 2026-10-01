@@ -17,8 +17,10 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from time import strftime, strptime
 from typing import Any
 
+from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
+
 ACTION = "accounting.core_write.execute"
-CAPABILITIES = frozenset(
+CAPABILITIES = report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -3306,6 +3308,47 @@ def _protocol(failure_type: type[Exception]) -> Exception:
     )
 
 
+_PARAMETER_KEYS.update(report_budgets.PARAMETER_KEYS)
+for _report_budget_capability in report_budgets.CAPABILITY_IDS:
+    _GROUPS[_report_budget_capability] = "account.group_account_manager"
+    _MODELS[_report_budget_capability] = {
+        "res.company", "account.report.budget", "account.report.budget.item"
+    }
+    _ACCESS[_report_budget_capability] = {
+        ("account.report.budget", "read"), ("account.report.budget.item", "read")
+    }
+    if _report_budget_capability in {
+        "report.budget_definition.create", "report.budget_definition.duplicate"
+    }:
+        _ACCESS[_report_budget_capability].add(("account.report.budget", "create"))
+    if _report_budget_capability in {
+        "report.budget_definition.update", "report.budget_definition.duplicate",
+        "report.budget_account_period.set_total",
+    }:
+        _ACCESS[_report_budget_capability].add(("account.report.budget", "write"))
+    if _report_budget_capability == "report.budget_definition.delete":
+        _ACCESS[_report_budget_capability].update({
+            ("account.report.budget", "unlink"), ("account.report.budget.item", "unlink")
+        })
+    if _report_budget_capability in {
+        "report.budget_definition.duplicate", "report.budget_item.create",
+        "report.budget_account_period.set_total",
+    }:
+        _ACCESS[_report_budget_capability].add(("account.report.budget.item", "create"))
+    if _report_budget_capability in {
+        "report.budget_item.update", "report.budget_account_period.set_total"
+    }:
+        _ACCESS[_report_budget_capability].add(("account.report.budget.item", "write"))
+    if _report_budget_capability == "report.budget_item.delete":
+        _ACCESS[_report_budget_capability].add(("account.report.budget.item", "unlink"))
+    if _report_budget_capability in {
+        "report.budget_definition.duplicate", "report.budget_item.create",
+        "report.budget_item.update", "report.budget_account_period.set_total",
+    }:
+        _MODELS[_report_budget_capability].add("account.account")
+        _ACCESS[_report_budget_capability].add(("account.account", "read"))
+
+
 def _is_id(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
@@ -5230,6 +5273,11 @@ def _valid_parameters(
 ) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id in report_budgets.CAPABILITY_IDS:
+        try:
+            return report_budgets.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
     parameter_keys = set(parameters)
     allowed_keys = _PARAMETER_KEYS[capability_id]
     required_keys = allowed_keys
@@ -5808,6 +5856,8 @@ def _validated_payload(
 def _deterministic_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in report_budgets.CAPABILITY_IDS:
+        return report_budgets.idempotency_key(capability_id, parameters, company_id)
     if capability_id in _BATCH_LIFECYCLE_CAPABILITIES and (
         "move_ids" in parameters or "payment_ids" in parameters
     ):
@@ -18383,6 +18433,327 @@ def _write_analytic_distribution_model(
     return _config_result(distribution_model, odoo_model, company_id), False
 
 
+def _report_budget_record(
+    env: Any, budget_id: int, company_id: int, failure_type: type[Exception]
+) -> Any:
+    return _search_one(
+        env,
+        "account.report.budget",
+        [("id", "=", budget_id), ("company_id", "=", company_id)],
+        company_id,
+        failure_type,
+    )
+
+
+def _report_budget_account(
+    env: Any, account_id: int, company_id: int, failure_type: type[Exception]
+) -> Any:
+    return _search_one(
+        env,
+        "account.account",
+        [
+            ("id", "=", account_id),
+            ("company_ids", "in", [company_id]),
+            (
+                "account_type",
+                "in",
+                [
+                    "income",
+                    "income_other",
+                    "expense",
+                    "expense_depreciation",
+                    "expense_direct_cost",
+                ],
+            ),
+        ],
+        company_id,
+        failure_type,
+    )
+
+
+def _report_budget_signature(budget: Any) -> list[tuple[int, str, float]]:
+    return sorted(
+        (item.account_id.id, str(item.date), item.amount) for item in budget.item_ids
+    )
+
+
+def _report_budget_result(
+    budget: Any,
+    company_id: int,
+    *,
+    item: Any = None,
+    source_id: int | None = None,
+    line_ids: list[int] | None = None,
+) -> dict[str, Any]:
+    result = _config_result(
+        item if item is not None else budget,
+        "account.report.budget.item" if item is not None else "account.report.budget",
+        company_id,
+    )
+    result.update(
+        state="recorded" if item is not None else "configured",
+        source_id=budget.id if item is not None else source_id,
+        line_ids=[]
+        if item is not None
+        else (sorted(budget.item_ids.ids) if line_ids is None else sorted(line_ids)),
+    )
+    return result
+
+
+def _report_budget_item_matches(item: Any, values: dict[str, Any]) -> bool:
+    return (
+        item.account_id.id == values["account_id"]
+        and str(item.date) == values["date"]
+        and item.amount == float(values["amount"])
+    )
+
+
+def _write_report_budget(
+    env: Any,
+    capability_id: str,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    budget_model = _scoped(env, "account.report.budget", company_id)
+    item_model = _scoped(env, "account.report.budget.item", company_id)
+    action = capability_id.rsplit(".", 1)[-1]
+    definition = capability_id.startswith("report.budget_definition.")
+    if definition and action in {"create", "duplicate"}:
+        source = (
+            _report_budget_record(
+                env, parameters["budget_definition_id"], company_id, failure_type
+            )
+            if action == "duplicate"
+            else None
+        )
+        sequence = source.sequence if source is not None else parameters["sequence"]
+        source_signature = (
+            _report_budget_signature(source) if source is not None else None
+        )
+        if source is not None:
+            for account_id in {item.account_id.id for item in source.item_ids}:
+                _report_budget_account(env, account_id, company_id, failure_type)
+        candidates = budget_model.search(
+            [("company_id", "=", company_id), ("name", "=", parameters["name"])]
+            + ([("id", "!=", source.id)] if source is not None else []),
+            limit=2,
+        )
+        if candidates:
+            if (
+                len(candidates) != 1
+                or candidates.sequence != sequence
+                or (
+                    source is not None
+                    and _report_budget_signature(candidates)
+                    != _report_budget_signature(source)
+                )
+            ):
+                raise _fail(
+                    failure_type,
+                    "idempotency_conflict",
+                    "The budget name conflicts with another configuration.",
+                    exit_code=5,
+                )
+            return _report_budget_result(
+                candidates,
+                company_id,
+                source_id=source.id if source is not None else None,
+            ), True
+        if source is None:
+            budget = budget_model.create({**parameters, "company_id": company_id})
+        else:
+            budget = source.copy()
+            # Native copy_data replaces the requested default name; apply it explicitly.
+            budget.write({"name": parameters["name"]})
+        budget.invalidate_recordset()
+        if (
+            not _is_id(budget.id)
+            or (source is not None and budget.id == source.id)
+            or budget.company_id.id != company_id
+            or budget.name != parameters["name"]
+            or budget.sequence != sequence
+            or (
+                source is not None
+                and (
+                    _report_budget_signature(budget) != source_signature
+                    or _report_budget_signature(source) != source_signature
+                    or set(budget.item_ids.ids).intersection(source.item_ids.ids)
+                )
+            )
+        ):
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo returned an invalid report budget.",
+                exit_code=6,
+            )
+        return _report_budget_result(
+            budget, company_id, source_id=source.id if source is not None else None
+        ), False
+
+    if capability_id.startswith("report.budget_item.") and action != "create":
+        item = _search_one(
+            env,
+            "account.report.budget.item",
+            [
+                ("id", "=", parameters["budget_item_id"]),
+                ("budget_id.company_id", "=", company_id),
+            ],
+            company_id,
+            failure_type,
+        )
+        budget = item.budget_id
+    else:
+        item = None
+        budget = _report_budget_record(
+            env, parameters["budget_definition_id"], company_id, failure_type
+        )
+
+    if action == "delete":
+        result = _deleted_result(_report_budget_result(budget, company_id, item=item))
+        record = item if item is not None else budget
+        record.unlink()
+        model = item_model if item is not None else budget_model
+        if model.search_count([("id", "=", result["id"])], limit=1) or (
+            item is None
+            and result["line_ids"]
+            and item_model.search_count([("id", "in", result["line_ids"])], limit=1)
+        ):
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not remove the budget target and its dependent items.",
+                exit_code=6,
+            )
+        return result, False
+
+    if definition:
+        changes = parameters["changes"]
+        if all(getattr(budget, key) == value for key, value in changes.items()):
+            return _report_budget_result(budget, company_id), True
+        budget.write(changes)
+        budget.invalidate_recordset()
+        if not all(getattr(budget, key) == value for key, value in changes.items()):
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not persist the report-budget update.",
+                exit_code=6,
+            )
+        return _report_budget_result(budget, company_id), False
+
+    if action in {"create", "update"}:
+        values = (
+            {key: parameters[key] for key in ("account_id", "date", "amount")}
+            if item is None
+            else {
+                "account_id": item.account_id.id,
+                "date": str(item.date),
+                "amount": _canonical_decimal_text(item.amount),
+                **parameters["changes"],
+            }
+        )
+        _report_budget_account(env, values["account_id"], company_id, failure_type)
+        if item is None:
+            matches = item_model.search(
+                [
+                    ("budget_id", "=", budget.id),
+                    ("account_id", "=", values["account_id"]),
+                    ("date", "=", values["date"]),
+                ],
+                limit=2,
+            )
+            if matches:
+                if len(matches) != 1 or not _report_budget_item_matches(
+                    matches, values
+                ):
+                    raise _fail(
+                        failure_type,
+                        "idempotency_conflict",
+                        "The budget account/date slot is ambiguous or has another amount.",
+                        exit_code=5,
+                    )
+                return _report_budget_result(budget, company_id, item=matches), True
+            item = item_model.create(
+                {**values, "amount": float(values["amount"]), "budget_id": budget.id}
+            )
+        else:
+            if _report_budget_item_matches(item, values):
+                return _report_budget_result(budget, company_id, item=item), True
+            item.write({**values, "amount": float(values["amount"])})
+        item.invalidate_recordset()
+        if (
+            item.budget_id.company_id.id != company_id
+            or not _report_budget_item_matches(item, values)
+        ):
+            raise _fail(
+                failure_type,
+                "odoo_write_error",
+                "Odoo did not persist the report-budget item.",
+                exit_code=6,
+            )
+        return _report_budget_result(budget, company_id, item=item), False
+
+    from odoo.tools import float_round
+
+    _report_budget_account(env, parameters["account_id"], company_id, failure_type)
+    months = report_budgets.period_months(
+        parameters["date_from"], parameters["date_to"]
+    )
+    domain = [
+        ("budget_id", "=", budget.id),
+        ("account_id", "=", parameters["account_id"]),
+        ("date", ">=", months[0]),
+        ("date", "<=", parameters["date_to"]),
+    ]
+    items = item_model.search(domain)
+    dates = [str(record.date) for record in items]
+    if len(dates) != len(set(dates)) or not set(dates) <= {
+        str(month) for month in months
+    }:
+        raise _fail(
+            failure_type,
+            "business_rule_error",
+            "Native period allocation requires unambiguous month-start budget items.",
+            exit_code=6,
+        )
+    target = float_round(
+        float(parameters["total"]), precision_digits=parameters["rounding"]
+    )
+    current = float_round(
+        sum(record.amount for record in items), precision_digits=parameters["rounding"]
+    )
+    if current == target:
+        return _report_budget_result(
+            budget, company_id, source_id=parameters["account_id"], line_ids=items.ids
+        ), True
+    budget._create_or_update_budget_items(
+        target,
+        parameters["account_id"],
+        parameters["rounding"],
+        parameters["date_from"],
+        parameters["date_to"],
+    )
+    items = item_model.search(domain)
+    if (
+        float_round(
+            sum(record.amount for record in items),
+            precision_digits=parameters["rounding"],
+        )
+        != target
+    ):
+        raise _fail(
+            failure_type,
+            "odoo_write_error",
+            "Odoo did not persist the requested period budget total.",
+            exit_code=6,
+        )
+    return _report_budget_result(
+        budget, company_id, source_id=parameters["account_id"], line_ids=items.ids
+    ), False
+
+
 def _dispatch_allowed(
     env: Any,
     capability_id: str,
@@ -18392,6 +18763,8 @@ def _dispatch_allowed(
     marker: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if capability_id in report_budgets.CAPABILITY_IDS:
+        return _write_report_budget(env, capability_id, parameters, company_id, failure_type)
     if capability_id.startswith("fiscal_year."):
         return _write_fiscal_year(
             env, capability_id, parameters, company_id, failure_type

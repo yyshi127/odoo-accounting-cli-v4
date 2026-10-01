@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/report.budget_item.update.request.schema.json",
+  "title": "report.budget_item.update request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "context",
+    "parameters"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v1"
+    },
+    "request_id": {
+      "$ref": "request.schema.json#/properties/request_id"
+    },
+    "context": {
+      "$ref": "request.schema.json#/$defs/context"
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "budget_item_id",
+        "changes"
+      ],
+      "properties": {
+        "budget_item_id": {
+          "$ref": "report.budget_definition.create.request.schema.json#/$defs/id"
+        },
+        "changes": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "account_id": {
+              "$ref": "report.budget_definition.create.request.schema.json#/$defs/id"
+            },
+            "date": {
+              "$ref": "report.budget_definition.create.request.schema.json#/$defs/date"
+            },
+            "amount": {
+              "$ref": "report.budget_definition.create.request.schema.json#/$defs/amount"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -6,6 +6,7 @@ from hashlib import sha256
 from pathlib import Path
 
 import pytest
+from test_report_budget_writes import PARAMETERS as REPORT_BUDGET_PARAMETERS
 
 from odoo_accounting_cli_v4.capabilities.core_writes import (
     CORE_WRITE_CAPABILITY_IDS,
@@ -822,6 +823,10 @@ PARAMETERS = {
 }
 
 
+PARAMETERS.update(deepcopy(REPORT_BUDGET_PARAMETERS))
+PARAMETERS["report.budget_definition.create"]["sequence"] = 0
+
+
 def _request(capability_id: str) -> dict:
     return {
         "schema_version": "v1",
@@ -838,6 +843,9 @@ def _request(capability_id: str) -> dict:
 
 
 def _key(capability_id: str) -> str:
+    if capability_id in REPORT_BUDGET_PARAMETERS:
+        parameters = validate_core_write_request(capability_id, _request(capability_id))[2]
+        return _expected_idempotency_key(capability_id, parameters, 7)
     if capability_id in {
         "payment_term.create",
         "period.accrual.generate",
@@ -1127,6 +1135,24 @@ def _key(capability_id: str) -> str:
 
 
 def _result(capability_id: str, **changes) -> dict:
+    if capability_id in REPORT_BUDGET_PARAMETERS:
+        parameters = PARAMETERS[capability_id]
+        item = capability_id.startswith("report.budget_item.")
+        creates = capability_id.endswith((".create", ".duplicate"))
+        result = {
+            "model": "account.report.budget.item" if item else "account.report.budget",
+            "id": 900 if creates else parameters["budget_item_id" if item else "budget_definition_id"],
+            "name": None if item else "Fixture budget",
+            "state": "deleted" if capability_id.endswith(".delete") else "recorded" if item else "configured",
+            "company_id": 7, "move_type": None,
+            "source_id": 11 if item or capability_id.endswith(".duplicate") else (
+                101 if capability_id.endswith(".set_total") else None
+            ),
+            "line_ids": [], "partial_reconcile_ids": [],
+            "full_reconcile_id": None, "reconciled": False,
+        }
+        result.update(changes)
+        return result
     parameters = PARAMETERS[capability_id]
     if capability_id in ACCOUNT_TRANSFER_MODEL_WRITES:
         result = {

@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 410
-EXPECTED_ENABLED_CAPABILITY_COUNT = 395
+EXPECTED_CAPABILITY_COUNT = 418
+EXPECTED_ENABLED_CAPABILITY_COUNT = 403
 EXPECTED_IMPLEMENTED_READ_COUNT = 215
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 180
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 188
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 337
-EXPECTED_DEGRADED_CAPABILITY_COUNT = 58
-EXPECTED_SCHEMA_COUNT = 796
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 340
+EXPECTED_DEGRADED_CAPABILITY_COUNT = 63
+EXPECTED_SCHEMA_COUNT = 812
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "a64154567e29da24bd822a008df497ef1733e5318ec96729abd8f8101a733ee2"
+    "80ab24fab163c1b141449a591e7ea5dff2ca783c52c696c524831b8396214dd5"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -335,7 +335,13 @@ DRAFT_DOCUMENT_MAINTENANCE_WRITES = {
     "journal_entry.duplicate",
     "journal_entry.delete",
 }
-IMPLEMENTED_WRITES = {
+REPORT_BUDGET_WRITES = {
+    "report.budget_definition.create", "report.budget_definition.update",
+    "report.budget_definition.duplicate", "report.budget_definition.delete",
+    "report.budget_item.create", "report.budget_item.update", "report.budget_item.delete",
+    "report.budget_account_period.set_total",
+}
+IMPLEMENTED_WRITES = REPORT_BUDGET_WRITES | {
     "account.group.create",
     "account.group.update",
     "account.tag.archive",
@@ -2623,6 +2629,10 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
     )
 
     assert set(CORE_WRITE_MODELS) == IMPLEMENTED_WRITES
+    extended_modules.update({
+        capability_id: ["account", "account_reports", "base"]
+        for capability_id in REPORT_BUDGET_WRITES
+    })
     assert set(CORE_WRITE_ACCESS) == IMPLEMENTED_WRITES
     assert set(CORE_WRITE_GROUPS) == IMPLEMENTED_WRITES
     for capability_id in IMPLEMENTED_WRITES:
@@ -2692,7 +2702,10 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
         }:
             assert descriptor["status"]["value"] == "degraded"
             assert descriptor["status"]["reason_code"] == "database_global_record_scope"
-        elif capability_id in {"product.create", "product.duplicate"}:
+        elif capability_id in {
+            "product.create", "product.duplicate", "report.budget_definition.create",
+            "report.budget_definition.duplicate", "report.budget_item.create",
+        }:
             assert descriptor["status"]["value"] == "degraded"
             assert (
                 descriptor["status"]["reason_code"]
@@ -2734,6 +2747,8 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             )
         elif capability_id in {
             "analytic.line.delete",
+            "report.budget_definition.delete",
+            "report.budget_item.delete",
             "account.return.delete",
             "account.transfer_model.delete",
             "bank.statement.delete",
@@ -2964,6 +2979,25 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             assert descriptor["tests"]["integration"]["references"] == [
                 "tests/integration/test_account_transfer_model_write_batch_live.py"
             ]
+            continue
+        if capability_id in REPORT_BUDGET_WRITES:
+            assert descriptor["tests"]["unit"]["status"] == "implemented"
+            assert descriptor["tests"]["unit"]["references"] == [
+                "tests/unit/test_report_budget_writes.py"
+            ]
+            assert descriptor["tests"]["integration"] == {
+                "status": "implemented",
+                "references": [
+                    "tests/integration/test_report_budget_write_batch_live.py"
+                ],
+                "reason": (
+                    "The guarded shared smoke passed both isolated aliases through the "
+                    "public CLI as uid 5 with su=False, exercising all eight report-budget "
+                    "writes, two readbacks, six immediate replays, company isolation, native "
+                    "monthly allocation/copy/cascade deletion, and fresh-cursor business-data "
+                    "and temporary-group rollback verification."
+                ),
+            }
             continue
         if capability_id in DRAFT_DOCUMENT_MAINTENANCE_WRITES:
             assert descriptor["tests"]["unit"]["status"] == "implemented"
