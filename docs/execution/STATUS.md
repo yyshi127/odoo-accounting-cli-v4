@@ -1,5 +1,29 @@
 # Execution status
 
+## Daily-core first-phase acceptance passed — 2026-10-02
+
+The user-approved S01–S12 workflows passed in both isolated aliases as ordinary
+UID5, su=False, company1, without temporary business-user group grants. One shared
+native test passed110.64s; all fixtures and configuration snapshots were checked
+with fresh-cursor rollback. Local/server19 helper units passed. This adds no
+command: counts remain559 registered/544 handlers/1094 schemas.
+
+The shared workflow exercises53 in-process public CLI/JSON capabilities and two
+real subprocess CLI/bridge read samples. Independent posted-AML/SQL-view oracles
+check trial-balance and analysis amounts; nine nonempty reports match native
+lines. PDF format/hash and XLSX nonempty amounts pass. Owned bank/tax/report
+configuration is a transaction-only fixture prerequisite, not proof that existing
+business journals or user configuration already fit. No external durable-write
+or whole544-command E2E claim. Two earlier helper failures were repaired and their
+fully rolled-back evidence retained separately.
+
+Final four test files match server bytes;1207 product files,nine reused helpers,
+six native files and three service PID/restart baselines are unchanged. See
+[ACCOUNTING_ACCEPTANCE.md](ACCOUNTING_ACCEPTANCE.md) and its current test/evidence
+links. Daily-core first phase is complete; stop proactive optional-field growth.
+Nonzero assets,automatic multi-period deferral,final locking,statutory tax closing
+and unified control/delivery remain unfinished. Overall goal stays active.
+
 ## Completion-boundary audit — 2026-10-02
 
 [ACCOUNTING_ACCEPTANCE.md](ACCOUNTING_ACCEPTANCE.md) records a proposed finite

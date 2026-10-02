@@ -2,6 +2,18 @@
 
 Updated: 2026-10-02 (Asia/Shanghai)
 
+Daily-core first-phase S01–S12 acceptance is now complete in both isolated aliases:
+one shared native test passed110.64s as UID5/su=False/company1; fresh rollback and
+unchanged user/group/configuration snapshots passed. Local/server19 helper units
+passed. Four new authored test files match server bytes; product code,registry,
+native source and service baselines are unchanged. No new command was added.
+The shared test covers53 in-process CLI/JSON capabilities plus two external
+read-only CLI/bridge samples, not544-command E2E or external durable writes.
+Owned bank/tax fixtures are prerequisites,not production configuration guarantees.
+Stop optional-field capability expansion. Continue only explicit later gaps or
+the original unified-control/delivery stage; do not mark the overall goal complete.
+Current details and limitations are in the acceptance document and STATUS below.
+
 Completion planning now has a finite workflow/evidence crosswalk in
 [ACCOUNTING_ACCEPTANCE.md](ACCOUNTING_ACCEPTANCE.md). The user confirmed
 daily-core acceptance first; nonzero assets, multi-period automatic deferral,
