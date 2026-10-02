@@ -8,6 +8,10 @@ from pathlib import Path
 import pytest
 from test_account_processing_batch import PARAMETERS as ACCOUNT_PROCESSING_PARAMETERS
 from test_account_processing_batch import result as account_processing_result
+from test_accounting_workflows_batch import (
+    NEW_PARAMETERS as ACCOUNTING_WORKFLOWS_PARAMETERS,
+)
+from test_accounting_workflows_batch import result as accounting_workflows_result
 from test_analytic_processing_batch import PARAMETERS as ANALYTIC_PROCESSING_PARAMETERS
 from test_analytic_processing_batch import result as analytic_processing_result
 from test_company_processing_batch import PARAMETERS as COMPANY_PROCESSING_PARAMETERS
@@ -870,6 +874,7 @@ PARAMETERS.update(deepcopy(ANALYTIC_PROCESSING_PARAMETERS))
 PARAMETERS.update(deepcopy(COMPANY_PROCESSING_PARAMETERS))
 PARAMETERS.update(deepcopy(JOURNAL_ITEM_PROCESSING_PARAMETERS))
 PARAMETERS.update(deepcopy(INVOICE_PREPARATION_PARAMETERS))
+PARAMETERS.update(deepcopy(ACCOUNTING_WORKFLOWS_PARAMETERS))
 PARAMETERS.update(deepcopy(JOURNAL_PROCESSING_PARAMETERS))
 PARAMETERS.update(deepcopy(ACCOUNT_PROCESSING_PARAMETERS))
 PARAMETERS.update(deepcopy(TAX_PROCESSING_PARAMETERS))
@@ -900,6 +905,9 @@ def _request(capability_id: str) -> dict:
 
 
 def _key(capability_id: str) -> str:
+    if capability_id in ACCOUNTING_WORKFLOWS_PARAMETERS:
+        parameters = validate_core_write_request(capability_id, _request(capability_id))[2]
+        return _expected_idempotency_key(capability_id, parameters, 7) or f"smoke:{capability_id}:0001"
     if capability_id in INVOICE_PREPARATION_PARAMETERS:
         parameters = validate_core_write_request(capability_id, _request(capability_id))[2]
         return _expected_idempotency_key(capability_id, parameters, 7)
@@ -1201,6 +1209,10 @@ def _key(capability_id: str) -> str:
 
 
 def _result(capability_id: str, **changes) -> dict:
+    if capability_id in ACCOUNTING_WORKFLOWS_PARAMETERS:
+        result = accounting_workflows_result(capability_id, PARAMETERS[capability_id])
+        result.update(changes)
+        return result
     if capability_id in INVOICE_PREPARATION_PARAMETERS:
         result = invoice_preparation_result(capability_id, PARAMETERS[capability_id])
         result.update(changes)
@@ -2574,6 +2586,7 @@ def test_account_return_results_reject_non_empty_line_ids(capability_id: str) ->
 
 def _success_response(capability_id: str) -> dict:
     result = _result(capability_id)
+    items = result.get("items", [result])
     return {
         "schema_version": "v1",
         "request_id": REQUEST_ID,
@@ -2587,8 +2600,11 @@ def _success_response(capability_id: str) -> dict:
             "database": "odoo_cli_v4_dev",
             "company_id": 7,
             "user_id": 42,
-            "model": result["model"],
+            "model": items[0]["model"],
             "record_ids": (
+                [item["id"] for item in items]
+                if capability_id == "invoice.reverse_and_reissue"
+                else
                 result["line_ids"]
                 if capability_id
                 in {

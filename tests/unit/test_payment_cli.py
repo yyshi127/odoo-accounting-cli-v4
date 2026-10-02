@@ -76,6 +76,7 @@ def _payment_detail() -> dict:
         "invoice_ids": [document],
         "reconciled_invoices": [document],
         "reconciled_bills": [],
+        "reconciled_bank_transactions": [],
     }
 
 

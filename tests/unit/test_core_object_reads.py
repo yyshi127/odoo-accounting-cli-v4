@@ -427,6 +427,7 @@ def _item(capability_id: str, record_id: int = 31) -> dict:
         return {
             "id": record_id,
             "company_id": 7,
+            "statement_id": None,
             "date": "2026-08-24",
             "payment_date": None,
             "name": "Customer transfer",

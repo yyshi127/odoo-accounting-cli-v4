@@ -4,9 +4,9 @@ Updated: 2026-10-02 (Asia/Shanghai)
 
 ## Current authoritative count — 2026-10-02
 
-540 registered IDs;525 implemented handlers (248 reads,277 writes);
-1056 schemas;451 unconfigured,74 degraded,15 disabled. Enabled integrations:
-522 implemented,two planned,one failed. Latest invoice-preparation checkpoint
+544 registered IDs;529 implemented handlers (248 reads,281 writes);
+1064 schemas;455 unconfigured,74 degraded,15 disabled. Enabled integrations:
+526 implemented,two planned,one failed. Latest accounting-workflow checkpoint
 at the end is authoritative; totals are not a full accounting denominator,
 completion percentage or unrestricted ordinary-user permission guarantee.
 
@@ -5966,3 +5966,60 @@ accounting gaps after checking existing coverage; the overall goal is not comple
 
 Registry file SHA256 fd2b4b24fcb0ccd313c0c2cf11be5b04335e4d5588e1202fbfc9eea3f282dd3a;
 canonical registry SHA256 8e534f9699b3a6b788f47f6c19c07b29e382d90854a315985f19bba720e9afc9.
+
+## Latest checkpoint — native accounting workflows, 2026-10-02
+
+Authoritative:544 registered;529 implemented handlers=248 reads+281 writes;
+1064 schemas;455 unconfigured/74 degraded/15 disabled. Enabled integration
+evidence:526 implemented/two planned/one failed. Four new IDs and six existing
+business extensions, not ten new IDs. Bank list/get statement projection is
+a mechanical output change. See the current STATUS section for scope/limits.
+
+New IDs:invoice.reverse_and_reissue;company.default_accounts.assign;
+company.bank_defaults.assign;company.discount_allocation_accounts.assign.
+Extensions:journal_entry.lines.update foreign currency/amount;reconciliation.undo
+match_group;bank.transaction.search statement_id;payment.get actual native bank
+matches;company.processing_settings.get six account settings;journal.sequence_policy.update
+purchase is_self_billing. SDK/bridge/schema must deploy together; old strict
+response-validator compatibility is not claimed.
+
+One shared real CLI/native ORM smoke passed both isolated aliases32.80s,
+UID5/su=False/company1. All observed capability checks and fresh rollback of
+objects, exact caller/native groups, both companies' scalar/M2O settings,
+all ir.defaults and currency/rate state passed. Independent synthetic bank
+prerequisites and necessary native configuration roles are transaction-only.
+No native source patch, caller sudo, existing bank reconfiguration or service
+restart. Unpaid reissue and immediate two-record graph replay are accepted;
+prior-paid reissue and concurrent exactly-once are not. Match-group replay
+may shrink after undo and reflects current native state, not an operation store.
+
+Local44 new cases7.55s, acceptance-registry2 cases14.02s; final server47 selected
+cases18.73s. Earlier selected evidence:895 affected reads/runtime;220 bank/payment
+across217+3 repaired fixture cases;eight generic writes;19 registry across16+3.
+These are scoped/combined passing runs, not an entire test-suite claim.
+Four failed native fixture/helper attempts are retained16.40/12.56/12.99/27.51s.
+The fourth failed attempt finished DEV fresh checks but E2E later snapshots were
+not reached; only the final32.80s run is two-alias acceptance.
+
+Recoverable CLI deployment:42 exact initial files (32 existing backups/10 new),
+four one-file fixture repairs, then four final metadata/SDK/test files.
+Every overwrite checks prior hashes; all42 final local/server hashes match.
+Public docs are local/GitHub only; server document overlays stay untouched.
+Services active; fresh-baseline process IDs/restart counts unchanged.
+Disk4.98 GiB free/94% used, no cleanup. Changed42-file privacy findings zero;
+13 pre-existing Ruff diagnostics, none introduced. Historical document findings
+are not erased or represented as a clean-tree claim.
+
+Continue capability-first concrete accounting gaps, verifying installed native
+models and existing coverage before adding a small batch. Do not multiply IDs
+with aliases or expand controls. Do not re-run this closed native workflow merely
+to inflate evidence. Still pending:two actual external sends;asset.validate native
+addon defect. Debit-note addon absent; installing or repairing native addons
+requires new authority. Native cashbasis/exchange undo lifecycles, all ancestry/
+currency/localization/lock/hash paths and all setting consumers remain unclaimed.
+The installed stock_account category-default override does not call super;
+the live product test verifies company fallback, not automatic category-default
+propagation from assignment.
+
+Registry file SHA256 77e61d0662284448a94b2a0b062055c0e4b8f3b0eeb2eebe61ee31106de5fa35;
+canonical registry SHA256 62843210c9338fff6e489ae385b8e72be28b666254d408e191b0146249aac2ef.

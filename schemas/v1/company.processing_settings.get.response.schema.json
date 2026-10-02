@@ -135,7 +135,13 @@
         "link_qr_code",
         "qr_code",
         "quick_edit_mode",
-        "tax_calculation_rounding_method"
+        "tax_calculation_rounding_method",
+        "expense_account_id",
+        "income_account_id",
+        "account_journal_suspense_account_id",
+        "transfer_account_id",
+        "account_discount_expense_allocation_id",
+        "account_discount_income_allocation_id"
       ],
       "properties": {
         "id": {
@@ -253,6 +259,48 @@
             "round_globally",
             "round_per_line"
           ]
+        },
+        "expense_account_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "income_account_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "account_journal_suspense_account_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "transfer_account_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "account_discount_expense_allocation_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "account_discount_income_allocation_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
         }
       }
     }

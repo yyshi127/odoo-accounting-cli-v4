@@ -1465,6 +1465,7 @@ def _valid_bank_item(item: Any, company_id: int) -> bool:
         == {
             "id",
             "company_id",
+            "statement_id",
             "date",
             "payment_date",
             "name",
@@ -1478,6 +1479,7 @@ def _valid_bank_item(item: Any, company_id: int) -> bool:
         }
         and _valid_id(item["id"])
         and item["company_id"] == company_id
+        and (item["statement_id"] is None or _valid_id(item["statement_id"]))
         and _canonical_date(item["date"])
         and _optional_date(item["payment_date"])
         and _nonempty(item["name"])

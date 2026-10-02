@@ -795,6 +795,7 @@ _REQUIRED_MODELS = {
     "bank.transaction.get": (
         "res.company",
         "account.bank.statement.line",
+        "account.bank.statement",
         "account.move",
         "account.journal",
         "res.partner",
@@ -2481,6 +2482,7 @@ def _raw_get_rows(
             "bank.transaction.get": (
                 "id",
                 "company_id",
+                "statement_id",
                 "payment_ref",
                 "partner_id",
                 "journal_id",
@@ -2679,6 +2681,11 @@ def _normalize_bank(
 ) -> list[dict[str, Any]]:
     partner_ids = {_reference_id(row.get("partner_id")) for row in rows}
     partner_ids.discard(None)
+    statement_ids = {_reference_id(row.get("statement_id")) for row in rows}
+    statement_ids.discard(None)
+    statements = _related_rows(env, "account.bank.statement", statement_ids, ("company_id",))
+    if any(_reference_id(statement["company_id"]) != company_id for statement in statements.values()):
+        raise ValueError("bank statement outside company")
     journal_ids = {_reference_id(row.get("journal_id")) for row in rows}
     currency_ids = {_reference_id(row.get("currency_id")) for row in rows}
     move_ids = {_reference_id(row.get("move_id")) for row in rows}
@@ -2729,6 +2736,7 @@ def _normalize_bank(
             {
                 "id": row["id"],
                 "company_id": company_id,
+                "statement_id": _reference_id(row["statement_id"]),
                 "date": _date_string(move["date"]),
                 "payment_date": min(payment_dates) if payment_dates else None,
                 "name": _optional_text(row["payment_ref"]) or "/",

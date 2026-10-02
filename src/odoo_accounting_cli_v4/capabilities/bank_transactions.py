@@ -22,6 +22,7 @@ _ROW_FIELDS = frozenset(
     {
         "id",
         "company_id",
+        "statement_id",
         "date",
         "payment_date",
         "name",
@@ -216,6 +217,7 @@ def validate_bank_transaction_search_request(
         "date_to",
         "journal_id",
         "partner_id",
+        "statement_id",
         "reconciled",
         "query",
         "limit",
@@ -240,7 +242,7 @@ def validate_bank_transaction_search_request(
     if date_from is not None and date_to is not None and date_from > date_to:
         raise _invalid("parameters.date_from cannot be after parameters.date_to.")
     identifiers: dict[str, int | None] = {}
-    for field in ("journal_id", "partner_id"):
+    for field in ("journal_id", "partner_id", "statement_id"):
         value = parameters.get(field)
         if value is not None and not _valid_id(value):
             raise _invalid(f"parameters.{field} must be null or a positive integer.")
@@ -263,6 +265,8 @@ def validate_bank_transaction_search_request(
         "reconciled": reconciled,
         "query": query,
     }
+    if identifiers["statement_id"] is not None:
+        filters["statement_id"] = identifiers["statement_id"]
     return request_id, context, filters, limit, cursor
 
 
@@ -411,6 +415,7 @@ def _valid_row(row: Any, *, company_id: int) -> bool:
         and set(row) == _ROW_FIELDS
         and _valid_id(row["id"])
         and row["company_id"] == company_id
+        and (row["statement_id"] is None or _valid_id(row["statement_id"]))
         and _is_date(row["date"])
         and (row["payment_date"] is None or _is_date(row["payment_date"]))
         and _is_nullable_text(row["name"])
@@ -589,6 +594,10 @@ def search_bank_transactions(
             or (
                 filters["reconciled"] is not None
                 and row["reconciled"] is not filters["reconciled"]
+            )
+            or (
+                filters.get("statement_id") is not None
+                and row["statement_id"] != filters["statement_id"]
             )
         ):
             raise _failed("Odoo returned a bank transaction outside the filters.")

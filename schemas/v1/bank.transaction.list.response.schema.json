@@ -84,7 +84,7 @@
     "item": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "company_id", "date", "payment_date", "name", "reference", "partner", "journal", "amount", "currency", "move", "reconciled"],
+      "required": ["id", "company_id", "date", "payment_date", "name", "reference", "partner", "journal", "amount", "currency", "move", "reconciled", "statement_id"],
       "properties": {
         "id": {"type": "integer", "minimum": 1},
         "company_id": {"type": "integer", "minimum": 1},
@@ -106,7 +106,8 @@
         "amount": {"$ref": "#/$defs/decimal"},
         "currency": {"$ref": "#/$defs/currency"},
         "move": {"$ref": "#/$defs/move"},
-        "reconciled": {"type": "boolean"}
+        "reconciled": {"type": "boolean"},
+        "statement_id": {"type": ["integer", "null"], "minimum": 1}
       }
     },
     "data": {

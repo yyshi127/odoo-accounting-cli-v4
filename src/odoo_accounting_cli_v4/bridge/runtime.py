@@ -646,6 +646,7 @@ _PAYMENT_GET_MODELS = (
     "account.move.line",
     "account.account",
     "account.partial.reconcile",
+    "account.bank.statement.line",
 )
 _OPEN_ITEM_ACTION_SIDES = {
     "account.move.line.receivable.open_items.search_page": (
@@ -698,6 +699,7 @@ _BANK_TRANSACTION_MODELS = (
     "res.partner",
     "res.currency",
     "account.payment",
+    "account.bank.statement",
 )
 _ACTIONS = {
     _CORE_OBJECT_READ_ACTION,
@@ -4504,7 +4506,7 @@ def _dispatch_payment_get(
         )
     company_scope = _payment_company_scope(env, company_id)
     graph_scope = _payment_graph_scope(env, company_id, available_company_ids)
-    fields = [*_PAYMENT_FIELDS, "invoice_ids"]
+    fields = [*_PAYMENT_FIELDS, "invoice_ids", "reconciled_statement_line_ids"]
     rows = (
         env["account.payment"]
         .with_context(active_test=False, allowed_company_ids=graph_scope)
@@ -4535,6 +4537,9 @@ def _dispatch_payment_get(
         raise _payment_runtime_failure()
     raw = dict(rows[0])
     invoice_ids = set(_many2many_ids(raw.pop("invoice_ids")))
+    statement_line_ids = set(
+        _many2many_ids(raw.pop("reconciled_statement_line_ids"))
+    )
     related = _payment_related(env, [raw], company_id, company_scope)
     payment = _payment_common(raw, related, company_id, company_scope)
     if payment["id"] != payload["payment_id"]:
@@ -4552,6 +4557,28 @@ def _dispatch_payment_get(
     payment["invoice_ids"] = direct_documents
     payment["reconciled_invoices"] = reconciled_invoices
     payment["reconciled_bills"] = reconciled_bills
+    statement_lines = _payment_read_index(
+        env,
+        "account.bank.statement.line",
+        statement_line_ids,
+        [
+            ("id", "in", sorted(statement_line_ids)),
+            ("company_id", "in", graph_scope),
+        ],
+        ("id", "company_id"),
+        company_id,
+        allowed_company_ids=graph_scope,
+    )
+    payment["reconciled_bank_transactions"] = []
+    for record_id in sorted(statement_lines):
+        reference_company_id = _reference_id(
+            statement_lines[record_id]["company_id"]
+        )
+        if reference_company_id not in graph_scope:
+            raise _payment_runtime_failure()
+        payment["reconciled_bank_transactions"].append(
+            {"id": record_id, "company_id": reference_company_id}
+        )
     return {
         "user_id": env.uid,
         "company_visible": company_visible,
@@ -5043,14 +5070,18 @@ def _bank_transaction_payload_is_valid(payload: Any) -> bool:
     if "filters" not in payload:
         return True
     filters = payload["filters"]
-    if not isinstance(filters, dict) or set(filters) != {
+    filter_fields = {
         "date_from",
         "date_to",
         "journal_id",
         "partner_id",
         "reconciled",
         "query",
-    }:
+    }
+    if not isinstance(filters, dict) or set(filters) not in (
+        filter_fields,
+        filter_fields | {"statement_id"},
+    ):
         return False
     for field in ("date_from", "date_to"):
         if filters[field] is not None and not _is_canonical_date(filters[field]):
@@ -5061,8 +5092,8 @@ def _bank_transaction_payload_is_valid(payload: Any) -> bool:
         and filters["date_from"] > filters["date_to"]
     ):
         return False
-    for field in ("journal_id", "partner_id"):
-        value = filters[field]
+    for field in ("journal_id", "partner_id", "statement_id"):
+        value = filters.get(field)
         if value is not None and (
             not isinstance(value, int) or isinstance(value, bool) or value <= 0
         ):
@@ -5084,6 +5115,8 @@ def _bank_transaction_domain(
 ) -> list[Any]:
     domains: list[list[Any]] = [[("company_id", "=", company_id)]]
     if filters is not None:
+        if filters.get("statement_id") is not None:
+            domains.append([("statement_id", "=", filters["statement_id"])])
         for filter_name, model_field, operator in (
             ("date_from", "date", ">="),
             ("date_to", "date", "<="),
@@ -5403,6 +5436,33 @@ def _dispatch_bank_transaction_search(
             "rows": [],
         }
 
+    statement_id = (payload.get("filters") or {}).get("statement_id")
+    if statement_id is not None:
+        statements = (
+            env["account.bank.statement"]
+            .with_context(active_test=False, allowed_company_ids=[company_id])
+            .search_read(
+                [("id", "=", statement_id), ("company_id", "=", company_id)],
+                fields=["id", "company_id"],
+                limit=1,
+                order="id",
+            )
+        )
+        if not statements:
+            raise RuntimeFailure(
+                "record_not_found",
+                "The requested bank statement was not found.",
+                exit_code=4,
+            )
+        if (
+            len(statements) != 1
+            or statements[0].get("id") != statement_id
+            or _reference_id(statements[0].get("company_id")) != company_id
+        ):
+            raise RuntimeFailure(
+                "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+            )
+
     raw_rows = (
         env["account.bank.statement.line"]
         .with_context(active_test=False, allowed_company_ids=[company_id])
@@ -5413,6 +5473,7 @@ def _dispatch_bank_transaction_search(
             fields=[
                 "id",
                 "company_id",
+                "statement_id",
                 "payment_ref",
                 "partner_id",
                 "journal_id",
@@ -5431,7 +5492,9 @@ def _dispatch_bank_transaction_search(
     currency_ids: set[int] = set()
     move_ids: set[int] = set()
     payment_ids: set[int] = set()
+    statement_ids: set[int] = set()
     for row in raw_rows:
+        linked_statement_id = _reference_id(row.get("statement_id"))
         partner_id = _reference_id(row.get("partner_id"))
         journal_id = _reference_id(row.get("journal_id"))
         currency_id = _reference_id(row.get("currency_id"))
@@ -5461,6 +5524,8 @@ def _dispatch_bank_transaction_search(
         currency_ids.add(currency_id)
         move_ids.add(move_id)
         payment_ids.update(raw_payment_ids)
+        if linked_statement_id is not None:
+            statement_ids.add(linked_statement_id)
 
     partners = _related_rows(
         env, "res.partner", partner_ids, ("complete_name",), company_id
@@ -5483,6 +5548,16 @@ def _dispatch_bank_transaction_search(
     payments = _related_rows(
         env, "account.payment", payment_ids, ("date", "company_id"), company_id
     )
+    statements = _related_rows(
+        env, "account.bank.statement", statement_ids, ("company_id",), company_id
+    )
+    if any(
+        _reference_id(statement["company_id"]) != company_id
+        for statement in statements.values()
+    ):
+        raise RuntimeFailure(
+            "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+        )
     payment_dates: dict[int, str] = {}
     for payment_id, payment in payments.items():
         if _reference_id(payment["company_id"]) != company_id:
@@ -5529,6 +5604,7 @@ def _dispatch_bank_transaction_search(
             {
                 "id": row_id,
                 "company_id": company_id,
+                "statement_id": _reference_id(row["statement_id"]),
                 "date": _date_string(move["date"]),
                 "payment_date": min(dates) if dates else None,
                 "name": _optional_string(row["payment_ref"]),

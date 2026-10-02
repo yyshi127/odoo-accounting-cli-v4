@@ -113,6 +113,7 @@ def _detail(record_id: int = 20) -> dict:
         invoice_ids=[_document(200)],
         reconciled_invoices=[_document(200)],
         reconciled_bills=[_document(300, "in_invoice")],
+        reconciled_bank_transactions=[],
     )
     return row
 

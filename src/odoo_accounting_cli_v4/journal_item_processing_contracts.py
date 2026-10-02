@@ -28,7 +28,7 @@ PARAMETER_KEYS = {
     "journal_entry.lines.update": {"move_id", "lines"},
 }
 CAPABILITY_IDS = frozenset(PARAMETER_KEYS)
-ENTRY_FIELDS = {"name", "account_id", "partner_id", "debit", "credit", "date_maturity", "analytic_distribution"}
+ENTRY_FIELDS = {"name", "account_id", "partner_id", "debit", "credit", "currency_id", "amount_currency", "date_maturity", "analytic_distribution"}
 DETAIL_FIELDS = (
     "id", "move_id", "company_id", "parent_state", "move_type", "display_type",
     "account_id", "product_id", "product_uom_id", "deductible_amount", "date_maturity",
@@ -81,15 +81,21 @@ def _changes(values: Any) -> dict[str, Any]:
     if not isinstance(values, dict) or not values or not set(values) <= ENTRY_FIELDS:
         raise ValueError("Entry updates require a nonempty fixed-field patch.")
     result = dict(values)
+    if "currency_id" in values and "amount_currency" not in values:
+        raise ValueError("Changing line currency also requires amount_currency.")
     for field, value in values.items():
         if field == "name" and not (isinstance(value, str) and 1 <= len(value) <= 256 and value == value.strip()):
             raise ValueError("Line name must be a trimmed 1-256 character string.")
         if field == "account_id" and not valid_id(value) or field == "partner_id" and not optional_id(value):
             raise ValueError("Invalid accounting-line reference.")
+        if field == "currency_id" and not valid_id(value):
+            raise ValueError("A positive currency_id is required.")
         if field == "date_maturity" and not (value is None or valid_date(value)):
             raise ValueError("Maturity must be null or an ISO date.")
         if field in {"debit", "credit"}:
             result[field] = amount_text(value)
+        if field == "amount_currency":
+            result[field] = amount_text(value, signed=True)
         if field == "analytic_distribution":
             result[field] = distribution(value)
     return result

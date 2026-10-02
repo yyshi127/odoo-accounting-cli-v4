@@ -90,7 +90,21 @@
                   },
                   "analytic_distribution": {
                     "$ref": "invoice.lines.replace.request.schema.json#/$defs/invoice_line/properties/analytic_distribution"
+                  },
+                  "currency_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "amount_currency": {
+                    "type": "string",
+                    "maxLength": 256,
+                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
                   }
+                },
+                "dependentRequired": {
+                  "currency_id": [
+                    "amount_currency"
+                  ]
                 }
               }
             }

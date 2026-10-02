@@ -17,6 +17,7 @@
         "date_to": {"type": ["string", "null"], "format": "date", "default": null},
         "journal_id": {"type": ["integer", "null"], "minimum": 1, "default": null},
         "partner_id": {"type": ["integer", "null"], "minimum": 1, "default": null},
+        "statement_id": {"type": ["integer", "null"], "minimum": 1, "default": null},
         "reconciled": {"type": ["boolean", "null"], "default": null},
         "query": {
           "oneOf": [

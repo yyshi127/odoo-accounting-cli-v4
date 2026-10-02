@@ -3526,6 +3526,7 @@
         "models": [
           "res.company",
           "account.bank.statement.line",
+          "account.bank.statement",
           "account.move",
           "account.journal",
           "res.partner",
@@ -3564,6 +3565,7 @@
         "acl": [
           "res.company:read",
           "account.bank.statement.line:read",
+          "account.bank.statement:read",
           "account.move:read",
           "account.journal:read",
           "res.partner:read",
@@ -3582,19 +3584,16 @@
         "unit": {
           "status": "implemented",
           "references": [
-            "tests/unit/test_core_object_reads.py",
-            "tests/unit/test_core_object_reads_bridge.py",
-            "tests/unit/test_core_object_reads_runtime.py",
-            "tests/unit/test_core_object_read_cli.py"
+            "tests/unit/test_accounting_workflows_batch.py"
           ],
-          "reason": "Unit tests cover the closed request and response, cursor binding, fixed bridge action, company scope, ACL gates, ORM normalization, and CLI dispatch."
+          "reason": "Closed typed inputs, schema and target binding; compatible legacy branches remain covered."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_core_object_read_batch_live.py"
+            "tests/integration/test_accounting_workflows_batch_live.py"
           ],
-          "reason": "The shared live read-only smoke verifies the capability against both dedicated isolated database aliases as the ordinary accounting user."
+          "reason": "Shared native CLI workflow: both isolated aliases passed32.80s as uid5/su=False/company1. Verified sale/purchase reversal plus draft reissue and replay, native foreign-currency line edits, full/partial matching-group leaf undo and shrinking replay, statement-scoped bank pagination and actual payment bank matches, three company account assignments/clearing/readback and product fallback, purchase self-billing sequence. Native configuration roles and independent bank fixtures exist only in the test transaction. Fresh-cursor objects, caller groups, company settings, defaults and currency/rate rollback checks passed. Bank response additions require synchronized SDK/bridge/schema. No business DB, native source/addon, service, external-send or operation-store changes. Prior-paid reissue, cashbasis/exchange undo workflows, all ancestry/currency/localization/lock/hash branches, all setting consumers and concurrent exactly-once are not claimed."
         },
         "golden": {
           "status": "planned",
@@ -3656,7 +3655,8 @@
           "account.journal",
           "res.partner",
           "res.currency",
-          "account.payment"
+          "account.payment",
+          "account.bank.statement"
         ],
         "wizards": [],
         "report_handlers": [],
@@ -3694,7 +3694,8 @@
           "account.journal:read",
           "res.partner:read",
           "res.currency:read",
-          "account.payment:read"
+          "account.payment:read",
+          "account.bank.statement:read"
         ]
       },
       "strategies": {
@@ -3708,19 +3709,16 @@
         "unit": {
           "status": "implemented",
           "references": [
-            "tests/unit/test_bank_transactions.py",
-            "tests/unit/test_bank_transaction_bridge.py",
-            "tests/unit/test_capability_batch_runtime.py",
-            "tests/unit/test_capability_batch_cli.py"
+            "tests/unit/test_accounting_workflows_batch.py"
           ],
-          "reason": "Unit tests cover the closed request and response, stable date/id cursor, fixed bridge action, ORM normalization, and CLI dispatch."
+          "reason": "Closed typed inputs, schema and target binding; compatible legacy branches remain covered."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_read_capability_batch_live.py"
+            "tests/integration/test_accounting_workflows_batch_live.py"
           ],
-          "reason": "The shared live integration test verifies the capability against both dedicated synthetic database aliases without committing database changes."
+          "reason": "Shared native CLI workflow: both isolated aliases passed32.80s as uid5/su=False/company1. Verified sale/purchase reversal plus draft reissue and replay, native foreign-currency line edits, full/partial matching-group leaf undo and shrinking replay, statement-scoped bank pagination and actual payment bank matches, three company account assignments/clearing/readback and product fallback, purchase self-billing sequence. Native configuration roles and independent bank fixtures exist only in the test transaction. Fresh-cursor objects, caller groups, company settings, defaults and currency/rate rollback checks passed. Bank response additions require synchronized SDK/bridge/schema. No business DB, native source/addon, service, external-send or operation-store changes. Prior-paid reissue, cashbasis/exchange undo workflows, all ancestry/currency/localization/lock/hash branches, all setting consumers and concurrent exactly-once are not claimed."
         },
         "golden": {
           "status": "planned",
@@ -3893,33 +3891,127 @@
       "handler_key": "core_write"
     },
     "bank.transaction.search": {
-      "summary": {"zh_CN": "搜索银行流水", "en_US": "Search bank transactions"},
+      "summary": {
+        "zh_CN": "搜索银行流水",
+        "en_US": "Search bank transactions"
+      },
       "domain": "bank_reconciliation",
       "access": "read",
       "source": {
-        "modules": ["account"],
-        "models": ["res.company", "account.bank.statement.line", "account.move", "account.journal", "res.partner", "res.currency", "account.payment"],
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "res.company",
+          "account.bank.statement.line",
+          "account.move",
+          "account.journal",
+          "res.partner",
+          "res.currency",
+          "account.payment",
+          "account.bank.statement"
+        ],
         "wizards": [],
         "report_handlers": [],
-        "locations": ["_references/base/models/res_company.py", "account/models/account_bank_statement_line.py", "account/models/account_move.py", "account/models/account_journal.py", "_references/base/models/res_partner.py", "_references/base/models/res_currency.py", "account/models/account_payment.py"]
+        "locations": [
+          "_references/base/models/res_company.py",
+          "account/models/account_bank_statement_line.py",
+          "account/models/account_move.py",
+          "account/models/account_journal.py",
+          "_references/base/models/res_partner.py",
+          "_references/base/models/res_currency.py",
+          "account/models/account_payment.py"
+        ]
       },
-      "schemas": {"request": "schemas/v1/bank.transaction.search.request.schema.json", "response": "schemas/v1/bank.transaction.search.response.schema.json"},
+      "schemas": {
+        "request": "schemas/v1/bank.transaction.search.request.schema.json",
+        "response": "schemas/v1/bank.transaction.search.response.schema.json"
+      },
       "requirements": {
-        "modules": ["account"],
-        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
         "company": "required",
-        "groups": ["account.group_account_readonly"],
-        "acl": ["res.company:read", "account.bank.statement.line:read", "account.move:read", "account.journal:read", "res.partner:read", "res.currency:read", "account.payment:read"]
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.bank.statement.line:read",
+          "account.move:read",
+          "account.journal:read",
+          "res.partner:read",
+          "res.currency:read",
+          "account.payment:read",
+          "account.bank.statement:read"
+        ]
       },
-      "strategies": {"preview": "not_applicable_read_only", "execute": "fixed_company_scoped_bank_transaction_search", "verify": "same_transaction_acl_filters_cursor_and_response_schema_validation", "idempotency": "not_applicable_read_only", "reverse": "not_applicable_read_only"},
+      "strategies": {
+        "preview": "not_applicable_read_only",
+        "execute": "fixed_company_scoped_bank_transaction_search",
+        "verify": "same_transaction_acl_filters_cursor_and_response_schema_validation",
+        "idempotency": "not_applicable_read_only",
+        "reverse": "not_applicable_read_only"
+      },
       "tests": {
-        "unit": {"status": "implemented", "references": ["tests/unit/test_bank_transaction_search.py", "tests/unit/test_payment_bank_write_cli.py"], "reason": "Unit tests cover the closed filters, cursor, fixed bridge action, company scope, ACL gates, ORM normalization, and CLI dispatch."},
-        "integration": {"status": "implemented", "references": ["tests/integration/test_payment_bank_capability_batch_live.py"], "reason": "The shared live smoke verifies the capability in both dedicated isolated database aliases with transaction rollback."},
-        "golden": {"status": "planned", "references": [], "reason": "The golden definition is frozen; implementation evidence is pending."},
-        "e2e": {"status": "planned", "references": [], "reason": "The e2e definition is frozen; implementation evidence is pending."}
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_accounting_workflows_batch.py"
+          ],
+          "reason": "Closed typed inputs, schema and target binding; compatible legacy branches remain covered."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_accounting_workflows_batch_live.py"
+          ],
+          "reason": "Shared native CLI workflow: both isolated aliases passed32.80s as uid5/su=False/company1. Verified sale/purchase reversal plus draft reissue and replay, native foreign-currency line edits, full/partial matching-group leaf undo and shrinking replay, statement-scoped bank pagination and actual payment bank matches, three company account assignments/clearing/readback and product fallback, purchase self-billing sequence. Native configuration roles and independent bank fixtures exist only in the test transaction. Fresh-cursor objects, caller groups, company settings, defaults and currency/rate rollback checks passed. Bank response additions require synchronized SDK/bridge/schema. No business DB, native source/addon, service, external-send or operation-store changes. Prior-paid reissue, cashbasis/exchange undo workflows, all ancestry/currency/localization/lock/hash branches, all setting consumers and concurrent exactly-once are not claimed."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
       },
-      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
-      "routing": {"object": "bank.transaction", "actions": ["search"], "aliases": {"zh_CN": ["搜索银行流水"], "en_US": ["Search bank transactions"]}, "not_for": {"zh_CN": [], "en_US": []}, "required_slots": ["database", "company_id", "user_login"]},
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."
+      },
+      "routing": {
+        "object": "bank.transaction",
+        "actions": [
+          "search"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "搜索银行流水"
+          ],
+          "en_US": [
+            "Search bank transactions"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [],
+          "en_US": []
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
       "handler_key": "bank_transaction_search"
     },
     "bank.transaction.reconciliation.get": {
@@ -13201,7 +13293,8 @@
           "account.move",
           "account.move.line",
           "account.account",
-          "account.partial.reconcile"
+          "account.partial.reconcile",
+          "account.bank.statement.line"
         ],
         "wizards": [],
         "report_handlers": [],
@@ -13246,7 +13339,8 @@
           "account.move:read",
           "account.move.line:read",
           "account.account:read",
-          "account.partial.reconcile:read"
+          "account.partial.reconcile:read",
+          "account.bank.statement.line:read"
         ]
       },
       "strategies": {
@@ -13260,19 +13354,16 @@
         "unit": {
           "status": "implemented",
           "references": [
-            "tests/unit/test_payments.py",
-            "tests/unit/test_payment_bridge.py",
-            "tests/unit/test_payment_runtime.py",
-            "tests/unit/test_payment_cli.py"
+            "tests/unit/test_accounting_workflows_batch.py"
           ],
-          "reason": "Unit tests cover the closed request and response, bridge, fixed ORM reconciliation traversal, scope, ACL, and control-CLI contracts."
+          "reason": "Closed typed inputs, schema and target binding; compatible legacy branches remain covered."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_payments_live.py"
+            "tests/integration/test_accounting_workflows_batch_live.py"
           ],
-          "reason": "The live integration test verifies payment search, exact-get details, all available search filters, and company isolation across both dedicated synthetic database aliases and both configured companies."
+          "reason": "Shared native CLI workflow: both isolated aliases passed32.80s as uid5/su=False/company1. Verified sale/purchase reversal plus draft reissue and replay, native foreign-currency line edits, full/partial matching-group leaf undo and shrinking replay, statement-scoped bank pagination and actual payment bank matches, three company account assignments/clearing/readback and product fallback, purchase self-billing sequence. Native configuration roles and independent bank fixtures exist only in the test transaction. Fresh-cursor objects, caller groups, company settings, defaults and currency/rate rollback checks passed. Bank response additions require synchronized SDK/bridge/schema. No business DB, native source/addon, service, external-send or operation-store changes. Prior-paid reissue, cashbasis/exchange undo workflows, all ancestry/currency/localization/lock/hash branches, all setting consumers and concurrent exactly-once are not claimed."
         },
         "golden": {
           "status": "planned",
@@ -16476,12 +16567,19 @@
           "account"
         ],
         "models": [
-          "res.company",
+          "account.account",
+          "account.analytic.account",
+          "account.analytic.line",
+          "account.full.reconcile",
+          "account.journal",
+          "account.move",
           "account.move.line",
           "account.partial.reconcile",
-          "account.full.reconcile",
-          "account.account",
-          "account.move",
+          "account.payment",
+          "account.tax",
+          "res.company",
+          "res.currency",
+          "res.currency.rate",
           "res.partner"
         ],
         "wizards": [],
@@ -16511,43 +16609,55 @@
           "account.group_account_user"
         ],
         "acl": [
-          "account.move.line:read",
-          "account.move.line:write",
-          "account.partial.reconcile:read",
-          "account.partial.reconcile:unlink",
+          "account.account:read",
+          "account.analytic.account:read",
+          "account.analytic.line:create",
+          "account.analytic.line:read",
+          "account.analytic.line:unlink",
+          "account.full.reconcile:create",
           "account.full.reconcile:read",
           "account.full.reconcile:unlink",
-          "account.account:read",
+          "account.journal:read",
+          "account.move.line:create",
+          "account.move.line:read",
+          "account.move.line:unlink",
+          "account.move.line:write",
+          "account.move:create",
           "account.move:read",
+          "account.move:unlink",
           "account.move:write",
+          "account.partial.reconcile:create",
+          "account.partial.reconcile:read",
+          "account.partial.reconcile:unlink",
+          "account.payment:read",
+          "account.payment:write",
+          "account.tax:read",
+          "res.currency.rate:read",
+          "res.currency:read",
           "res.partner:read"
         ]
       },
       "strategies": {
         "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_targeted_invoice_partial_or_line_pair_reconciliation_removal",
+        "execute": "native_pair_invoice_or_complete_readable_current_company_matching_group_undo",
         "verify": "same_transaction_target_partial_removal_and_outstanding_restore_validation",
-        "idempotency": "odoo_persisted_business_marker_and_result_replay",
+        "idempotency": "legacy_pair_invoice_recheck_or_match_group_current_state_closure_replay_without_operation_store_or_concurrent_exactly_once",
         "reverse": "reconciliation.apply"
       },
       "tests": {
         "unit": {
           "status": "implemented",
           "references": [
-            "tests/unit/test_core_writes.py",
-            "tests/unit/test_core_writes_bridge.py",
-            "tests/unit/test_core_writes_runtime.py",
-            "tests/unit/test_core_write_cli.py"
+            "tests/unit/test_accounting_workflows_batch.py"
           ],
-          "reason": "Unit tests cover the closed request, exact confirmation, fixed bridge action, Odoo-side execution, idempotent replay, and CLI response contract."
+          "reason": "Closed typed inputs, schema and target binding; compatible legacy branches remain covered."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_core_write_batch_live.py",
-            "tests/integration/test_accounting_depth_batch_live.py"
+            "tests/integration/test_accounting_workflows_batch_live.py"
           ],
-          "reason": "The shared dual-database rollback smoke covers targeted partial undo, replay, and outstanding restoration."
+          "reason": "Shared native CLI workflow: both isolated aliases passed32.80s as uid5/su=False/company1. Verified sale/purchase reversal plus draft reissue and replay, native foreign-currency line edits, full/partial matching-group leaf undo and shrinking replay, statement-scoped bank pagination and actual payment bank matches, three company account assignments/clearing/readback and product fallback, purchase self-billing sequence. Native configuration roles and independent bank fixtures exist only in the test transaction. Fresh-cursor objects, caller groups, company settings, defaults and currency/rate rollback checks passed. Bank response additions require synchronized SDK/bridge/schema. No business DB, native source/addon, service, external-send or operation-store changes. Prior-paid reissue, cashbasis/exchange undo workflows, all ancestry/currency/localization/lock/hash branches, all setting consumers and concurrent exactly-once are not claimed."
         },
         "golden": {
           "status": "planned",
@@ -35409,16 +35519,16 @@
         "unit": {
           "status": "implemented",
           "references": [
-            "tests/unit/test_journal_processing_batch.py"
+            "tests/unit/test_accounting_workflows_batch.py"
           ],
-          "reason": "Closed public CLI/schemas, deterministic keys, native copy rename and state replay, result/company binding, fixed field/reference/access denials and savepoint rollback."
+          "reason": "Closed typed inputs, schema and target binding; compatible legacy branches remain covered."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_journal_processing_batch_live.py"
+            "tests/integration/test_accounting_workflows_batch_live.py"
           ],
-          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs, six setup IDs and twelve immediate replays per alias. Actual general/sale/bank native copies retain fifteen stable fields, rename only the real copy after native copy_data, preserve sources, use independent identities, honor serial conflict/replay and recreate deleted targets with fresh archived identities. Native copy=False default/bank references are not forced to share; bank copies have fresh native default accounts/method lines and no source bank link. Real native sequence/reference/private-share-account and available customer-invoice-template settings persist and nullable references clear. Foreign/global-group/inapplicable/missing/deleted targets are denied. Native account_move_journal_id_fkey ForeignKeyViolation is verified directly for both draft and posted journal deletion denials, retaining the existing public odoo_write_error/exit-6 mapping. Posted IDs/accounts/journals/maturities/amounts/residuals/tax links remain unchanged. Native group deletion preserves journals. With no standalone bank unlink privilege, linked-bank journal deletion is denied by native ACL and restores journal/method lines/reference in its savepoint; publicly detaching the reference permits journal/method-line unlink while preserving the detached bank record. No added standalone alias/bank prerequisites or broader roles/caller-sudo. Fresh-cursor synthetic business data and temporary manager-group rollback verified; no business DB, addon/source, service or external payment changes."
+          "reason": "Shared native CLI workflow: both isolated aliases passed32.80s as uid5/su=False/company1. Verified sale/purchase reversal plus draft reissue and replay, native foreign-currency line edits, full/partial matching-group leaf undo and shrinking replay, statement-scoped bank pagination and actual payment bank matches, three company account assignments/clearing/readback and product fallback, purchase self-billing sequence. Native configuration roles and independent bank fixtures exist only in the test transaction. Fresh-cursor objects, caller groups, company settings, defaults and currency/rate rollback checks passed. Bank response additions require synchronized SDK/bridge/schema. No business DB, native source/addon, service, external-send or operation-store changes. Prior-paid reissue, cashbasis/exchange undo workflows, all ancestry/currency/localization/lock/hash branches, all setting consumers and concurrent exactly-once are not claimed."
         },
         "golden": {
           "status": "planned",
@@ -37235,16 +37345,16 @@
         "unit": {
           "status": "implemented",
           "references": [
-            "tests/unit/test_company_processing_batch.py"
+            "tests/unit/test_accounting_workflows_batch.py"
           ],
-          "reason": "Closed operation-specific settings, native typed choices and null clearing, public CLI/schemas/confirmation, deterministic keys and contextual company/result binding. Real ORM behavior belongs to the shared integration workflow."
+          "reason": "Closed typed inputs, schema and target binding; compatible legacy branches remain covered."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_company_processing_batch_live.py"
+            "tests/integration/test_accounting_workflows_batch_live.py"
           ],
-          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs and two reused journal-entry setup IDs; fourteen setting replays plus one posting replay per alias. Ordinary business-user settings read succeeds and native company write is denied before a transaction-local ERP-access group grant. All seven fixed native company writes persist and serial target-state replay is verified. Native April31 fiscal-end validation and existing-accounting price-method denial return the actual ValidationError/business_rule_error and restore all partial changes; February29 is natively accepted. Current-company reads, relation null clearing, all three quick-edit choices and disabled null mode are checked. All seven relation fields reject foreign and missing references; exchange journal selection rejects non-general sale journals. Posted entry identities/accounts/amounts/residuals/taxes, the other company and non-target lock/audit/chart/currency/prefix configuration are unchanged. Actual product-category default values match native company accounts after company.write; fresh cursors prove existing company settings, all ir.default rows, exact groups and synthetic objects roll back, including before rethrow on failure. The test loads the actual immutable CLI registry once per worker but retains real request/response validation and native ACLs. No concurrent exactly-once, child-company native scenario, real invoice rendering/delivery, automatic bill posting or credit-limit amount mutation claim. No business DB, installed addon/source or service/configuration changes; no ERP grant persisted."
+          "reason": "Shared native CLI workflow: both isolated aliases passed32.80s as uid5/su=False/company1. Verified sale/purchase reversal plus draft reissue and replay, native foreign-currency line edits, full/partial matching-group leaf undo and shrinking replay, statement-scoped bank pagination and actual payment bank matches, three company account assignments/clearing/readback and product fallback, purchase self-billing sequence. Native configuration roles and independent bank fixtures exist only in the test transaction. Fresh-cursor objects, caller groups, company settings, defaults and currency/rate rollback checks passed. Bank response additions require synchronized SDK/bridge/schema. No business DB, native source/addon, service, external-send or operation-store changes. Prior-paid reissue, cashbasis/exchange undo workflows, all ancestry/currency/localization/lock/hash branches, all setting consumers and concurrent exactly-once are not claimed."
         },
         "golden": {
           "status": "planned",
@@ -37724,6 +37834,8 @@
           "account.move",
           "account.move.line",
           "res.company",
+          "res.currency",
+          "res.currency.rate",
           "res.partner"
         ],
         "wizards": [],
@@ -37767,6 +37879,8 @@
           "account.move:read",
           "account.move:write",
           "res.company:read",
+          "res.currency.rate:read",
+          "res.currency:read",
           "res.partner:read"
         ]
       },
@@ -37781,16 +37895,16 @@
         "unit": {
           "status": "implemented",
           "references": [
-            "tests/unit/test_journal_item_processing_batch.py"
+            "tests/unit/test_accounting_workflows_batch.py"
           ],
-          "reason": "Closed typed parameters, bound parent/line results, shared CLI/schemas/confirmation/keys and target-bound pagination; native behavior is covered separately."
+          "reason": "Closed typed inputs, schema and target binding; compatible legacy branches remain covered."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_journal_item_processing_batch_live.py"
+            "tests/integration/test_accounting_workflows_batch_live.py"
           ],
-          "reason": "One shared public CLI/real-ORM workflow passed both isolated aliases in21.41s as uid5/su=False/company1: bound line reads, target analytic keyset pages and actual partial/full reconciliation; native atomic draft entry updates preserve IDs and reject imbalance; posted maturity/full analytic replacement/clearing preserve financial fields and replay avoids child recreation; draft product UOM reprices/retaxes natively and purchase deductibility50/0/100 synchronizes native rows. Temporary analytic permission and an admin-created purchase-journal default-account fixture are transaction-local; missing/foreign parent and parent-line mismatch, posted financial writes and draft sales partial-deductibility are rejected. All objects/journal/mail alias and exact groups roll back in fresh cursors. First numeric-conversion and second analytic-sign failures retained, not acceptance; no concurrent exactly-once, receipt, business DB or real external-send claim."
+          "reason": "Shared native CLI workflow: both isolated aliases passed32.80s as uid5/su=False/company1. Verified sale/purchase reversal plus draft reissue and replay, native foreign-currency line edits, full/partial matching-group leaf undo and shrinking replay, statement-scoped bank pagination and actual payment bank matches, three company account assignments/clearing/readback and product fallback, purchase self-billing sequence. Native configuration roles and independent bank fixtures exist only in the test transaction. Fresh-cursor objects, caller groups, company settings, defaults and currency/rate rollback checks passed. Bank response additions require synchronized SDK/bridge/schema. No business DB, native source/addon, service, external-send or operation-store changes. Prior-paid reissue, cashbasis/exchange undo workflows, all ancestry/currency/localization/lock/hash branches, all setting consumers and concurrent exactly-once are not claimed."
         },
         "golden": {
           "status": "planned",
@@ -39486,6 +39600,516 @@
         ]
       },
       "handler_key": "product_tax_profile_get"
+    },
+    "invoice.reverse_and_reissue": {
+      "summary": {
+        "zh_CN": "冲销并重新开票",
+        "en_US": "Reverse and reissue a posted invoice"
+      },
+      "domain": "invoices_and_bills",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.account",
+          "account.analytic.account",
+          "account.analytic.line",
+          "account.full.reconcile",
+          "account.journal",
+          "account.move",
+          "account.move.line",
+          "account.move.reversal",
+          "account.partial.reconcile",
+          "account.payment",
+          "account.tax",
+          "product.product",
+          "res.company",
+          "res.currency",
+          "res.currency.rate",
+          "res.partner",
+          "res.partner.bank"
+        ],
+        "wizards": [
+          "account.move.reversal"
+        ],
+        "report_handlers": [],
+        "locations": [
+          "account/wizard/account_move_reversal.py",
+          "account/models/account_move.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.reverse_and_reissue.request.schema.json",
+        "response": "schemas/v1/invoice.reverse_and_reissue.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.analytic.account:read",
+          "account.analytic.line:create",
+          "account.analytic.line:read",
+          "account.analytic.line:unlink",
+          "account.full.reconcile:create",
+          "account.full.reconcile:read",
+          "account.full.reconcile:unlink",
+          "account.journal:read",
+          "account.move.line:create",
+          "account.move.line:read",
+          "account.move.line:unlink",
+          "account.move.line:write",
+          "account.move.reversal:create",
+          "account.move:create",
+          "account.move:read",
+          "account.move:unlink",
+          "account.move:write",
+          "account.partial.reconcile:create",
+          "account.partial.reconcile:read",
+          "account.partial.reconcile:unlink",
+          "account.payment:read",
+          "account.payment:write",
+          "account.tax:read",
+          "res.currency.rate:read",
+          "res.currency:read",
+          "res.partner.bank:read",
+          "res.partner:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_modify_moves_as_ordinary_caller_today_or_past_posted_invoice",
+        "verify": "same_transaction_posted_refund_and_same_direction_draft_replacement",
+        "idempotency": "native_marked_pair_current_target_recheck_without_operation_store",
+        "reverse": "native_compensating_workflow_subject_to_accounting_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_accounting_workflows_batch.py"
+          ],
+          "reason": "Closed typed inputs, schema and target binding; compatible legacy branches remain covered."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_accounting_workflows_batch_live.py"
+          ],
+          "reason": "Shared native CLI workflow: both isolated aliases passed32.80s as uid5/su=False/company1. Verified sale/purchase reversal plus draft reissue and replay, native foreign-currency line edits, full/partial matching-group leaf undo and shrinking replay, statement-scoped bank pagination and actual payment bank matches, three company account assignments/clearing/readback and product fallback, purchase self-billing sequence. Native configuration roles and independent bank fixtures exist only in the test transaction. Fresh-cursor objects, caller groups, company settings, defaults and currency/rate rollback checks passed. Bank response additions require synchronized SDK/bridge/schema. No business DB, native source/addon, service, external-send or operation-store changes. Prior-paid reissue, cashbasis/exchange undo workflows, all ancestry/currency/localization/lock/hash branches, all setting consumers and concurrent exactly-once are not claimed."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."
+      },
+      "routing": {
+        "object": "customer_credit_note",
+        "actions": [
+          "reverse_and_reissue"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "冲销并重新开票"
+          ],
+          "en_US": [
+            "Reverse and reissue a posted invoice"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [],
+          "en_US": []
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "company.default_accounts.assign": {
+      "summary": {
+        "zh_CN": "设置公司默认收入费用科目",
+        "en_US": "Assign company default income and expense accounts"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "ir.default",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/company.py",
+          "stock_account/models/res_company.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/company.default_accounts.assign.request.schema.json",
+        "response": "schemas/v1/company.default_accounts.assign.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "base.group_erp_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "ir.default:read",
+          "res.company:read",
+          "res.company:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_res_company_write_with_fixed_operation_fields_as_business_user",
+        "verify": "same_transaction_native_current_company_setting_readback",
+        "idempotency": "serial_current_target_setting_recheck_without_operation_store_or_concurrent_exactly_once",
+        "reverse": "restore_prior_settings_subject_to_native_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_accounting_workflows_batch.py"
+          ],
+          "reason": "Closed typed inputs, schema and target binding; compatible legacy branches remain covered."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_accounting_workflows_batch_live.py"
+          ],
+          "reason": "Shared native CLI workflow: both isolated aliases passed32.80s as uid5/su=False/company1. Verified sale/purchase reversal plus draft reissue and replay, native foreign-currency line edits, full/partial matching-group leaf undo and shrinking replay, statement-scoped bank pagination and actual payment bank matches, three company account assignments/clearing/readback and product fallback, purchase self-billing sequence. Native configuration roles and independent bank fixtures exist only in the test transaction. Fresh-cursor objects, caller groups, company settings, defaults and currency/rate rollback checks passed. Bank response additions require synchronized SDK/bridge/schema. No business DB, native source/addon, service, external-send or operation-store changes. Prior-paid reissue, cashbasis/exchange undo workflows, all ancestry/currency/localization/lock/hash branches, all setting consumers and concurrent exactly-once are not claimed."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed current-company settings are implemented; native company write requires access-rights administration and reference ACLs. Ordinary accountant permission is not implied."
+      },
+      "routing": {
+        "object": "company",
+        "actions": [
+          "assign"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置公司默认收入费用科目"
+          ],
+          "en_US": [
+            "Assign company default income and expense accounts"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改锁账或审计配置",
+            "绕过原生含税约束或公司权限",
+            "实际自动审核历史账单"
+          ],
+          "en_US": [
+            "Changing locks or audit controls",
+            "Bypassing native tax-price constraints or company ACLs",
+            "Automatically posting existing bills"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "company.bank_defaults.assign": {
+      "summary": {
+        "zh_CN": "设置公司银行默认科目",
+        "en_US": "Assign company bank default accounts"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "ir.default",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/company.py",
+          "stock_account/models/res_company.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/company.bank_defaults.assign.request.schema.json",
+        "response": "schemas/v1/company.bank_defaults.assign.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "base.group_erp_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "ir.default:read",
+          "res.company:read",
+          "res.company:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_res_company_write_with_fixed_operation_fields_as_business_user",
+        "verify": "same_transaction_native_current_company_setting_readback",
+        "idempotency": "serial_current_target_setting_recheck_without_operation_store_or_concurrent_exactly_once",
+        "reverse": "restore_prior_settings_subject_to_native_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_accounting_workflows_batch.py"
+          ],
+          "reason": "Closed typed inputs, schema and target binding; compatible legacy branches remain covered."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_accounting_workflows_batch_live.py"
+          ],
+          "reason": "Shared native CLI workflow: both isolated aliases passed32.80s as uid5/su=False/company1. Verified sale/purchase reversal plus draft reissue and replay, native foreign-currency line edits, full/partial matching-group leaf undo and shrinking replay, statement-scoped bank pagination and actual payment bank matches, three company account assignments/clearing/readback and product fallback, purchase self-billing sequence. Native configuration roles and independent bank fixtures exist only in the test transaction. Fresh-cursor objects, caller groups, company settings, defaults and currency/rate rollback checks passed. Bank response additions require synchronized SDK/bridge/schema. No business DB, native source/addon, service, external-send or operation-store changes. Prior-paid reissue, cashbasis/exchange undo workflows, all ancestry/currency/localization/lock/hash branches, all setting consumers and concurrent exactly-once are not claimed."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed current-company settings are implemented; native company write requires access-rights administration and reference ACLs. Ordinary accountant permission is not implied."
+      },
+      "routing": {
+        "object": "company",
+        "actions": [
+          "assign"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置公司银行默认科目"
+          ],
+          "en_US": [
+            "Assign company bank default accounts"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改锁账或审计配置",
+            "绕过原生含税约束或公司权限",
+            "实际自动审核历史账单"
+          ],
+          "en_US": [
+            "Changing locks or audit controls",
+            "Bypassing native tax-price constraints or company ACLs",
+            "Automatically posting existing bills"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "company.discount_allocation_accounts.assign": {
+      "summary": {
+        "zh_CN": "设置发票折扣分摊科目",
+        "en_US": "Assign invoice discount allocation accounts"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "ir.default",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/company.py",
+          "stock_account/models/res_company.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/company.discount_allocation_accounts.assign.request.schema.json",
+        "response": "schemas/v1/company.discount_allocation_accounts.assign.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "base.group_erp_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "ir.default:read",
+          "res.company:read",
+          "res.company:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_res_company_write_with_fixed_operation_fields_as_business_user",
+        "verify": "same_transaction_native_current_company_setting_readback",
+        "idempotency": "serial_current_target_setting_recheck_without_operation_store_or_concurrent_exactly_once",
+        "reverse": "restore_prior_settings_subject_to_native_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_accounting_workflows_batch.py"
+          ],
+          "reason": "Closed typed inputs, schema and target binding; compatible legacy branches remain covered."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_accounting_workflows_batch_live.py"
+          ],
+          "reason": "Shared native CLI workflow: both isolated aliases passed32.80s as uid5/su=False/company1. Verified sale/purchase reversal plus draft reissue and replay, native foreign-currency line edits, full/partial matching-group leaf undo and shrinking replay, statement-scoped bank pagination and actual payment bank matches, three company account assignments/clearing/readback and product fallback, purchase self-billing sequence. Native configuration roles and independent bank fixtures exist only in the test transaction. Fresh-cursor objects, caller groups, company settings, defaults and currency/rate rollback checks passed. Bank response additions require synchronized SDK/bridge/schema. No business DB, native source/addon, service, external-send or operation-store changes. Prior-paid reissue, cashbasis/exchange undo workflows, all ancestry/currency/localization/lock/hash branches, all setting consumers and concurrent exactly-once are not claimed."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed current-company settings are implemented; native company write requires access-rights administration and reference ACLs. Ordinary accountant permission is not implied."
+      },
+      "routing": {
+        "object": "company",
+        "actions": [
+          "assign"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置发票折扣分摊科目"
+          ],
+          "en_US": [
+            "Assign invoice discount allocation accounts"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改锁账或审计配置",
+            "绕过原生含税约束或公司权限",
+            "实际自动审核历史账单"
+          ],
+          "en_US": [
+            "Changing locks or audit controls",
+            "Bypassing native tax-price constraints or company ACLs",
+            "Automatically posting existing bills"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
     }
   }
 }

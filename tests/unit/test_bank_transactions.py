@@ -35,6 +35,7 @@ def _row(record_id: int, transaction_date: str, **changes: object) -> dict:
         "id": record_id,
         "company_id": 7,
         "date": transaction_date,
+        "statement_id": None,
         "payment_date": "2025-01-26",
         "name": "Customer transfer",
         "reference": "BANK/42",

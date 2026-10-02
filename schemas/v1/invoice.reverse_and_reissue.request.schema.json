@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/journal.sequence_policy.update.request.schema.json",
-  "title": "journal.sequence_policy.update request",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/invoice.reverse_and_reissue.request.schema.json",
+  "title": "invoice.reverse_and_reissue request",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -25,33 +25,27 @@
     "parameters": {
       "type": "object",
       "additionalProperties": false,
+      "required": [
+        "move_id",
+        "date",
+        "reason"
+      ],
       "properties": {
-        "journal_id": {
+        "move_id": {
           "type": "integer",
           "minimum": 1
         },
-        "changes": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "refund_sequence": {
-              "type": "boolean"
-            },
-            "payment_sequence": {
-              "type": "boolean"
-            },
-            "is_self_billing": {
-              "type": "boolean"
-            }
-          },
-          "required": [],
-          "minProperties": 1
+        "date": {
+          "type": "string",
+          "format": "date"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"
         }
-      },
-      "required": [
-        "changes",
-        "journal_id"
-      ]
+      }
     }
   }
 }

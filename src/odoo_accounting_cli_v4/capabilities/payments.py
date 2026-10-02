@@ -89,6 +89,7 @@ _GET_FIELDS = _COMMON_FIELDS | {
     "invoice_ids",
     "reconciled_invoices",
     "reconciled_bills",
+    "reconciled_bank_transactions",
 }
 
 
@@ -664,6 +665,23 @@ def _valid_document_list(value: Any, *, allowed_types: frozenset[str]) -> bool:
     return True
 
 
+def _valid_bank_transaction_list(value: Any) -> bool:
+    if not isinstance(value, list):
+        return False
+    previous_id = 0
+    for transaction in value:
+        if (
+            not isinstance(transaction, dict)
+            or set(transaction) != {"id", "company_id"}
+            or not _valid_id(transaction["id"])
+            or not _valid_id(transaction["company_id"])
+            or transaction["id"] <= previous_id
+        ):
+            return False
+        previous_id = transaction["id"]
+    return True
+
+
 def _validate_payment(
     row: Any, *, company_id: int, payment_id: int
 ) -> dict[str, Any]:
@@ -680,6 +698,7 @@ def _validate_payment(
         or not _valid_document_list(
             row["reconciled_bills"], allowed_types=_PURCHASE_DOCUMENT_TYPES
         )
+        or not _valid_bank_transaction_list(row["reconciled_bank_transactions"])
     ):
         raise _failed("Odoo returned an invalid or out-of-scope payment detail.")
     return dict(row)

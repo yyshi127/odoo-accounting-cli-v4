@@ -2,6 +2,84 @@
 
 ## Current accounting phase — 2026-10-02
 
+544 registered IDs; 529 implemented handlers (248 reads, 281 writes);
+1064 schemas. Availability: 455 unconfigured, 74 degraded, 15 disabled.
+Enabled integrations: 526 implemented, two planned, one failed. Counts include
+historical non-accounting extensions, not a full accounting denominator,
+completion percentage or unrestricted ordinary-user permission guarantee.
+
+This batch adds four commands and extends six existing business capabilities:
+
+- invoice.reverse_and_reissue — native posted sale/purchase invoice reversal
+  plus same-direction draft reissue, returning exactly two distinct moves.
+- company.default_accounts.assign — current-company income/expense defaults.
+- company.bank_defaults.assign — suspense and reconcilable transfer accounts.
+- company.discount_allocation_accounts.assign — discount income/expense accounts.
+- journal_entry.lines.update — currency and signed foreign amount on existing
+  draft ordinary journal items; native inverse, precision and balance checks.
+- reconciliation.undo — explicit match_group mode for a complete readable
+  current-company native matching closure; legacy pair/invoice modes retained.
+- bank.transaction.search — statement filter with company scope and cursor binding.
+- payment.get — actual native reconciled bank-transaction references.
+- company.processing_settings.get — readback of the six new account settings.
+- journal.sequence_policy.update — native purchase-journal self-billing flag.
+
+Bank transaction list/get additionally project nullable statement_id; these
+two mechanical response changes are not counted as new business capabilities.
+Old requests and omitted/null statement search filters remain compatible.
+Required response-field additions need synchronized SDK, bridge and schema;
+compatibility with old strict response validators is not claimed.
+
+One shared public CLI/native ORM workflow passed both isolated aliases in
+32.80s as uid5/su=False/company1. Verified unpaid sale/purchase reissue pairs
+and replay, balanced two-line foreign-amount updates using native inverse,
+precision/imbalance/posted denials, three-line full/partial matching-group leaf
+undo, statement pagination and actual payment bank matches, company setting
+assign/get/clear/replay and real product company fallback, native self-billing
+sequence. Fresh-cursor checks confirm all fixtures, exact caller/native group
+memberships, both companies' settings, all defaults and currency/rate rollback.
+
+Necessary native configuration roles were granted only inside the isolated
+test transaction; business calls never gained sudo. Bank prerequisites use
+independent synthetic accounts/journal, not existing bank reconfiguration.
+Replay checks current targets/closures, not persisted operation records or
+concurrent exactly-once. Reissue of previously paid invoices, native cashbasis/
+exchange undo workflows, all ancestry/currency/localization/lock/hash branches
+and every downstream setting consumer are not accepted by this smoke. Installed
+stock_account overrides category-default propagation without calling super;
+company assignment alone does not prove category defaults were propagated.
+
+Local evidence:44 new cases7.55s; affected object reads/runtime895 passed;
+bank/payment220 selected cases passed across initial217 plus three repaired
+fixture cases; eight new generic-write cases passed;19 scoped registry cases
+passed across initial16 plus three repaired fixture/metadata cases. Acceptance
+metadata closure:two affected registry cases14.02s. Final server:47 selected
+cases18.73s (44 batch, runtime set, two registry). No full-suite claim.
+Four failed native attempts16.40s/12.56s/12.99s/27.51s are retained, not acceptance:
+bank prerequisite and test-helper null/typed-ID tracking defects were repaired
+without loosening native constraints. The fourth failed attempt completed DEV
+fresh rollback but E2E later snapshot assertions were not reached.
+
+Initial deployment:explicit42-file prior-SHA allowlist,32 existing backed up
+and10 new; four one-file fixture repairs; final four-file metadata/SDK/test
+deployment, all checksum-guarded with recoverable backups. All42 final local/
+server hashes match. Services remain active with unchanged fresh-baseline
+PIDs/restart counts. Server docs stay untouched. Disk is4.98 GiB free/94% used;
+no cleanup/deletion. Changed42-file privacy scan has zero findings; Ruff has
+13 unchanged baseline diagnostics and zero introduced. Historical document
+privacy findings remain outside changed/staged-added evidence.
+
+No business database, native source/addon, service/configuration, Pi/V2/V3,
+external sends or service restarts were changed. Still unclosed:asset.validate
+native-addon failure and two external-send integrations requiring separately
+scoped authority. Debit-note addon is absent and must not be silently installed.
+Continue useful native accounting gaps; the overall goal remains active.
+
+Registry file SHA256 77e61d0662284448a94b2a0b062055c0e4b8f3b0eeb2eebe61ee31106de5fa35;
+canonical registry SHA256 62843210c9338fff6e489ae385b8e72be28b666254d408e191b0146249aac2ef.
+
+## Previous checkpoint — native invoice preparation, 2026-10-02
+
 540 registered IDs; 525 implemented handlers (248 reads, 277 writes);
 1056 schemas. Availability: 451 unconfigured, 74 degraded, 15 disabled.
 Enabled integrations: 522 implemented, two planned, one failed. Historical

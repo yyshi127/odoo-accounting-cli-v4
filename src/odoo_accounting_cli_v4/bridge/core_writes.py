@@ -123,8 +123,9 @@ class OdooCoreWritePort:
         parameters: dict[str, Any],
     ) -> dict[str, Any]:
         self._user_id = None
-        batch_request = capability_id in _BATCH_LIFECYCLE_CAPABILITIES and (
-            "move_ids" in parameters or "payment_ids" in parameters
+        batch_request = capability_id == "invoice.reverse_and_reissue" or (
+            capability_id in _BATCH_LIFECYCLE_CAPABILITIES
+            and ("move_ids" in parameters or "payment_ids" in parameters)
         )
         page = self._client.invoke(
             _ACTION,

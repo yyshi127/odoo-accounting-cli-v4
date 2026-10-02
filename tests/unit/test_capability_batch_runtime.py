@@ -227,6 +227,7 @@ class _Env:
                 {
                     "id": 80,
                     "company_id": [7, "Untrusted"],
+                    "statement_id": False,
                     "payment_ref": False,
                     "partner_id": [11, "Untrusted"],
                     "journal_id": [12, "Untrusted"],
@@ -265,6 +266,7 @@ class _Env:
             "res.currency",
             "res.currency.rate",
             "account.bank.statement.line",
+            "account.bank.statement",
             "account.move",
             "account.journal",
             "res.partner",

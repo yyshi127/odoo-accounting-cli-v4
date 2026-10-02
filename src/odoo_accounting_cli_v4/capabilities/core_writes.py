@@ -54,6 +54,7 @@ CORE_WRITE_CAPABILITY_IDS = invoice_preparation.CAPABILITY_IDS | journal_item_pr
         "payment.cancel",
         "customer_credit_note.create",
         "vendor_refund.create",
+        "invoice.reverse_and_reissue",
         "payment.post",
         "reconciliation.undo",
         "bank.transaction.record",
@@ -1473,6 +1474,12 @@ def _validate_reconciliation_parameters(
 ) -> dict[str, Any]:
     if not isinstance(parameters, dict):
         raise _invalid("Reconciliation parameters do not match the fixed contract.")
+    if capability_id == "reconciliation.undo" and set(parameters) == {"mode", "line_ids"}:
+        line_ids = _validate_ids(parameters["line_ids"])
+        if (parameters["mode"] != "match_group" or line_ids is None
+                or not 1 <= len(line_ids) <= 100 or line_ids != sorted(line_ids)):
+            raise _invalid("Match-group undo requires 1-100 sorted unique line IDs.")
+        return {"mode": "match_group", "line_ids": line_ids}
     if set(parameters) == {"line_ids"}:
         line_ids = _validate_ids(parameters["line_ids"], exact_length=2)
         if line_ids is None:
@@ -4457,7 +4464,7 @@ def validate_core_write_request(
         normalized = _validate_singular_or_batch_ids(
             parameters, "move_id", "move_ids"
         )
-    elif capability_id == "journal_entry.reverse":
+    elif capability_id in {"journal_entry.reverse", "invoice.reverse_and_reissue"}:
         normalized = _validate_reverse_parameters(parameters)
     elif capability_id in _REFUND_CAPABILITIES:
         normalized = _validate_refund_parameters(parameters)
@@ -4959,7 +4966,7 @@ def _expected_idempotency_key(
         return None
     if capability_id in _CREATE_CAPABILITIES:
         return None
-    if capability_id in _REFUND_CAPABILITIES:
+    if capability_id in _REFUND_CAPABILITIES or capability_id == "invoice.reverse_and_reissue":
         return None
     if capability_id == "invoice.duplicate":
         return None
@@ -5109,6 +5116,8 @@ def _expected_idempotency_key(
     if capability_id == "bank.transaction.unmatch":
         return f"bank.transaction.unmatch:{parameters['transaction_id']}"
     if capability_id in _RECONCILIATION_CAPABILITIES:
+        if parameters.get("mode") == "match_group":
+            return move_processing.idempotency_key(capability_id, parameters, company_id)
         if "line_ids" in parameters:
             first, second = parameters["line_ids"]
             return f"{capability_id}:{first}:{second}"
@@ -5284,6 +5293,22 @@ def _validate_result(
     company_id: int,
     idempotent_replay: bool,
 ) -> dict[str, Any]:
+    if capability_id == "invoice.reverse_and_reissue":
+        if (not _valid_batch_result_shape(result) or result["processed_count"] != 2
+                or {item["move_type"] for item in result["items"]}
+                not in ({"out_invoice", "out_refund"}, {"in_invoice", "in_refund"})
+                or set(result["items"][0]["line_ids"]) & set(result["items"][1]["line_ids"])):
+            raise _failed("Odoo returned a malformed reverse-and-reissue pair.")
+        for item in result["items"]:
+            refund = item["move_type"] in {"out_refund", "in_refund"}
+            if (item["model"] != "account.move" or item["company_id"] != company_id
+                    or item["id"] == parameters["move_id"]
+                    or item["source_id"] != parameters["move_id"] or not item["line_ids"]
+                    or item["state"] != ("posted" if refund else "draft")
+                    or (not refund and (item["partial_reconcile_ids"]
+                        or item["full_reconcile_id"] is not None or item["reconciled"]))):
+                raise _failed("Odoo returned a mismatched reverse-and-reissue pair.")
+        return deepcopy(result)
     if not _valid_result_shape(result) or result["company_id"] != company_id:
         raise _failed("Odoo returned a malformed or out-of-scope core-write result.")
 
@@ -5760,9 +5785,12 @@ def _validate_result(
 
     if capability_id == "reconciliation.undo":
         invoice_mode = "invoice_id" in parameters
+        group_mode = parameters.get("mode") == "match_group"
         line_ids_match = (
             parameters["invoice_line_id"] in result["line_ids"]
             if invoice_mode
+            else set(parameters["line_ids"]) <= set(result["line_ids"])
+            if group_mode
             else result["line_ids"] == parameters["line_ids"]
         )
         expected_source_id = parameters["invoice_id"] if invoice_mode else None
@@ -5804,7 +5832,7 @@ def _validate_result(
                 result["state"] != "unreconciled"
                 or bool(result["partial_reconcile_ids"])
                 or result["full_reconcile_id"] is not None
-                or result["reconciled"]
+                or (not group_mode and result["reconciled"])
             )
         if common_mismatch or result_mismatch:
             raise _failed("Odoo returned a mismatched reconciliation result.")

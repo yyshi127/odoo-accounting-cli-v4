@@ -1729,6 +1729,7 @@ def _expected_item(capability_id: str, record_id: int = 31) -> dict[str, Any]:
         return {
             "id": record_id,
             "company_id": 7,
+            "statement_id": 31,
             "date": "2026-08-24",
             "payment_date": None,
             "name": "Customer transfer",

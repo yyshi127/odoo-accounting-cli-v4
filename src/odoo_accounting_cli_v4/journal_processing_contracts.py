@@ -26,7 +26,7 @@ PARAMETER_KEYS = {
     "journal.group.delete": {"journal_group_id"},
 }
 CAPABILITY_IDS = frozenset(PARAMETER_KEYS)
-SEQUENCE_FIELDS = {"refund_sequence", "payment_sequence"}
+SEQUENCE_FIELDS = {"refund_sequence", "payment_sequence", "is_self_billing"}
 REFERENCE_CHOICES = {"invoice_reference_type": {"partner", "invoice"}, "invoice_reference_model": {"odoo", "euro", "number"}}
 RELATION_FIELDS = ("currency_id", "suspense_account_id", "profit_account_id", "loss_account_id", "non_deductible_account_id", "invoice_template_pdf_report_id")
 COPY_FIELDS = ("active", "type", "sequence", *RELATION_FIELDS, "invoice_reference_type", "invoice_reference_model",

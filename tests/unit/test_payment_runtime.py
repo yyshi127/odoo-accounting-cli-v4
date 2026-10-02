@@ -31,6 +31,7 @@ GET_MODELS = SEARCH_MODELS | {
     "account.move.line",
     "account.account",
     "account.partial.reconcile",
+    "account.bank.statement.line",
 }
 
 PAYMENT_FIELDS = [
@@ -287,6 +288,7 @@ def _raw_payment(*, company_id: int = 7, get: bool = False) -> dict[str, Any]:
     }
     if get:
         row["invoice_ids"] = [91, 90]
+        row["reconciled_statement_line_ids"] = []
     return row
 
 
@@ -333,6 +335,7 @@ def _records(*, get: bool) -> dict[str, list[dict[str, Any]]]:
         "account.move.line": [],
         "account.account": [],
         "account.partial.reconcile": [],
+        "account.bank.statement.line": [],
     }
     if get:
         records["account.move"].extend([
@@ -567,6 +570,7 @@ def _expected_get() -> dict[str, Any]:
         "reconciled_bills": [
             _document(91, "RCPT/2025/00091", "in_receipt", "paid")
         ],
+        "reconciled_bank_transactions": [],
     }
 
 
@@ -707,7 +711,7 @@ def test_get_explicitly_traverses_reconciliations_and_keeps_three_provenances() 
     }
     payment_call = _search_calls(env, "account.payment")[0]
     assert payment_call[2] == [("id", "=", 5), ("company_id", "=", 7)]
-    assert payment_call[3] == [*PAYMENT_FIELDS, "invoice_ids"]
+    assert payment_call[3] == [*PAYMENT_FIELDS, "invoice_ids", "reconciled_statement_line_ids"]
     assert payment_call[4:] == (1, "id")
 
     payment_line_call = next(
@@ -1062,6 +1066,7 @@ def test_null_payment_move_skips_reconciliation_and_returns_null_journal_entry()
         "invoice_ids": [],
         "reconciled_invoices": [],
         "reconciled_bills": [],
+        "reconciled_bank_transactions": [],
     }
     assert not _search_calls(env, "account.move.line")
     assert not _search_calls(env, "account.partial.reconcile")

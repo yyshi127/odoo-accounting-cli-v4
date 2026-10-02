@@ -68,7 +68,7 @@
         "currency", "company_currency", "company_id", "partner", "journal",
         "memo", "payment_reference", "payment_method_line", "payment_method",
         "move_id", "is_reconciled", "is_matched", "journal_entry", "invoice_ids",
-        "reconciled_invoices", "reconciled_bills"
+        "reconciled_invoices", "reconciled_bills", "reconciled_bank_transactions"
       ],
       "properties": {
         "id": {"type": "integer", "minimum": 1},
@@ -95,7 +95,14 @@
         "journal_entry": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/journalEntry"}]},
         "invoice_ids": {"type": "array", "items": {"$ref": "#/$defs/document"}},
         "reconciled_invoices": {"type": "array", "items": {"$ref": "#/$defs/document"}},
-        "reconciled_bills": {"type": "array", "items": {"$ref": "#/$defs/document"}}
+        "reconciled_bills": {"type": "array", "items": {"$ref": "#/$defs/document"}},
+        "reconciled_bank_transactions": {
+          "type": "array", "uniqueItems": true,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["id", "company_id"],
+            "properties": {"id": {"type": "integer", "minimum": 1}, "company_id": {"type": "integer", "minimum": 1}}
+          }
+        }
       }
     }
   }

@@ -46,6 +46,7 @@ def _row(record_id: int, day: int) -> dict:
         "id": record_id,
         "company_id": 7,
         "date": f"2026-08-{day:02d}",
+        "statement_id": None,
         "payment_date": None,
         "name": f"Transfer {record_id}",
         "reference": None,

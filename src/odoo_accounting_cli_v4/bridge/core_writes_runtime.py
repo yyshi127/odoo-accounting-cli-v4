@@ -62,6 +62,7 @@ CAPABILITIES = invoice_preparation.CAPABILITY_IDS | journal_item_processing.CAPA
         "invoice.reset_to_draft",
         "invoice.post",
         "invoice.duplicate",
+        "invoice.reverse_and_reissue",
         "invoice.type.switch",
         "journal_entry.create",
         "journal_entry.update",
@@ -772,6 +773,7 @@ _PARAMETER_KEYS = {
     "invoice.reset_to_draft": {"move_id", "move_ids"},
     "invoice.post": {"move_id", "move_ids"},
     "invoice.duplicate": {"move_id"},
+    "invoice.reverse_and_reissue": {"move_id", "date", "reason"},
     "invoice.type.switch": {"move_id", "target_move_type"},
     "journal_entry.create": {"journal_id", "date", "lines", "reference"},
     "journal_entry.update": {"move_id", "changes"},
@@ -808,6 +810,7 @@ _PARAMETER_KEYS = {
     "vendor_refund.create": {"move_id", "date", "reason", "lines"},
     "payment.post": {"payment_id", "payment_ids"},
     "reconciliation.undo": {
+        "mode",
         "line_ids",
         "invoice_id",
         "partial_reconcile_id",
@@ -3340,6 +3343,37 @@ _PARAMETER_KEYS.update({
     "invoice.service_dates.update": {"move_id", "changes"},
     "invoice.tax_totals.adjust": {"move_id", "groups"},
 })
+_GROUPS["invoice.reverse_and_reissue"] = "account.group_account_invoice"
+_MODELS["invoice.reverse_and_reissue"] = (
+    _MODELS["customer_credit_note.create"] | _MODELS["invoice.post"]
+    | _MODELS["reconciliation.apply"] | _MODELS["reconciliation.undo"]
+    | {"account.tax", "res.currency", "res.currency.rate", "account.payment"}
+)
+_ACCESS["invoice.reverse_and_reissue"] = (
+    _ACCESS["customer_credit_note.create"] | _ACCESS["invoice.post"]
+    | _ACCESS["reconciliation.apply"] | _ACCESS["reconciliation.undo"]
+    | {("account.tax", "read"), ("res.currency", "read"),
+       ("res.currency.rate", "read"), ("account.payment", "read"),
+       ("account.payment", "write"), ("account.move.line", "create"),
+       ("account.move.line", "unlink"), ("account.full.reconcile", "create"),
+       ("account.analytic.line", "create"), ("account.analytic.line", "unlink")}
+)
+_MODELS["reconciliation.undo"].update({
+    "account.payment", "account.journal", "account.tax", "res.currency",
+    "res.currency.rate", "account.analytic.account", "account.analytic.line",
+})
+_ACCESS["reconciliation.undo"].update({
+    ("account.payment", "read"), ("account.payment", "write"),
+    ("account.journal", "read"), ("account.tax", "read"),
+    ("res.currency", "read"), ("res.currency.rate", "read"),
+    ("account.move", "create"), ("account.move", "unlink"),
+    ("account.move.line", "create"), ("account.move.line", "unlink"),
+    ("account.partial.reconcile", "create"), ("account.full.reconcile", "create"),
+    ("account.analytic.account", "read"), ("account.analytic.line", "read"),
+    ("account.analytic.line", "create"), ("account.analytic.line", "unlink"),
+})
+_MODELS["invoice.reverse_and_reissue"].update(_MODELS["reconciliation.undo"])
+_ACCESS["invoice.reverse_and_reissue"].update(_ACCESS["reconciliation.undo"])
 for _invoice_preparation_capability in invoice_preparation.CAPABILITY_IDS:
     _GROUPS[_invoice_preparation_capability] = "account.group_account_invoice"
     _MODELS[_invoice_preparation_capability] = {
@@ -3382,9 +3416,10 @@ for _journal_item_capability in (
         ("account.analytic.line", "read"), ("account.analytic.line", "create"),
         ("account.analytic.line", "unlink"),
     })
-_MODELS["journal_entry.lines.update"].update({"account.journal", "res.partner"})
+_MODELS["journal_entry.lines.update"].update({"account.journal", "res.partner", "res.currency", "res.currency.rate"})
 _ACCESS["journal_entry.lines.update"].update({
     ("account.move", "write"), ("account.journal", "read"), ("res.partner", "read"),
+    ("res.currency", "read"), ("res.currency.rate", "read"),
 })
 for _journal_item_capability in (
     "invoice.line.unit.assign", "invoice.line.deductibility.update",
@@ -3425,6 +3460,16 @@ _ACCESS['company.invoice_display.update'] = {('ir.default', 'read'), ('res.compa
 _GROUPS['company.tax_policy.update'] = "base.group_erp_manager"
 _MODELS['company.tax_policy.update'] = {'res.company', 'ir.default', 'account.tax'}
 _ACCESS['company.tax_policy.update'] = {('ir.default', 'read'), ('account.tax', 'read'), ('res.company', 'write'), ('res.company', 'read')}
+for _company_account_capability in (
+    "company.default_accounts.assign", "company.bank_defaults.assign",
+    "company.discount_allocation_accounts.assign",
+):
+    _GROUPS[_company_account_capability] = "base.group_erp_manager"
+    _MODELS[_company_account_capability] = {"res.company", "account.account", "ir.default"}
+    _ACCESS[_company_account_capability] = {
+        ("res.company", "read"), ("res.company", "write"),
+        ("account.account", "read"), ("ir.default", "read"),
+    }
 _PARAMETER_KEYS.update(analytic_processing.PARAMETER_KEYS)
 _GROUPS['analytic.account.delete'] = "account.group_account_manager"
 _MODELS['analytic.account.delete'] = {'res.company', 'account.analytic.account'}
@@ -5881,7 +5926,7 @@ def _valid_parameters(
         return _is_id(parameters["move_id"]) and parameters[
             "target_move_type"
         ] in _DOCUMENT_TYPES
-    if capability_id == "journal_entry.reverse" or capability_id in {
+    if capability_id in {"journal_entry.reverse", "invoice.reverse_and_reissue"} or capability_id in {
         "customer_credit_note.create",
         "vendor_refund.create",
     }:
@@ -5957,6 +6002,11 @@ def _valid_parameters(
             for field_name in ("invoice_id", "outstanding_line_id")
         )
     if capability_id == "reconciliation.undo":
+        if set(parameters) == {"mode", "line_ids"}:
+            ids = parameters["line_ids"]
+            return (parameters["mode"] == "match_group" and isinstance(ids, list)
+                    and 1 <= len(ids) <= 100 and all(_is_id(value) for value in ids)
+                    and ids == sorted(set(ids)))
         expected = {
             "invoice_id",
             "partial_reconcile_id",
@@ -6650,6 +6700,8 @@ def _deterministic_key(
     if capability_id in _ORDER_TRANSITION_CAPABILITIES:
         return f"{capability_id}:{parameters['order_id']}"
     if capability_id in {"reconciliation.apply", "reconciliation.undo"}:
+        if parameters.get("mode") == "match_group":
+            return move_processing.idempotency_key(capability_id, parameters, company_id)
         if "line_ids" in parameters:
             low, high = sorted(parameters["line_ids"])
             return f"{capability_id}:{low}:{high}"
@@ -6928,6 +6980,7 @@ def _deterministic_key(
     if capability_id in {
         "customer_credit_note.create",
         "vendor_refund.create",
+        "invoice.reverse_and_reissue",
     } or (
         capability_id in {"receivable.payment.register", "payable.payment.register"}
         and "amount" in parameters
@@ -12616,6 +12669,68 @@ def _reverse_entry(
     return _move_result(reversals, company_id, source_id=source.id), False
 
 
+def _reverse_and_reissue_invoice(
+    env: Any, parameters: dict[str, Any], company_id: int,
+    key: str, marker: str, failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    capability_id = "invoice.reverse_and_reissue"
+    with env.cr.savepoint():
+        source = _search_one(env, "account.move", [
+            ("id", "=", parameters["move_id"]), ("company_id", "=", company_id),
+            ("move_type", "in", ["out_invoice", "in_invoice"]),
+        ], company_id, failure_type)
+        if source.state != "posted":
+            raise _fail(failure_type, "state_conflict", "Only a posted invoice or bill can be reversed and reissued.", exit_code=5)
+        if date.fromisoformat(parameters["date"]) > source._fields["date"].context_today(source):
+            raise _fail(failure_type, "business_rule_error", "Reissue requires a current or past native reversal date.", exit_code=6)
+        refund_type = "out_refund" if source.move_type == "out_invoice" else "in_refund"
+        key_marker = _idempotency_key_marker(capability_id, company_id, key)
+        operation_marker = f"{_operation_marker(capability_id, key, parameters)};{key_marker};{marker}"
+
+        def verified_pair(moves: Any, code: str) -> dict[str, Any]:
+            refunds = moves.filtered(lambda move: move.move_type == refund_type)
+            replacements = moves.filtered(lambda move: move.move_type == source.move_type)
+            if (len(moves) != 2 or len(refunds) != 1 or len(replacements) != 1
+                or refunds.state != "posted" or refunds.reversed_entry_id != source
+                or replacements.state != "draft" or replacements.reversed_entry_id
+                or source.state != "posted" or any(
+                    move.id == source.id or move.company_id.id != company_id
+                    or move.invoice_origin != operation_marker or not move.line_ids
+                    for move in moves
+                )):
+                raise _fail(failure_type, code, "The reissue operation does not identify one posted reversal and one draft replacement.", exit_code=5 if code == "idempotency_conflict" else 6)
+            return {"items": [
+                _move_result(move, company_id, source_id=source.id)
+                for move in moves.sorted(lambda move: move.id)
+            ], "processed_count": 2}
+
+        candidates = _scoped(env, "account.move", company_id).search([
+            ("company_id", "=", company_id), ("invoice_origin", "ilike", key_marker),
+        ], limit=3).filtered(lambda move: _move_has_marker(move, key_marker))
+        if candidates:
+            return verified_pair(candidates, "idempotency_conflict"), True
+        if source.reversal_move_ids:
+            raise _fail(failure_type, "idempotency_conflict", "The invoice already has a reversal outside this reissue operation.", exit_code=5)
+        wizard = _scoped(env, "account.move.reversal", company_id).with_context(
+            active_model="account.move", active_ids=[source.id],
+        ).create({"date": parameters["date"], "reason": parameters["reason"], "journal_id": source.journal_id.id})
+        wizard.modify_moves()
+        source.invalidate_recordset()
+        refunds = _scoped(env, "account.move", company_id).search([
+            ("company_id", "=", company_id), ("reversed_entry_id", "=", source.id),
+            ("move_type", "=", refund_type),
+        ], limit=2)
+        replacements = _ensure_ids(env, "account.move", set(wizard.new_move_ids.ids), [
+            ("company_id", "=", company_id), ("move_type", "=", source.move_type),
+        ], company_id, failure_type)
+        moves = refunds | replacements
+        if len(refunds) != 1 or len(replacements) != 1:
+            raise _fail(failure_type, "odoo_write_error", "Native reissue did not create exactly two accounting documents.", exit_code=6)
+        moves.write({"invoice_origin": operation_marker})
+        moves.invalidate_recordset()
+        return verified_pair(moves, "odoo_write_error"), False
+
+
 def _create_refund(
     env: Any,
     capability_id: str,
@@ -13720,12 +13835,74 @@ def _apply_reconciliation(
     return result, False
 
 
+def _undo_match_group(
+    env: Any, parameters: dict[str, Any], company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    with env.cr.savepoint():
+        requested = _ensure_ids(env, "account.move.line", set(parameters["line_ids"]), [
+            ("company_id", "=", company_id),
+        ], company_id, failure_type)
+        # Native matching-number discovery internally uses sudo; never mutate
+        # that unchecked graph. Search it again as the configured caller.
+        discovered = requested._all_reconciled_lines()
+        lines = _ensure_ids(env, "account.move.line", set(discovered.ids), [
+            ("company_id", "=", company_id),
+        ], company_id, failure_type)
+        if not set(requested.ids) <= set(lines.ids):
+            raise _fail(failure_type, "state_conflict", "The native matching group does not contain its requested lines.", exit_code=5)
+        lines.check_access("write")
+        moves = _ensure_ids(env, "account.move", set(lines.move_id.ids), [
+            ("company_id", "=", company_id),
+        ], company_id, failure_type)
+        moves.check_access("write")
+        partials = lines.matched_debit_ids | lines.matched_credit_ids
+        partials = _ensure_ids(env, "account.partial.reconcile", set(partials.ids), [
+            ("company_id", "=", company_id),
+        ], company_id, failure_type)
+        fulls = _ensure_ids(env, "account.full.reconcile", set((lines.full_reconcile_id | partials.full_reconcile_id).ids), [], company_id, failure_type)
+        if (not set((partials.debit_move_id | partials.credit_move_id).ids) <= set(lines.ids)
+            or not set(fulls.reconciled_line_ids.ids) <= set(lines.ids)
+            or not set(fulls.partial_reconcile_ids.ids) <= set(partials.ids)):
+            raise _fail(failure_type, "state_conflict", "The native matching group has an incomplete reconciliation graph.", exit_code=5)
+        partials.check_access("unlink")
+        fulls.check_access("unlink")
+        replay = not partials and not fulls
+        if not replay:
+            related = _scoped(env, "account.move", company_id).search([
+                ("tax_cash_basis_rec_id", "in", partials.ids),
+            ]) | partials.exchange_move_id
+            related = _ensure_ids(env, "account.move", set(related.ids), [
+                ("company_id", "=", company_id),
+            ], company_id, failure_type)
+            related.check_access("write")
+            related.filtered(lambda move: move.state == "draft").check_access("unlink")
+            related_lines = _ensure_ids(env, "account.move.line", set(related.line_ids.ids), [
+                ("company_id", "=", company_id),
+            ], company_id, failure_type)
+            related_lines.check_access("write")
+            payments = partials._get_to_update_payments(from_state="paid")
+            payments = _ensure_ids(env, "account.payment", set(payments.ids), [
+                ("company_id", "=", company_id),
+            ], company_id, failure_type)
+            payments.check_access("write")
+            lines.remove_move_reconcile()
+            lines.invalidate_recordset()
+        if lines.matched_debit_ids or lines.matched_credit_ids or lines.full_reconcile_id:
+            raise _fail(failure_type, "odoo_write_error", "Native matching-group undo left reconciliation links.", exit_code=6)
+        result = _unreconciled_result(lines, company_id)
+        result["reconciled"] = bool(lines and all(bool(line.reconciled) for line in lines))
+        return result, replay
+
+
 def _undo_reconciliation(
     env: Any,
     parameters: dict[str, Any],
     company_id: int,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if parameters.get("mode") == "match_group":
+        return _undo_match_group(env, parameters, company_id, failure_type)
     if "invoice_id" in parameters:
         return _undo_invoice_reconciliation(env, parameters, company_id, failure_type)
     expected_ids = set(parameters["line_ids"])
@@ -17996,6 +18173,22 @@ def _write_company_processing(
             model = company_processing.RELATION_MODELS.get(field)
             if model and value is not None:
                 domain = [("company_ids", "in", [company_id])] if model == "account.account" else [("company_id", "=", company_id)]
+                if capability_id in {
+                    "company.default_accounts.assign", "company.bank_defaults.assign",
+                    "company.discount_allocation_accounts.assign",
+                }:
+                    domain = [("company_ids", "parent_of", [company_id])]
+                    if capability_id == "company.default_accounts.assign":
+                        domain.append(("account_type", "not in", [
+                            "asset_receivable", "liability_payable", "asset_cash",
+                            "liability_credit_card", "off_balance",
+                        ]))
+                    elif capability_id == "company.bank_defaults.assign":
+                        domain.append(("account_type", "in", ["asset_current", "liability_current"]))
+                        if field == "transfer_account_id":
+                            domain.append(("reconcile", "=", True))
+                    else:
+                        domain.append(("account_type", "in", ["income", "income_other", "expense", "expense_other"]))
                 if model == "account.journal":
                     domain.append(("type", "=", "general"))
                 _ensure_ids(env, model, {value}, domain, company_id, failure_type)
@@ -18092,6 +18285,8 @@ def _write_journal_processing(
             result["source_id"] = record.id
             return result, replay
         changes = parameters.get("changes")
+        if capability_id == "journal.sequence_policy.update" and "is_self_billing" in changes and record.type != "purchase":
+            raise _fail(failure_type, "business_rule_error", "Self-billing sequence policy only applies to purchase journals.", exit_code=6)
         if capability_id == "journal.non_deductible_account.assign":
             account_id = parameters["account_id"]
             if account_id is not None:
@@ -20541,9 +20736,9 @@ def _journal_item_current(line: Any, fields: set[str]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for field in fields:
         value = getattr(line, field)
-        if field in {"account_id", "partner_id", "product_uom_id"}:
+        if field in {"account_id", "partner_id", "product_uom_id", "currency_id"}:
             result[field] = _relation_id(value)
-        elif field in {"debit", "credit", "deductible_amount"}:
+        elif field in {"debit", "credit", "deductible_amount", "amount_currency"}:
             result[field] = _canonical_decimal_text(value)
         elif field == "analytic_distribution":
             result[field] = _normalized_analytic_distribution(value) or None
@@ -20557,7 +20752,7 @@ def _journal_item_current(line: Any, fields: set[str]) -> dict[str, Any]:
 def _journal_item_write_values(changes: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for field, value in changes.items():
-        if field in {"debit", "credit", "deductible_amount"}:
+        if field in {"debit", "credit", "deductible_amount", "amount_currency"}:
             result[field] = float(Decimal(value))
         elif field == "analytic_distribution":
             result[field] = _odoo_analytic_distribution(value)
@@ -20608,25 +20803,36 @@ def _write_journal_item_processing(
         _ensure_ids(env, "res.partner", {
             item["changes"]["partner_id"] for item in requested if item["changes"].get("partner_id") is not None
         }, [("company_id", "in", [False, company_id])], company_id, failure_type)
+        currencies = _ensure_ids(env, "res.currency", {
+            item["changes"]["currency_id"] for item in requested if "currency_id" in item["changes"]
+        }, [("active", "=", True)], company_id, failure_type)
+        currency_by_id = {currency.id: currency for currency in currencies}
+        for item in requested:
+            changes = item["changes"]
+            if "amount_currency" in changes:
+                currency = currency_by_id[changes["currency_id"]] if "currency_id" in changes else by_id[item["line_id"]].currency_id
+                if _rounded_currency_amount(currency, changes["amount_currency"]) != Decimal(changes["amount_currency"]):
+                    raise _fail(failure_type, "business_rule_error", "The foreign amount must match its native currency precision.", exit_code=6)
         _validate_line_analytic_references(env, [item["changes"] for item in requested], company_id, failure_type)
         replay = all(
             _journal_item_current(by_id[item["line_id"]], set(item["changes"])) == item["changes"]
             for item in requested
         )
-        if not replay:
-            if any(_journal_item_sourced(line) for line in lines):
-                raise _fail(failure_type, "business_rule_error", "Source-linked journal lines cannot be changed by this capability.", exit_code=6)
-            move.write({"line_ids": [
-                (1, item["line_id"], _journal_item_write_values(item["changes"]))
+        with env.cr.savepoint():
+            if not replay:
+                if any(_journal_item_sourced(line) for line in lines):
+                    raise _fail(failure_type, "business_rule_error", "Source-linked journal lines cannot be changed by this capability.", exit_code=6)
+                move.write({"line_ids": [
+                    (1, item["line_id"], _journal_item_write_values(item["changes"]))
+                    for item in requested
+                ]})
+                lines.invalidate_recordset()
+                move.invalidate_recordset()
+            if set(move.line_ids.ids) != before_ids or any(
+                _journal_item_current(by_id[item["line_id"]], set(item["changes"])) != item["changes"]
                 for item in requested
-            ]})
-            lines.invalidate_recordset()
-            move.invalidate_recordset()
-        if set(move.line_ids.ids) != before_ids or any(
-            _journal_item_current(by_id[item["line_id"]], set(item["changes"])) != item["changes"]
-            for item in requested
-        ):
-            raise _fail(failure_type, "odoo_write_error", "Native journal-line changes were not persisted with the existing line IDs.", exit_code=6)
+            ):
+                raise _fail(failure_type, "odoo_write_error", "Native journal-line changes were not persisted with the existing line IDs.", exit_code=6)
         return _move_result(move, company_id), replay
 
     line = _invoice_line(env, move, parameters["line_id"], company_id, failure_type) if invoice else _search_one(
@@ -21059,6 +21265,8 @@ def _dispatch_allowed(
         return _post_move(env, capability_id, parameters, company_id, failure_type)
     if capability_id == "journal_entry.reverse":
         return _reverse_entry(env, parameters, company_id, marker, failure_type)
+    if capability_id == "invoice.reverse_and_reissue":
+        return _reverse_and_reissue_invoice(env, parameters, company_id, key, marker, failure_type)
     if capability_id in {"customer_credit_note.create", "vendor_refund.create"}:
         return _create_refund(
             env, capability_id, parameters, company_id, key, marker, failure_type

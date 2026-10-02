@@ -1596,6 +1596,9 @@ _CAPABILITY_MODELS = {
     "analytic.distribution.resolve": "res.company",
     "analytic.distribution_model.delete": "account.analytic.distribution.model",
     "company.bill_processing_policy.update": "res.company",
+    "company.default_accounts.assign": "res.company",
+    "company.bank_defaults.assign": "res.company",
+    "company.discount_allocation_accounts.assign": "res.company",
     "company.cash_discount_accounts.assign": "res.company",
     "company.credit_policy.update": "res.company",
     "company.exchange_configuration.update": "res.company",
@@ -1780,6 +1783,7 @@ _CAPABILITY_MODELS = {
     "payment.reset_to_draft": "account.payment",
     "customer_credit_note.create": "account.move",
     "vendor_refund.create": "account.move",
+    "invoice.reverse_and_reissue": "account.move",
     "payment.post": "account.payment",
     "reconciliation.undo": "account.move.line",
     "bank.transaction.record": "account.bank.statement.line",
@@ -2798,7 +2802,8 @@ def _execute_write_run(
             ) from exc
         return document
 
-    if capability_id in _BATCH_LIFECYCLE_CAPABILITY_IDS and "items" in result:
+    if (capability_id in _BATCH_LIFECYCLE_CAPABILITY_IDS
+            or capability_id == "invoice.reverse_and_reissue") and "items" in result:
         record_ids = [item["id"] for item in result["items"]]
         result_model = _CAPABILITY_MODELS[capability_id]
         verification = {
