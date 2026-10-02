@@ -12,10 +12,12 @@ CAPABILITY_IDS = frozenset(
         "sale.order.search",
         "sale.order.get",
         "sale.order.line.search",
+        "sale.order.line.get",
         "sale.order.analysis.summary",
         "purchase.order.search",
         "purchase.order.get",
         "purchase.order.line.search",
+        "purchase.order.line.get",
         "purchase.order.analysis.summary",
     }
 )
@@ -24,6 +26,7 @@ _SALE_STATES = frozenset({"draft", "sent", "sale", "cancel"})
 _PURCHASE_STATES = frozenset({"draft", "sent", "to approve", "purchase", "cancel"})
 _SALE_INVOICE_STATUSES = frozenset({"no", "to invoice", "invoiced", "upselling"})
 _PURCHASE_INVOICE_STATUSES = frozenset({"no", "to invoice", "invoiced"})
+_ORDER_FILTER_FIELDS = frozenset({"user_id", "payment_term_id", "fiscal_position_id"})
 _GROUP_FIELDS = {
     "sale": {
         "state": "state",
@@ -192,10 +195,12 @@ def _valid_parameters(capability_id: str, parameters: Any) -> bool:
     invoice_statuses = (
         _SALE_INVOICE_STATUSES if kind == "sale" else _PURCHASE_INVOICE_STATUSES
     )
+    if capability_id.endswith(".line.get"):
+        return set(parameters) == {"line_id"} and _positive_id(parameters["line_id"])
     if capability_id.endswith(".get"):
         return set(parameters) == {"order_id"} and _positive_id(parameters["order_id"])
     if capability_id.endswith(".order.search"):
-        if set(parameters) != {
+        required = {
             "query",
             "date_from",
             "date_to",
@@ -205,7 +210,8 @@ def _valid_parameters(capability_id: str, parameters: Any) -> bool:
             "invoice_statuses",
             "after",
             "limit",
-        }:
+        }
+        if not required <= set(parameters) <= required | _ORDER_FILTER_FIELDS:
             return False
         query = parameters["query"]
         return bool(
@@ -219,6 +225,7 @@ def _valid_parameters(capability_id: str, parameters: Any) -> bool:
             and _enum_list(parameters["states"], states)
             and _optional_id(parameters["partner_id"])
             and _optional_id(parameters["currency_id"])
+            and all(_optional_id(parameters.get(field)) for field in _ORDER_FILTER_FIELDS)
             and _enum_list(parameters["invoice_statuses"], invoice_statuses)
             and _optional_id(parameters["after"])
             and _integer(parameters["limit"])
@@ -226,7 +233,7 @@ def _valid_parameters(capability_id: str, parameters: Any) -> bool:
         )
     if capability_id.endswith(".line.search"):
         pending_key = "to_deliver_only" if kind == "sale" else "to_receive_only"
-        if set(parameters) != {
+        required = {
             "order_id",
             "date_from",
             "date_to",
@@ -237,7 +244,8 @@ def _valid_parameters(capability_id: str, parameters: Any) -> bool:
             "to_invoice_only",
             "after",
             "limit",
-        }:
+        }
+        if not required <= set(parameters) <= required | {"is_downpayment", "negative_to_invoice_only"}:
             return False
         return bool(
             _optional_id(parameters["order_id"])
@@ -247,18 +255,22 @@ def _valid_parameters(capability_id: str, parameters: Any) -> bool:
             and _enum_list(parameters["states"], states)
             and isinstance(parameters[pending_key], bool)
             and isinstance(parameters["to_invoice_only"], bool)
+            and ("is_downpayment" not in parameters or isinstance(parameters["is_downpayment"], bool))
+            and ("negative_to_invoice_only" not in parameters or isinstance(parameters["negative_to_invoice_only"], bool))
+            and not (parameters["to_invoice_only"] and parameters.get("negative_to_invoice_only", False))
             and _optional_id(parameters["after"])
             and _integer(parameters["limit"])
             and 1 <= parameters["limit"] <= 1001
         )
-    if set(parameters) != {
+    required = {
         "date_from",
         "date_to",
         "group_by",
         "states",
         "partner_id",
         "currency_id",
-    }:
+    }
+    if not required <= set(parameters) <= required | _ORDER_FILTER_FIELDS | {"invoice_statuses"}:
         return False
     return bool(
         _valid_date_range(parameters, dates_required=True)
@@ -267,6 +279,8 @@ def _valid_parameters(capability_id: str, parameters: Any) -> bool:
         and _enum_list(parameters["states"], states)
         and _optional_id(parameters["partner_id"])
         and _optional_id(parameters["currency_id"])
+        and all(_optional_id(parameters.get(field)) for field in _ORDER_FILTER_FIELDS)
+        and _enum_list(parameters.get("invoice_statuses"), invoice_statuses)
     )
 
 
@@ -325,7 +339,7 @@ def _required_models(capability_id: str) -> tuple[str, ...]:
     models.add(_line_model(kind))
     if capability_id.endswith(".order.search"):
         models.update({"account.move", "stock.picking"})
-    elif capability_id.endswith(".line.search"):
+    elif capability_id.endswith((".line.search", ".line.get")):
         models.update(
             {
                 "product.product",
@@ -335,6 +349,8 @@ def _required_models(capability_id: str) -> tuple[str, ...]:
                 "stock.move",
             }
         )
+        if capability_id.endswith(".line.get"):
+            models.add("account.move")
     else:
         models.update(
             {
@@ -375,7 +391,8 @@ def _field_shape_available(env: Any, capability_id: str) -> bool:
     if not _fields(
         env,
         _order_model(kind),
-        summary_fields if capability_id.endswith(".analysis.summary") else order_fields,
+        {"company_id", "name", "partner_id", "date_order"} if capability_id.endswith(".line.get")
+        else summary_fields if capability_id.endswith(".analysis.summary") else order_fields,
     ):
         return False
     if capability_id.endswith(".analysis.summary"):
@@ -391,6 +408,12 @@ def _field_shape_available(env: Any, capability_id: str) -> bool:
     if capability_id.endswith(".line.search"):
         return bool(
             _fields(env, "account.move.line", {"company_id"})
+            and _fields(env, "stock.move", {"company_id"})
+        )
+    if capability_id.endswith(".line.get"):
+        return bool(
+            _fields(env, "account.move", _INVOICE_FIELDS)
+            and _fields(env, "account.move.line", {"company_id", "move_id"})
             and _fields(env, "stock.move", {"company_id"})
         )
     return bool(
@@ -573,6 +596,9 @@ def _order_domain(kind: str, company_id: int, parameters: dict[str, Any]) -> lis
         domain.append(("partner_id", "=", parameters["partner_id"]))
     if parameters["currency_id"] is not None:
         domain.append(("currency_id", "=", parameters["currency_id"]))
+    for field in ("user_id", "payment_term_id", "fiscal_position_id"):
+        if parameters.get(field) is not None:
+            domain.append((field, "=", parameters[field]))
     if "invoice_statuses" in parameters and parameters["invoice_statuses"] is not None:
         domain.append(("invoice_status", "in", parameters["invoice_statuses"]))
     query = parameters.get("query")
@@ -663,6 +689,10 @@ def _order_header(env: Any, kind: str, order: Any, company_id: int) -> dict[str,
         "transfer_ids": [_record_id(record) for record in transfers],
         "line_count": _line_count(env, kind, _record_id(order), company_id),
     }
+    for field in ("payment_term_id", "fiscal_position_id"):
+        if _fields(env, _order_model(kind), {field}):
+            value = getattr(order, field)
+            item[field] = None if not value else _record_id(value)
     if kind == "sale":
         team = order.team_id
         if team and not _company_matches(team, company_id, shared=True):
@@ -675,6 +705,10 @@ def _order_header(env: Any, kind: str, order: Any, company_id: int) -> dict[str,
                 "delivery_status": _optional_text(order.delivery_status),
             }
         )
+        for field in ("amount_invoiced", "amount_to_invoice"):
+            if _fields(env, _order_model(kind), {field}):
+                value = getattr(order, field)
+                item[field] = None if value is None else _decimal_text(value)
     else:
         item.update(
             {
@@ -718,6 +752,10 @@ def _line_domain(kind: str, company_id: int, parameters: dict[str, Any]) -> list
             domain.append((field, "=", parameters[key]))
     if parameters["states"] is not None:
         domain.append(("state", "in", parameters["states"]))
+    if "is_downpayment" in parameters:
+        domain.append(("is_downpayment", "=", parameters["is_downpayment"]))
+    if parameters.get("negative_to_invoice_only", False):
+        domain.append(("qty_to_invoice", "<", 0))
     return domain
 
 
@@ -835,6 +873,17 @@ def _line_item(env: Any, kind: str, line: Any, company_id: int) -> dict[str, Any
         "invoice_line_ids": invoice_line_ids,
         "stock_move_ids": stock_move_ids,
     }
+    if _fields(env, _line_model(kind), {"is_downpayment"}):
+        if not isinstance(line.is_downpayment, bool):
+            raise ValueError("invalid down-payment flag")
+        item["is_downpayment"] = line.is_downpayment
+    policy = "invoice_policy" if kind == "sale" else "purchase_method"
+    if _fields(env, "product.product", {policy}):
+        value = getattr(product, policy) if product else None
+        choices = {"order", "delivery"} if kind == "sale" else {"purchase", "receive"}
+        if value is not None and value is not False and (not isinstance(value, str) or value not in choices):
+            raise ValueError("invalid product accounting policy")
+        item[policy] = None if value is None or value is False else value
     if kind == "sale":
         item.update(
             {
@@ -842,6 +891,15 @@ def _line_item(env: Any, kind: str, line: Any, company_id: int) -> dict[str, Any
                 "to_deliver_quantity": _decimal_text(_pending_quantity(kind, line)),
             }
         )
+        if _fields(env, _line_model(kind), {"invoice_status"}):
+            value = line.invoice_status
+            if value is not None and value is not False and (not isinstance(value, str) or value not in _SALE_INVOICE_STATUSES):
+                raise ValueError("invalid sales-line invoice status")
+            item["invoice_status"] = None if value is None or value is False else value
+        for native, public in (("qty_invoiced_posted", "posted_invoiced_quantity"), ("amount_invoiced", "amount_invoiced"), ("amount_to_invoice", "amount_to_invoice")):
+            if _fields(env, _line_model(kind), {native}):
+                value = getattr(line, native)
+                item[public] = None if value is None else _decimal_text(value)
     else:
         item.update(
             {
@@ -875,6 +933,26 @@ def _invoice_item(invoice: Any, company_id: int) -> dict[str, Any]:
         "amount_total": _decimal_text(invoice.amount_total),
         "currency": _currency(invoice.currency_id),
     }
+
+
+def _line_get_item(env: Any, capability_id: str, company_id: int,
+                   parameters: dict[str, Any]) -> dict[str, Any] | None:
+    kind = _kind(capability_id)
+    lines = _model(env, _line_model(kind), company_id).search(
+        [("id", "=", parameters["line_id"]), ("company_id", "=", company_id)], limit=2,
+    )
+    if len(lines) > 1:
+        raise ValueError("ambiguous order line")
+    if not lines:
+        return None
+    line = lines[0]
+    item = _line_item(env, kind, line, company_id)
+    invoice_lines = _linked_records(env, "account.move.line", line.invoice_lines, company_id)
+    move_ids = sorted({_record_id(invoice_line.move_id) for invoice_line in invoice_lines})
+    invoices = [] if not move_ids else _model(env, "account.move", company_id).search(
+        [("id", "in", move_ids), ("company_id", "=", company_id)], order="id asc",
+    )
+    return {**item, "invoices": [_invoice_item(invoice, company_id) for invoice in invoices]}
 
 
 def _transfer_item(transfer: Any, company_id: int) -> dict[str, Any]:
@@ -1046,10 +1124,22 @@ def dispatch(
         page = _scope_page(env, capability_id, company_id, failure_type)
         if not page["access_allowed"]:
             return page
+        kind = _kind(capability_id)
+        if capability_id.endswith((".order.search", ".analysis.summary")):
+            requested_fields = {field for field in _ORDER_FILTER_FIELDS if parameters.get(field) is not None}
+            if not _fields(env, _order_model(kind), requested_fields):
+                raise _runtime_failure(failure_type)
+        if (capability_id.endswith(".line.search") and "is_downpayment" in parameters
+                and not _fields(env, _line_model(kind), {"is_downpayment"})):
+            raise _runtime_failure(failure_type)
         if capability_id.endswith(".order.search"):
             cursor_found, items = _order_search_items(
                 env, capability_id, company_id, parameters
             )
+        elif capability_id.endswith(".line.get"):
+            cursor_found = True
+            item = _line_get_item(env, capability_id, company_id, parameters)
+            items = [] if item is None else [item]
         elif capability_id.endswith(".order.get"):
             cursor_found = True
             item = _order_get_item(env, capability_id, company_id, parameters)

@@ -16,10 +16,12 @@ ORDER_DOCUMENT_CAPABILITY_IDS = frozenset(
         "sale.order.search",
         "sale.order.get",
         "sale.order.line.search",
+        "sale.order.line.get",
         "sale.order.analysis.summary",
         "purchase.order.search",
         "purchase.order.get",
         "purchase.order.line.search",
+        "purchase.order.line.get",
         "purchase.order.analysis.summary",
     }
 )
@@ -27,6 +29,9 @@ SEARCH_CAPABILITY_IDS = frozenset({"sale.order.search", "purchase.order.search"}
 GET_CAPABILITY_IDS = frozenset({"sale.order.get", "purchase.order.get"})
 LINE_SEARCH_CAPABILITY_IDS = frozenset(
     {"sale.order.line.search", "purchase.order.line.search"}
+)
+LINE_GET_CAPABILITY_IDS = frozenset(
+    {"sale.order.line.get", "purchase.order.line.get"}
 )
 SUMMARY_CAPABILITY_IDS = frozenset(
     {"sale.order.analysis.summary", "purchase.order.analysis.summary"}
@@ -68,6 +73,7 @@ MAX_LIMIT = 1000
 _CURSOR_VERSION = 1
 _DECIMAL_PATTERN = re.compile(r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 _UTC_PATTERN = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
+_ACCOUNTING_ID_FILTERS = frozenset({"user_id", "payment_term_id", "fiscal_position_id"})
 
 
 class OrderDocumentPort(Protocol):
@@ -278,7 +284,7 @@ def _search_parameters(
         "limit",
         "cursor",
     }
-    if not set(parameters) <= allowed:
+    if not set(parameters) <= allowed | _ACCOUNTING_ID_FILTERS:
         raise _invalid(f"{capability_id} contains an unsupported parameter.")
     query = parameters.get("query")
     if query is not None:
@@ -299,6 +305,7 @@ def _search_parameters(
         ),
         "limit": limit,
         "cursor": cursor,
+        **{key: _optional_id(parameters, key) for key in sorted(_ACCOUNTING_ID_FILTERS) if key in parameters},
     }
 
 
@@ -313,6 +320,8 @@ def _line_parameters(capability_id: str, parameters: dict[str, Any]) -> dict[str
         "states",
         pending_key,
         "to_invoice_only",
+        "is_downpayment",
+        "negative_to_invoice_only",
         "limit",
         "cursor",
     }
@@ -324,6 +333,11 @@ def _line_parameters(capability_id: str, parameters: dict[str, Any]) -> dict[str
         raise _invalid(f"parameters.{pending_key} must be boolean.")
     if not isinstance(to_invoice_only, bool):
         raise _invalid("parameters.to_invoice_only must be boolean.")
+    for key in ("is_downpayment", "negative_to_invoice_only"):
+        if key in parameters and not isinstance(parameters[key], bool):
+            raise _invalid(f"parameters.{key} must be boolean.")
+    if to_invoice_only and parameters.get("negative_to_invoice_only") is True:
+        raise _invalid("Positive and negative pending invoice quantities cannot be selected together.")
     date_from, date_to = _date_range(parameters)
     limit, cursor = _pagination(parameters)
     return {
@@ -337,6 +351,7 @@ def _line_parameters(capability_id: str, parameters: dict[str, Any]) -> dict[str
         "to_invoice_only": to_invoice_only,
         "limit": limit,
         "cursor": cursor,
+        **{key: parameters[key] for key in ("is_downpayment", "negative_to_invoice_only") if key in parameters},
     }
 
 
@@ -353,7 +368,7 @@ def _summary_parameters(
     }
     if (
         not {"date_from", "date_to", "group_by"} <= set(parameters)
-        or not set(parameters) <= allowed
+        or not set(parameters) <= allowed | _ACCOUNTING_ID_FILTERS | {"invoice_statuses"}
     ):
         raise _invalid(f"{capability_id} requires date_from, date_to and group_by.")
     date_from, date_to = _date_range(parameters)
@@ -370,6 +385,8 @@ def _summary_parameters(
         "states": _enum_list(parameters, "states", _states(capability_id)),
         "partner_id": _optional_id(parameters, "partner_id"),
         "currency_id": _optional_id(parameters, "currency_id"),
+        **{key: _optional_id(parameters, key) for key in sorted(_ACCOUNTING_ID_FILTERS) if key in parameters},
+        **({"invoice_statuses": _enum_list(parameters, "invoice_statuses", _invoice_statuses(capability_id))} if "invoice_statuses" in parameters else {}),
     }
 
 
@@ -388,7 +405,11 @@ def validate_order_document_request(
             exit_code=4,
         )
     request_id, context, parameters = _envelope(request)
-    if capability_id in GET_CAPABILITY_IDS:
+    if capability_id in LINE_GET_CAPABILITY_IDS:
+        if set(parameters) != {"line_id"} or not _positive_id(parameters.get("line_id")):
+            raise _invalid("parameters must contain one positive line_id.")
+        normalized = {"line_id": parameters["line_id"]}
+    elif capability_id in GET_CAPABILITY_IDS:
         if set(parameters) != {"order_id"} or not _positive_id(
             parameters.get("order_id")
         ):
@@ -557,6 +578,12 @@ def _header_keys(capability_id: str) -> set[str]:
     )
 
 
+def _optional_header_keys(capability_id: str) -> set[str]:
+    return {"payment_term_id", "fiscal_position_id"} | (
+        {"amount_invoiced", "amount_to_invoice"} if _sale(capability_id) else set()
+    )
+
+
 def _valid_header(
     capability_id: str,
     value: Any,
@@ -564,7 +591,12 @@ def _valid_header(
     company_id: int,
     parameters: dict[str, Any] | None,
 ) -> bool:
-    if not isinstance(value, dict) or set(value) != _header_keys(capability_id):
+    required = _header_keys(capability_id)
+    if not isinstance(value, dict) or not required <= set(value) <= required | _optional_header_keys(capability_id):
+        return False
+    if any(key in value and value[key] is not None and not _positive_id(value[key]) for key in ("payment_term_id", "fiscal_position_id")):
+        return False
+    if any(key in value and value[key] is not None and _decimal(value[key]) is None for key in ("amount_invoiced", "amount_to_invoice")):
         return False
     states = _states(capability_id)
     statuses = _invoice_statuses(capability_id)
@@ -574,10 +606,12 @@ def _valid_header(
         and _named_ref(value["company"])
         and value["company"]["id"] == company_id
         and _named_ref(value["partner"])
+        and isinstance(value["state"], str)
         and value["state"] in states
         and _utc_datetime(value["date_order"])
         and _currency(value["currency"])
         and _optional_ref(value["user"])
+        and isinstance(value["invoice_status"], str)
         and value["invoice_status"] in statuses
         and all(
             _decimal(value[key]) is not None
@@ -626,6 +660,9 @@ def _valid_header(
         and value["currency"]["id"] != parameters["currency_id"]
         or parameters["invoice_statuses"] is not None
         and value["invoice_status"] not in parameters["invoice_statuses"]
+        or parameters.get("user_id") is not None
+        and (value["user"] is None or value["user"]["id"] != parameters["user_id"])
+        or any(parameters.get(key) is not None and value.get(key) != parameters[key] for key in ("payment_term_id", "fiscal_position_id"))
     )
 
 
@@ -668,6 +705,13 @@ def _line_keys(capability_id: str) -> set[str]:
     )
 
 
+def _optional_line_keys(capability_id: str) -> set[str]:
+    return {"is_downpayment"} | (
+        {"invoice_policy", "invoice_status", "posted_invoiced_quantity", "amount_invoiced", "amount_to_invoice"}
+        if _sale(capability_id) else {"purchase_method"}
+    )
+
+
 def _valid_line(
     capability_id: str,
     value: Any,
@@ -675,7 +719,15 @@ def _valid_line(
     company_id: int,
     parameters: dict[str, Any] | None,
 ) -> bool:
-    if not isinstance(value, dict) or set(value) != _line_keys(capability_id):
+    required = _line_keys(capability_id)
+    if not isinstance(value, dict) or not required <= set(value) <= required | _optional_line_keys(capability_id):
+        return False
+    if "is_downpayment" in value and not isinstance(value["is_downpayment"], bool):
+        return False
+    for key, allowed in (("invoice_policy", {"order", "delivery"}), ("purchase_method", {"purchase", "receive"}), ("invoice_status", SALE_INVOICE_STATUSES)):
+        if key in value and value[key] is not None and (not isinstance(value[key], str) or value[key] not in allowed):
+            return False
+    if any(key in value and value[key] is not None and _decimal(value[key]) is None for key in ("posted_invoiced_quantity", "amount_invoiced", "amount_to_invoice")):
         return False
     decimal_keys = {
         "ordered_quantity",
@@ -698,6 +750,7 @@ def _valid_line(
         and _named_ref(value["company"])
         and value["company"]["id"] == company_id
         and _named_ref(value["partner"])
+        and isinstance(value["state"], str)
         and value["state"] in _states(capability_id)
         and _utc_datetime(value["date_order"])
         and _integer(value["sequence"])
@@ -747,6 +800,10 @@ def _valid_line(
         and _decimal(value[pending_key]) <= 0
         or parameters["to_invoice_only"]
         and _decimal(value["to_invoice_quantity"]) <= 0
+        or parameters.get("negative_to_invoice_only") is True
+        and _decimal(value["to_invoice_quantity"]) >= 0
+        or "is_downpayment" in parameters
+        and value.get("is_downpayment") is not parameters["is_downpayment"]
     )
 
 
@@ -765,9 +822,11 @@ def _valid_invoice(value: Any, *, sale: bool) -> bool:
         }
         and _positive_id(value["id"])
         and _text(value["name"])
+        and isinstance(value["move_type"], str)
         and value["move_type"] in (SALE_MOVE_TYPES if sale else PURCHASE_MOVE_TYPES)
+        and isinstance(value["state"], str)
         and value["state"] in INVOICE_STATES
-        and (value["payment_state"] is None or value["payment_state"] in PAYMENT_STATES)
+        and (value["payment_state"] is None or isinstance(value["payment_state"], str) and value["payment_state"] in PAYMENT_STATES)
         and _decimal(value["amount_total"]) is not None
         and _currency(value["currency"])
     )
@@ -800,9 +859,9 @@ def _valid_get(
     order_id: int,
 ) -> bool:
     expected = _header_keys(capability_id) | {"lines", "invoices", "transfers"}
-    if not isinstance(value, dict) or set(value) != expected:
+    if not isinstance(value, dict) or not expected <= set(value) <= expected | _optional_header_keys(capability_id):
         return False
-    header = {key: value[key] for key in _header_keys(capability_id)}
+    header = {key: value[key] for key in _header_keys(capability_id) | _optional_header_keys(capability_id) if key in value}
     lines = value["lines"]
     invoices = value["invoices"]
     transfers = value["transfers"]
@@ -837,6 +896,20 @@ def _valid_get(
     )
 
 
+def _valid_line_get(capability_id: str, value: Any, *, company_id: int, line_id: int) -> bool:
+    if not isinstance(value, dict) or "invoices" not in value:
+        return False
+    invoices = value["invoices"]
+    return bool(
+        _valid_line(capability_id, {key: item for key, item in value.items() if key != "invoices"}, company_id=company_id, parameters=None)
+        and value["id"] == line_id
+        and isinstance(invoices, list)
+        and all(_valid_invoice(invoice, sale=_sale(capability_id)) for invoice in invoices)
+        and [invoice["id"] for invoice in invoices] == sorted({invoice["id"] for invoice in invoices})
+        and (not invoices or value["invoice_line_ids"])
+    )
+
+
 _SUMMARY_AMOUNT_KEYS = ("amount_untaxed", "amount_tax", "amount_total")
 
 
@@ -846,9 +919,9 @@ def _valid_group_descriptor(capability_id: str, group_by: str, value: Any) -> bo
     group_id = value["id"]
     group_value = value["value"]
     if group_by == "state":
-        return group_id is None and group_value in _states(capability_id)
+        return group_id is None and isinstance(group_value, str) and group_value in _states(capability_id)
     if group_by == "invoice_status":
-        return group_id is None and group_value in _invoice_statuses(capability_id)
+        return group_id is None and isinstance(group_value, str) and group_value in _invoice_statuses(capability_id)
     if group_by == "partner":
         return _positive_id(group_id) and _text(group_value)
     if group_by == "currency":
@@ -912,6 +985,10 @@ def _valid_summary(
         ):
             return False
         if parameters["group_by"] == "currency" and descriptor["id"] != currency["id"]:
+            return False
+        if parameters["group_by"] == "invoice_status" and parameters.get("invoice_statuses") is not None and descriptor["value"] not in parameters["invoice_statuses"]:
+            return False
+        if parameters["group_by"] in {"salesperson", "buyer"} and parameters.get("user_id") is not None and descriptor["id"] != parameters["user_id"]:
             return False
         identity = (
             descriptor["id"] or 0,
@@ -1125,7 +1202,9 @@ def read_order_document(
             exit_code=4,
         )
     item = items[0]
-    if capability_id in GET_CAPABILITY_IDS:
+    if capability_id in LINE_GET_CAPABILITY_IDS:
+        valid = _valid_line_get(capability_id, item, company_id=context["company_id"], line_id=parameters["line_id"])
+    elif capability_id in GET_CAPABILITY_IDS:
         valid = _valid_get(
             capability_id,
             item,

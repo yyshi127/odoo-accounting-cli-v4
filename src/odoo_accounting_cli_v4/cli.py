@@ -725,6 +725,9 @@ _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
     "sale_order_line_search": lambda port, request: read_order_document(
         port, "sale.order.line.search", request
     ),
+    "sale_order_line_get": lambda port, request: read_order_document(
+        port, "sale.order.line.get", request
+    ),
     "sale_order_analysis_summary": lambda port, request: read_order_document(
         port, "sale.order.analysis.summary", request
     ),
@@ -736,6 +739,9 @@ _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
     ),
     "purchase_order_line_search": lambda port, request: read_order_document(
         port, "purchase.order.line.search", request
+    ),
+    "purchase_order_line_get": lambda port, request: read_order_document(
+        port, "purchase.order.line.get", request
     ),
     "purchase_order_analysis_summary": lambda port, request: read_order_document(
         port, "purchase.order.analysis.summary", request
@@ -1286,6 +1292,9 @@ _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "sale_order_line_search": partial(
         validate_order_document_request, "sale.order.line.search"
     ),
+    "sale_order_line_get": partial(
+        validate_order_document_request, "sale.order.line.get"
+    ),
     "sale_order_analysis_summary": partial(
         validate_order_document_request, "sale.order.analysis.summary"
     ),
@@ -1297,6 +1306,9 @@ _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     ),
     "purchase_order_line_search": partial(
         validate_order_document_request, "purchase.order.line.search"
+    ),
+    "purchase_order_line_get": partial(
+        validate_order_document_request, "purchase.order.line.get"
     ),
     "purchase_order_analysis_summary": partial(
         validate_order_document_request, "purchase.order.analysis.summary"
@@ -1717,10 +1729,12 @@ _CAPABILITY_MODELS = {
     "sale.order.search": "sale.order",
     "sale.order.get": "sale.order",
     "sale.order.line.search": "sale.order.line",
+    "sale.order.line.get": "sale.order.line",
     "sale.order.analysis.summary": "sale.order",
     "purchase.order.search": "purchase.order",
     "purchase.order.get": "purchase.order",
     "purchase.order.line.search": "purchase.order.line",
+    "purchase.order.line.get": "purchase.order.line",
     "purchase.order.analysis.summary": "purchase.order",
     "sale.order.create": "sale.order",
     "sale.order.update_draft": "sale.order",
@@ -2507,7 +2521,9 @@ def _execute_read(
                                                                 "asset.get",
                                                                 "stock.transfer.get",
                                                                 "sale.order.get",
+                                                                "sale.order.line.get",
                                                                 "purchase.order.get",
+                                                                "purchase.order.line.get",
                                                                 *CORE_OBJECT_GET_CAPABILITY_IDS,
                                                             }
                                                             else (
@@ -3020,10 +3036,12 @@ def _configured_port_factory(capability_id: str, request: dict[str, Any]) -> obj
         "sale.order.search",
         "sale.order.get",
         "sale.order.line.search",
+        "sale.order.line.get",
         "sale.order.analysis.summary",
         "purchase.order.search",
         "purchase.order.get",
         "purchase.order.line.search",
+        "purchase.order.line.get",
         "purchase.order.analysis.summary",
     }:
         return OdooOrderDocumentsPort(client)

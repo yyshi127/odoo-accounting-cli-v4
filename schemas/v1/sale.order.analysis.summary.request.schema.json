@@ -24,7 +24,11 @@
         "group_by": {"enum": ["state", "invoice_status", "partner", "salesperson", "currency"]},
         "states": {"$ref": "#/$defs/nullableStates"},
         "partner_id": {"$ref": "#/$defs/nullableId"},
-        "currency_id": {"$ref": "#/$defs/nullableId"}
+        "currency_id": {"$ref": "#/$defs/nullableId"},
+        "user_id": {"$ref": "#/$defs/nullableId"},
+        "payment_term_id": {"$ref": "#/$defs/nullableId"},
+        "fiscal_position_id": {"$ref": "#/$defs/nullableId"},
+        "invoice_statuses": {"oneOf": [{"type": "null"}, {"type": "array", "minItems": 1, "maxItems": 4, "uniqueItems": true, "items": {"enum": ["upselling","invoiced","to invoice","no"]}}]}
       }
     }
   }

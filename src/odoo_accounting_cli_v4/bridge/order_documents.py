@@ -10,10 +10,12 @@ CAPABILITY_IDS = frozenset(
         "sale.order.search",
         "sale.order.get",
         "sale.order.line.search",
+        "sale.order.line.get",
         "sale.order.analysis.summary",
         "purchase.order.search",
         "purchase.order.get",
         "purchase.order.line.search",
+        "purchase.order.line.get",
         "purchase.order.analysis.summary",
     }
 )

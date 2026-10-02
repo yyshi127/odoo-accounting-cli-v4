@@ -22,6 +22,12 @@
       "type": "object", "additionalProperties": false,
       "required": ["id", "order", "company", "partner", "state", "date_order", "sequence", "display_type", "description", "product", "uom", "ordered_quantity", "invoiced_quantity", "to_invoice_quantity", "unit_price", "discount_percent", "amount_untaxed", "amount_tax", "amount_total", "currency", "taxes", "invoice_line_ids", "stock_move_ids", "delivered_quantity", "to_deliver_quantity"],
       "properties": {
+        "is_downpayment": {"type": "boolean"},
+        "invoice_policy": {"enum": ["order", "delivery", null], "description": "Native template-shared invoicing policy, not a company-dependent setting."},
+        "invoice_status": {"enum": ["upselling", "invoiced", "to invoice", "no", null]},
+        "posted_invoiced_quantity": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/decimal"}]},
+        "amount_invoiced": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/decimal"}]},
+        "amount_to_invoice": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/decimal"}]},
         "id": {"type": "integer", "minimum": 1}, "order": {"$ref": "#/$defs/ref"}, "company": {"$ref": "#/$defs/ref"}, "partner": {"$ref": "#/$defs/ref"}, "state": {"enum": ["draft", "sent", "sale", "cancel"]}, "date_order": {"$ref": "#/$defs/utcDateTime"}, "sequence": {"type": "integer", "minimum": 0}, "display_type": {"$ref": "#/$defs/nullableText"}, "description": {"type": "string", "minLength": 1}, "product": {"$ref": "#/$defs/nullableRef"}, "uom": {"$ref": "#/$defs/nullableRef"},
         "ordered_quantity": {"$ref": "#/$defs/decimal"}, "invoiced_quantity": {"$ref": "#/$defs/decimal"}, "to_invoice_quantity": {"$ref": "#/$defs/decimal"}, "delivered_quantity": {"$ref": "#/$defs/decimal"}, "to_deliver_quantity": {"$ref": "#/$defs/decimal"}, "unit_price": {"$ref": "#/$defs/decimal"}, "discount_percent": {"$ref": "#/$defs/decimal"}, "amount_untaxed": {"$ref": "#/$defs/decimal"}, "amount_tax": {"$ref": "#/$defs/decimal"}, "amount_total": {"$ref": "#/$defs/decimal"}, "currency": {"$ref": "#/$defs/currency"}, "taxes": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/ref"}}, "invoice_line_ids": {"$ref": "#/$defs/idList"}, "stock_move_ids": {"$ref": "#/$defs/idList"}
       }
@@ -40,6 +46,10 @@
       "type": "object", "additionalProperties": false,
       "required": ["id", "name", "company", "partner", "state", "date_order", "currency", "user", "invoice_status", "amount_untaxed", "amount_tax", "amount_total", "invoice_ids", "transfer_ids", "line_count", "validity_date", "client_order_ref", "team", "delivery_status", "lines", "invoices", "transfers"],
       "properties": {
+        "payment_term_id": {"type": ["integer", "null"], "minimum": 1},
+        "fiscal_position_id": {"type": ["integer", "null"], "minimum": 1},
+        "amount_invoiced": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/decimal"}]},
+        "amount_to_invoice": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/decimal"}]},
         "id": {"type": "integer", "minimum": 1}, "name": {"type": "string", "minLength": 1}, "company": {"$ref": "#/$defs/ref"}, "partner": {"$ref": "#/$defs/ref"},
         "state": {"enum": ["draft", "sent", "sale", "cancel"]}, "date_order": {"$ref": "#/$defs/utcDateTime"}, "currency": {"$ref": "#/$defs/currency"}, "user": {"$ref": "#/$defs/nullableRef"}, "invoice_status": {"enum": ["upselling", "invoiced", "to invoice", "no"]},
         "amount_untaxed": {"$ref": "#/$defs/decimal"}, "amount_tax": {"$ref": "#/$defs/decimal"}, "amount_total": {"$ref": "#/$defs/decimal"},

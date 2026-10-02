@@ -4,9 +4,9 @@ Updated: 2026-10-02 (Asia/Shanghai)
 
 ## Current authoritative count — 2026-10-02
 
-554 registered IDs;539 handlers (251 reads,288 writes);
-1084 schemas;462 unconfigured,77 degraded,15 disabled. Enabled integrations:
-536 implemented,two planned,one failed. Latest invoice-round/installment checkpoint
+556 registered IDs;541 handlers (253 reads,288 writes);
+1088 schemas;464 unconfigured,77 degraded,15 disabled. Enabled integrations:
+538 implemented,two planned,one failed. Latest order-accounting-read checkpoint
 at the end is authoritative; totals are not a full accounting denominator,
 completion percentage or unrestricted ordinary-user permission guarantee.
 
@@ -6586,3 +6586,62 @@ accounting/country-tax/FX/branch/lock/hash/concurrent combinations are covered.
 
 Registry file SHA256 92612d00ff1b10249968068c60a338c20f38300a3103bc418e6cb6cdfe79536e;
 canonical SHA256 6af0692cb52982816bc6f20a9e66b045f02249c3bac516d9ca03ca6a930fcc28.
+
+## Current phase checkpoint — order accounting reads, 2026-10-02
+
+Two NEW IDs: sale.order.line.get and purchase.order.line.get. Eight EXT interfaces:
+sale/purchase.order.search/get/line.search/analysis.summary. Totals556 registered /
+541 handlers (253 reads,288 writes),1088 schemas;464 unconfigured,77 degraded,
+15 disabled. Enabled integrations538 implemented,two planned,one failed. This
+does not establish a full-accounting denominator or unrestricted availability.
+
+Exact line_id reads return existing line fields plus ordinary-visible AML-to-move
+invoice graphs. Models/ACLs are the old line-search set plus account.move, not
+whole-order-get picking/location prerequisites. Existing header payment/fiscal
+IDs and user/term/fiscal search/summary filters are added; summary invoice-status
+filtering precedes aggregation. Lines expose native down-payment flag and policy;
+sale lines additionally expose status/posted quantity/native invoiced and remaining
+amounts, with sale header native amounts. These are source projections, not
+payment/residual amounts or local recalculations. Draft quantities differ from
+posted measures; installed native legacy/compute_sudo semantics remain intact.
+Optional keys are independent: missing fields omit keys, product-less policy is
+null; omitted inputs keep old cursor bindings and old required fields/ACLs.
+negative_to_invoice_only means qty_to_invoice<0, not refund eligibility; explicit
+is_downpayment includes meaningful False. Positive/negative invoice flags conflict.
+
+Verification:400 local136.24s/server95.46s focused and order-read regression tests;
+accepted shared dual-isolated native27.52s, UID5suFalsecompany1. Exact graphs,
+draft/posted consumers, full negative/flag paging and foreign-company rejection
+were compared to native ordinary-visible records. All owned fixtures, company1+2
+stored settings, defaults, currencies/rates and all user/implied groups passed
+fresh rollback. Fixture-only temporary sales/purchase groups and down-payment
+account were rolled back. Two earlier attempts failed on over-strong DP-section
+cardinality/quantity assumptions and foreign-PO missing operation type; full
+rollback preceded each failure. Only the shared fixture was repaired. Foreign
+draft PO uses owned type/native sequence with read-only shared locations; no
+warehouse/location/routes/picking/move workflow is created. No caller sudo,
+generic dispatcher/store/gate, persistent service config or native/addon change.
+Do not rerun the accepted native smoke merely to obtain a newer timestamp.
+
+Deployment:26 explicit paths,18 existing/eight new; original18 and repair1/1/final1
+before-backups downloaded/hash-verified. All26 final local/server bytes equal;
+546 unrelated prior descriptors unchanged. Metadata four nodes local29.40s /
+server23.50s; no whole-suite or unrelated legacy-matrix repair claim. Registry
+2092899bytes below unchanged2MiB public-file checker limit; loader remains4MiB.
+No new public privacy/lint findings; existing document findings were not erased.
+Services active with baseline PIDs/restart counts unchanged; free5260865536bytes
+(about4.90GiB). Docs remain local Git handoff, preserving server overlays.
+Registry file SHA25648b4516bc7cd0c76d69c09bde05633729e6de84afcd9c7cc3967348614fe2679;
+canonical SHA25635b783ad8583b8ab89597d806c0d1d26960f29b6d434244a568910d98782f53a.
+
+Private resumable evidence: .tooling/accounting-order-read-depth-audit-20261002
+contains STATE/native-source/foreign-PO prerequisite source, manifest and all
+before-backups, initial/repair1 failure observations, accepted repair-live2 logs
+and terminal handle, final local/server byte/service facts. Normal exact28path
+checkpoint/push follows these verified facts; verify a fresh remote HEAD.
+
+Next: keep building source-backed high-frequency accounting capabilities in
+8–12-target batches; distinguish NEW IDs from extensions, do not recount existing
+quantities/status/links or schedules. Native asset validation/report-send/custom
+multi-invoice addon limitations remain unclosed; addon fixes/installations require
+separate authority. Overall goal stays active; no percentage/full-coverage claim.

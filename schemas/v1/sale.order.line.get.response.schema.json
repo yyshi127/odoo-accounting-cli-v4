@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/sale.order.line.get.response.schema.json",
+  "title": "sale.order.line.get response",
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "response.schema.json"
+    },
+    {
+      "properties": {
+        "capability": {
+          "const": "sale.order.line.get"
+        },
+        "data": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/data"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "success": {
+            "const": true
+          }
+        },
+        "required": [
+          "success"
+        ]
+      },
+      "then": {
+        "properties": {
+          "status": {
+            "const": "verified"
+          },
+          "data": {
+            "$ref": "#/$defs/data"
+          },
+          "error": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "order",
+        "company",
+        "partner",
+        "state",
+        "date_order",
+        "sequence",
+        "display_type",
+        "description",
+        "product",
+        "uom",
+        "ordered_quantity",
+        "invoiced_quantity",
+        "to_invoice_quantity",
+        "unit_price",
+        "discount_percent",
+        "amount_untaxed",
+        "amount_tax",
+        "amount_total",
+        "currency",
+        "taxes",
+        "invoice_line_ids",
+        "stock_move_ids",
+        "delivered_quantity",
+        "to_deliver_quantity",
+        "invoices"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/id"
+        },
+        "order": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/order"
+        },
+        "company": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/company"
+        },
+        "partner": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/partner"
+        },
+        "state": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/state"
+        },
+        "date_order": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/date_order"
+        },
+        "sequence": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/sequence"
+        },
+        "display_type": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/display_type"
+        },
+        "description": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/description"
+        },
+        "product": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/product"
+        },
+        "uom": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/uom"
+        },
+        "ordered_quantity": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/ordered_quantity"
+        },
+        "invoiced_quantity": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/invoiced_quantity"
+        },
+        "to_invoice_quantity": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/to_invoice_quantity"
+        },
+        "unit_price": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/unit_price"
+        },
+        "discount_percent": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/discount_percent"
+        },
+        "amount_untaxed": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/amount_untaxed"
+        },
+        "amount_tax": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/amount_tax"
+        },
+        "amount_total": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/amount_total"
+        },
+        "currency": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/currency"
+        },
+        "taxes": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/taxes"
+        },
+        "invoice_line_ids": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/invoice_line_ids"
+        },
+        "stock_move_ids": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/stock_move_ids"
+        },
+        "delivered_quantity": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/delivered_quantity"
+        },
+        "to_deliver_quantity": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/to_deliver_quantity"
+        },
+        "is_downpayment": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/is_downpayment"
+        },
+        "invoice_policy": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/invoice_policy"
+        },
+        "invoice_status": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/invoice_status"
+        },
+        "posted_invoiced_quantity": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/posted_invoiced_quantity"
+        },
+        "amount_invoiced": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/amount_invoiced"
+        },
+        "amount_to_invoice": {
+          "$ref": "sale.order.line.search.response.schema.json#/$defs/line/properties/amount_to_invoice"
+        },
+        "invoices": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "sale.order.get.response.schema.json#/$defs/invoice"
+          }
+        }
+      }
+    }
+  }
+}

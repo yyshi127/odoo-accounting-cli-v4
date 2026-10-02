@@ -1,6 +1,59 @@
 # Execution status
 
-## Current accounting phase — invoice rounds, installments and down payments, 2026-10-02
+## Current accounting phase — order accounting reads, 2026-10-02
+
+Two NEW commands and eight existing-interface extensions. Totals: 556 registered /
+541 handlers (253 reads, 288 writes), 1088 schemas; 464 unconfigured, 77 degraded,
+15 disabled. Enabled integrations: 538 implemented, two planned, one failed.
+Counts are not a completion percentage or a guarantee of configured availability.
+
+- NEW sale.order.line.get and purchase.order.line.get accept one exact line_id.
+  They return the existing line contract plus invoices reached through ordinary
+  visible accounting lines and moves, under the caller's company and ACL scope.
+  Required models are the old line-search set plus account.move; no picking,
+  location or unused header requirement is added to these new reads.
+- EXT sale/purchase.order.search/get/line.search/analysis.summary: optional header
+  payment_term_id/fiscal_position_id; search and summary user/term/fiscal filters;
+  summary invoice_statuses; line is_downpayment and native product invoice_policy
+  or purchase_method. Sale headers/lines expose native amount_invoiced and
+  amount_to_invoice; sale lines also expose invoice_status and
+  posted_invoiced_quantity. Values are native projections, not SDK recalculations.
+  Draft invoice quantities can differ from posted quantities and amounts; native
+  invoicing_legacy exceptions and compute_sudo semantics are retained.
+- Line search adds strict is_downpayment and negative_to_invoice_only filters.
+  Negative means native qty_to_invoice < 0, not guaranteed refund eligibility;
+  down-payment deductions can also be negative. It cannot be combined with
+  to_invoice_only=True. Explicit filters run before paging/aggregation. New
+  projections are independently optional; absent native fields omit keys and
+  product-less lines have null policy. Omitted parameters preserve old cursors.
+
+Local 400 focused/regression tests passed in 136.24s; server 400 in 95.46s.
+One accepted shared dual-isolated native smoke passed in 27.52s: ordinary UID5,
+su=False, company1, exact line graphs, native draft/posted consumers, negative
+paging, flag filters and foreign-company denial. Fresh rollback verified all
+owned fixtures, company1+2 stored settings, defaults, currencies/rates and all
+user/implied groups. Two earlier failures were fixture assumptions/prerequisites
+(down-payment section cardinality and missing foreign-PO operation type), not
+query failures; both completed full rollback before failure propagation. Only
+the shared fixture changed. Its owned foreign operation type/sequence are draft
+test prerequisites, not new inventory commands; no stock workflow is created.
+No new dispatcher, store, gate, caller sudo or persistent service configuration.
+The accepted native smoke must not be rerun just to refresh its timestamp.
+
+All 26 deployed code/schema/test hashes match locally and on the server; 546
+unrelated prior descriptors remain unchanged. Original18 plus repair1/1/final1
+before-backups were downloaded and verified. Final metadata four nodes passed
+locally29.40s/server23.50s. Registry2092899bytes stays below the unchanged2MiB
+public-file checker limit; the separate loader limit remains4MiB. Services are
+active with baseline PIDs/restarts unchanged, free5260865536bytes (about4.90GiB).
+Two public docs are local Git handoff only; server document overlays are preserved.
+Final byte/service/backup checkpoint is recorded in the latest handoff section.
+Next: continue installed-source-backed high-frequency accounting gaps in batches;
+do not recount these eight extensions or existing quantities/links as NEW IDs.
+Asset validation, report sends and the custom multi-invoice addon limitation
+remain unclosed; native-addon fixes/installations need separate authority.
+
+## Previous accounting phase — invoice rounds, installments and down payments, 2026-10-02
 
 One NEW command and eight existing-interface extensions. Totals: 554 registered /
 539 handlers (251 reads, 288 writes), 1084 schemas; 462 unconfigured, 77 degraded,

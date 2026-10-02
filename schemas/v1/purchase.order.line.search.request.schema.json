@@ -27,9 +27,12 @@
         "states": {"$ref": "#/$defs/nullableStates"},
         "to_receive_only": {"type": "boolean", "default": false},
         "to_invoice_only": {"type": "boolean", "default": false},
+        "is_downpayment": {"type": "boolean"},
+        "negative_to_invoice_only": {"type": "boolean", "description": "Select negative native qty_to_invoice; includes down-payment deductions and does not guarantee a refund."},
         "limit": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 100},
         "cursor": {"type": ["string", "null"], "minLength": 1, "maxLength": 4096, "default": null}
-      }
+      },
+      "not": {"required": ["to_invoice_only", "negative_to_invoice_only"], "properties": {"to_invoice_only": {"const": true}, "negative_to_invoice_only": {"const": true}}}
     }
   }
 }

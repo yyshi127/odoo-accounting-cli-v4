@@ -22,6 +22,12 @@
       "type": "object", "additionalProperties": false,
       "required": ["id", "order", "company", "partner", "state", "date_order", "sequence", "display_type", "description", "product", "uom", "ordered_quantity", "invoiced_quantity", "to_invoice_quantity", "unit_price", "discount_percent", "amount_untaxed", "amount_tax", "amount_total", "currency", "taxes", "invoice_line_ids", "stock_move_ids", "delivered_quantity", "to_deliver_quantity"],
       "properties": {
+        "is_downpayment": {"type": "boolean"},
+        "invoice_policy": {"enum": ["order", "delivery", null], "description": "Native template-shared invoicing policy, not a company-dependent setting."},
+        "invoice_status": {"enum": ["upselling", "invoiced", "to invoice", "no", null]},
+        "posted_invoiced_quantity": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/decimal"}]},
+        "amount_invoiced": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/decimal"}]},
+        "amount_to_invoice": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/decimal"}]},
         "id": {"type": "integer", "minimum": 1}, "order": {"$ref": "#/$defs/ref"}, "company": {"$ref": "#/$defs/ref"}, "partner": {"$ref": "#/$defs/ref"},
         "state": {"enum": ["draft", "sent", "sale", "cancel"]}, "date_order": {"$ref": "#/$defs/utcDateTime"}, "sequence": {"type": "integer", "minimum": 0}, "display_type": {"$ref": "#/$defs/nullableText"}, "description": {"type": "string", "minLength": 1},
         "product": {"$ref": "#/$defs/nullableRef"}, "uom": {"$ref": "#/$defs/nullableRef"},

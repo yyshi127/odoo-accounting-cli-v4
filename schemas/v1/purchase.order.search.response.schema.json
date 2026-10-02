@@ -40,6 +40,8 @@
         "date_order": {"$ref": "#/$defs/utcDateTime"},
         "currency": {"$ref": "#/$defs/currency"},
         "user": {"$ref": "#/$defs/nullableRef"},
+        "payment_term_id": {"type": ["integer", "null"], "minimum": 1},
+        "fiscal_position_id": {"type": ["integer", "null"], "minimum": 1},
         "invoice_status": {"enum": ["no", "to invoice", "invoiced"]},
         "amount_untaxed": {"$ref": "#/$defs/decimal"},
         "amount_tax": {"$ref": "#/$defs/decimal"},

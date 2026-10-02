@@ -26,6 +26,9 @@
         "states": {"$ref": "#/$defs/nullableStates"},
         "partner_id": {"$ref": "#/$defs/nullableId"},
         "currency_id": {"$ref": "#/$defs/nullableId"},
+        "user_id": {"$ref": "#/$defs/nullableId"},
+        "payment_term_id": {"$ref": "#/$defs/nullableId"},
+        "fiscal_position_id": {"$ref": "#/$defs/nullableId"},
         "invoice_statuses": {"$ref": "#/$defs/nullableInvoiceStatuses"},
         "limit": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 100},
         "cursor": {"type": ["string", "null"], "minLength": 1, "maxLength": 4096, "default": null}

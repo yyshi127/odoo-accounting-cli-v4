@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 554
-EXPECTED_ENABLED_CAPABILITY_COUNT = 539
-EXPECTED_IMPLEMENTED_READ_COUNT = 251
+EXPECTED_CAPABILITY_COUNT = 556
+EXPECTED_ENABLED_CAPABILITY_COUNT = 541
+EXPECTED_IMPLEMENTED_READ_COUNT = 253
 EXPECTED_IMPLEMENTED_WRITE_COUNT = 288
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 462
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 464
 EXPECTED_DEGRADED_CAPABILITY_COUNT = 77
-EXPECTED_SCHEMA_COUNT = 1084
+EXPECTED_SCHEMA_COUNT = 1088
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "fc5a0212045b69a0eacbc276270207b0a5ba6bc5b76454347f6599a536081398"
+    "6305fa981dd9163f344ee7e448b019c541f39dc0f25382f0c78974e2a80331ff"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -283,12 +283,14 @@ IMPLEMENTED_READS = {
     "warehouse.list": "warehouse_list",
     "purchase.order.analysis.summary": "purchase_order_analysis_summary",
     "purchase.order.get": "purchase_order_get",
+    "purchase.order.line.get": "purchase_order_line_get",
     "purchase.order.line.search": "purchase_order_line_search",
     "purchase.order.pdf.export": "document_purchase_order_pdf_export",
     "purchase.rfq.pdf.export": "document_purchase_rfq_pdf_export",
     "purchase.order.search": "purchase_order_search",
     "sale.order.analysis.summary": "sale_order_analysis_summary",
     "sale.order.get": "sale_order_get",
+    "sale.order.line.get": "sale_order_line_get",
     "sale.order.line.search": "sale_order_line_search",
     "sale.order.pdf.export": "document_sale_order_pdf_export",
     "sale.order.search": "sale_order_search",
@@ -915,6 +917,13 @@ ORDER_DOCUMENT_LIVE_READS = {
     "sale.order.line.search",
     "sale.order.search",
 }
+ORDER_LINE_GET_READS = {"sale.order.line.get", "purchase.order.line.get"}
+ORDER_ACCOUNTING_READ_UNIT_TESTS = [
+    "tests/unit/test_order_accounting_reads_contract.py",
+    "tests/unit/test_order_accounting_reads_runtime.py",
+    "tests/unit/test_order_accounting_reads_cli.py",
+]
+ORDER_ACCOUNTING_READ_LIVE_TEST = "tests/integration/test_order_accounting_reads_live.py"
 MANAGEMENT_REPORTING_PERIOD_LIVE_READS = {
     "company.fiscal_year.resolve",
     "company.lock_dates.inspect",
@@ -1252,6 +1261,16 @@ def test_every_unimplemented_capability_is_honestly_disabled_without_a_handler()
 
 def _prior_payment_tax_input_evidence(capability_id, descriptor):
     """Check only this extension's evidence, retaining the prior exact assertions."""
+    if capability_id in ORDER_DOCUMENT_LIVE_READS:
+        descriptor = copy.deepcopy(descriptor)
+        references = descriptor["tests"]["unit"]["references"]
+        assert references[-len(ORDER_ACCOUNTING_READ_UNIT_TESTS):] == ORDER_ACCOUNTING_READ_UNIT_TESTS
+        descriptor["tests"]["unit"]["references"] = references[:-len(ORDER_ACCOUNTING_READ_UNIT_TESTS)]
+        integration = descriptor["tests"]["integration"]["references"]
+        if ORDER_ACCOUNTING_READ_LIVE_TEST in integration:
+            assert integration[-1] == ORDER_ACCOUNTING_READ_LIVE_TEST
+            assert integration.count(ORDER_ACCOUNTING_READ_LIVE_TEST) == 1
+            descriptor["tests"]["integration"]["references"] = integration[:-1]
     if capability_id in INVOICE_ROUNDS_EXTENSIONS:
         descriptor = copy.deepcopy(descriptor)
         references = descriptor["tests"]["unit"]["references"]
@@ -1341,6 +1360,19 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
             ]
             continue
         assert descriptor["tests"]["unit"]["status"] == "implemented"
+        if capability_id in ORDER_LINE_GET_READS:
+            assert descriptor["tests"]["unit"]["references"] == (
+                ORDER_ACCOUNTING_READ_UNIT_TESTS + ["tests/unit/test_capability_registry.py"]
+            )
+            integration = descriptor["tests"]["integration"]
+            if integration["status"] == "planned":
+                assert integration["references"] == []
+                assert integration["reason"] == "Shared isolated native order accounting read smoke pending."
+            else:
+                assert integration["status"] == "implemented"
+                assert integration["references"] == [ORDER_ACCOUNTING_READ_LIVE_TEST]
+                assert integration["reason"] == "Shared native order accounting read smoke passed; full rollback."
+            continue
         if capability_id in ACCOUNTING_SETTLEMENT_READS:
             assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_accounting_settlement_batch.py"]
             assert descriptor["tests"]["integration"]["status"] == "implemented"
@@ -2600,7 +2632,7 @@ def test_order_document_reads_match_runtime_acl_and_shared_evidence() -> None:
     registry = load_registry()
 
     for capability_id in ORDER_DOCUMENT_LIVE_READS:
-        descriptor = registry.describe(capability_id)
+        descriptor = _prior_payment_tax_input_evidence(capability_id, registry.describe(capability_id))
         models = list(order_document_required_models(capability_id))
         business_module = "sale" if capability_id.startswith("sale.") else "purchase"
         expected_modules = (
@@ -2636,6 +2668,29 @@ def test_order_document_reads_match_runtime_acl_and_shared_evidence() -> None:
             "tests/unit/test_order_documents_cli.py",
             "tests/unit/test_capability_registry.py",
         }
+
+
+def test_order_line_get_reads_use_exact_fixed_models_and_shared_tests() -> None:
+    registry = load_registry()
+    for capability_id in ORDER_LINE_GET_READS:
+        descriptor = registry.describe(capability_id)
+        models = list(order_document_required_models(capability_id))
+        kind = capability_id.split(".")[0]
+        assert descriptor["handler_key"] == IMPLEMENTED_READS[capability_id]
+        assert descriptor["source"]["models"] == models
+        assert set(models) == set(order_document_required_models(f"{kind}.order.line.search")) | {"account.move"}
+        assert not {"stock.picking", "stock.location"} & set(models)
+        assert descriptor["requirements"]["acl"] == [f"{model}:read" for model in models]
+        assert descriptor["requirements"]["groups"] == ["account.group_account_readonly"]
+        assert descriptor["schemas"] == {
+            part: f"schemas/v1/{capability_id}.{part}.schema.json"
+            for part in ("request", "response")
+        }
+        assert descriptor["routing"]["object"] == f"{kind}.order.line"
+        assert descriptor["routing"]["actions"] == ["get", "inspect"]
+        assert descriptor["tests"]["unit"]["references"] == (
+            ORDER_ACCOUNTING_READ_UNIT_TESTS + ["tests/unit/test_capability_registry.py"]
+        )
 
 
 def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() -> None:

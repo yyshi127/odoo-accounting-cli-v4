@@ -23,6 +23,8 @@
       "type": "object", "additionalProperties": false,
       "required": ["id", "order", "company", "partner", "state", "date_order", "sequence", "display_type", "description", "product", "uom", "ordered_quantity", "invoiced_quantity", "to_invoice_quantity", "unit_price", "discount_percent", "amount_untaxed", "amount_tax", "amount_total", "currency", "taxes", "invoice_line_ids", "stock_move_ids", "received_quantity", "to_receive_quantity", "date_planned"],
       "properties": {
+        "is_downpayment": {"type": "boolean"},
+        "purchase_method": {"enum": ["purchase", "receive", null], "description": "Native template-shared billing policy, not a company-dependent setting."},
         "id": {"type": "integer", "minimum": 1}, "order": {"$ref": "#/$defs/ref"}, "company": {"$ref": "#/$defs/ref"}, "partner": {"$ref": "#/$defs/ref"},
         "state": {"enum": ["draft", "sent", "to approve", "purchase", "cancel"]}, "date_order": {"$ref": "#/$defs/utcDateTime"}, "sequence": {"type": "integer", "minimum": 0}, "display_type": {"$ref": "#/$defs/nullableText"}, "description": {"type": "string", "minLength": 1},
         "product": {"$ref": "#/$defs/nullableRef"}, "uom": {"$ref": "#/$defs/nullableRef"},
