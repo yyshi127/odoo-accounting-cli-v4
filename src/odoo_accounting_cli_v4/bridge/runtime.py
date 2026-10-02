@@ -1942,11 +1942,16 @@ def _journal_entry_filters_are_valid(filters: Any) -> bool:
         "partner_id",
         "query",
     }
-    if not isinstance(filters, dict) or not required <= set(filters) or set(filters) - required - {"currency_id", "account_id"}:
+    if not isinstance(filters, dict) or not required <= set(filters) or set(filters) - required - {"currency_id", "account_id", "tax_id", "line_query"}:
         return False
-    for key in ("currency_id", "account_id"):
+    for key in ("currency_id", "account_id", "tax_id"):
         if key in filters and (not isinstance(filters[key], int) or isinstance(filters[key], bool) or filters[key] <= 0):
             return False
+    if filters.get("line_query") is not None and not (
+        isinstance(filters["line_query"], str) and filters["line_query"] == filters["line_query"].strip()
+        and 1 <= len(filters["line_query"]) <= 200
+    ):
+        return False
     for key in ("date_from", "date_to"):
         value = filters[key]
         if value is not None and not _is_canonical_date(value):
@@ -2025,9 +2030,19 @@ def _journal_entry_domain(
         domains.append([("journal_id", "=", filters["journal_id"])])
     if filters["partner_id"] is not None:
         domains.append([("partner_id", "=", filters["partner_id"])])
-    for key, field in (("currency_id", "currency_id"), ("account_id", "line_ids.account_id")):
-        if key in filters:
-            domains.append([(field, "=", filters[key])])
+    if "currency_id" in filters:
+        domains.append([("currency_id", "=", filters["currency_id"])])
+    if "tax_id" in filters or filters.get("line_query") is not None:
+        line_domain: list[Any] = []
+        if "account_id" in filters:
+            line_domain.append(("account_id", "=", filters["account_id"]))
+        if "tax_id" in filters:
+            line_domain.append(("tax_ids", "in", [filters["tax_id"]]))
+        if filters.get("line_query") is not None:
+            line_domain.append(("name", "ilike", filters["line_query"]))
+        domains.append([("line_ids", "any", line_domain)])
+    elif "account_id" in filters:
+        domains.append([("line_ids.account_id", "=", filters["account_id"])])
     if filters["query"] is not None:
         domains.append(
             [
@@ -2465,7 +2480,8 @@ def _invoice_search_payload_is_valid(payload: Any) -> bool:
         "query",
     }
     optional = {"invoice_date_from", "invoice_date_to", "due_date_from", "due_date_to",
-                "currency_id", "invoice_user_id", "payment_term_id", "fiscal_position_id"}
+                "currency_id", "invoice_user_id", "payment_term_id", "fiscal_position_id",
+                "product_id", "account_id", "tax_id"}
     if not isinstance(filters, dict) or not required <= set(filters) or set(filters) - required - optional:
         return False
     for lower, upper in (("invoice_date_from", "invoice_date_to"), ("due_date_from", "due_date_to")):
@@ -2474,8 +2490,8 @@ def _invoice_search_payload_is_valid(payload: Any) -> bool:
                 return False
         if filters.get(lower) is not None and filters.get(upper) is not None and filters[lower] > filters[upper]:
             return False
-    for key in ("currency_id", "invoice_user_id", "payment_term_id", "fiscal_position_id"):
-        if key not in filters or (key != "currency_id" and filters[key] is None):
+    for key in ("currency_id", "invoice_user_id", "payment_term_id", "fiscal_position_id", "product_id", "account_id", "tax_id"):
+        if key not in filters or (key in {"invoice_user_id", "payment_term_id", "fiscal_position_id"} and filters[key] is None):
             continue
         if not isinstance(filters[key], int) or isinstance(filters[key], bool) or filters[key] <= 0:
             return False
@@ -2601,6 +2617,14 @@ def _invoice_domain(
                        ("fiscal_position_id", "fiscal_position_id")):
         if key in filters:
             domains.append([(field, "=", filters[key] if filters[key] is not None else False)])
+    if any(key in filters for key in ("product_id", "account_id", "tax_id")):
+        line_domain: list[Any] = [("display_type", "=", "product")]
+        for key in ("product_id", "account_id"):
+            if key in filters:
+                line_domain.append((key, "=", filters[key]))
+        if "tax_id" in filters:
+            line_domain.append(("tax_ids", "in", [filters["tax_id"]]))
+        domains.append([("invoice_line_ids", "any", line_domain)])
     if filters["query"] is not None:
         domains.append(
             [
@@ -4668,8 +4692,13 @@ def _open_item_payload_is_valid(payload: Any) -> bool:
         "currency_id",
         "query",
     }
-    if not isinstance(filters, dict) or not required <= set(filters) or set(filters) - required - {"move_id", "move_types"}:
+    if not isinstance(filters, dict) or not required <= set(filters) or set(filters) - required - {"move_id", "move_types", "invoice_user_id", "payment_term_id", "fiscal_position_id"}:
         return False
+    for key in ("invoice_user_id", "payment_term_id", "fiscal_position_id"):
+        if key in filters and filters[key] is not None and (
+            not isinstance(filters[key], int) or isinstance(filters[key], bool) or filters[key] <= 0
+        ):
+            return False
     if "move_id" in filters and (not isinstance(filters["move_id"], int) or isinstance(filters["move_id"], bool) or filters["move_id"] <= 0):
         return False
     if "move_types" in filters:
@@ -4757,6 +4786,10 @@ def _open_item_domain(
         domains.append([("move_id", "=", filters["move_id"])])
     if "move_types" in filters:
         domains.append([("move_id.move_type", "in", filters["move_types"])])
+    for key, field in (("invoice_user_id", "move_id.invoice_user_id"), ("payment_term_id", "move_id.invoice_payment_term_id"),
+                       ("fiscal_position_id", "move_id.fiscal_position_id")):
+        if key in filters:
+            domains.append([(field, "=", filters[key] if filters[key] is not None else False)])
     if filters["query"] is not None:
         domains.append(
             list(

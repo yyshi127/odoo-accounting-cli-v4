@@ -1,6 +1,66 @@
 # Execution status
 
-## Current accounting phase — document searches and invoice bulk lines, 2026-10-02
+## Current accounting phase — business-line searches and bulk removal, 2026-10-02
+
+One NEW command and seven EXT queries. 559 registered /544 handlers (253 reads,
+291 writes),1094 schemas;465 unconfigured,79 degraded,15 disabled. Enabled
+integrations:541 implemented,two planned,one failed. These counts are not a full
+accounting denominator,completion percentage or configured permission guarantee.
+
+- NEW invoice.lines.remove accepts move_id and1-200 distinct positive line_ids;
+  caller order is normalized. One native parent write deletes exactly the selected
+  draft invoice/bill business rows, preserving survivor business/layout IDs and
+  inputs. Native tax/payment-term/non-deductible financial rows may synchronize.
+  Any missing,wrong-parent or layout ID rejects the whole request. Removing the
+  last business row is allowed. Posted documents are rejected. No tombstone/store
+  is added: a retry with deleted IDs is record_not_found,not successful replay.
+  Confirmation and the existing content-bound idempotency key remain required;
+  the registry is honestly degraded for deletion retry attribution.
+- invoice.search adds product_id/account_id/tax_id. All supplied conditions must
+  match the SAME display_type=product business row via ordinary native any,
+  not different rows. tax_id means membership in applied tax_ids,not tax_line_id.
+- journal_entry.search adds tax_id and nullable line_query (native ilike on line
+  name). An effective new line condition binds the existing account_id to that
+  same row. Old account-only membership and header query behavior are unchanged.
+  journal_item.search adds product_id/tax_id on the individual financial row.
+- Receivable/payable open-items add invoice_user_id/payment_term_id/
+  fiscal_position_id through the parent move,retaining posted/open/side scope.
+  Invoice-analysis search/summary add invoice_user_id/fiscal_position_id/account_id
+  using existing native SQL-view columns; totals remain company currency.
+  Nullable relation null means unset; omission means no filter. Null line_query
+  means no filter. New keys are retained only when explicit,so old normalization,
+  response projections and cursor bindings are unchanged. Filters precede paging
+  and grouping. There are no new global gates,dispatcher or control framework.
+
+Local shared selection1156 passed114.99s; identical server selection1156
+passed68.90s. One shared dual-isolated native workflow passed28.01s as UID5,
+su=False,company1. Both aliases verified all eight targets,same-line decoy traps,
+new/legacy pagination,cross-filter cursor misuse,unset parent filters,native report
+IDs/company-currency aggregates,bulk deletion,survivor/layout inputs,empty business
+graph,posted/wrong-parent/layout/missing-ID denials and rejected deletion retries.
+Fresh rollback checked every owned fixture,all users/groups/implied groups,both
+company settings,all defaults and all currencies/rates. Actual SO/PO-linked
+deletion and source preservation have focused runtime tests only,not a fresh
+native claim in this fixture. The native job succeeded on its first handle;
+do not relaunch accepted evidence. Final metadata4nodes passed locally76.26s
+and on the server34.14s. No full-suite/all-configured green claim is made.
+
+Exactly29 CLI code/schema/test files deployed and byte-checked against local;
+21 server originals and one final-registry original were backed up,downloaded
+and hash-checked. Three raw native/unit/exit logs match the server byte-for-byte.
+The other551 registry descriptors are semantically unchanged. Registry2094790B
+remains below unchanged2MiB public/4MiB loader limits. New privacy/lint findings
+zero;two old lint diagnostics and old document findings retained. Six audited
+native hashes and service PIDs/restarts unchanged. No business DB,native addon,
+service configuration/restart,inventory/cleanup or V2/V3/Pi changes. Public docs
+stay local to preserve server overlays. Private evidence/recovery manifests are
+in .tooling/accounting-business-line-search-remove-20261002.
+
+Next: select another small batch of actual accounting gaps,not query aliases or
+per-command gates. Retain the separate debit-note-addon,custom-FX-addon,
+asset-validation and report-send constraints; do not infer full completion.
+
+## Previous accounting phase — document searches and invoice bulk lines, 2026-10-02
 
 Two NEW commands and seven EXT queries. 558 registered /543 handlers (253 reads,290 writes),
 1092 schemas;465 unconfigured,78 degraded,15 disabled. Enabled

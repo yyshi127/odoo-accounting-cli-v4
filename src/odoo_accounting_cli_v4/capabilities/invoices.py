@@ -63,6 +63,9 @@ _FILTER_FIELDS = frozenset(
         "invoice_user_id",
         "payment_term_id",
         "fiscal_position_id",
+        "product_id",
+        "account_id",
+        "tax_id",
     }
 )
 _HEADER_FIELDS = frozenset(
@@ -426,11 +429,12 @@ def validate_invoice_search_request(
                 filters[key] = value
         if filters.get(start) is not None and filters.get(end) is not None and filters[start] > filters[end]:
             raise _invalid(f"parameters.{start} cannot be after parameters.{end}.")
-    for key in ("currency_id", "invoice_user_id", "payment_term_id", "fiscal_position_id"):
+    for key in ("currency_id", "invoice_user_id", "payment_term_id", "fiscal_position_id", "product_id", "account_id", "tax_id"):
         if key in parameters:
             value = parameters[key]
-            if not _valid_id(value) and not (key != "currency_id" and value is None):
-                raise _invalid(f"parameters.{key} must be a positive integer" + (" or null." if key != "currency_id" else "."))
+            nullable = key in {"invoice_user_id", "payment_term_id", "fiscal_position_id"}
+            if not _valid_id(value) and not (nullable and value is None):
+                raise _invalid(f"parameters.{key} must be a positive integer" + (" or null." if nullable else "."))
             filters[key] = value
     return request_id, context, filters, limit, cursor
 

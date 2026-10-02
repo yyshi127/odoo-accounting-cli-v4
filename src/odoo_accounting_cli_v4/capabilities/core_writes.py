@@ -75,6 +75,7 @@ CORE_WRITE_CAPABILITY_IDS = invoice_preparation.CAPABILITY_IDS | journal_item_pr
         "invoice.line.update",
         "invoice.lines.update",
         "invoice.lines.add",
+        "invoice.lines.remove",
         "invoice.line.delete",
         "invoice.delete",
         "invoice.cancel",
@@ -1311,9 +1312,15 @@ def _validate_invoice_bulk_line_parameters(
     capability_id: str, parameters: Any
 ) -> dict[str, Any]:
     adding = capability_id == "invoice.lines.add"
-    fields = {"move_id", "lines"} | ({"expected_line_ids"} if adding else set())
+    removing = capability_id == "invoice.lines.remove"
+    fields = {"move_id", "line_ids" if removing else "lines"} | ({"expected_line_ids"} if adding else set())
     if not isinstance(parameters, dict) or set(parameters) != fields or not _valid_id(parameters["move_id"]):
         raise _invalid("Bulk invoice-line parameters do not match the fixed contract.")
+    if removing:
+        identifiers = _validate_ids(parameters["line_ids"])
+        if identifiers is None or not 1 <= len(identifiers) <= 200:
+            raise _invalid("line_ids must contain between 1 and 200 distinct positive integers.")
+        return {"move_id": parameters["move_id"], "line_ids": sorted(identifiers)}
     lines = parameters["lines"]
     if not isinstance(lines, list) or not 1 <= len(lines) <= 200:
         raise _invalid("parameters.lines must contain between 1 and 200 rows.")
@@ -4716,7 +4723,7 @@ def validate_core_write_request(
         normalized = _validate_invoice_update_parameters(parameters)
     elif capability_id == "invoice.lines.replace":
         normalized = _validate_invoice_line_replacement_parameters(parameters)
-    elif capability_id in {"invoice.lines.update", "invoice.lines.add"}:
+    elif capability_id in {"invoice.lines.update", "invoice.lines.add", "invoice.lines.remove"}:
         normalized = _validate_invoice_bulk_line_parameters(capability_id, parameters)
     elif capability_id == "invoice.duplicate":
         normalized = _validate_single_id(parameters, "move_id")
@@ -4844,7 +4851,7 @@ def validate_core_write_request(
 def _expected_idempotency_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
-    if capability_id in {"invoice.lines.update", "invoice.lines.add"}:
+    if capability_id in {"invoice.lines.update", "invoice.lines.add", "invoice.lines.remove"}:
         canonical = json.dumps(parameters, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
         return f"{capability_id}:{parameters['move_id']}:{hashlib.sha256(canonical).hexdigest()[:32]}"
     if (
@@ -5608,6 +5615,14 @@ def _validate_result(
         return deepcopy(result)
     if not _valid_result_shape(result) or result["company_id"] != company_id:
         raise _failed("Odoo returned a malformed or out-of-scope core-write result.")
+
+    if capability_id == "invoice.lines.remove":
+        if (result["model"] != "account.move" or result["id"] != parameters["move_id"]
+            or result["move_type"] not in _INVOICE_MOVE_TYPES or result["state"] != "draft"
+            or result["source_id"] is not None or set(parameters["line_ids"]) & set(result["line_ids"])
+            or idempotent_replay or result["partial_reconcile_ids"] or result["full_reconcile_id"] is not None):
+            raise _failed("Odoo returned a mismatched invoice-line removal result.")
+        return deepcopy(result)
 
     if capability_id in {"invoice.lines.update", "invoice.lines.add"}:
         selected = (set(parameters["expected_line_ids"]) if capability_id == "invoice.lines.add" else {line["line_id"] for line in parameters["lines"]})

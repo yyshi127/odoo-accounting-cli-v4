@@ -64,7 +64,7 @@ def test_optional_header_domains_and_null_relation_filters():
     {"invoice_date_from": "2026-02-30"}, {"due_date_to": "2026-1-1"},
     {"due_date_from": "2026-12-31", "due_date_to": "2026-01-01"},
     {"invoice_date_from": "2026-12-31", "invoice_date_to": "2026-01-01"},
-    {"product_id": 1},
+    {"product_id": None},
 ])
 def test_invalid_invoice_extension_filters(extra):
     assert not runtime._invoice_search_payload_is_valid(invoice_payload(**extra))
@@ -98,7 +98,7 @@ def test_open_items_precise_parent_filters_preserve_posted_side_and_open_scope()
 @pytest.mark.parametrize("extra", [
     {"move_id": None}, {"move_id": True}, {"move_id": 0}, {"move_types": []},
     {"move_types": ["out_invoice", "out_invoice"]}, {"move_types": ["out_refund", "out_invoice"]},
-    {"move_types": ["invalid"]}, {"move_types": [True]}, {"invoice_user_id": 5},
+    {"move_types": ["invalid"]}, {"move_types": [True]}, {"invoice_user_id": 0},
 ])
 def test_invalid_open_item_extension_filters(extra):
     assert not runtime._open_item_payload_is_valid(open_payload(**extra))

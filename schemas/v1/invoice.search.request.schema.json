@@ -32,6 +32,9 @@
         "invoice_user_id": {"type": ["integer", "null"], "minimum": 1},
         "payment_term_id": {"type": ["integer", "null"], "minimum": 1},
         "fiscal_position_id": {"type": ["integer", "null"], "minimum": 1},
+        "product_id": {"type": "integer", "minimum": 1},
+        "account_id": {"type": "integer", "minimum": 1},
+        "tax_id": {"type": "integer", "minimum": 1},
         "document_types": {
           "type": "array",
           "minItems": 1,

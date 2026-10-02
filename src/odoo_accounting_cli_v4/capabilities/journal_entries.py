@@ -44,7 +44,7 @@ _DISPLAY_TYPES = frozenset(
     }
 )
 _FILTER_FIELDS = frozenset(
-    {"date_from", "date_to", "states", "journal_id", "partner_id", "query", "currency_id", "account_id"}
+    {"date_from", "date_to", "states", "journal_id", "partner_id", "query", "currency_id", "account_id", "tax_id", "line_query"}
 )
 _SEARCH_FIELDS = frozenset(
     {
@@ -310,11 +310,16 @@ def validate_journal_entry_search_request(
         "partner_id": ids["partner_id"],
         "query": query,
     }
-    for key in ("currency_id", "account_id"):
+    for key in ("currency_id", "account_id", "tax_id"):
         if key in parameters:
             if not _valid_id(parameters[key]):
                 raise _invalid(f"parameters.{key} must be a positive integer.")
             filters[key] = parameters[key]
+    if "line_query" in parameters:
+        query = parameters["line_query"]
+        if query is not None and (not isinstance(query, str) or not 1 <= len(query) <= 200 or query != query.strip()):
+            raise _invalid("parameters.line_query must be null or a trimmed 1-200 character string.")
+        filters["line_query"] = query
     return request_id, context, filters, limit, cursor
 
 

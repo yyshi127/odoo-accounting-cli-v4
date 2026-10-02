@@ -257,6 +257,8 @@ _JOURNAL_ITEM_FILTERS = frozenset(
         "reconciled",
         "move_types",
         "query",
+        "product_id",
+        "tax_id",
     }
 )
 _JOURNAL_MOVE_TYPE_ORDER = ("entry", "out_invoice", "out_refund", "in_invoice", "in_refund", "out_receipt", "in_receipt")
@@ -1034,10 +1036,11 @@ def validate_core_object_read_request(
         if not isinstance(posted_only, bool):
             raise _invalid("parameters.posted_only must be a boolean.")
         filters["posted_only"] = posted_only
-        if "currency_id" in parameters:
-            if not _valid_id(parameters["currency_id"]):
-                raise _invalid("parameters.currency_id must be a positive integer.")
-            filters["currency_id"] = parameters["currency_id"]
+        for field in ("currency_id", "product_id", "tax_id"):
+            if field in parameters:
+                if not _valid_id(parameters[field]):
+                    raise _invalid(f"parameters.{field} must be a positive integer.")
+                filters[field] = parameters[field]
         for field in ("due_date_from", "due_date_to"):
             if field in parameters:
                 if not _optional_date(parameters[field]):

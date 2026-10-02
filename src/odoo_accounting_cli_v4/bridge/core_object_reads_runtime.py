@@ -2330,10 +2330,10 @@ def _valid_parameters(capability_id: str, parameters: Any) -> bool:
         "after_id",
         "limit",
     }
-    optional = {"currency_id", "due_date_from", "due_date_to", "reconciled", "move_types", "query"}
+    optional = {"currency_id", "due_date_from", "due_date_to", "reconciled", "move_types", "query", "product_id", "tax_id"}
     if not required <= set(parameters) <= required | optional:
         return False
-    if "currency_id" in parameters and not _valid_id(parameters["currency_id"]):
+    if any(not _valid_id(parameters[field]) for field in ("currency_id", "product_id", "tax_id") if field in parameters):
         return False
     if any(not _optional_date(parameters[field]) for field in ("due_date_from", "due_date_to") if field in parameters):
         return False
@@ -2818,6 +2818,10 @@ def _journal_item_domain(
     for field in ("move_id", "account_id", "partner_id", "journal_id"):
         if parameters[field] is not None:
             domains.append([(field, "=", parameters[field])])
+    if "product_id" in parameters:
+        domains.append([("product_id", "=", parameters["product_id"])])
+    if "tax_id" in parameters:
+        domains.append([("tax_ids", "in", [parameters["tax_id"]])])
     for parameter, field, operator in (
         ("currency_id", "currency_id", "="), ("due_date_from", "date_maturity", ">="),
         ("due_date_to", "date_maturity", "<="), ("reconciled", "reconciled", "="),

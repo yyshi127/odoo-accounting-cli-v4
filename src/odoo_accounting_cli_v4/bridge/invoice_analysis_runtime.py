@@ -156,7 +156,9 @@ def _enum_list(value: Any, allowed: frozenset[str]) -> bool:
 def _common_parameters(parameters: dict[str, Any], *, require_dates: bool) -> bool:
     date_from = parameters["date_from"]
     date_to = parameters["date_to"]
-    if any(not _positive_id(parameters[field]) for field in ("journal_id", "currency_id") if field in parameters):
+    if any(not _positive_id(parameters[field]) for field in ("journal_id", "currency_id", "account_id") if field in parameters):
+        return False
+    if any(parameters[field] is not None and not _positive_id(parameters[field]) for field in ("invoice_user_id", "fiscal_position_id") if field in parameters):
         return False
     if any(parameters[field] is not None and not _canonical_date(parameters[field]) for field in ("due_date_from", "due_date_to") if field in parameters):
         return False
@@ -191,7 +193,7 @@ def _valid_parameters(capability_id: str, parameters: Any) -> bool:
         "partner_id",
         "product_id",
     }
-    optional = {"journal_id", "currency_id", "due_date_from", "due_date_to"}
+    optional = {"journal_id", "currency_id", "due_date_from", "due_date_to", "invoice_user_id", "fiscal_position_id", "account_id"}
     if capability_id == "invoice.analysis.search":
         required = common | {"after", "limit"}
         if not required <= set(parameters) <= required | optional:
@@ -305,6 +307,11 @@ def _base_domain(company_id: int, parameters: dict[str, Any]) -> list[Any]:
     ):
         if parameter in parameters and parameters[parameter] is not None:
             domain.append((field, operator, parameters[parameter]))
+    if "account_id" in parameters:
+        domain.append(("account_id", "=", parameters["account_id"]))
+    for field in ("invoice_user_id", "fiscal_position_id"):
+        if field in parameters:
+            domain.append((field, "=", parameters[field] if parameters[field] is not None else False))
     return domain
 
 

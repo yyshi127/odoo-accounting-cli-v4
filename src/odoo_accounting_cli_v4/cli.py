@@ -1789,6 +1789,7 @@ _CAPABILITY_MODELS = {
     "invoice.lines.replace": "account.move",
     "invoice.lines.update": "account.move",
     "invoice.lines.add": "account.move",
+    "invoice.lines.remove": "account.move",
     "invoice.line.create": "account.move.line",
     "invoice.line.update": "account.move.line",
     "invoice.line.delete": "account.move.line",

@@ -4,11 +4,11 @@ Updated: 2026-10-02 (Asia/Shanghai)
 
 ## Current authoritative count — 2026-10-02
 
-558 registered /543 handlers (253 reads,290 writes),
-1092 schemas;465 unconfigured,78 degraded,15 disabled. Enabled
-integrations:540 implemented,two planned,one failed. Counts are not a full
+559 registered /544 handlers (253 reads,291 writes),
+1094 schemas;465 unconfigured,79 degraded,15 disabled. Enabled
+integrations:541 implemented,two planned,one failed. Counts are not a full
 accounting denominator,completion percentage or configured permission guarantee.
-Latest document-search/invoice-bulk checkpoint at the end is authoritative.
+Latest business-line-search/bulk-removal checkpoint at the end is authoritative.
 
 ## Objective and working rule
 
@@ -6787,3 +6787,57 @@ Current candidate areas are invoice multi-line removal and genuinely missing
 document/product/tax searches; freeze semantics before implementing. Missing
 debit-note addon,custom exchange addon fixes,asset validation and report-send
 authority remain separate constraints,not reasons to inflate the command count.
+
+## Latest checkpoint — business-line searches and bulk removal, 2026-10-02
+
+This supersedes the preceding candidate list: invoice multi-line removal and
+product/account/applied-tax searches are delivered here. One NEW command and
+seven EXT queries;559 registered /544 handlers (253 reads,291 writes),1094
+schemas;465 unconfigured,79 degraded,15 disabled. Enabled integrations541
+implemented,two planned,one failed. Counts do not establish a full denominator,
+completion percentage or configured availability.
+
+NEW invoice.lines.remove takes move_id and1-200 distinct line_ids,normalizes
+caller ID order and binds the full normalized request into the existing content
+key. Exact CLI confirmation is required. A single native parent write removes
+only draft invoice/bill business rows. Survivors keep business/layout IDs,inputs
+and source links; native financial AML synchronization remains enabled. Any
+missing/wrong-parent/layout ID rejects before writing. Empty business membership
+is valid. There is no deletion store/tombstone: retries after deletion reject
+record_not_found and never claim successful replay. Registry status is degraded.
+
+EXT invoice.search adds product_id/account_id/tax_id in ONE ordinary native any
+subdomain restricted to product business rows; cross-row matches are excluded.
+EXT journal_entry.search adds tax_id/line_query,including old account_id in the
+same line condition when a new criterion is effective. Old account-only/header
+query semantics stay unchanged. EXT journal_item.search adds product_id/tax_id.
+tax_id is applied tax_ids membership,not generated tax_line_id. EXT open-items
+(both sides) add parent invoice_user_id/payment_term_id/fiscal_position_id.
+EXT invoice-analysis (search/summary) add native owner/fiscal/account view filters;
+aggregate money remains company currency. Nullable relation null means unset,
+omission no filter;null line_query no filter. Old absent-key payload/cursor and
+response shapes stay unchanged;all filters precede native paging/grouping.
+
+Shared local1156 tests114.99s and server1156 tests68.90s passed. The one original
+dual-isolated native job passed28.01s as UID5,su=False,company1 across all8targets:
+same-line traps,legacy/new paging,cursor misuse,unset header filters,native report
+rows/company-currency totals,multiple deletion,survivor/layout inputs,empty
+business graph,posted/wrong-parent/layout/missing/retry denials. Its complete
+fresh oracle verified all owned fixtures,all users/groups/implied groups,both
+company settings,all defaults and all currencies/rates after rollback. No native
+repair/relaunch was needed. SO/PO-linked deletion/source preservation remains
+focused-runtime coverage only. Do not rerun accepted jobs to refresh evidence.
+Final metadata4nodes passed locally76.26s/server34.14s. Broader old financial
+header fake failures and old registry/other test assertions remain outside this
+batch;do not claim a full-suite green result.
+
+Exactly29 deployed/local CLI code/schema/test bytes agree;21 original server
+files plus one final registry original are recoverable downloaded/hash-checked
+backups. Three raw execution logs agree with server hashes.551 unrelated
+descriptors are semantically unchanged;registry2094790B respects unchanged
+2MiB public/4MiB loader limits. New privacy/lint0,old2lint/old doc findings
+retained. Six audited native source hashes and service PIDs/restarts unchanged.
+No business/native-addon/service/V2/V3/Pi or inventory/cleanup changes. Public
+docs stay local;server overlays preserved. Evidence is private in
+.tooling/accounting-business-line-search-remove-20261002. Overall goal remains
+ACTIVE;next choose another8-12 actual related gaps without expanding controls.

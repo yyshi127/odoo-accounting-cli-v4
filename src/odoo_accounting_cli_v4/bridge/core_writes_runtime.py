@@ -58,6 +58,7 @@ CAPABILITIES = invoice_preparation.CAPABILITY_IDS | journal_item_processing.CAPA
         "invoice.lines.replace",
         "invoice.lines.update",
         "invoice.lines.add",
+        "invoice.lines.remove",
         "invoice.line.create",
         "invoice.line.update",
         "invoice.line.delete",
@@ -282,6 +283,7 @@ _INVOICE_LIFECYCLE_CAPABILITIES = frozenset(
         "invoice.lines.replace",
         "invoice.lines.update",
         "invoice.lines.add",
+        "invoice.lines.remove",
         "invoice.line.create",
         "invoice.line.update",
         "invoice.line.delete",
@@ -800,6 +802,7 @@ _PARAMETER_KEYS = {
     "invoice.lines.replace": {"move_id", "lines"},
     "invoice.lines.update": {"move_id", "lines"},
     "invoice.lines.add": {"move_id", "expected_line_ids", "lines"},
+    "invoice.lines.remove": {"move_id", "line_ids"},
     "invoice.line.create": {"move_id", "line"},
     "invoice.line.update": {"move_id", "line_id", "changes"},
     "invoice.line.delete": {"move_id", "line_id"},
@@ -3331,6 +3334,7 @@ _MODELS["invoice.lines.replace"].add("account.analytic.account")
 for _capability_id, _single_capability in (
     ("invoice.lines.update", "invoice.line.update"),
     ("invoice.lines.add", "invoice.line.create"),
+    ("invoice.lines.remove", "invoice.line.delete"),
 ):
     _GROUPS[_capability_id] = _GROUPS[_single_capability]
     _MODELS[_capability_id] = set(_MODELS[_single_capability])
@@ -6229,6 +6233,12 @@ def _valid_parameters(
         )
     if capability_id == "invoice.line.delete":
         return _is_id(parameters["move_id"]) and _is_id(parameters["line_id"])
+    if capability_id == "invoice.lines.remove":
+        ids = parameters["line_ids"]
+        return bool(
+            _is_id(parameters["move_id"]) and isinstance(ids, list) and 1 <= len(ids) <= 200
+            and all(_is_id(item) for item in ids) and ids == sorted(set(ids))
+        )
     if capability_id in {
         "invoice.delete",
         "journal_entry.duplicate",
@@ -7118,7 +7128,7 @@ def _deterministic_key(
         ).encode("utf-8")
         digest = hashlib.sha256(canonical).hexdigest()[:32]
         return f"{capability_id}:{parameters['move_id']}:{digest}"
-    if capability_id in {"invoice.lines.update", "invoice.lines.add"}:
+    if capability_id in {"invoice.lines.update", "invoice.lines.add", "invoice.lines.remove"}:
         digest = hashlib.sha256(json.dumps(parameters, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")).hexdigest()[:32]
         return f"{capability_id}:{parameters['move_id']}:{digest}"
     if capability_id == "asset.validate":
@@ -12859,6 +12869,41 @@ def _write_invoice_bulk_lines(
             valid = valid and _invoice_added_lines_match([line for line in final_lines if line.id not in before_ids], requested)
         if not valid:
             raise _fail(failure_type, "odoo_write_error", "Native bulk invoice-line changes did not preserve the requested rows and existing line membership.", exit_code=6)
+    return _move_result(move, company_id), False
+
+
+def _remove_invoice_lines(
+    env: Any, parameters: dict[str, Any], company_id: int, failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    move = _lifecycle_move(env, "invoice.lines.remove", parameters["move_id"], company_id, failure_type)
+    if move.state != "draft":
+        raise _fail(failure_type, "state_conflict", "Only a draft invoice or bill can have business lines removed.", exit_code=5)
+    before_ids = set(move.invoice_line_ids.ids)
+    current = _ensure_ids(env, "account.move.line", before_ids, [
+        ("move_id", "=", move.id), ("company_id", "=", company_id),
+    ], company_id, failure_type)
+    removed_ids = set(parameters["line_ids"])
+    if not removed_ids <= before_ids or any(
+        _current_invoice_line(line) is None for line in current if line.id in removed_ids
+    ):
+        raise _fail(failure_type, "record_not_found", "A requested invoice business line was not found.", exit_code=4)
+    retained_ids = before_ids - removed_ids
+    before = {line.id: _invoice_bulk_line_snapshot(line) for line in current if line.id in retained_ids}
+    with env.cr.savepoint():
+        move.write({"invoice_line_ids": [(2, line_id, 0) for line_id in parameters["line_ids"]]})
+        current.invalidate_recordset()
+        move.invalidate_recordset()
+        final_ids = set(move.invoice_line_ids.ids)
+        final = _ensure_ids(env, "account.move.line", final_ids, [
+            ("move_id", "=", move.id), ("company_id", "=", company_id),
+        ], company_id, failure_type)
+        valid = (
+            move.state == "draft" and move.company_id.id == company_id and final_ids == retained_ids
+            and before == {line.id: _invoice_bulk_line_snapshot(line) for line in final}
+            and not _scoped(env, "account.move.line", company_id).search_count([("id", "in", sorted(removed_ids))], limit=1)
+        )
+        if not valid:
+            raise _fail(failure_type, "odoo_write_error", "Native invoice-line removal did not preserve the remaining rows or delete every requested business line.", exit_code=6)
     return _move_result(move, company_id), False
 
 
@@ -22929,6 +22974,8 @@ def _dispatch_allowed(
         )
     if capability_id in {"invoice.lines.update", "invoice.lines.add"}:
         return _write_invoice_bulk_lines(env, capability_id, parameters, company_id, failure_type)
+    if capability_id == "invoice.lines.remove":
+        return _remove_invoice_lines(env, parameters, company_id, failure_type)
     if capability_id in {
         "invoice.cancel",
         "invoice.reset_to_draft",

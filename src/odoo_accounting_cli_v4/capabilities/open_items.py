@@ -50,6 +50,9 @@ _FILTER_FIELDS = frozenset(
         "query",
         "move_id",
         "move_types",
+        "invoice_user_id",
+        "payment_term_id",
+        "fiscal_position_id",
     }
 )
 _ROW_FIELDS = frozenset(
@@ -311,6 +314,12 @@ def _validate_request(
         if not isinstance(values, list) or not values or any(not isinstance(value, str) or value not in _MOVE_TYPES for value in values) or len(set(values)) != len(values):
             raise _invalid("parameters.move_types must contain unique supported types.")
         filters["move_types"] = [value for value in _MOVE_TYPE_ORDER if value in values]
+    for key in ("invoice_user_id", "payment_term_id", "fiscal_position_id"):
+        if key in parameters:
+            value = parameters[key]
+            if value is not None and not _valid_id(value):
+                raise _invalid(f"parameters.{key} must be null or a positive integer.")
+            filters[key] = value
     return request_id, context, filters, limit, cursor
 
 

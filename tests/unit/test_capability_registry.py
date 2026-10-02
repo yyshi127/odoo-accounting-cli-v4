@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 558
-EXPECTED_ENABLED_CAPABILITY_COUNT = 543
+EXPECTED_CAPABILITY_COUNT = 559
+EXPECTED_ENABLED_CAPABILITY_COUNT = 544
 EXPECTED_IMPLEMENTED_READ_COUNT = 253
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 290
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 291
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
 EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 465
-EXPECTED_DEGRADED_CAPABILITY_COUNT = 78
-EXPECTED_SCHEMA_COUNT = 1092
+EXPECTED_DEGRADED_CAPABILITY_COUNT = 79
+EXPECTED_SCHEMA_COUNT = 1094
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "f197e2e80a0d919cd767d7a9960e4a8ad97504b3fff752d9e7c164b35ea8daf8"
+    "b7eef12384a410f3053d0a08b2a6232b99dba74229482338d25139076857eb9d"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -625,6 +625,7 @@ ACCOUNTING_DELIVERY_WRITES = {
 }
 INVOICE_BULK_LINE_WRITES = {"invoice.lines.update", "invoice.lines.add"}
 IMPLEMENTED_WRITES |= INVOICE_BULK_LINE_WRITES
+IMPLEMENTED_WRITES.add("invoice.lines.remove")
 ENABLED_WRITES = IMPLEMENTED_WRITES | ACCOUNTING_DELIVERY_WRITES
 EXTENDED_WRITES = {
     "asset.cancel",
@@ -3177,6 +3178,7 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             "bank.transaction.delete",
             "invoice.delete",
             "invoice.line.delete",
+            "invoice.lines.remove",
             "journal_entry.delete",
             "journal_entry.lines.remove",
             "payment.delete",
@@ -4288,7 +4290,7 @@ def test_document_search_bulk_line_targets_match_the_fixed_runtime() -> None:
     for capability_id in extensions:
         descriptor = registry.describe(capability_id)
         assert descriptor["handler_key"] == IMPLEMENTED_READS[capability_id]
-        assert descriptor["tests"]["unit"]["references"][-4:] == [
+        assert descriptor["tests"]["unit"]["references"][-7:-3] == [
             "tests/unit/test_document_search_batch_contract.py", "tests/unit/test_document_search_batch_runtime.py",
             "tests/unit/test_document_search_header_runtime.py", "tests/unit/test_document_search_batch_cli.py"]
     for capability_id in INVOICE_BULK_LINE_WRITES:
@@ -4304,3 +4306,32 @@ def test_document_search_bulk_line_targets_match_the_fixed_runtime() -> None:
         integration = descriptor["tests"]["integration"]
         assert integration["status"] in {"planned", "implemented"}
         assert integration["references"] == (["tests/integration/test_document_search_bulk_lines_live.py"] if integration["status"] == "implemented" else [])
+
+
+def test_business_line_search_remove_targets_match_the_fixed_runtime() -> None:
+    registry = load_registry()
+    for capability_id in ("invoice.search", "journal_entry.search", "journal_item.search",
+                          "receivable.open_items.list", "payable.open_items.list",
+                          "invoice.analysis.search", "invoice.analysis.summary"):
+        descriptor = registry.describe(capability_id)
+        assert descriptor["handler_key"] == IMPLEMENTED_READS[capability_id]
+        assert descriptor["tests"]["unit"]["references"][-3:] == [
+            "tests/unit/test_invoice_business_line_filters_contract.py",
+            "tests/unit/test_document_business_filters_runtime.py",
+            "tests/unit/test_business_line_search_remove_cli.py"]
+    capability_id = "invoice.lines.remove"
+    descriptor = registry.describe(capability_id)
+    assert descriptor["handler_key"] == "core_write"
+    assert set(descriptor["source"]["models"]) == CORE_WRITE_MODELS[capability_id]
+    assert descriptor["requirements"]["groups"] == [CORE_WRITE_GROUPS[capability_id]]
+    assert set(descriptor["requirements"]["acl"]) == {
+        f"{model}:{operation}" for model, operation in CORE_WRITE_ACCESS[capability_id]}
+    assert descriptor["status"]["value"] == "degraded"
+    assert descriptor["strategies"]["idempotency"] == "content_key_missing_targets_rejected_no_tombstone"
+    assert descriptor["tests"]["unit"]["references"] == [
+        "tests/unit/test_invoice_lines_remove_contract.py", "tests/unit/test_invoice_lines_remove_runtime.py",
+        "tests/unit/test_business_line_search_remove_cli.py", "tests/unit/test_capability_registry.py"]
+    integration = descriptor["tests"]["integration"]
+    assert integration["status"] in {"planned", "implemented"}
+    assert integration["references"] == (["tests/integration/test_business_line_search_remove_live.py"]
+                                          if integration["status"] == "implemented" else [])

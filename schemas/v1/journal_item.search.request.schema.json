@@ -78,6 +78,8 @@
           "default": false
         },
         "currency_id": {"type": "integer", "minimum": 1},
+        "product_id": {"type": "integer", "minimum": 1},
+        "tax_id": {"type": "integer", "minimum": 1},
         "due_date_from": {"type": ["string", "null"], "format": "date"},
         "due_date_to": {"type": ["string", "null"], "format": "date"},
         "reconciled": {"type": "boolean"},

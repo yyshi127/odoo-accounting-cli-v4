@@ -198,11 +198,17 @@ def _filters(parameters: dict[str, Any], *, require_dates: bool) -> dict[str, An
         "partner_id": _optional_id(parameters, "partner_id"),
         "product_id": _optional_id(parameters, "product_id"),
     }
-    for key in ("journal_id", "currency_id"):
+    for key in ("journal_id", "currency_id", "account_id"):
         if key in parameters:
             if not _positive_id(parameters[key]):
                 raise _invalid(f"parameters.{key} must be a positive integer.")
             filters[key] = parameters[key]
+    for key in ("invoice_user_id", "fiscal_position_id"):
+        if key in parameters:
+            value = parameters[key]
+            if value is not None and not _positive_id(value):
+                raise _invalid(f"parameters.{key} must be null or a positive integer.")
+            filters[key] = value
     for key in ("due_date_from", "due_date_to"):
         if key in parameters:
             value = parameters[key]
@@ -238,6 +244,9 @@ def validate_invoice_analysis_request(
         "currency_id",
         "due_date_from",
         "due_date_to",
+        "invoice_user_id",
+        "fiscal_position_id",
+        "account_id",
     }
     if capability_id == "invoice.analysis.search":
         if not set(parameters) <= common | {"limit", "cursor"}:
