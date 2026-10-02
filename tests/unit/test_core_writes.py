@@ -18,6 +18,10 @@ from test_invoice_presentation_batch import (
     PARAMETERS as INVOICE_PRESENTATION_PARAMETERS,
 )
 from test_invoice_presentation_batch import result as invoice_presentation_result
+from test_journal_item_processing_batch import (
+    PARAMETERS as JOURNAL_ITEM_PROCESSING_PARAMETERS,
+)
+from test_journal_item_processing_batch import result as journal_item_processing_result
 from test_journal_processing_batch import PARAMETERS as JOURNAL_PROCESSING_PARAMETERS
 from test_journal_processing_batch import result as journal_processing_result
 from test_move_processing_batch import PARAMETERS as MOVE_PROCESSING_PARAMETERS
@@ -862,6 +866,7 @@ PARAMETERS = {
 PARAMETERS.update(deepcopy(PAYMENT_CONFIGURATION_PARAMETERS))
 PARAMETERS.update(deepcopy(ANALYTIC_PROCESSING_PARAMETERS))
 PARAMETERS.update(deepcopy(COMPANY_PROCESSING_PARAMETERS))
+PARAMETERS.update(deepcopy(JOURNAL_ITEM_PROCESSING_PARAMETERS))
 PARAMETERS.update(deepcopy(JOURNAL_PROCESSING_PARAMETERS))
 PARAMETERS.update(deepcopy(ACCOUNT_PROCESSING_PARAMETERS))
 PARAMETERS.update(deepcopy(TAX_PROCESSING_PARAMETERS))
@@ -892,6 +897,9 @@ def _request(capability_id: str) -> dict:
 
 
 def _key(capability_id: str) -> str:
+    if capability_id in JOURNAL_ITEM_PROCESSING_PARAMETERS:
+        parameters = validate_core_write_request(capability_id, _request(capability_id))[2]
+        return _expected_idempotency_key(capability_id, parameters, 7)
     if capability_id in COMPANY_PROCESSING_PARAMETERS:
         parameters = validate_core_write_request(capability_id, _request(capability_id))[2]
         return _expected_idempotency_key(capability_id, parameters, 7)
@@ -1187,6 +1195,10 @@ def _key(capability_id: str) -> str:
 
 
 def _result(capability_id: str, **changes) -> dict:
+    if capability_id in JOURNAL_ITEM_PROCESSING_PARAMETERS:
+        result = journal_item_processing_result(capability_id, PARAMETERS[capability_id])
+        result.update(changes)
+        return result
     if capability_id in COMPANY_PROCESSING_PARAMETERS:
         result = company_processing_result(capability_id, PARAMETERS[capability_id])
         result.update(changes)

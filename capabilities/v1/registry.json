@@ -14579,9 +14579,12 @@
           "reason": "Unit tests cover the closed request and response, optional module slots, final company-relative account mapping, and CLI dispatch."
         },
         "integration": {
-          "status": "planned",
-          "references": [],
-          "reason": "Dual-database live routing and record-not-found behavior are verified; a successful product-profile mapping remains pending because the isolated databases contain no products."
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_product_accounting_write_batch_live.py",
+            "tests/integration/test_journal_item_processing_batch_live.py"
+          ],
+          "reason": "Existing native product-accounting write workflow already positively verified category fallback/product overrides. Current shared line-processing workflow also reads a synthetic company-specific product and category as ordinary uid5/su=False before temporary analytic permissions in both isolated aliases. Full fresh-cursor fixture/group rollback verified; unavailable legacy stock slots remain explicit, not invented."
         },
         "golden": {
           "status": "planned",
@@ -37411,6 +37414,1100 @@
         ]
       },
       "handler_key": "core_write"
+    },
+    "invoice.line.deductibility.update": {
+      "summary": {
+        "zh_CN": "修改草稿账单行抵扣比例",
+        "en_US": "Update draft purchase-line deductibility"
+      },
+      "domain": "invoice",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "analytic",
+          "product",
+          "uom"
+        ],
+        "models": [
+          "account.account",
+          "account.fiscal.position",
+          "account.journal",
+          "account.move",
+          "account.move.line",
+          "account.tax",
+          "product.product",
+          "product.template",
+          "res.company",
+          "res.currency"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move_line.py",
+          "account/models/account_move.py",
+          "analytic/models/analytic_mixin.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.line.deductibility.update.request.schema.json",
+        "response": "schemas/v1/invoice.line.deductibility.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "analytic",
+          "product",
+          "uom"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.fiscal.position:read",
+          "account.journal:read",
+          "account.move.line:create",
+          "account.move.line:read",
+          "account.move.line:unlink",
+          "account.move.line:write",
+          "account.move:read",
+          "account.move:write",
+          "account.tax:read",
+          "product.product:read",
+          "product.template:read",
+          "res.company:read",
+          "res.currency:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_line_or_atomic_parent_write_with_closed_existing_targets_as_business_user",
+        "verify": "same_transaction_parent_line_readback_with_native_constraints_and_recomputation",
+        "idempotency": "serial_current_target_recheck_without_operation_store_or_concurrent_exactly_once",
+        "reverse": "restore_prior_values_subject_to_native_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_journal_item_processing_batch.py"
+          ],
+          "reason": "Closed typed parameters, bound parent/line results, shared CLI/schemas/confirmation/keys and target-bound pagination; native behavior is covered separately."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_journal_item_processing_batch_live.py"
+          ],
+          "reason": "One shared public CLI/real-ORM workflow passed both isolated aliases in21.41s as uid5/su=False/company1: bound line reads, target analytic keyset pages and actual partial/full reconciliation; native atomic draft entry updates preserve IDs and reject imbalance; posted maturity/full analytic replacement/clearing preserve financial fields and replay avoids child recreation; draft product UOM reprices/retaxes natively and purchase deductibility50/0/100 synchronizes native rows. Temporary analytic permission and an admin-created purchase-journal default-account fixture are transaction-local; missing/foreign parent and parent-line mismatch, posted financial writes and draft sales partial-deductibility are rejected. All objects/journal/mail alias and exact groups roll back in fresh cursors. First numeric-conversion and second analytic-sign failures retained, not acceptance; no concurrent exactly-once, receipt, business DB or real external-send claim."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples are deferred until the capability library reaches target coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing is outside this capability batch."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed line-targeted operations are implemented; native accounting, reference and analytic synchronization ACLs apply. Runtime context and native acceptance are not an unrestricted permission claim."
+      },
+      "routing": {
+        "object": "invoice",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "修改草稿账单行抵扣比例"
+          ],
+          "en_US": [
+            "Update draft purchase-line deductibility"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改已过账行的金额或科目",
+            "任意 ORM 写入或跨公司操作",
+            "绕过原生重算、锁账或核销检查"
+          ],
+          "en_US": [
+            "Changing posted monetary fields or accounts",
+            "Arbitrary ORM writes or cross-company operations",
+            "Bypassing native recomputation, locks or reconciliation checks"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "invoice.line.unit.assign": {
+      "summary": {
+        "zh_CN": "设置草稿发票行计量单位",
+        "en_US": "Assign a draft invoice-line product unit"
+      },
+      "domain": "invoice",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "analytic",
+          "product",
+          "uom"
+        ],
+        "models": [
+          "account.account",
+          "account.fiscal.position",
+          "account.journal",
+          "account.move",
+          "account.move.line",
+          "account.tax",
+          "product.product",
+          "product.template",
+          "res.company",
+          "res.currency",
+          "uom.uom"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move_line.py",
+          "account/models/account_move.py",
+          "analytic/models/analytic_mixin.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.line.unit.assign.request.schema.json",
+        "response": "schemas/v1/invoice.line.unit.assign.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "analytic",
+          "product",
+          "uom"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.fiscal.position:read",
+          "account.journal:read",
+          "account.move.line:create",
+          "account.move.line:read",
+          "account.move.line:unlink",
+          "account.move.line:write",
+          "account.move:read",
+          "account.move:write",
+          "account.tax:read",
+          "product.product:read",
+          "product.template:read",
+          "res.company:read",
+          "res.currency:read",
+          "uom.uom:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_line_or_atomic_parent_write_with_closed_existing_targets_as_business_user",
+        "verify": "same_transaction_parent_line_readback_with_native_constraints_and_recomputation",
+        "idempotency": "serial_current_target_recheck_without_operation_store_or_concurrent_exactly_once",
+        "reverse": "restore_prior_values_subject_to_native_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_journal_item_processing_batch.py"
+          ],
+          "reason": "Closed typed parameters, bound parent/line results, shared CLI/schemas/confirmation/keys and target-bound pagination; native behavior is covered separately."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_journal_item_processing_batch_live.py"
+          ],
+          "reason": "One shared public CLI/real-ORM workflow passed both isolated aliases in21.41s as uid5/su=False/company1: bound line reads, target analytic keyset pages and actual partial/full reconciliation; native atomic draft entry updates preserve IDs and reject imbalance; posted maturity/full analytic replacement/clearing preserve financial fields and replay avoids child recreation; draft product UOM reprices/retaxes natively and purchase deductibility50/0/100 synchronizes native rows. Temporary analytic permission and an admin-created purchase-journal default-account fixture are transaction-local; missing/foreign parent and parent-line mismatch, posted financial writes and draft sales partial-deductibility are rejected. All objects/journal/mail alias and exact groups roll back in fresh cursors. First numeric-conversion and second analytic-sign failures retained, not acceptance; no concurrent exactly-once, receipt, business DB or real external-send claim."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples are deferred until the capability library reaches target coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing is outside this capability batch."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed line-targeted operations are implemented; native accounting, reference and analytic synchronization ACLs apply. Runtime context and native acceptance are not an unrestricted permission claim."
+      },
+      "routing": {
+        "object": "invoice",
+        "actions": [
+          "assign"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置草稿发票行计量单位"
+          ],
+          "en_US": [
+            "Assign a draft invoice-line product unit"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改已过账行的金额或科目",
+            "任意 ORM 写入或跨公司操作",
+            "绕过原生重算、锁账或核销检查"
+          ],
+          "en_US": [
+            "Changing posted monetary fields or accounts",
+            "Arbitrary ORM writes or cross-company operations",
+            "Bypassing native recomputation, locks or reconciliation checks"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "journal_entry.lines.update": {
+      "summary": {
+        "zh_CN": "保留行标识批量修改草稿分录",
+        "en_US": "Update existing draft entry lines while preserving identifiers"
+      },
+      "domain": "journal_entry",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "analytic",
+          "product",
+          "uom"
+        ],
+        "models": [
+          "account.account",
+          "account.analytic.account",
+          "account.analytic.line",
+          "account.analytic.plan",
+          "account.journal",
+          "account.move",
+          "account.move.line",
+          "res.company",
+          "res.partner"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move_line.py",
+          "account/models/account_move.py",
+          "analytic/models/analytic_mixin.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/journal_entry.lines.update.request.schema.json",
+        "response": "schemas/v1/journal_entry.lines.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "analytic",
+          "product",
+          "uom"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_user"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.analytic.account:read",
+          "account.analytic.line:create",
+          "account.analytic.line:read",
+          "account.analytic.line:unlink",
+          "account.analytic.plan:read",
+          "account.journal:read",
+          "account.move.line:read",
+          "account.move.line:write",
+          "account.move:read",
+          "account.move:write",
+          "res.company:read",
+          "res.partner:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_line_or_atomic_parent_write_with_closed_existing_targets_as_business_user",
+        "verify": "same_transaction_parent_line_readback_with_native_constraints_and_recomputation",
+        "idempotency": "serial_current_target_recheck_without_operation_store_or_concurrent_exactly_once",
+        "reverse": "restore_prior_values_subject_to_native_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_journal_item_processing_batch.py"
+          ],
+          "reason": "Closed typed parameters, bound parent/line results, shared CLI/schemas/confirmation/keys and target-bound pagination; native behavior is covered separately."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_journal_item_processing_batch_live.py"
+          ],
+          "reason": "One shared public CLI/real-ORM workflow passed both isolated aliases in21.41s as uid5/su=False/company1: bound line reads, target analytic keyset pages and actual partial/full reconciliation; native atomic draft entry updates preserve IDs and reject imbalance; posted maturity/full analytic replacement/clearing preserve financial fields and replay avoids child recreation; draft product UOM reprices/retaxes natively and purchase deductibility50/0/100 synchronizes native rows. Temporary analytic permission and an admin-created purchase-journal default-account fixture are transaction-local; missing/foreign parent and parent-line mismatch, posted financial writes and draft sales partial-deductibility are rejected. All objects/journal/mail alias and exact groups roll back in fresh cursors. First numeric-conversion and second analytic-sign failures retained, not acceptance; no concurrent exactly-once, receipt, business DB or real external-send claim."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples are deferred until the capability library reaches target coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing is outside this capability batch."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed line-targeted operations are implemented; native accounting, reference and analytic synchronization ACLs apply. Runtime context and native acceptance are not an unrestricted permission claim."
+      },
+      "routing": {
+        "object": "journal_entry",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "保留行标识批量修改草稿分录"
+          ],
+          "en_US": [
+            "Update existing draft entry lines while preserving identifiers"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改已过账行的金额或科目",
+            "任意 ORM 写入或跨公司操作",
+            "绕过原生重算、锁账或核销检查"
+          ],
+          "en_US": [
+            "Changing posted monetary fields or accounts",
+            "Arbitrary ORM writes or cross-company operations",
+            "Bypassing native recomputation, locks or reconciliation checks"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "journal_item.analytic_distribution.replace": {
+      "summary": {
+        "zh_CN": "替换分录行分析分配",
+        "en_US": "Replace a journal-item analytic distribution"
+      },
+      "domain": "journal_item",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "analytic",
+          "product",
+          "uom"
+        ],
+        "models": [
+          "account.account",
+          "account.analytic.account",
+          "account.analytic.line",
+          "account.analytic.plan",
+          "account.move",
+          "account.move.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move_line.py",
+          "account/models/account_move.py",
+          "analytic/models/analytic_mixin.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/journal_item.analytic_distribution.replace.request.schema.json",
+        "response": "schemas/v1/journal_item.analytic_distribution.replace.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "analytic",
+          "product",
+          "uom"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_user"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.analytic.account:read",
+          "account.analytic.line:create",
+          "account.analytic.line:read",
+          "account.analytic.line:unlink",
+          "account.analytic.plan:read",
+          "account.move.line:read",
+          "account.move.line:write",
+          "account.move:read",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_line_or_atomic_parent_write_with_closed_existing_targets_as_business_user",
+        "verify": "same_transaction_parent_line_readback_with_native_constraints_and_recomputation",
+        "idempotency": "serial_current_target_recheck_without_operation_store_or_concurrent_exactly_once",
+        "reverse": "restore_prior_values_subject_to_native_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_journal_item_processing_batch.py"
+          ],
+          "reason": "Closed typed parameters, bound parent/line results, shared CLI/schemas/confirmation/keys and target-bound pagination; native behavior is covered separately."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_journal_item_processing_batch_live.py"
+          ],
+          "reason": "One shared public CLI/real-ORM workflow passed both isolated aliases in21.41s as uid5/su=False/company1: bound line reads, target analytic keyset pages and actual partial/full reconciliation; native atomic draft entry updates preserve IDs and reject imbalance; posted maturity/full analytic replacement/clearing preserve financial fields and replay avoids child recreation; draft product UOM reprices/retaxes natively and purchase deductibility50/0/100 synchronizes native rows. Temporary analytic permission and an admin-created purchase-journal default-account fixture are transaction-local; missing/foreign parent and parent-line mismatch, posted financial writes and draft sales partial-deductibility are rejected. All objects/journal/mail alias and exact groups roll back in fresh cursors. First numeric-conversion and second analytic-sign failures retained, not acceptance; no concurrent exactly-once, receipt, business DB or real external-send claim."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples are deferred until the capability library reaches target coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing is outside this capability batch."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed line-targeted operations are implemented; native accounting, reference and analytic synchronization ACLs apply. Runtime context and native acceptance are not an unrestricted permission claim."
+      },
+      "routing": {
+        "object": "journal_item",
+        "actions": [
+          "replace"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "替换分录行分析分配"
+          ],
+          "en_US": [
+            "Replace a journal-item analytic distribution"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改已过账行的金额或科目",
+            "任意 ORM 写入或跨公司操作",
+            "绕过原生重算、锁账或核销检查"
+          ],
+          "en_US": [
+            "Changing posted monetary fields or accounts",
+            "Arbitrary ORM writes or cross-company operations",
+            "Bypassing native recomputation, locks or reconciliation checks"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "journal_item.analytic_lines.list": {
+      "summary": {
+        "zh_CN": "列出指定分录行的分析分录",
+        "en_US": "List analytic entries for one journal item"
+      },
+      "domain": "analytic_accounting",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "analytic",
+          "product",
+          "uom"
+        ],
+        "models": [
+          "res.company",
+          "account.move.line",
+          "account.move",
+          "account.analytic.line",
+          "account.analytic.account",
+          "account.analytic.plan",
+          "res.partner",
+          "res.currency",
+          "product.product",
+          "uom.uom",
+          "account.account"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move_line.py",
+          "account/models/account_move.py",
+          "analytic/models/analytic_mixin.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/journal_item.analytic_lines.list.request.schema.json",
+        "response": "schemas/v1/journal_item.analytic_lines.list.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "analytic",
+          "product",
+          "uom"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.move.line:read",
+          "account.move:read",
+          "account.analytic.line:read",
+          "account.analytic.account:read",
+          "account.analytic.plan:read",
+          "res.partner:read",
+          "res.currency:read",
+          "product.product:read",
+          "uom.uom:read",
+          "account.account:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_company_line_target_read_as_business_user",
+        "verify": "typed_target_binding_and_native_keyset_cursor",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_journal_item_processing_batch.py"
+          ],
+          "reason": "Closed typed parameters, bound parent/line results, shared CLI/schemas/confirmation/keys and target-bound pagination; native behavior is covered separately."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_journal_item_processing_batch_live.py"
+          ],
+          "reason": "One shared public CLI/real-ORM workflow passed both isolated aliases in21.41s as uid5/su=False/company1: bound line reads, target analytic keyset pages and actual partial/full reconciliation; native atomic draft entry updates preserve IDs and reject imbalance; posted maturity/full analytic replacement/clearing preserve financial fields and replay avoids child recreation; draft product UOM reprices/retaxes natively and purchase deductibility50/0/100 synchronizes native rows. Temporary analytic permission and an admin-created purchase-journal default-account fixture are transaction-local; missing/foreign parent and parent-line mismatch, posted financial writes and draft sales partial-deductibility are rejected. All objects/journal/mail alias and exact groups roll back in fresh cursors. First numeric-conversion and second analytic-sign failures retained, not acceptance; no concurrent exactly-once, receipt, business DB or real external-send claim."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed line-targeted operations are implemented; native accounting, reference and analytic synchronization ACLs apply. Runtime context and native acceptance are not an unrestricted permission claim."
+      },
+      "routing": {
+        "object": "journal_item",
+        "actions": [
+          "list"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "列出指定分录行的分析分录"
+          ],
+          "en_US": [
+            "List analytic entries for one journal item"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改已过账行的金额或科目",
+            "任意 ORM 写入或跨公司操作",
+            "绕过原生重算、锁账或核销检查"
+          ],
+          "en_US": [
+            "Changing posted monetary fields or accounts",
+            "Arbitrary ORM writes or cross-company operations",
+            "Bypassing native recomputation, locks or reconciliation checks"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "journal_item_analytic_lines_list"
+    },
+    "journal_item.date_maturity.update": {
+      "summary": {
+        "zh_CN": "修改分录行到期日",
+        "en_US": "Update a receivable or payable journal-item maturity"
+      },
+      "domain": "journal_item",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "analytic",
+          "product",
+          "uom"
+        ],
+        "models": [
+          "account.account",
+          "account.move",
+          "account.move.line",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move_line.py",
+          "account/models/account_move.py",
+          "analytic/models/analytic_mixin.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/journal_item.date_maturity.update.request.schema.json",
+        "response": "schemas/v1/journal_item.date_maturity.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "analytic",
+          "product",
+          "uom"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_user"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.move.line:read",
+          "account.move.line:write",
+          "account.move:read",
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_line_or_atomic_parent_write_with_closed_existing_targets_as_business_user",
+        "verify": "same_transaction_parent_line_readback_with_native_constraints_and_recomputation",
+        "idempotency": "serial_current_target_recheck_without_operation_store_or_concurrent_exactly_once",
+        "reverse": "restore_prior_values_subject_to_native_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_journal_item_processing_batch.py"
+          ],
+          "reason": "Closed typed parameters, bound parent/line results, shared CLI/schemas/confirmation/keys and target-bound pagination; native behavior is covered separately."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_journal_item_processing_batch_live.py"
+          ],
+          "reason": "One shared public CLI/real-ORM workflow passed both isolated aliases in21.41s as uid5/su=False/company1: bound line reads, target analytic keyset pages and actual partial/full reconciliation; native atomic draft entry updates preserve IDs and reject imbalance; posted maturity/full analytic replacement/clearing preserve financial fields and replay avoids child recreation; draft product UOM reprices/retaxes natively and purchase deductibility50/0/100 synchronizes native rows. Temporary analytic permission and an admin-created purchase-journal default-account fixture are transaction-local; missing/foreign parent and parent-line mismatch, posted financial writes and draft sales partial-deductibility are rejected. All objects/journal/mail alias and exact groups roll back in fresh cursors. First numeric-conversion and second analytic-sign failures retained, not acceptance; no concurrent exactly-once, receipt, business DB or real external-send claim."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples are deferred until the capability library reaches target coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing is outside this capability batch."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed line-targeted operations are implemented; native accounting, reference and analytic synchronization ACLs apply. Runtime context and native acceptance are not an unrestricted permission claim."
+      },
+      "routing": {
+        "object": "journal_item",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "修改分录行到期日"
+          ],
+          "en_US": [
+            "Update a receivable or payable journal-item maturity"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改已过账行的金额或科目",
+            "任意 ORM 写入或跨公司操作",
+            "绕过原生重算、锁账或核销检查"
+          ],
+          "en_US": [
+            "Changing posted monetary fields or accounts",
+            "Arbitrary ORM writes or cross-company operations",
+            "Bypassing native recomputation, locks or reconciliation checks"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "journal_item.processing_details.get": {
+      "summary": {
+        "zh_CN": "查看分录行处理详情",
+        "en_US": "Read journal-item processing details"
+      },
+      "domain": "journal_item",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "analytic",
+          "product",
+          "uom"
+        ],
+        "models": [
+          "res.company",
+          "account.move.line",
+          "account.move",
+          "account.account",
+          "product.product",
+          "uom.uom",
+          "account.payment",
+          "account.bank.statement.line",
+          "res.currency"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move_line.py",
+          "account/models/account_move.py",
+          "analytic/models/analytic_mixin.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/journal_item.processing_details.get.request.schema.json",
+        "response": "schemas/v1/journal_item.processing_details.get.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "analytic",
+          "product",
+          "uom"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.move.line:read",
+          "account.move:read",
+          "account.account:read",
+          "product.product:read",
+          "uom.uom:read",
+          "account.payment:read",
+          "account.bank.statement.line:read",
+          "res.currency:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_company_line_target_read_as_business_user",
+        "verify": "typed_target_binding_and_native_keyset_cursor",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_journal_item_processing_batch.py"
+          ],
+          "reason": "Closed typed parameters, bound parent/line results, shared CLI/schemas/confirmation/keys and target-bound pagination; native behavior is covered separately."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_journal_item_processing_batch_live.py"
+          ],
+          "reason": "One shared public CLI/real-ORM workflow passed both isolated aliases in21.41s as uid5/su=False/company1: bound line reads, target analytic keyset pages and actual partial/full reconciliation; native atomic draft entry updates preserve IDs and reject imbalance; posted maturity/full analytic replacement/clearing preserve financial fields and replay avoids child recreation; draft product UOM reprices/retaxes natively and purchase deductibility50/0/100 synchronizes native rows. Temporary analytic permission and an admin-created purchase-journal default-account fixture are transaction-local; missing/foreign parent and parent-line mismatch, posted financial writes and draft sales partial-deductibility are rejected. All objects/journal/mail alias and exact groups roll back in fresh cursors. First numeric-conversion and second analytic-sign failures retained, not acceptance; no concurrent exactly-once, receipt, business DB or real external-send claim."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed line-targeted operations are implemented; native accounting, reference and analytic synchronization ACLs apply. Runtime context and native acceptance are not an unrestricted permission claim."
+      },
+      "routing": {
+        "object": "journal_item",
+        "actions": [
+          "get"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "查看分录行处理详情"
+          ],
+          "en_US": [
+            "Read journal-item processing details"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改已过账行的金额或科目",
+            "任意 ORM 写入或跨公司操作",
+            "绕过原生重算、锁账或核销检查"
+          ],
+          "en_US": [
+            "Changing posted monetary fields or accounts",
+            "Arbitrary ORM writes or cross-company operations",
+            "Bypassing native recomputation, locks or reconciliation checks"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "journal_item_processing_details_get"
+    },
+    "journal_item.reconciliation.inspect": {
+      "summary": {
+        "zh_CN": "查看指定分录行核销关系",
+        "en_US": "Inspect reconciliation for one journal item"
+      },
+      "domain": "journal_item",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "analytic",
+          "product",
+          "uom"
+        ],
+        "models": [
+          "res.company",
+          "account.move.line",
+          "account.move",
+          "account.partial.reconcile",
+          "account.full.reconcile",
+          "res.currency"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move_line.py",
+          "account/models/account_move.py",
+          "analytic/models/analytic_mixin.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/journal_item.reconciliation.inspect.request.schema.json",
+        "response": "schemas/v1/journal_item.reconciliation.inspect.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "analytic",
+          "product",
+          "uom"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.move.line:read",
+          "account.move:read",
+          "account.partial.reconcile:read",
+          "account.full.reconcile:read",
+          "res.currency:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_company_line_target_read_as_business_user",
+        "verify": "typed_target_binding_and_native_keyset_cursor",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_journal_item_processing_batch.py"
+          ],
+          "reason": "Closed typed parameters, bound parent/line results, shared CLI/schemas/confirmation/keys and target-bound pagination; native behavior is covered separately."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_journal_item_processing_batch_live.py"
+          ],
+          "reason": "One shared public CLI/real-ORM workflow passed both isolated aliases in21.41s as uid5/su=False/company1: bound line reads, target analytic keyset pages and actual partial/full reconciliation; native atomic draft entry updates preserve IDs and reject imbalance; posted maturity/full analytic replacement/clearing preserve financial fields and replay avoids child recreation; draft product UOM reprices/retaxes natively and purchase deductibility50/0/100 synchronizes native rows. Temporary analytic permission and an admin-created purchase-journal default-account fixture are transaction-local; missing/foreign parent and parent-line mismatch, posted financial writes and draft sales partial-deductibility are rejected. All objects/journal/mail alias and exact groups roll back in fresh cursors. First numeric-conversion and second analytic-sign failures retained, not acceptance; no concurrent exactly-once, receipt, business DB or real external-send claim."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed line-targeted operations are implemented; native accounting, reference and analytic synchronization ACLs apply. Runtime context and native acceptance are not an unrestricted permission claim."
+      },
+      "routing": {
+        "object": "journal_item",
+        "actions": [
+          "inspect"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "查看指定分录行核销关系"
+          ],
+          "en_US": [
+            "Inspect reconciliation for one journal item"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改已过账行的金额或科目",
+            "任意 ORM 写入或跨公司操作",
+            "绕过原生重算、锁账或核销检查"
+          ],
+          "en_US": [
+            "Changing posted monetary fields or accounts",
+            "Arbitrary ORM writes or cross-company operations",
+            "Bypassing native recomputation, locks or reconciliation checks"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "journal_item_reconciliation_inspect"
     }
   }
 }

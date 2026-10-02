@@ -16,6 +16,9 @@ from odoo_accounting_cli_v4.capabilities.core_object_reads import (
 
 EXPECTED_CAPABILITY_IDS = frozenset(
     {
+        "journal_item.processing_details.get",
+        "journal_item.reconciliation.inspect",
+        "journal_item.analytic_lines.list",
         "company.processing_settings.get",
         "analytic.account.balance.inspect",
         "analytic.account.invoice_usage.inspect",
@@ -180,6 +183,9 @@ GET_ID_FIELDS = {
 }
 
 PRIMARY_MODELS = {
+    "journal_item.processing_details.get": "account.move.line",
+    "journal_item.reconciliation.inspect": "account.move.line",
+    "journal_item.analytic_lines.list": "account.analytic.line",
     "company.processing_settings.get": "res.company",
     "analytic.account.balance.inspect": "account.analytic.account",
     "analytic.account.invoice_usage.inspect": "account.analytic.account",
@@ -1484,6 +1490,10 @@ def _dispatch(
 
 
 def _parameters(capability_id: str) -> dict[str, Any]:
+    if capability_id in {"journal_item.processing_details.get", "journal_item.reconciliation.inspect"}:
+        return {"journal_item_id": 31}
+    if capability_id == "journal_item.analytic_lines.list":
+        return {"journal_item_id": 71, "limit": 100, "after_id": None}
     if capability_id == "company.processing_settings.get":
         return {}
     if capability_id in {

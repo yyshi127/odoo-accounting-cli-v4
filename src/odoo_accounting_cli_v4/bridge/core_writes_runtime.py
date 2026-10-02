@@ -24,6 +24,9 @@ from odoo_accounting_cli_v4 import fiscal_mapping_contracts as fiscal_mappings
 from odoo_accounting_cli_v4 import (
     invoice_presentation_contracts as invoice_presentation,
 )
+from odoo_accounting_cli_v4 import (
+    journal_item_processing_contracts as journal_item_processing,
+)
 from odoo_accounting_cli_v4 import journal_processing_contracts as journal_processing
 from odoo_accounting_cli_v4 import move_processing_contracts as move_processing
 from odoo_accounting_cli_v4 import partner_preferences_contracts as partner_preferences
@@ -41,7 +44,7 @@ from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
 from odoo_accounting_cli_v4 import tax_processing_contracts as tax_processing
 
 ACTION = "accounting.core_write.execute"
-CAPABILITIES = company_processing.CAPABILITY_IDS | analytic_processing.CAPABILITY_IDS | journal_processing.CAPABILITY_IDS | account_processing.CAPABILITY_IDS | tax_processing.CAPABILITY_IDS | payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
+CAPABILITIES = journal_item_processing.CAPABILITY_IDS | company_processing.CAPABILITY_IDS | analytic_processing.CAPABILITY_IDS | journal_processing.CAPABILITY_IDS | account_processing.CAPABILITY_IDS | tax_processing.CAPABILITY_IDS | payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -3329,6 +3332,53 @@ def _protocol(failure_type: type[Exception]) -> Exception:
     )
 
 
+_PARAMETER_KEYS.update(journal_item_processing.PARAMETER_KEYS)
+for _journal_item_capability in journal_item_processing.CAPABILITY_IDS:
+    _GROUPS[_journal_item_capability] = (
+        "account.group_account_invoice"
+        if _journal_item_capability.startswith("invoice.")
+        else "account.group_account_user"
+    )
+    _MODELS[_journal_item_capability] = {
+        "res.company", "account.move", "account.move.line", "account.account",
+    }
+    _ACCESS[_journal_item_capability] = {
+        ("res.company", "read"), ("account.move", "read"),
+        ("account.move.line", "read"), ("account.move.line", "write"),
+        ("account.account", "read"),
+    }
+for _journal_item_capability in (
+    "journal_item.analytic_distribution.replace", "journal_entry.lines.update",
+):
+    _MODELS[_journal_item_capability].update({
+        "account.analytic.account", "account.analytic.plan", "account.analytic.line",
+    })
+    _ACCESS[_journal_item_capability].update({
+        ("account.analytic.account", "read"), ("account.analytic.plan", "read"),
+        ("account.analytic.line", "read"), ("account.analytic.line", "create"),
+        ("account.analytic.line", "unlink"),
+    })
+_MODELS["journal_entry.lines.update"].update({"account.journal", "res.partner"})
+_ACCESS["journal_entry.lines.update"].update({
+    ("account.move", "write"), ("account.journal", "read"), ("res.partner", "read"),
+})
+for _journal_item_capability in (
+    "invoice.line.unit.assign", "invoice.line.deductibility.update",
+):
+    _MODELS[_journal_item_capability].update({
+        "account.journal", "account.tax", "res.currency", "product.product",
+        "product.template", "account.fiscal.position",
+    })
+    _ACCESS[_journal_item_capability].update({
+        ("account.move", "write"), ("account.move.line", "create"),
+        ("account.move.line", "unlink"), ("account.journal", "read"),
+        ("account.tax", "read"), ("res.currency", "read"),
+        ("product.product", "read"), ("product.template", "read"),
+        ("account.fiscal.position", "read"),
+    })
+_MODELS["invoice.line.unit.assign"].add("uom.uom")
+_ACCESS["invoice.line.unit.assign"].add(("uom.uom", "read"))
+
 _PARAMETER_KEYS.update(company_processing.PARAMETER_KEYS)
 _GROUPS['company.bill_processing_policy.update'] = "base.group_erp_manager"
 _MODELS['company.bill_processing_policy.update'] = {'res.company', 'ir.default'}
@@ -5553,6 +5603,11 @@ def _valid_parameters(
 ) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id in journal_item_processing.CAPABILITY_IDS:
+        try:
+            return journal_item_processing.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
     if capability_id in company_processing.CAPABILITY_IDS:
         try:
             return company_processing.normalize_parameters(capability_id, parameters) == parameters
@@ -6201,6 +6256,8 @@ def _validated_payload(
 def _deterministic_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in journal_item_processing.CAPABILITY_IDS:
+        return journal_item_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in company_processing.CAPABILITY_IDS:
         return company_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in analytic_processing.CAPABILITY_IDS:
@@ -20391,6 +20448,142 @@ def _write_move_processing(
     return _move_result(move, company_id), replay
 
 
+def _journal_item_current(line: Any, fields: set[str]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for field in fields:
+        value = getattr(line, field)
+        if field in {"account_id", "partner_id", "product_uom_id"}:
+            result[field] = _relation_id(value)
+        elif field in {"debit", "credit", "deductible_amount"}:
+            result[field] = _canonical_decimal_text(value)
+        elif field == "analytic_distribution":
+            result[field] = _normalized_analytic_distribution(value) or None
+        elif field == "date_maturity":
+            result[field] = _nullable_value(value)
+        else:
+            result[field] = value
+    return result
+
+
+def _journal_item_write_values(changes: dict[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for field, value in changes.items():
+        if field in {"debit", "credit", "deductible_amount"}:
+            result[field] = float(Decimal(value))
+        elif field == "analytic_distribution":
+            result[field] = _odoo_analytic_distribution(value)
+        else:
+            result[field] = value if value is not None else False
+    return result
+
+
+def _journal_item_sourced(line: Any) -> bool:
+    fields = getattr(line, "_fields", {})
+    return bool(
+        "sale_line_ids" in fields and line.sale_line_ids
+        or "purchase_line_id" in fields and line.purchase_line_id
+    )
+
+
+def _write_journal_item_processing(
+    env: Any, capability_id: str, parameters: dict[str, Any],
+    company_id: int, failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    move_domain: list[Any] = [
+        ("id", "=", parameters["move_id"]), ("company_id", "=", company_id),
+    ]
+    invoice = capability_id.startswith("invoice.")
+    if invoice:
+        move_domain.append(("move_type", "in", list(_DOCUMENT_TYPES)))
+    elif capability_id == "journal_entry.lines.update":
+        move_domain.append(("move_type", "=", "entry"))
+    move = _search_one(env, "account.move", move_domain, company_id, failure_type)
+    if move.state not in {"draft", "posted"}:
+        raise _fail(failure_type, "state_conflict", "Journal-item processing requires a draft or posted move.", exit_code=5)
+    if (invoice or capability_id == "journal_entry.lines.update") and move.state != "draft":
+        raise _fail(failure_type, "state_conflict", "Financial line changes require a draft accounting document.", exit_code=5)
+
+    if capability_id == "journal_entry.lines.update":
+        if not move.journal_id or move.journal_id.type != "general" or _generated_entry(move):
+            raise _fail(failure_type, "business_rule_error", "Only an ordinary source-unlinked general journal entry can have its lines updated.", exit_code=6)
+        before_ids = set(move.line_ids.ids)
+        requested = parameters["lines"]
+        lines = _ensure_ids(env, "account.move.line", {item["line_id"] for item in requested}, [
+            ("move_id", "=", move.id), ("company_id", "=", company_id),
+            ("display_type", "in", [False, "product"]), ("account_id", "!=", False),
+        ], company_id, failure_type)
+        by_id = {line.id: line for line in lines}
+        _ensure_ids(env, "account.account", {
+            item["changes"]["account_id"] for item in requested if "account_id" in item["changes"]
+        }, [("company_ids", "in", [company_id])], company_id, failure_type)
+        _ensure_ids(env, "res.partner", {
+            item["changes"]["partner_id"] for item in requested if item["changes"].get("partner_id") is not None
+        }, [("company_id", "in", [False, company_id])], company_id, failure_type)
+        _validate_line_analytic_references(env, [item["changes"] for item in requested], company_id, failure_type)
+        replay = all(
+            _journal_item_current(by_id[item["line_id"]], set(item["changes"])) == item["changes"]
+            for item in requested
+        )
+        if not replay:
+            if any(_journal_item_sourced(line) for line in lines):
+                raise _fail(failure_type, "business_rule_error", "Source-linked journal lines cannot be changed by this capability.", exit_code=6)
+            move.write({"line_ids": [
+                (1, item["line_id"], _journal_item_write_values(item["changes"]))
+                for item in requested
+            ]})
+            lines.invalidate_recordset()
+            move.invalidate_recordset()
+        if set(move.line_ids.ids) != before_ids or any(
+            _journal_item_current(by_id[item["line_id"]], set(item["changes"])) != item["changes"]
+            for item in requested
+        ):
+            raise _fail(failure_type, "odoo_write_error", "Native journal-line changes were not persisted with the existing line IDs.", exit_code=6)
+        return _move_result(move, company_id), replay
+
+    line = _invoice_line(env, move, parameters["line_id"], company_id, failure_type) if invoice else _search_one(
+        env, "account.move.line", [
+            ("id", "=", parameters["line_id"]), ("move_id", "=", move.id),
+            ("company_id", "=", company_id), ("account_id", "!=", False),
+            ("display_type", "not in", ["line_section", "line_subsection", "line_note"]),
+        ], company_id, failure_type,
+    )
+    if capability_id == "journal_item.date_maturity.update":
+        if line.account_id.account_type not in {"asset_receivable", "liability_payable"}:
+            raise _fail(failure_type, "business_rule_error", "Maturity dates can only be changed on a receivable or payable journal item.", exit_code=6)
+        changes = {"date_maturity": parameters["date_maturity"]}
+    elif capability_id == "journal_item.analytic_distribution.replace":
+        changes = {"analytic_distribution": parameters["analytic_distribution"]}
+        _validate_line_analytic_references(env, [changes], company_id, failure_type)
+    elif capability_id == "invoice.line.unit.assign":
+        if not line.product_id:
+            raise _fail(failure_type, "business_rule_error", "Unit assignment requires a product-backed invoice business line.", exit_code=6)
+        _ensure_ids(env, "product.product", {line.product_id.id}, [
+            ("company_id", "in", [False, company_id]),
+        ], company_id, failure_type)
+        _ensure_ids(env, "uom.uom", {parameters["product_uom_id"]}, [], company_id, failure_type)
+        if parameters["product_uom_id"] not in line.allowed_uom_ids.ids:
+            raise _fail(failure_type, "business_rule_error", "The requested unit is not a native allowed unit for this invoice product.", exit_code=6)
+        changes = {"product_uom_id": parameters["product_uom_id"]}
+    else:
+        changes = {"deductible_amount": parameters["deductible_amount"]}
+        if Decimal(changes["deductible_amount"]) != 100 and move.move_type not in {"in_invoice", "in_refund"}:
+            raise _fail(failure_type, "business_rule_error", "Partial deductibility is only supported on native purchase documents.", exit_code=6)
+    replay = _journal_item_current(line, set(changes)) == changes
+    if not replay:
+        if invoice and _journal_item_sourced(line):
+            raise _fail(failure_type, "business_rule_error", "Source-linked invoice business lines cannot change unit or deductibility by this capability.", exit_code=6)
+        line.write(_journal_item_write_values(changes))
+        line.invalidate_recordset()
+        move.invalidate_recordset()
+    if (
+        _journal_item_current(line, set(changes)) != changes
+        or _relation_id(line.move_id) != move.id
+        or _relation_id(line.company_id) != company_id
+    ):
+        raise _fail(failure_type, "odoo_write_error", "Native journal-item changes were not persisted on the requested company and move.", exit_code=6)
+    return _move_result(move, company_id, source_id=line.id), replay
+
+
 def _dispatch_allowed(
     env: Any,
     capability_id: str,
@@ -20400,6 +20593,8 @@ def _dispatch_allowed(
     marker: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if capability_id in journal_item_processing.CAPABILITY_IDS:
+        return _write_journal_item_processing(env, capability_id, parameters, company_id, failure_type)
     if capability_id in company_processing.CAPABILITY_IDS:
         return _write_company_processing(env, capability_id, parameters, company_id, failure_type)
     if capability_id in analytic_processing.CAPABILITY_IDS:

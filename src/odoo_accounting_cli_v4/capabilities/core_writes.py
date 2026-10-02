@@ -20,6 +20,9 @@ from odoo_accounting_cli_v4 import fiscal_mapping_contracts as fiscal_mappings
 from odoo_accounting_cli_v4 import (
     invoice_presentation_contracts as invoice_presentation,
 )
+from odoo_accounting_cli_v4 import (
+    journal_item_processing_contracts as journal_item_processing,
+)
 from odoo_accounting_cli_v4 import journal_processing_contracts as journal_processing
 from odoo_accounting_cli_v4 import move_processing_contracts as move_processing
 from odoo_accounting_cli_v4 import partner_preferences_contracts as partner_preferences
@@ -36,7 +39,7 @@ from odoo_accounting_cli_v4 import (
 from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
 from odoo_accounting_cli_v4 import tax_processing_contracts as tax_processing
 
-CORE_WRITE_CAPABILITY_IDS = company_processing.CAPABILITY_IDS | analytic_processing.CAPABILITY_IDS | journal_processing.CAPABILITY_IDS | account_processing.CAPABILITY_IDS | tax_processing.CAPABILITY_IDS | payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
+CORE_WRITE_CAPABILITY_IDS = journal_item_processing.CAPABILITY_IDS | company_processing.CAPABILITY_IDS | analytic_processing.CAPABILITY_IDS | journal_processing.CAPABILITY_IDS | account_processing.CAPABILITY_IDS | tax_processing.CAPABILITY_IDS | payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -4291,7 +4294,12 @@ def validate_core_write_request(
             code="capability_unavailable",
         )
     request_id, context, parameters = _validate_envelope(request)
-    if capability_id in company_processing.CAPABILITY_IDS:
+    if capability_id in journal_item_processing.CAPABILITY_IDS:
+        try:
+            normalized = journal_item_processing.normalize_parameters(capability_id, parameters)
+        except ValueError as exc:
+            raise _invalid(str(exc)) from exc
+    elif capability_id in company_processing.CAPABILITY_IDS:
         try:
             normalized = company_processing.normalize_parameters(capability_id, parameters)
         except ValueError as exc:
@@ -4553,6 +4561,8 @@ def validate_core_write_request(
 def _expected_idempotency_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in journal_item_processing.CAPABILITY_IDS:
+        return journal_item_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in company_processing.CAPABILITY_IDS:
         return company_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in analytic_processing.CAPABILITY_IDS:
@@ -5268,6 +5278,20 @@ def _validate_result(
 ) -> dict[str, Any]:
     if not _valid_result_shape(result) or result["company_id"] != company_id:
         raise _failed("Odoo returned a malformed or out-of-scope core-write result.")
+
+    if capability_id in journal_item_processing.CAPABILITY_IDS:
+        invoice = capability_id.startswith("invoice.")
+        batch = capability_id == "journal_entry.lines.update"
+        expected_lines = ({line["line_id"] for line in parameters["lines"]}
+                          if batch else {parameters["line_id"]})
+        if (result["model"] != "account.move" or result["id"] != parameters["move_id"]
+            or result["source_id"] != (None if batch else parameters["line_id"])
+            or result["state"] not in ({"draft"} if invoice or batch else {"draft", "posted"})
+            or result["move_type"] not in ({"out_invoice", "in_invoice", "out_refund", "in_refund"} if invoice else {"entry"} if batch else move_processing.MOVE_TYPES)
+            or not expected_lines <= set(result["line_ids"])
+            or result["partial_reconcile_ids"] or result["full_reconcile_id"] is not None):
+            raise _failed("Odoo returned a mismatched parent/line processing result.")
+        return deepcopy(result)
 
     if capability_id in company_processing.CAPABILITY_IDS:
         if (result["model"] != "res.company" or result["id"] != company_id

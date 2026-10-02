@@ -2,6 +2,114 @@
 
 ## Current accounting phase — 2026-10-02
 
+532 registered IDs; 517 implemented handlers (242 reads, 275 writes);
+1040 schemas. Availability: 443 unconfigured, 74 degraded, 15 disabled.
+Enabled integrations: 514 implemented, two planned, one failed. Counts include
+historical non-accounting extensions; they are not a full accounting denominator,
+completion percentage or unrestricted ordinary-user permission guarantee.
+
+This batch adds eight actual line-targeted accounting operations, not aliases:
+
+- journal_item.processing_details.get — native processing/residual/discount,
+  product unit/deductibility and payment/statement source details.
+- journal_item.reconciliation.inspect — the target's native partial IDs, full
+  group ID and direct counterpart IDs excluding the target. Existing
+  reconciliation.full.get supplies the entire full group when needed.
+- journal_item.analytic_lines.list — fixed target-line filter with existing
+  keyset cursor and analytic item shape, no generic query dispatcher.
+- journal_item.date_maturity.update — bound receivable/payable line maturity.
+- journal_item.analytic_distribution.replace — full native distribution
+  replacement or null clearing, including posted analytic-child synchronization.
+- invoice.line.unit.assign — draft product-backed line native allowed unit;
+  Odoo reprices and recalculates taxes, not a metadata-only change.
+- invoice.line.deductibility.update — draft line deductibility; partial values
+  are purchase-only and native nondeductible base/tax rows synchronize.
+- journal_entry.lines.update — one balanced parent write updates existing draft
+  financial rows and preserves IDs. No create/delete, tax/system-line patch,
+  posted monetary patch or currency/amount_currency writer.
+
+One shared public CLI/real-ORM workflow passed both isolated aliases in21.41s,
+uid5/su=False/company1, eight new plus six reused setup IDs and one existing
+product-profile read. Nine immediate replay variants per alias; replay checks
+current target state and does not recreate posted analytic children. No new
+operation store, approval framework, per-command smoke or concurrency guarantee.
+
+Native atomic debit/credit edits preserve all entry IDs; imbalance is rejected
+and unchanged monetary rows checked. Posted maturity and distribution50/50,
+replacement100 and null clearing preserve identities/accounts/currency amounts,
+residuals and reconciliation links. Native analytic income is the opposite of
+the revenue AML balance: revenue-120 produces analytic+120, not an expense.
+Target analytic pagination and partial40 then full120 reconciliation are verified.
+
+Draft unit selection uses actual Odoo19 product allowed_uom_ids; a unit-to-pack6
+change natively reprices12 to72 and recomputes purchase taxes. Purchase
+deductibility50/0/100 preserves aggregate bill total/tax while synchronizing
+nondeductible rows. The seeded purchase journal lacks default/nondeductible
+accounts, so an admin-created transaction-local purchase-journal expense-default
+fixture is used; the existing journal is untouched. Posted unit/deductibility,
+draft sales partial deductibility, missing/foreign parent and parent-line mismatch
+are rejected. Fixture coverage does not prove every account type, localization,
+receipt, foreign currency, restricted/hash/lock or source-linked path.
+
+Actual business-user calls retain native ACLs and exact company binding. Native
+analytic synchronization permissions are added only within the isolated test
+transaction; no product-manager or ERP-manager grant is used for the product
+profile read. All exact user groups, synthetic rows, new journal and its native
+mail alias roll back in fresh cursors, including before failure rethrow. Existing
+analytic plans are unchanged; no new plans/dynamic fields are created.
+
+Product accounting-profile GET was incorrectly marked planned despite an earlier
+positive native product-accounting write workflow. It is now accurately closed
+using both the original category-fallback/product-override evidence and a current
+ordinary-user positive read before temporary analytic permissions. This is a
+metadata correction, not a ninth new command or invented legacy stock-slot value.
+
+Failed native attempts are retained and are not acceptance:8.52s exposed native
+existing monetary float-minus-Decimal comparison; the new helper now supplies
+native floats from public canonical strings.15.24s exposed the test's reversed
+analytic income sign. State-denial expectations and the native purchase-journal
+prerequisite were corrected without bypassing native logic. SDK also no longer
+misreports successful updates when native parent reconciled=True. Production
+rolls back the complete action transaction on native failure; the shared outer
+test transaction uses per-invoke savepoints and final full rollback. Public
+amount strings and native currency rules/readback stay intact.
+
+Local:31 new unit cases10.33s; clean880 affected reads1.99s;279 selected write
+cases99.11s with639 deselected. Initial local registry18passed1failed1deselected
+exposed only pre-repair source/ACL order; final local registry19passed1deselected
+in172.44s. The later metadata-only verification-label correction passes the
+server fixed-write registry case1passed19deselected5.95s.
+Server:31 new unit cases6.32s;19 registry cases137.38s with the known stale
+bank_statement_payment_maintenance case explicitly deselected, not a full-suite
+pass. Actual immutable CLI registry is loaded once per native test worker;
+request/response validation and native ACLs still execute, no production cache.
+
+Deployment is an explicit31file prior-SHA allowlist:12 existing backups and19
+new files, then bounded2file numeric/metadata,3file fixture/metadata and2file
+acceptance repairs, then one metadata-only savepoint-to-transaction verify-label
+correction; each has prior-SHA guard and recoverable backups. Final
+server code hashes are checked separately. Local STATUS/HANDOFF updated; server
+overlays are untouched. Ruff/diff/changed-code privacy and actual staged-added
+privacy checks passed for the exact33-path recovery commit. Five historical
+whole-tree document findings remain; this is not a full-tree clean privacy claim.
+
+No business DB, installed source/addon, service/configuration, Pi/V2/V3, actual
+external-send or disk-cleanup changes. This run's fresh service PIDs/restart
+counts remain stable, not a statement about earlier paused periods. Disk remains
+tight (5.1 GiB free at the check); no implicit deletion or backup removal.
+
+Unclosed: asset.validate native-addon failure and two real external-send
+integrations; repair/sends require separate scoped authority. Continue useful
+native accounting gaps such as invoice service dates, actionable alert/origin
+reads and tax-rounding adjustment; verify existing commands first. Debit-note
+addon is absent in isolated databases and must not be silently installed.
+Broad accounting coverage and a percentage remain unproven; goal is not complete.
+
+Reproducibility: registry file SHA256 96c031eb29de8f94f3578b53711fade271406a1075c98ed86fb938db67b8e67f;
+canonical registry SHA256 7a5f33c2d0f67f8f886a5d5cb3f9e0a7f2aa4be18cbf84dfef425eea5dcf7da1.
+
+## Previous checkpoint — native company processing, 2026-10-02
+
 524 registered IDs; 509 implemented handlers (239 reads, 270 writes);
 1024 schemas. Availability: 435 unconfigured, 74 degraded, 15 disabled.
 Enabled integrations: 505 implemented, three planned, one failed. Historical

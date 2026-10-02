@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/journal_item.reconciliation.inspect.response.schema.json",
+  "title": "journal_item.reconciliation.inspect response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "success",
+    "capability",
+    "status",
+    "data",
+    "warnings",
+    "error",
+    "odoo",
+    "audit"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v1"
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "success": {
+      "type": "boolean"
+    },
+    "capability": {
+      "const": "journal_item.reconciliation.inspect"
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "data": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/item"
+        }
+      ]
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "error": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "response.schema.json#/$defs/error"
+        }
+      ]
+    },
+    "odoo": {
+      "$ref": "response.schema.json#/$defs/odoo"
+    },
+    "audit": {
+      "$ref": "response.schema.json#/$defs/audit"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "success": {
+            "const": true
+          }
+        },
+        "required": [
+          "success"
+        ]
+      },
+      "then": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "const": "verified"
+          },
+          "data": {
+            "$ref": "#/$defs/item"
+          },
+          "error": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "data": {
+            "type": "null"
+          },
+          "error": {
+            "$ref": "response.schema.json#/$defs/error"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "move_id",
+        "company_id",
+        "currency_id",
+        "company_currency_id",
+        "amount_residual",
+        "amount_residual_currency",
+        "partial_reconcile_ids",
+        "reconciled_journal_item_ids",
+        "reconciled",
+        "matching_number",
+        "full_reconcile_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "move_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "company_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "currency_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "company_currency_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "amount_residual": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+        },
+        "amount_residual_currency": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+        },
+        "partial_reconcile_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "reconciled_journal_item_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "reconciled": {
+          "type": "boolean"
+        },
+        "matching_number": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "full_reconcile_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

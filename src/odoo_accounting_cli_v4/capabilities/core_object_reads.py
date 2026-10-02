@@ -17,6 +17,9 @@ from odoo_accounting_cli_v4 import company_processing_contracts as company_proce
 from odoo_accounting_cli_v4 import (
     invoice_presentation_contracts as invoice_presentation,
 )
+from odoo_accounting_cli_v4 import (
+    journal_item_processing_contracts as journal_item_processing,
+)
 from odoo_accounting_cli_v4 import journal_processing_contracts as journal_processing
 from odoo_accounting_cli_v4 import move_processing_contracts as move_processing
 from odoo_accounting_cli_v4 import partner_preferences_contracts as partner_preferences
@@ -49,6 +52,7 @@ CORE_OBJECT_GET_CAPABILITY_IDS = frozenset(
         "partner.accounting.get",
         "bank.transaction.get",
         "journal_item.get",
+        *journal_item_processing.GET_IDS,
         "product.get",
         "analytic.plan.get",
         "analytic.account.get",
@@ -134,6 +138,7 @@ _CORE_OBJECT_SEARCH_CAPABILITY_IDS = frozenset(
         "partner.bank_account.search",
         "bank.statement.search",
         "analytic.line.search",
+        journal_item_processing.ANALYTIC_LIST_ID,
         "budget.search",
         "budget.line.list",
         "account.group.list",
@@ -178,6 +183,7 @@ _ID_FIELDS = {
     "partner.accounting.get": "partner_id",
     "bank.transaction.get": "transaction_id",
     "journal_item.get": "line_id",
+    **{capability_id: "journal_item_id" for capability_id in journal_item_processing.GET_IDS},
     "product.get": "product_id",
     "analytic.plan.get": "plan_id",
     "analytic.account.get": "analytic_account_id",
@@ -251,6 +257,7 @@ _SEARCH_FILTERS = {
     "analytic.line.search": frozenset(
         {"query", "date_from", "date_to", "analytic_account_id"}
     ),
+    journal_item_processing.ANALYTIC_LIST_ID: frozenset({"journal_item_id"}),
     "budget.search": frozenset(
         {"query", "state", "budget_type", "date_from", "date_to"}
     ),
@@ -519,6 +526,11 @@ def validate_core_object_read_request(
             return request_id, context, analytic_processing.normalize_parameters(capability_id, parameters)
         except ValueError as exc:
             raise _invalid(str(exc)) from exc
+    if capability_id in journal_item_processing.GET_IDS:
+        try:
+            return request_id, context, journal_item_processing.normalize_parameters(capability_id, parameters)
+        except ValueError as exc:
+            raise _invalid(str(exc)) from exc
     if capability_id in CORE_OBJECT_GET_CAPABILITY_IDS:
         id_field = _ID_FIELDS[capability_id]
         if set(parameters) != {id_field} or not _valid_id(parameters.get(id_field)):
@@ -555,6 +567,11 @@ def validate_core_object_read_request(
         if not {"payment_id"} <= set(parameters) <= {"payment_id", "limit", "cursor"} or not _valid_id(parameters.get("payment_id")):
             raise _invalid("Native payment candidates require payment_id and optional pagination only.")
         filters = {"payment_id": parameters["payment_id"]}
+    elif capability_id == journal_item_processing.ANALYTIC_LIST_ID:
+        if not {"journal_item_id"} <= set(parameters) <= {"journal_item_id", "limit", "cursor"} or not _valid_id(parameters.get("journal_item_id")):
+            raise _invalid("Analytic listing requires journal_item_id and optional pagination only.")
+        parameters = {"limit": 50, **parameters}
+        filters = {"journal_item_id": parameters["journal_item_id"]}
     elif capability_id == "invoice.layout_line.list":
         if not {"move_id"} <= set(parameters) <= {"move_id", "limit", "cursor"} or not _valid_id(parameters.get("move_id")):
             raise _invalid("Layout listing requires an invoice move_id and optional pagination only.")
@@ -2814,6 +2831,8 @@ def _valid_account_status_item(item: Any, company_id: int) -> bool:
 
 
 def _valid_item(capability_id: str, item: Any, company_id: int) -> bool:
+    if capability_id in journal_item_processing.GET_IDS:
+        return journal_item_processing.valid_read_item(capability_id, item, company_id)
     if capability_id == company_processing.GET_ID:
         return company_processing.valid_read_item(item, company_id)
     if capability_id in analytic_processing.READ_IDS:
@@ -2891,7 +2910,7 @@ def _valid_item(capability_id: str, item: Any, company_id: int) -> bool:
         "reconciliation.full.get",
     }:
         return _valid_full_reconcile_item(item, company_id)
-    if capability_id in {"analytic.line.search", "analytic.line.get"}:
+    if capability_id in {"analytic.line.search", "analytic.line.get", journal_item_processing.ANALYTIC_LIST_ID}:
         return _valid_analytic_line_item(item, company_id)
     if capability_id in {
         "analytic.distribution_model.list",
@@ -3144,6 +3163,8 @@ def read_core_object(
         raise _failed("Odoo returned candidates from the wrong payment.")
     if capability_id == invoice_presentation.LIST_ID and any(item["move_id"] != filters["move_id"] for item in items):
         raise _failed("Odoo returned a layout line from the wrong invoice.")
+    if capability_id == journal_item_processing.ANALYTIC_LIST_ID and any(item["journal_item_id"] != filters["journal_item_id"] for item in items):
+        raise _failed("Odoo returned an analytic line from the wrong journal item.")
     if capability_id == "budget.line.list" and any(
         item["budget"]["id"] != filters["budget_id"] for item in items
     ):

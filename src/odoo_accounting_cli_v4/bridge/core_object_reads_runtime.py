@@ -15,6 +15,9 @@ from odoo_accounting_cli_v4 import company_processing_contracts as company_proce
 from odoo_accounting_cli_v4 import (
     invoice_presentation_contracts as invoice_presentation,
 )
+from odoo_accounting_cli_v4 import (
+    journal_item_processing_contracts as journal_item_processing,
+)
 from odoo_accounting_cli_v4 import journal_processing_contracts as journal_processing
 from odoo_accounting_cli_v4 import move_processing_contracts as move_processing
 from odoo_accounting_cli_v4 import partner_preferences_contracts as partner_preferences
@@ -38,8 +41,13 @@ class _InvoiceNotFound(LookupError):
     pass
 
 
+class _JournalItemNotFound(LookupError):
+    pass
+
+
 CAPABILITY_IDS = frozenset(
     {
+        *journal_item_processing.READ_IDS,
         "account.account.get",
         "journal.get",
         "tax.get",
@@ -154,6 +162,7 @@ CAPABILITY_IDS = frozenset(
 )
 
 _GET_IDS = {
+    **{capability_id: ("account.move.line", "journal_item_id") for capability_id in journal_item_processing.GET_IDS},
     "account.account.get": ("account.account", "account_id"),
     "journal.get": ("account.journal", "journal_id"),
     "tax.get": ("account.tax", "tax_id"),
@@ -735,6 +744,19 @@ _SUPPORTING_FIELDS = {
 _ANALYTIC_COLUMN_PATTERN = re.compile(r"^(?:account_id|x_plan[1-9][0-9]*_id)$")
 _PARTNER_REF_MARKER_SUFFIX = re.compile(r"(?:^| )\[ODACV4:[0-9a-f]{64}\]$")
 _REQUIRED_MODELS = {
+    journal_item_processing.DETAIL_ID: (
+        "res.company", "account.move.line", "account.move", "account.account",
+        "product.product", "uom.uom", "account.payment", "account.bank.statement.line", "res.currency",
+    ),
+    journal_item_processing.RECONCILIATION_ID: (
+        "res.company", "account.move.line", "account.move", "account.partial.reconcile",
+        "account.full.reconcile", "res.currency",
+    ),
+    journal_item_processing.ANALYTIC_LIST_ID: (
+        "res.company", "account.move.line", "account.move", "account.analytic.line",
+        "account.analytic.account", "account.analytic.plan", "res.partner", "res.currency",
+        "product.product", "uom.uom", "account.account",
+    ),
     "account.account.get": ("res.company", "account.account"),
     "journal.get": ("res.company", "account.journal", "res.currency"),
     "tax.get": ("res.company", "account.tax", "account.tax.group"),
@@ -1652,6 +1674,13 @@ def _scope_domain(env: Any, capability_id: str, company_id: int) -> list[Any]:
 def _valid_parameters(capability_id: str, parameters: Any) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id in journal_item_processing.GET_IDS:
+        try:
+            return journal_item_processing.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
+    if capability_id == journal_item_processing.ANALYTIC_LIST_ID:
+        return set(parameters) == {"journal_item_id", "after_id", "limit"} and _valid_id(parameters["journal_item_id"]) and (parameters["after_id"] is None or _valid_id(parameters["after_id"])) and _valid_limit(parameters["limit"])
     if capability_id == company_processing.GET_ID:
         try:
             return company_processing.normalize_parameters(capability_id, parameters) == parameters
@@ -2769,6 +2798,120 @@ def _journal_item_rows(
         load=None,
     )
     return rows, True
+
+
+def _journal_item_target_row(
+    env: Any, journal_item_id: int, company_id: int, fields: tuple[str, ...]
+) -> dict[str, Any] | None:
+    rows = env["account.move.line"].with_context(
+        active_test=False, allowed_company_ids=[company_id]
+    ).search_read(
+        [("id", "=", journal_item_id), ("company_id", "=", company_id)],
+        fields=list(fields), limit=1, order="id", load=None,
+    )
+    if not rows:
+        return None
+    row = rows[0]
+    move_id = _reference_id(row.get("move_id"))
+    if row.get("id") != journal_item_id or _reference_id(row.get("company_id")) != company_id or move_id is None:
+        raise ValueError("journal item outside company")
+    moves = _related_rows(env, "account.move", {move_id}, ("company_id", "state", "move_type"), company_id=company_id)
+    if _reference_id(moves[move_id]["company_id"]) != company_id:
+        raise ValueError("journal-item parent outside company")
+    if "parent_state" in row and (row["parent_state"] != moves[move_id]["state"] or row["move_type"] != moves[move_id]["move_type"]):
+        raise ValueError("journal-item parent state mismatch")
+    return row
+
+
+def _journal_item_processing_rows(
+    env: Any, capability_id: str, parameters: dict[str, Any], company_id: int
+) -> list[dict[str, Any]]:
+    fields = (journal_item_processing.DETAIL_FIELDS if capability_id == journal_item_processing.DETAIL_ID else (
+        "id", "move_id", "company_id", "reconciled", "matching_number", "amount_residual",
+        "amount_residual_currency", "currency_id", "company_currency_id", "full_reconcile_id",
+        "matched_debit_ids", "matched_credit_ids",
+    ))
+    row = _journal_item_target_row(env, parameters["journal_item_id"], company_id, fields)
+    if row is None:
+        return []
+    currency_ids = {_reference_id(row[field]) for field in ("currency_id", "company_currency_id")}
+    if None in currency_ids:
+        raise ValueError("missing journal-item currency")
+    _related_rows(env, "res.currency", currency_ids, ("name",), company_id=company_id)
+    companies = _related_rows(env, "res.company", {company_id}, ("currency_id",), company_id=company_id)
+    if _reference_id(row["company_currency_id"]) != _reference_id(companies[company_id]["currency_id"]):
+        raise ValueError("journal-item company currency mismatch")
+    item = {
+        field: _reference_id(value) if field.endswith("_id") else value
+        for field, value in row.items()
+        if field not in {"matched_debit_ids", "matched_credit_ids"}
+    }
+    for field in ("amount_residual", "amount_residual_currency"):
+        item[field] = _decimal_string(row[field])
+    if capability_id == journal_item_processing.DETAIL_ID:
+        for field in ("deductible_amount", "discount_amount_currency"):
+            item[field] = _decimal_string(row[field])
+        for field in ("date_maturity", "discount_date"):
+            item[field] = _optional_date_string(row[field])
+        for field, model_name, scope_field, shared in (
+            ("account_id", "account.account", "company_ids", False),
+            ("product_id", "product.product", "company_id", True),
+            ("payment_id", "account.payment", "company_id", False),
+            ("statement_line_id", "account.bank.statement.line", "company_id", False),
+        ):
+            record_id = item[field]
+            if record_id is None:
+                continue
+            related = _related_rows(env, model_name, {record_id}, (scope_field,), company_id=company_id)[record_id]
+            if scope_field == "company_ids":
+                if company_id not in _sorted_relation_ids(related[scope_field]):
+                    raise ValueError("journal-item account outside company")
+            elif _reference_id(related[scope_field]) not in ({None, company_id} if shared else {company_id}):
+                raise ValueError("journal-item reference outside company")
+        if item["product_uom_id"] is not None:
+            _related_rows(env, "uom.uom", {item["product_uom_id"]}, ("name",), company_id=company_id)
+    else:
+        item["matching_number"] = _optional_text(row["matching_number"])
+        partials = env["account.partial.reconcile"].with_context(
+            active_test=False, allowed_company_ids=[company_id]
+        ).search_read(
+            [("company_id", "=", company_id), "|", ("debit_move_id", "=", item["id"]), ("credit_move_id", "=", item["id"])],
+            fields=list(_REFERENCE_FIELDS["partial_reconcile"]), order="id", load=None,
+        )
+        expected_ids = sorted(set(_sorted_relation_ids(row["matched_debit_ids"]) + _sorted_relation_ids(row["matched_credit_ids"])))
+        if [partial["id"] for partial in partials] != expected_ids:
+            raise ValueError("missing visible journal-item partial reconcile")
+        normalized_partials = _normalize_partial_reconciles(env, partials, company_id)
+        counterpart_ids = set()
+        for partial in normalized_partials:
+            pair = {partial["debit_journal_item_id"], partial["credit_journal_item_id"]}
+            if item["id"] not in pair or partial["full_reconcile_id"] != item["full_reconcile_id"]:
+                raise ValueError("partial reconcile belongs to another target")
+            counterpart_ids.update(pair - {item["id"]})
+        item["partial_reconcile_ids"] = expected_ids
+        item["reconciled_journal_item_ids"] = sorted(counterpart_ids)
+        full_id = item["full_reconcile_id"]
+        if full_id is not None:
+            full_rows = _related_rows(env, "account.full.reconcile", {full_id}, _REFERENCE_FIELDS["full_reconcile"][1:], company_id=company_id)
+            full = _normalize_full_reconciles(env, [full_rows[full_id]], company_id)[0]
+            if item["id"] not in full["reconciled_journal_item_ids"] or not set(expected_ids) <= set(full["partial_reconcile_ids"]):
+                raise ValueError("full reconcile belongs to another target")
+    if not journal_item_processing.valid_read_item(capability_id, item, company_id):
+        raise ValueError("invalid native journal-item processing read")
+    return [item]
+
+
+def _journal_item_analytic_rows(
+    env: Any, parameters: dict[str, Any], company_id: int
+) -> tuple[list[dict[str, Any]], bool]:
+    if _journal_item_target_row(env, parameters["journal_item_id"], company_id, ("id", "move_id", "company_id")) is None:
+        raise _JournalItemNotFound
+    model = env["account.analytic.line"].with_context(active_test=False, allowed_company_ids=[company_id])
+    return _id_page_rows(
+        model, [("company_id", "=", company_id), ("move_line_id", "=", parameters["journal_item_id"])],
+        after_id=parameters["after_id"], limit=parameters["limit"],
+        fields=(*_ANALYTIC_LINE_FIELDS, *_analytic_column_names(model)),
+    )
 
 
 def _normalize_journal_items(
@@ -6541,6 +6684,10 @@ def dispatch(
         removes_all_taxes = False
         if capability_id == company_processing.GET_ID:
             rows = _company_processing_rows(env, company_id)
+        elif capability_id in journal_item_processing.GET_IDS:
+            rows = _journal_item_processing_rows(env, capability_id, parameters, company_id)
+        elif capability_id == journal_item_processing.ANALYTIC_LIST_ID:
+            rows, cursor_found = _journal_item_analytic_rows(env, parameters, company_id)
         elif capability_id in analytic_processing.READ_IDS:
             rows = _analytic_processing_rows(env, capability_id, parameters, company_id)
         elif capability_id == tax_processing.LIST_ID:
@@ -6624,7 +6771,7 @@ def dispatch(
                 cursor_found=False,
             )
 
-        if capability_id == company_processing.GET_ID or capability_id in analytic_processing.READ_IDS:
+        if capability_id == company_processing.GET_ID or capability_id in analytic_processing.READ_IDS or capability_id in journal_item_processing.GET_IDS:
             items = rows
         elif capability_id == journal_processing.GET_ID:
             items = _normalize_journal_processing(rows, company_id)
@@ -6689,8 +6836,10 @@ def dispatch(
             items = _normalize_bank(env, rows, company_id)
         elif capability_id in {"journal_item.search", "journal_item.get"}:
             items = _normalize_journal_items(env, rows, company_id)
-        elif capability_id in {"analytic.line.search", "analytic.line.get"}:
+        elif capability_id in {"analytic.line.search", "analytic.line.get", journal_item_processing.ANALYTIC_LIST_ID}:
             items = _normalize_analytic_lines(env, rows, company_id)
+            if capability_id == journal_item_processing.ANALYTIC_LIST_ID and any(item["journal_item_id"] != parameters["journal_item_id"] for item in items):
+                raise ValueError("analytic line belongs to another journal item")
         elif capability_id in {
             "analytic.distribution_model.list",
             "analytic.distribution_model.get",
@@ -6738,6 +6887,8 @@ def dispatch(
         if capability_id == "fiscal_position.tax_mapping.list":
             page["removes_all_taxes"] = removes_all_taxes
         return page
+    except _JournalItemNotFound as exc:
+        raise _failure(failure_type, "record_not_found", "The requested journal item was not found.", 4) from exc
     except _InvoiceNotFound as exc:
         raise _failure(
             failure_type,

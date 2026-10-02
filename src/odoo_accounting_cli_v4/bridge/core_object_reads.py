@@ -4,9 +4,14 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from odoo_accounting_cli_v4 import (
+    journal_item_processing_contracts as journal_item_processing,
+)
+
 ACTION = "accounting.core_object.read"
 CAPABILITY_IDS = frozenset(
     {
+        *journal_item_processing.READ_IDS,
         "account.account.get",
         "journal.get",
         "tax.get",

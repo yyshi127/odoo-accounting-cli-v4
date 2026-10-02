@@ -1,0 +1,258 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/journal_item.processing_details.get.response.schema.json",
+  "title": "journal_item.processing_details.get response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "success",
+    "capability",
+    "status",
+    "data",
+    "warnings",
+    "error",
+    "odoo",
+    "audit"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v1"
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "success": {
+      "type": "boolean"
+    },
+    "capability": {
+      "const": "journal_item.processing_details.get"
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "data": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/item"
+        }
+      ]
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "error": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "response.schema.json#/$defs/error"
+        }
+      ]
+    },
+    "odoo": {
+      "$ref": "response.schema.json#/$defs/odoo"
+    },
+    "audit": {
+      "$ref": "response.schema.json#/$defs/audit"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "success": {
+            "const": true
+          }
+        },
+        "required": [
+          "success"
+        ]
+      },
+      "then": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "const": "verified"
+          },
+          "data": {
+            "$ref": "#/$defs/item"
+          },
+          "error": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "data": {
+            "type": "null"
+          },
+          "error": {
+            "$ref": "response.schema.json#/$defs/error"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "move_id",
+        "company_id",
+        "currency_id",
+        "company_currency_id",
+        "account_id",
+        "product_id",
+        "product_uom_id",
+        "payment_id",
+        "statement_line_id",
+        "date_maturity",
+        "discount_date",
+        "amount_residual",
+        "amount_residual_currency",
+        "discount_amount_currency",
+        "parent_state",
+        "move_type",
+        "display_type",
+        "deductible_amount",
+        "no_followup"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "move_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "company_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "currency_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "company_currency_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "account_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "product_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "product_uom_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "payment_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "statement_line_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "date_maturity": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "discount_date": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "amount_residual": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+        },
+        "amount_residual_currency": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+        },
+        "discount_amount_currency": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+        },
+        "parent_state": {
+          "enum": [
+            "draft",
+            "posted",
+            "cancel"
+          ]
+        },
+        "move_type": {
+          "enum": [
+            "entry",
+            "out_invoice",
+            "in_invoice",
+            "out_refund",
+            "in_refund",
+            "out_receipt",
+            "in_receipt"
+          ]
+        },
+        "display_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deductible_amount": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+        },
+        "no_followup": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}
