@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 546
-EXPECTED_ENABLED_CAPABILITY_COUNT = 531
+EXPECTED_CAPABILITY_COUNT = 548
+EXPECTED_ENABLED_CAPABILITY_COUNT = 533
 EXPECTED_IMPLEMENTED_READ_COUNT = 249
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 282
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 284
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 457
-EXPECTED_DEGRADED_CAPABILITY_COUNT = 74
-EXPECTED_SCHEMA_COUNT = 1068
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 458
+EXPECTED_DEGRADED_CAPABILITY_COUNT = 75
+EXPECTED_SCHEMA_COUNT = 1072
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "43e89b4b0c89c3c935401e86e4a3aaabaaadc40928150848076c79409d28bd3e"
+    "e334dd5367a429788feb4b0f91976c2468e9db57f4324d1b09fda905acd5daee"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -438,7 +438,9 @@ ACCOUNTING_WORKFLOWS_READS = {"bank.transaction.list", "bank.transaction.search"
 ACCOUNTING_SETUP_WRITES = {"company.cash_basis_configuration.update", "tax.create", "tax.update", "invoice.update", "journal_entry.update", "invoice.presentation_settings.update"}
 ACCOUNTING_SETUP_READS = {"cash_rounding.compute", "company.processing_settings.get"}
 
-IMPLEMENTED_WRITES = ACCOUNTING_SETUP_WRITES | ACCOUNTING_WORKFLOWS_WRITES | INVOICE_PREPARATION_WRITES | JOURNAL_ITEM_PROCESSING_WRITES | COMPANY_PROCESSING_WRITES | ANALYTIC_PROCESSING_WRITES | JOURNAL_PROCESSING_WRITES | ACCOUNT_PROCESSING_WRITES | TAX_PROCESSING_WRITES | PAYMENT_TERM_PROCESSING_WRITES | RECONCILIATION_PROCESSING_WRITES | PAYMENT_PROCESSING_WRITES | INVOICE_PRESENTATION_WRITES | MOVE_PROCESSING_WRITES | PARTNER_PREFERENCES_WRITES | PAYMENT_CONFIGURATION_WRITES | FISCAL_MAPPING_WRITES | REPORT_BUDGET_WRITES | {
+ACCOUNTING_MAINTENANCE_WRITES = {"currency.rate.update", "currency.rate.delete", "bank.statement.update", "bank.transaction.record", "bank.transaction.update", "invoice.update", "invoice.payment_method.assign", "invoice.incoterm.update"}
+
+IMPLEMENTED_WRITES = ACCOUNTING_MAINTENANCE_WRITES | ACCOUNTING_SETUP_WRITES | ACCOUNTING_WORKFLOWS_WRITES | INVOICE_PREPARATION_WRITES | JOURNAL_ITEM_PROCESSING_WRITES | COMPANY_PROCESSING_WRITES | ANALYTIC_PROCESSING_WRITES | JOURNAL_PROCESSING_WRITES | ACCOUNT_PROCESSING_WRITES | TAX_PROCESSING_WRITES | PAYMENT_TERM_PROCESSING_WRITES | RECONCILIATION_PROCESSING_WRITES | PAYMENT_PROCESSING_WRITES | INVOICE_PRESENTATION_WRITES | MOVE_PROCESSING_WRITES | PARTNER_PREFERENCES_WRITES | PAYMENT_CONFIGURATION_WRITES | FISCAL_MAPPING_WRITES | REPORT_BUDGET_WRITES | {
     "account.group.create",
     "account.group.update",
     "account.tag.archive",
@@ -2704,6 +2706,8 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
     extended_modules.update(
         {
             "currency.rate.record": ["account", "base"],
+            "currency.rate.update": ["account", "base"],
+            "currency.rate.delete": ["account", "base"],
             "account.group.create": ["account", "base"],
             "account.group.update": ["account", "base"],
             "tax.repartition_lines.replace": ["account", "base"],
@@ -2914,7 +2918,10 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             expected_acl.add("res.company:read")
         expected_acl -= runtime_support_acl.get(capability_id, set())
         assert set(descriptor["requirements"]["acl"]) == expected_acl
-        if capability_id == "analytic.account.duplicate":
+        if capability_id == "currency.rate.delete":
+            assert descriptor["status"]["value"] == "degraded"
+            assert descriptor["status"]["reason_code"] == "idempotency_degraded"
+        elif capability_id == "analytic.account.duplicate":
             assert descriptor["status"]["value"] == "degraded"
             assert descriptor["status"]["reason_code"] == "concurrent_idempotency_limit"
         elif capability_id in {"partner.invoice_delivery_preferences.update", "partner.bill_validation_preferences.update"}:
@@ -3090,6 +3097,12 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
         else:
             assert descriptor["status"]["value"] == "unconfigured"
             assert descriptor["status"]["reason_code"] == "runtime_context_required"
+        if capability_id in ACCOUNTING_MAINTENANCE_WRITES:
+            assert descriptor["tests"]["unit"]["status"] == "implemented"
+            assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_accounting_maintenance_batch.py"]
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == ["tests/integration/test_accounting_maintenance_batch_live.py"]
+            continue
         if capability_id in ACCOUNTING_SETUP_WRITES:
             assert descriptor["tests"]["unit"]["status"] == "implemented"
             assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_accounting_setup_batch.py"]
@@ -3836,7 +3849,7 @@ def test_bank_statement_payment_maintenance_has_closed_registry_and_schemas() ->
     )["properties"]["parameters"]["properties"]["changes"]
     assert update_changes["minProperties"] == 1
     assert update_changes["additionalProperties"] is False
-    assert set(update_changes["properties"]) == {"reference", "balance_end_real"}
+    assert set(update_changes["properties"]) == {"reference", "balance_end_real", "transaction_ids"}
 
 
 def test_reconciliation_candidates_has_the_closed_source_and_acl_gates() -> None:

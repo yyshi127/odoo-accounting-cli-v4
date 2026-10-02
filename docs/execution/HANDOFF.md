@@ -4,9 +4,9 @@ Updated: 2026-10-02 (Asia/Shanghai)
 
 ## Current authoritative count — 2026-10-02
 
-546 registered IDs;531 implemented handlers (249 reads,282 writes);
-1068 schemas;457 unconfigured,74 degraded,15 disabled. Enabled integrations:
-528 implemented,two planned,one failed. Latest cash-basis/posted-metadata checkpoint
+548 registered IDs;533 implemented handlers (249 reads,284 writes);
+1072 schemas;458 unconfigured,75 degraded,15 disabled. Enabled integrations:
+530 implemented,two planned,one failed. Latest rate/bank/posted-metadata checkpoint
 at the end is authoritative; totals are not a full accounting denominator,
 completion percentage or unrestricted ordinary-user permission guarantee.
 
@@ -6024,7 +6024,7 @@ propagation from assignment.
 Registry file SHA256 77e61d0662284448a94b2a0b062055c0e4b8f3b0eeb2eebe61ee31106de5fa35;
 canonical registry SHA256 62843210c9338fff6e489ae385b8e72be28b666254d408e191b0146249aac2ef.
 
-## Latest checkpoint — cash-basis setup and posted metadata, 2026-10-02
+## Previous checkpoint — cash-basis setup and posted metadata, 2026-10-02
 
 Authoritative:546 registered;531 handlers=249 reads+282 writes;1068 schemas;
 457 unconfigured/74 degraded/15 disabled. Enabled integration evidence:
@@ -6082,3 +6082,70 @@ silently install the absent debit-note addon. Overall goal remains active.
 
 Registry file SHA256 02e931fcfa25cd08d712731c6287f314389b0bbc84b966e48f5883591f90f7e8;
 canonical registry SHA256 2e20214ae8099e27c34af41966cc6b04292101e6cf634f8efaed180d806feece.
+
+## Latest checkpoint — rates, foreign bank lines and posted metadata, 2026-10-02
+
+Authoritative:548 registered;533 handlers=249 reads+284 writes;1072 schemas;
+458 unconfigured/75 degraded/15 disabled. Enabled integration evidence:
+530 implemented/two planned/one failed. New IDs are only currency.rate.update
+and currency.rate.delete. Six existing extensions:bank.statement.update;
+bank.transaction.record/update;invoice.update;invoice.payment_method.assign;
+invoice.incoterm.update. See current STATUS for exact input and evidence bounds.
+
+Rate update supports date/positive quote on exact-current-root-owned rates,
+never changing currency/company. Explicit branch, global/ancestor/foreign-root
+requests are rejected. Readback compares the exact native technical Float chain,
+not a rounded quote or arbitrary tolerance. Native deletion has no tombstone or
+missing-target replay and remains degraded. Old currency.rate.record is unchanged;
+its fresh-cache reciprocal replay over every quote is unverified.
+
+Statement transaction_ids replace the full nonempty contiguous same-company/
+journal member set; native detach retains reconciled lines, moves and graphs.
+Contiguity is CLI policy, not a native constraint. Bank foreign_currency_id/
+amount_currency are optional paired set/clear fields, same signed direction as
+journal amount; foreign differs from actual journal currency. Update stays
+unmatched-only. Omitted legacy requests/keys remain unchanged.
+
+Posted unsent invoice bank, preferred payment method and Incoterm/location edits
+are supported without changing financial fields. Native sent state blocks bank
+edits even on replay. Synthetic DB-only raw PDF bytes plus native linking verify
+that restriction, not PDF generation/send/filestore. Payment-register wizard
+defaults use an explicit journal; no payment or automatic journal-selection proof.
+
+One shared public CLI/native ORM smoke accepted both isolated aliases24.70s,
+UID5/su=False/company1. Rate7.123456/8.123456 correction/replay/conversion/delete
+fallback, USD-bank/EUR-third-currency positive/negative set/clear, native full
+bank matching, reconciled membership/detachment and posted metadata with real
+partial-invoice graph/financial snapshots all passed. Both aliases fresh-verified
+tracked fixtures, both companies' settings, defaults, currencies/rates and exact
+caller/native group rollback. Configuration roles are transaction-only.
+
+Final local62 new cases8.37s;three legacy checks0.13s;two registry nodes14.53s.
+Server initial63 selected cases18.82s;three affected precision nodes1.21s;
+final metadata two registry nodes15.54s. No full-suite claim. Native failures
+11.32s/9.58s/16.39s/12.11s/16.50s are not acceptance:DEV completed fresh rollback
+each time, E2E did not start. Repairs address bank-fixture debit/credit direction,
+a real new-rate reciprocal readback bug, wrong empty-list error expectation and
+foreign fixture tracking order; the last diagnostic exposes the original
+test-helper AccessError. Foreign fixture/strong denial runs last; business ACL,
+company scope and production CLI privacy are unchanged.
+
+Initial15 checksum-guarded files:nine existing backed up/six new. One fixture
+repair;two precision runtime/unit files;three later single-file fixture/
+diagnostic repairs;two final metadata/test files, all with prior hashes/backups.
+All15 final local/server hashes match; server docs stay untouched. Services
+active with fresh-baseline PIDs/restart counts unchanged. Disk4.96 GiB free/94%
+used (df), no deletion. Changed15-file privacy/Ruff findings zero; staged-added
+privacy is checked separately without claiming historical documents are clean.
+
+Next:continue concrete high-frequency accounting gaps in related batches;
+do not inflate totals with aliases, re-run this accepted batch, add a per-command
+control framework or expand to a historical UUID-schema sweep. Unclaimed:live
+branches, all currencies/precision/localization/hash/lock paths, fully paid/CABA
+invoices, existing foreign-invoice revaluation, PDF generation/sends and concurrent
+exactly-once. Preserved posted financial snapshots use company currency. Two
+external sends and asset.validate native-addon defect remain unclosed; do not
+silently install the absent debit-note addon. Overall goal remains active.
+
+Registry file SHA256 72ca147d16ee900f02366928bad4a94de2eb2dab723b097901d92e11418eef93;
+canonical registry SHA256 ece5778e19d44d455bf7cd6670c03bc12507c734a670fee1019d4769e630ba8a.

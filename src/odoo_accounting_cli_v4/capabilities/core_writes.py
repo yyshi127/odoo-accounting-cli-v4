@@ -164,6 +164,8 @@ CORE_WRITE_CAPABILITY_IDS = invoice_preparation.CAPABILITY_IDS | journal_item_pr
         "journal.group.create",
         "journal.group.update",
         "currency.rate.record",
+        "currency.rate.update",
+        "currency.rate.delete",
         "account.group.create",
         "account.group.update",
         "tax.repartition_lines.replace",
@@ -1513,9 +1515,26 @@ def _validate_reconciliation_parameters(
     return dict(parameters)
 
 
+def _validate_bank_foreign_currency_pair(values: dict[str, Any]) -> None:
+    if ("foreign_currency_id" in values) != ("amount_currency" in values):
+        raise _invalid("foreign_currency_id and amount_currency must be provided together.")
+    if "foreign_currency_id" not in values:
+        return
+    foreign_currency_id = values["foreign_currency_id"]
+    amount_currency = _canonical_decimal(values["amount_currency"], signed=True)
+    if foreign_currency_id is None:
+        if values["amount_currency"] != "0":
+            raise _invalid("Clearing foreign_currency_id requires amount_currency '0'.")
+    elif not _valid_id(foreign_currency_id) or amount_currency is None or amount_currency == 0:
+        raise _invalid("A foreign currency requires a positive ID and canonical nonzero amount_currency.")
+    elif "amount" in values and (Decimal(values["amount"]) > 0) != (amount_currency > 0):
+        raise _invalid("amount and amount_currency must have the same sign.")
+
+
 def _validate_bank_transaction_parameters(parameters: Any) -> dict[str, Any]:
     expected = {"journal_id", "date", "amount", "payment_ref", "partner_id"}
-    if not isinstance(parameters, dict) or set(parameters) != expected:
+    if (not isinstance(parameters, dict) or not expected <= set(parameters)
+            or not set(parameters) <= expected | {"foreign_currency_id", "amount_currency"}):
         raise _invalid("Bank-transaction parameters do not match the fixed contract.")
     if not _valid_id(parameters["journal_id"]):
         raise _invalid("parameters.journal_id must be a positive integer.")
@@ -1528,6 +1547,7 @@ def _validate_bank_transaction_parameters(parameters: Any) -> dict[str, Any]:
         raise _invalid("parameters.payment_ref must be a non-empty string.")
     if not _valid_optional_id(parameters["partner_id"]):
         raise _invalid("parameters.partner_id must be null or a positive integer.")
+    _validate_bank_foreign_currency_pair(parameters)
     return dict(parameters)
 
 
@@ -1540,7 +1560,7 @@ def _validate_bank_transaction_update_parameters(parameters: Any) -> dict[str, A
     if not _valid_id(parameters["transaction_id"]):
         raise _invalid("parameters.transaction_id must be a positive integer.")
     changes = parameters["changes"]
-    allowed = {"date", "amount", "payment_ref", "partner_id"}
+    allowed = {"date", "amount", "payment_ref", "partner_id", "foreign_currency_id", "amount_currency"}
     if not isinstance(changes, dict) or not changes or not set(changes) <= allowed:
         raise _invalid("parameters.changes contains no supported bank update.")
     if "date" in changes and not _is_date(changes["date"]):
@@ -1553,6 +1573,7 @@ def _validate_bank_transaction_update_parameters(parameters: Any) -> dict[str, A
         raise _invalid("changes.payment_ref must be a trimmed 1-200 character string.")
     if "partner_id" in changes and not _valid_optional_id(changes["partner_id"]):
         raise _invalid("changes.partner_id must be null or a positive integer.")
+    _validate_bank_foreign_currency_pair(changes)
     return {"transaction_id": parameters["transaction_id"], "changes": dict(changes)}
 
 
@@ -1561,7 +1582,7 @@ def _validate_bank_statement_values(values: Any, *, partial: bool) -> dict[str, 
     required = allowed | {"transaction_ids"}
     if (
         not isinstance(values, dict)
-        or (partial and (not values or not set(values) <= allowed))
+        or (partial and (not values or not set(values) <= required))
         or (not partial and set(values) != required)
     ):
         raise _invalid("Bank-statement values do not match the fixed contract.")
@@ -2739,6 +2760,24 @@ def _validate_currency_rate_parameters(parameters: Any) -> dict[str, Any]:
             "company_units_per_foreign_unit must be a canonical positive decimal."
         )
     return dict(parameters)
+
+
+def _validate_currency_rate_update_parameters(parameters: Any) -> dict[str, Any]:
+    if not isinstance(parameters, dict) or set(parameters) != {"rate_id", "changes"}:
+        raise _invalid("Currency-rate update parameters do not match the fixed contract.")
+    if not _valid_id(parameters["rate_id"]):
+        raise _invalid("parameters.rate_id must be a positive integer.")
+    changes = parameters["changes"]
+    if (not isinstance(changes, dict) or not changes
+            or not set(changes) <= {"date", "company_units_per_foreign_unit"}):
+        raise _invalid("parameters.changes contains no supported currency-rate update.")
+    if "date" in changes and not _is_date(changes["date"]):
+        raise _invalid("changes.date must be a YYYY-MM-DD date.")
+    if "company_units_per_foreign_unit" in changes:
+        rate = _canonical_decimal(changes["company_units_per_foreign_unit"], signed=False)
+        if rate is None or rate <= 0:
+            raise _invalid("company_units_per_foreign_unit must be a canonical positive decimal.")
+    return {"rate_id": parameters["rate_id"], "changes": dict(changes)}
 
 
 _ACCOUNT_GROUP_FIELDS = frozenset({"name", "code_prefix_start", "code_prefix_end"})
@@ -4436,6 +4475,10 @@ def validate_core_write_request(
         normalized = _validate_cash_rounding_parameters(capability_id, parameters)
     elif capability_id == "currency.rate.record":
         normalized = _validate_currency_rate_parameters(parameters)
+    elif capability_id == "currency.rate.update":
+        normalized = _validate_currency_rate_update_parameters(parameters)
+    elif capability_id == "currency.rate.delete":
+        normalized = _validate_single_id(parameters, "rate_id")
     elif capability_id in _ACCOUNT_GROUP_WRITE_CAPABILITIES:
         normalized = _validate_account_group_parameters(capability_id, parameters)
     elif capability_id == "tax.repartition_lines.replace":
@@ -4596,6 +4639,8 @@ def validate_core_write_request(
 def _expected_idempotency_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in {"currency.rate.update", "currency.rate.delete"}:
+        return move_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in invoice_preparation.CAPABILITY_IDS:
         return invoice_preparation.idempotency_key(capability_id, parameters, company_id)
     if capability_id in journal_item_processing.CAPABILITY_IDS:
@@ -5484,10 +5529,15 @@ def _validate_result(
 
     if capability_id in move_processing.CAPABILITY_IDS:
         types = move_processing.INVOICE_TYPES if capability_id.startswith("invoice.") else move_processing.MOVE_TYPES
+        metadata = capability_id in {"invoice.payment_method.assign", "invoice.incoterm.update"}
+        states = ({"draft", "posted"} if metadata else {"draft", "posted", "cancel"}
+                  if capability_id in {"accounting_move.review.set", "invoice.payment_block.set"}
+                  else {"draft"})
         if (result["model"] != "account.move" or result["id"] != parameters["move_id"]
-            or result["move_type"] not in types or result["state"] not in {"draft", "posted", "cancel"}
-            or result["source_id"] is not None or result["partial_reconcile_ids"]
-            or result["full_reconcile_id"] is not None):
+            or result["move_type"] not in types or result["state"] not in states
+            or result["source_id"] is not None
+            or (not (metadata and result["state"] == "posted")
+                and (result["partial_reconcile_ids"] or result["full_reconcile_id"] is not None))):
             raise _failed("Odoo returned a mismatched processing-settings result.")
         return deepcopy(result)
 
@@ -5744,6 +5794,11 @@ def _validate_result(
                 capability_id == "bank.statement.create"
                 and result["line_ids"] != parameters["transaction_ids"]
             )
+            or (
+                capability_id == "bank.statement.update"
+                and "transaction_ids" in parameters["changes"]
+                and result["line_ids"] != parameters["changes"]["transaction_ids"]
+            )
             or (capability_id == "bank.statement.delete" and idempotent_replay)
             or result["partial_reconcile_ids"]
             or result["full_reconcile_id"] is not None
@@ -5882,13 +5937,19 @@ def _validate_result(
 
     if not _valid_id(result["id"]):
         raise _failed("Odoo returned a core-write result without a record ID.")
-    if capability_id == "currency.rate.record":
+    if capability_id in {"currency.rate.record", "currency.rate.update", "currency.rate.delete"}:
+        deleted = capability_id == "currency.rate.delete"
         if (
             result["model"] != "res.currency.rate"
+            or (capability_id != "currency.rate.record" and result["id"] != parameters["rate_id"])
             or not _is_text(result["name"])
-            or result["state"] != "active"
+            or result["state"] != ("deleted" if deleted else "active")
             or result["move_type"] is not None
-            or result["source_id"] != parameters["currency_id"]
+            or (result["source_id"] != parameters["currency_id"]
+                if capability_id == "currency.rate.record" else not _valid_id(result["source_id"]))
+            or (capability_id == "currency.rate.update" and "date" in parameters["changes"]
+                and result["name"] != parameters["changes"]["date"])
+            or (deleted and idempotent_replay)
             or result["line_ids"]
             or result["partial_reconcile_ids"]
             or result["full_reconcile_id"] is not None
@@ -6614,7 +6675,7 @@ def _validate_result(
             if capability_id
             in {"invoice.reset_to_draft", "journal_entry.reset_to_draft"}
             else ({"draft", "posted"}
-                  if set(parameters["changes"]) <= {"reference", "payment_reference"}
+                  if set(parameters["changes"]) <= {"reference", "payment_reference", "partner_bank_id"}
                   else {"draft"})
             if capability_id == "invoice.update"
             else ({"draft", "posted"}

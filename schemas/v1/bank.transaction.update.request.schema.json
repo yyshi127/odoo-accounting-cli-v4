@@ -19,7 +19,11 @@
           "type": "object",
           "additionalProperties": false,
           "minProperties": 1,
+          "dependentRequired": {"foreign_currency_id": ["amount_currency"], "amount_currency": ["foreign_currency_id"]},
+          "allOf": [{"if": {"required": ["foreign_currency_id"], "properties": {"foreign_currency_id": {"type": "null"}}}, "then": {"properties": {"amount_currency": {"const": "0"}}}, "else": {"properties": {"amount_currency": {"type": "string", "maxLength": 256, "pattern": "^-?(?:0\\.[0-9]*[1-9]|[1-9][0-9]*(?:\\.[0-9]*[1-9])?)$(?![\\s\\S])"}}}}],
           "properties": {
+            "foreign_currency_id": {"type": ["integer", "null"], "minimum": 1},
+            "amount_currency": {"type": "string", "maxLength": 256, "pattern": "^(?:0|-?(?:0\\.[0-9]*[1-9]|[1-9][0-9]*(?:\\.[0-9]*[1-9])?))$(?![\\s\\S])"},
             "date": {"type": "string", "format": "date"},
             "amount": {"type": "string", "maxLength": 256, "pattern": "^-?(?:(?:[1-9][0-9]*)(?:\\.[0-9]+)?|0\\.(?=[0-9]*[1-9])[0-9]+)$(?![\\s\\S])"},
             "payment_ref": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"},

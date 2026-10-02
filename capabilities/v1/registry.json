@@ -3452,33 +3452,129 @@
       "handler_key": "core_write"
     },
     "bank.statement.update": {
-      "summary": {"zh_CN": "更新银行对账单", "en_US": "Update a bank statement"},
+      "summary": {
+        "zh_CN": "更新银行对账单",
+        "en_US": "Update a bank statement"
+      },
       "domain": "bank_reconciliation",
       "access": "write",
       "source": {
-        "modules": ["account"],
-        "models": ["res.company", "res.currency", "account.bank.statement", "account.bank.statement.line"],
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.bank.statement",
+          "account.bank.statement.line",
+          "account.journal",
+          "account.move",
+          "res.company",
+          "res.currency"
+        ],
         "wizards": [],
         "report_handlers": [],
-        "locations": ["_references/base/models/res_company.py", "_references/base/models/res_currency.py", "account/models/account_bank_statement.py", "account/models/account_bank_statement_line.py"]
+        "locations": [
+          "_references/base/models/res_company.py",
+          "_references/base/models/res_currency.py",
+          "account/models/account_bank_statement.py",
+          "account/models/account_bank_statement_line.py"
+        ]
       },
-      "schemas": {"request": "schemas/v1/bank.statement.update.request.schema.json", "response": "schemas/v1/bank.statement.update.response.schema.json"},
+      "schemas": {
+        "request": "schemas/v1/bank.statement.update.request.schema.json",
+        "response": "schemas/v1/bank.statement.update.response.schema.json"
+      },
       "requirements": {
-        "modules": ["account"],
-        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
         "company": "required",
-        "groups": ["account.group_account_user"],
-        "acl": ["res.currency:read", "account.bank.statement:read", "account.bank.statement:write", "account.bank.statement.line:read"]
+        "groups": [
+          "account.group_account_user"
+        ],
+        "acl": [
+          "account.bank.statement.line:read",
+          "account.bank.statement.line:write",
+          "account.bank.statement:read",
+          "account.bank.statement:write",
+          "account.journal:read",
+          "account.move:read",
+          "res.currency:read"
+        ]
       },
-      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_scoped_bank_statement_update", "verify": "same_transaction_requested_target_state_reread_and_response_schema_validation", "idempotency": "requested_target_state_hash_and_result_replay", "reverse": "bank.statement.update_with_prior_values"},
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_statement_write_with_nonempty_same_journal_contiguous_membership_set_without_line_deletion",
+        "verify": "same_transaction_complete_requested_membership_and_metadata_reread",
+        "idempotency": "requested_target_state_hash_and_result_replay",
+        "reverse": "bank.statement.update_with_prior_values"
+      },
       "tests": {
-        "unit": {"status": "implemented", "references": ["tests/unit/test_bank_statement_payment_maintenance_public.py", "tests/unit/test_bank_statement_payment_maintenance_runtime.py", "tests/unit/test_core_writes.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover the non-empty closed changes, exact confirmation, runtime result contract, CLI dispatch, registry descriptor, and schemas."},
-        "integration": {"status": "implemented", "references": ["tests/integration/test_bank_statement_payment_maintenance_live.py"], "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all six bank/payment-maintenance commands, three immediate replays, native statement/payment readbacks, and fresh-cursor rollback verification."},
-        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
-        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_accounting_maintenance_batch.py"
+          ],
+          "reason": "Focused closed-input, legacy omission/key, company/state/ACL and result binding tests; execution is required before acceptance."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_accounting_maintenance_batch_live.py"
+          ],
+          "reason": "One shared public CLI/native ORM workflow passed both isolated aliases in 24.70s as uid5/su=False/company1. Two new IDs and six extensions: exact-current-root currency-rate correction/date/replay, native technical Float readback, conversion/delete fallback and missing denial; explicit foreign-bank positive/negative paired amount set/clear/replay while legacy omitted shapes remain unchanged; reconciled statement membership/detach retaining native lines, posted moves, financial snapshots and matching graphs; posted unsent invoice bank set/clear with native PDF-link sent denial; posted preferred-method wizard default and Incoterm/location set/clear; a real partially reconciled invoice retaining raw matching IDs/amounts and financial lines. Native configuration roles exist only inside the isolated transaction, never sudo business calls. Fresh tracked fixtures, both companies settings, all defaults, currencies/rates and exact caller/native group memberships roll back. Live companies are independent roots; branch context rejection has unit evidence only. PDF uses synthetic DB-only raw bytes and native linking, not generation or delivery. Wizard defaults do not make payments. All hierarchy/currency/precision/localization/hash/lock paths, fully-paid/CABA invoices, existing foreign-invoice revaluation and concurrent exactly-once are not claimed. Legacy currency.rate.record guard is unchanged. No business DB, native source/addon, configuration, service or external-send changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples are deferred until the capability library reaches target coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing is outside this capability batch."
+        }
       },
-      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
-      "routing": {"object": "bank.statement", "actions": ["update"], "aliases": {"zh_CN": ["更新银行对账单", "修改对账单参考或期末余额"], "en_US": ["Update bank statement", "Change statement reference or ending balance"]}, "not_for": {"zh_CN": ["增删对账单流水", "银行流水核销"], "en_US": ["Adding or removing statement transactions", "Reconciling bank transactions"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."
+      },
+      "routing": {
+        "object": "bank.statement",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "更新银行对账单参考、期末余额或完整流水归组"
+          ],
+          "en_US": [
+            "Update statement reference, ending balance or complete transaction membership"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "清空对账单全部流水",
+            "抢占其他对账单流水",
+            "修改流水金额或核销"
+          ],
+          "en_US": [
+            "Emptying a statement",
+            "Stealing another statement transaction",
+            "Editing transaction amounts or reconciliation"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
       "handler_key": "core_write"
     },
     "bank.statement.delete": {
@@ -3773,13 +3869,14 @@
           "account"
         ],
         "models": [
-          "res.company",
-          "res.partner",
-          "res.currency",
+          "account.bank.statement.line",
           "account.journal",
           "account.move",
           "account.move.line",
-          "account.bank.statement.line"
+          "res.company",
+          "res.currency",
+          "res.currency.rate",
+          "res.partner"
         ],
         "wizards": [],
         "report_handlers": [],
@@ -3811,43 +3908,41 @@
           "account.group_account_user"
         ],
         "acl": [
-          "res.partner:read",
-          "res.currency:read",
-          "account.journal:read",
-          "account.bank.statement.line:read",
           "account.bank.statement.line:create",
-          "account.move:read",
-          "account.move:write",
-          "account.move:create",
+          "account.bank.statement.line:read",
+          "account.journal:read",
+          "account.move.line:create",
           "account.move.line:read",
           "account.move.line:write",
-          "account.move.line:create"
+          "account.move:create",
+          "account.move:read",
+          "account.move:write",
+          "res.currency.rate:read",
+          "res.currency:read",
+          "res.partner:read"
         ]
       },
       "strategies": {
         "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_accounting_core_write_action_as_configured_business_user",
-        "verify": "post_write_same_transaction_reread_and_response_schema_validation",
-        "idempotency": "odoo_persisted_business_marker_and_result_replay",
+        "execute": "native_bank_line_create_or_default_unmatched_write_with_optional_paired_foreign_amount",
+        "verify": "native_bank_line_amount_currency_pair_reread_and_balanced_posted_entry",
+        "idempotency": "legacy_omitted_pair_key_unchanged_or_closed_explicit_foreign_target_state_recheck",
         "reverse": "reconciliation.undo_then_record_correcting_transaction"
       },
       "tests": {
         "unit": {
           "status": "implemented",
           "references": [
-            "tests/unit/test_core_writes.py",
-            "tests/unit/test_core_writes_bridge.py",
-            "tests/unit/test_core_writes_runtime.py",
-            "tests/unit/test_core_write_cli.py"
+            "tests/unit/test_accounting_maintenance_batch.py"
           ],
-          "reason": "Unit tests cover the closed request, exact confirmation, fixed bridge action, Odoo-side execution, idempotent replay, and CLI response contract."
+          "reason": "Focused closed-input, legacy omission/key, company/state/ACL and result binding tests; execution is required before acceptance."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_core_write_batch_live.py"
+            "tests/integration/test_accounting_maintenance_batch_live.py"
           ],
-          "reason": "The guarded live write smoke verified first execution and immediate idempotent replay against both dedicated isolated database aliases."
+          "reason": "One shared public CLI/native ORM workflow passed both isolated aliases in 24.70s as uid5/su=False/company1. Two new IDs and six extensions: exact-current-root currency-rate correction/date/replay, native technical Float readback, conversion/delete fallback and missing denial; explicit foreign-bank positive/negative paired amount set/clear/replay while legacy omitted shapes remain unchanged; reconciled statement membership/detach retaining native lines, posted moves, financial snapshots and matching graphs; posted unsent invoice bank set/clear with native PDF-link sent denial; posted preferred-method wizard default and Incoterm/location set/clear; a real partially reconciled invoice retaining raw matching IDs/amounts and financial lines. Native configuration roles exist only inside the isolated transaction, never sudo business calls. Fresh tracked fixtures, both companies settings, all defaults, currencies/rates and exact caller/native group memberships roll back. Live companies are independent roots; branch context rejection has unit evidence only. PDF uses synthetic DB-only raw bytes and native linking, not generation or delivery. Wizard defaults do not make payments. All hierarchy/currency/precision/localization/hash/lock paths, fully-paid/CABA invoices, existing foreign-invoice revaluation and concurrent exactly-once are not claimed. Legacy currency.rate.record guard is unchanged. No business DB, native source/addon, configuration, service or external-send changes."
         },
         "golden": {
           "status": "planned",
@@ -3872,15 +3967,21 @@
         ],
         "aliases": {
           "zh_CN": [
-            "记录银行流水"
+            "录入或更正银行流水及外币金额"
           ],
           "en_US": [
-            "Record a bank transaction"
+            "Record or correct bank transactions with foreign currency amounts"
           ]
         },
         "not_for": {
-          "zh_CN": [],
-          "en_US": []
+          "zh_CN": [
+            "修改已经核销或非默认暂记状态的流水",
+            "绕过原生银行分录同步"
+          ],
+          "en_US": [
+            "Updating reconciled or non-default suspense transactions",
+            "Bypassing native statement-line synchronization"
+          ]
         },
         "required_slots": [
           "database",
@@ -4075,33 +4176,131 @@
       "handler_key": "bank_transaction_match_candidates_list"
     },
     "bank.transaction.update": {
-      "summary": {"zh_CN": "更新银行流水", "en_US": "Update a bank transaction"},
+      "summary": {
+        "zh_CN": "更新银行流水",
+        "en_US": "Update a bank transaction"
+      },
       "domain": "bank_reconciliation",
       "access": "write",
       "source": {
-        "modules": ["account"],
-        "models": ["res.company", "res.partner", "account.bank.statement.line", "account.move", "account.move.line"],
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.bank.statement.line",
+          "account.move",
+          "account.move.line",
+          "res.company",
+          "res.currency",
+          "res.currency.rate",
+          "res.partner"
+        ],
         "wizards": [],
         "report_handlers": [],
-        "locations": ["_references/base/models/res_company.py", "_references/base/models/res_partner.py", "account/models/account_bank_statement_line.py", "account/models/account_move.py", "account/models/account_move_line.py"]
+        "locations": [
+          "_references/base/models/res_company.py",
+          "_references/base/models/res_partner.py",
+          "account/models/account_bank_statement_line.py",
+          "account/models/account_move.py",
+          "account/models/account_move_line.py"
+        ]
       },
-      "schemas": {"request": "schemas/v1/bank.transaction.update.request.schema.json", "response": "schemas/v1/bank.transaction.update.response.schema.json"},
+      "schemas": {
+        "request": "schemas/v1/bank.transaction.update.request.schema.json",
+        "response": "schemas/v1/bank.transaction.update.response.schema.json"
+      },
       "requirements": {
-        "modules": ["account"],
-        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
         "company": "required",
-        "groups": ["account.group_account_user"],
-        "acl": ["res.partner:read", "account.bank.statement.line:read", "account.bank.statement.line:write", "account.move:read", "account.move:write", "account.move.line:read", "account.move.line:write"]
+        "groups": [
+          "account.group_account_user"
+        ],
+        "acl": [
+          "account.bank.statement.line:read",
+          "account.bank.statement.line:write",
+          "account.move.line:read",
+          "account.move.line:write",
+          "account.move:read",
+          "account.move:write",
+          "res.currency.rate:read",
+          "res.currency:read",
+          "res.partner:read"
+        ]
       },
-      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_accounting_core_write_action_as_configured_business_user", "verify": "post_write_same_transaction_reread_and_response_schema_validation", "idempotency": "requested_target_state_hash_and_result_replay", "reverse": "bank.transaction.update_with_prior_values"},
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_bank_line_create_or_default_unmatched_write_with_optional_paired_foreign_amount",
+        "verify": "native_bank_line_amount_currency_pair_reread_and_balanced_posted_entry",
+        "idempotency": "legacy_omitted_pair_key_unchanged_or_closed_explicit_foreign_target_state_recheck",
+        "reverse": "bank.transaction.update_with_prior_values"
+      },
       "tests": {
-        "unit": {"status": "implemented", "references": ["tests/unit/test_payment_bank_writes.py", "tests/unit/test_payment_bank_writes_runtime.py", "tests/unit/test_payment_bank_write_cli.py"], "reason": "Unit tests cover the closed changes, exact confirmation, fixed bridge action, Odoo-side execution, target-state replay, and CLI response contract."},
-        "integration": {"status": "implemented", "references": ["tests/integration/test_payment_bank_capability_batch_live.py"], "reason": "The shared live smoke verifies execution and rollback in both dedicated isolated database aliases."},
-        "golden": {"status": "planned", "references": [], "reason": "The golden definition is frozen; implementation evidence is pending."},
-        "e2e": {"status": "planned", "references": [], "reason": "The e2e definition is frozen; implementation evidence is pending."}
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_accounting_maintenance_batch.py"
+          ],
+          "reason": "Focused closed-input, legacy omission/key, company/state/ACL and result binding tests; execution is required before acceptance."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_accounting_maintenance_batch_live.py"
+          ],
+          "reason": "One shared public CLI/native ORM workflow passed both isolated aliases in 24.70s as uid5/su=False/company1. Two new IDs and six extensions: exact-current-root currency-rate correction/date/replay, native technical Float readback, conversion/delete fallback and missing denial; explicit foreign-bank positive/negative paired amount set/clear/replay while legacy omitted shapes remain unchanged; reconciled statement membership/detach retaining native lines, posted moves, financial snapshots and matching graphs; posted unsent invoice bank set/clear with native PDF-link sent denial; posted preferred-method wizard default and Incoterm/location set/clear; a real partially reconciled invoice retaining raw matching IDs/amounts and financial lines. Native configuration roles exist only inside the isolated transaction, never sudo business calls. Fresh tracked fixtures, both companies settings, all defaults, currencies/rates and exact caller/native group memberships roll back. Live companies are independent roots; branch context rejection has unit evidence only. PDF uses synthetic DB-only raw bytes and native linking, not generation or delivery. Wizard defaults do not make payments. All hierarchy/currency/precision/localization/hash/lock paths, fully-paid/CABA invoices, existing foreign-invoice revaluation and concurrent exactly-once are not claimed. Legacy currency.rate.record guard is unchanged. No business DB, native source/addon, configuration, service or external-send changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
       },
-      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
-      "routing": {"object": "bank.transaction", "actions": ["update"], "aliases": {"zh_CN": ["更新银行流水"], "en_US": ["Update a bank transaction"]}, "not_for": {"zh_CN": [], "en_US": []}, "required_slots": ["database", "company_id", "user_login"]},
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."
+      },
+      "routing": {
+        "object": "bank.transaction",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "录入或更正银行流水及外币金额"
+          ],
+          "en_US": [
+            "Record or correct bank transactions with foreign currency amounts"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改已经核销或非默认暂记状态的流水",
+            "绕过原生银行分录同步"
+          ],
+          "en_US": [
+            "Updating reconciled or non-default suspense transactions",
+            "Bypassing native statement-line synchronization"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
       "handler_key": "core_write"
     },
     "bank.transaction.match": {
@@ -8993,14 +9192,14 @@
           "account"
         ],
         "models": [
-          "res.company",
-          "res.partner",
-          "res.partner.bank",
           "account.fiscal.position",
-          "account.payment.term",
           "account.journal",
+          "account.move",
+          "account.payment.term",
+          "res.company",
           "res.currency",
-          "account.move"
+          "res.partner",
+          "res.partner.bank"
         ],
         "wizards": [],
         "report_handlers": [],
@@ -9033,19 +9232,19 @@
           "account.group_account_invoice"
         ],
         "acl": [
-          "res.partner:read",
-          "res.partner.bank:read",
           "account.fiscal.position:read",
-          "account.payment.term:read",
           "account.journal:read",
-          "res.currency:read",
           "account.move:read",
-          "account.move:write"
+          "account.move:write",
+          "account.payment.term:read",
+          "res.currency:read",
+          "res.partner.bank:read",
+          "res.partner:read"
         ]
       },
       "strategies": {
         "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "native_draft_header_write_or_posted_existing_reference_fields_only",
+        "execute": "native_draft_header_or_posted_reference_fields_and_unsent_partner_bank_only",
         "verify": "same_transaction_target_header_payload_reread_and_response_schema_validation",
         "idempotency": "target_header_payload_state_check_before_native_write",
         "reverse": "repeat_update_with_previous_header_values"
@@ -9054,16 +9253,16 @@
         "unit": {
           "status": "implemented",
           "references": [
-            "tests/unit/test_accounting_setup_batch.py"
+            "tests/unit/test_accounting_maintenance_batch.py"
           ],
-          "reason": "Closed typed inputs, legacy request/key compatibility, native scopes and posted nonfinancial boundaries."
+          "reason": "Focused closed-input, legacy omission/key, company/state/ACL and result binding tests; execution is required before acceptance."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_accounting_setup_batch_live.py"
+            "tests/integration/test_accounting_maintenance_batch_live.py"
           ],
-          "reason": "One shared public CLI/native ORM workflow passed both isolated aliases in 22.30s as uid5/su=False/company1. Two new IDs and six extensions: company cash-basis assign/clear/get/replay; optional advanced tax fields, native grouped-tax invoice computation and transition-account rules; sale/purchase posted reference and narration/user edits including a partially reconciled invoice with raw matching IDs/amounts unchanged; posted entry references; financial/shipping denials; positive/negative/zero/minor-unit native currency-aware cash-rounding computation. Native configuration roles exist only inside the isolated transaction; caller never gains sudo. Fresh fixtures, both companies settings, all defaults, currencies/rates and exact caller/native group memberships roll back. Root cash-basis boolean natively propagates to branches; the live topology uses independent roots, not a tested branch workflow. Company ORM write does not run settings UI onchange or delete cash-basis taxes. Group-to-leaf native write need not clear children; non-group calculation ignores retained children. Actual cash-basis entry lifecycle, all hierarchy/currency/localization/hash/lock paths, PDF regeneration, external sends and concurrent exactly-once are not claimed. No business DB, native source/addon or service changes."
+          "reason": "One shared public CLI/native ORM workflow passed both isolated aliases in 24.70s as uid5/su=False/company1. Two new IDs and six extensions: exact-current-root currency-rate correction/date/replay, native technical Float readback, conversion/delete fallback and missing denial; explicit foreign-bank positive/negative paired amount set/clear/replay while legacy omitted shapes remain unchanged; reconciled statement membership/detach retaining native lines, posted moves, financial snapshots and matching graphs; posted unsent invoice bank set/clear with native PDF-link sent denial; posted preferred-method wizard default and Incoterm/location set/clear; a real partially reconciled invoice retaining raw matching IDs/amounts and financial lines. Native configuration roles exist only inside the isolated transaction, never sudo business calls. Fresh tracked fixtures, both companies settings, all defaults, currencies/rates and exact caller/native group memberships roll back. Live companies are independent roots; branch context rejection has unit evidence only. PDF uses synthetic DB-only raw bytes and native linking, not generation or delivery. Wizard defaults do not make payments. All hierarchy/currency/precision/localization/hash/lock paths, fully-paid/CABA invoices, existing foreign-invoice revaluation and concurrent exactly-once are not claimed. Legacy currency.rate.record guard is unchanged. No business DB, native source/addon, configuration, service or external-send changes."
         },
         "golden": {
           "status": "planned",
@@ -9088,10 +9287,10 @@
         ],
         "aliases": {
           "zh_CN": [
-            "修改草稿字段或已过账引用信息"
+            "修改草稿字段或已过账引用与未发送收款账户"
           ],
           "en_US": [
-            "Update draft fields or posted nonfinancial references"
+            "Update draft fields or posted references and unsent invoice bank account"
           ]
         },
         "not_for": {
@@ -28279,7 +28478,7 @@
       },
       "strategies": {
         "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_native_move_field_patch_or_native_action",
+        "execute": "native_draft_or_posted_invoice_incoterm_metadata_write",
         "verify": "same_transaction_native_payload_recheck",
         "idempotency": "native_current_payload_recheck",
         "reverse": "restore_previous_setting_subject_to_native_state_and_acl"
@@ -28288,16 +28487,16 @@
         "unit": {
           "status": "implemented",
           "references": [
-            "tests/unit/test_move_processing_batch.py"
+            "tests/unit/test_accounting_maintenance_batch.py"
           ],
-          "reason": "Shared closed contracts, native methods, fixed public/runtime/schema and company/user boundaries."
+          "reason": "Focused closed-input, legacy omission/key, company/state/ACL and result binding tests; execution is required before acceptance."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_move_processing_batch_live.py"
+            "tests/integration/test_accounting_maintenance_batch_live.py"
           ],
-          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all nine new capabilities, eight immediate replays, actual foreign-currency balance recomputation and native rate refresh, native cash-rounding line, incoterm and invoice method, native payment block/unblock and posted review, a saved unposted recurring schedule, direction/state/company denial, and fresh-cursor business-data, currency/rate fixture and temporary-group rollback verification. No cron, external delivery or service changes."
+          "reason": "One shared public CLI/native ORM workflow passed both isolated aliases in 24.70s as uid5/su=False/company1. Two new IDs and six extensions: exact-current-root currency-rate correction/date/replay, native technical Float readback, conversion/delete fallback and missing denial; explicit foreign-bank positive/negative paired amount set/clear/replay while legacy omitted shapes remain unchanged; reconciled statement membership/detach retaining native lines, posted moves, financial snapshots and matching graphs; posted unsent invoice bank set/clear with native PDF-link sent denial; posted preferred-method wizard default and Incoterm/location set/clear; a real partially reconciled invoice retaining raw matching IDs/amounts and financial lines. Native configuration roles exist only inside the isolated transaction, never sudo business calls. Fresh tracked fixtures, both companies settings, all defaults, currencies/rates and exact caller/native group memberships roll back. Live companies are independent roots; branch context rejection has unit evidence only. PDF uses synthetic DB-only raw bytes and native linking, not generation or delivery. Wizard defaults do not make payments. All hierarchy/currency/precision/localization/hash/lock paths, fully-paid/CABA invoices, existing foreign-invoice revaluation and concurrent exactly-once are not claimed. Legacy currency.rate.record guard is unchanged. No business DB, native source/addon, configuration, service or external-send changes."
         },
         "golden": {
           "status": "planned",
@@ -28322,22 +28521,20 @@
         ],
         "aliases": {
           "zh_CN": [
-            "修改发票贸易术语"
+            "修改草稿或已过账发票贸易条款及地点"
           ],
           "en_US": [
-            "Update draft invoice incoterm and location"
+            "Update draft or posted invoice Incoterm and location"
           ]
         },
         "not_for": {
           "zh_CN": [
-            "运行自动过账任务",
-            "修改已过账发票的汇率或金额",
-            "操作其他公司单据"
+            "修改已过账财务或收货方字段",
+            "保证重生成已有PDF"
           ],
           "en_US": [
-            "Running an auto-post cron",
-            "Changing posted invoice rates or amounts",
-            "Another company move"
+            "Changing posted financial or shipping fields",
+            "Guaranteeing existing PDF regeneration"
           ]
         },
         "required_slots": [
@@ -28527,7 +28724,7 @@
       },
       "strategies": {
         "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_native_move_field_patch_or_native_action",
+        "execute": "native_draft_or_posted_invoice_preferred_method_write_for_later_payment_registration",
         "verify": "same_transaction_native_payload_recheck",
         "idempotency": "native_current_payload_recheck",
         "reverse": "restore_previous_setting_subject_to_native_state_and_acl"
@@ -28536,16 +28733,16 @@
         "unit": {
           "status": "implemented",
           "references": [
-            "tests/unit/test_move_processing_batch.py"
+            "tests/unit/test_accounting_maintenance_batch.py"
           ],
-          "reason": "Shared closed contracts, native methods, fixed public/runtime/schema and company/user boundaries."
+          "reason": "Focused closed-input, legacy omission/key, company/state/ACL and result binding tests; execution is required before acceptance."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_move_processing_batch_live.py"
+            "tests/integration/test_accounting_maintenance_batch_live.py"
           ],
-          "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False: all nine new capabilities, eight immediate replays, actual foreign-currency balance recomputation and native rate refresh, native cash-rounding line, incoterm and invoice method, native payment block/unblock and posted review, a saved unposted recurring schedule, direction/state/company denial, and fresh-cursor business-data, currency/rate fixture and temporary-group rollback verification. No cron, external delivery or service changes."
+          "reason": "One shared public CLI/native ORM workflow passed both isolated aliases in 24.70s as uid5/su=False/company1. Two new IDs and six extensions: exact-current-root currency-rate correction/date/replay, native technical Float readback, conversion/delete fallback and missing denial; explicit foreign-bank positive/negative paired amount set/clear/replay while legacy omitted shapes remain unchanged; reconciled statement membership/detach retaining native lines, posted moves, financial snapshots and matching graphs; posted unsent invoice bank set/clear with native PDF-link sent denial; posted preferred-method wizard default and Incoterm/location set/clear; a real partially reconciled invoice retaining raw matching IDs/amounts and financial lines. Native configuration roles exist only inside the isolated transaction, never sudo business calls. Fresh tracked fixtures, both companies settings, all defaults, currencies/rates and exact caller/native group memberships roll back. Live companies are independent roots; branch context rejection has unit evidence only. PDF uses synthetic DB-only raw bytes and native linking, not generation or delivery. Wizard defaults do not make payments. All hierarchy/currency/precision/localization/hash/lock paths, fully-paid/CABA invoices, existing foreign-invoice revaluation and concurrent exactly-once are not claimed. Legacy currency.rate.record guard is unchanged. No business DB, native source/addon, configuration, service or external-send changes."
         },
         "golden": {
           "status": "planned",
@@ -28570,22 +28767,20 @@
         ],
         "aliases": {
           "zh_CN": [
-            "设置发票付款方式"
+            "设置草稿或已过账发票首选付款方式"
           ],
           "en_US": [
-            "Assign or clear a draft invoice preferred payment method"
+            "Assign preferred payment method on draft or posted invoices"
           ]
         },
         "not_for": {
           "zh_CN": [
-            "运行自动过账任务",
-            "修改已过账发票的汇率或金额",
-            "操作其他公司单据"
+            "修改已有付款",
+            "绕过付款方向、公司、原生哈希或ACL"
           ],
           "en_US": [
-            "Running an auto-post cron",
-            "Changing posted invoice rates or amounts",
-            "Another company move"
+            "Changing existing payments",
+            "Bypassing payment direction, company, native hashes or ACLs"
           ]
         },
         "required_slots": [
@@ -40493,6 +40688,242 @@
         ]
       },
       "handler_key": "cash_rounding_compute"
+    },
+    "currency.rate.update": {
+      "summary": {
+        "zh_CN": "更正根公司历史汇率",
+        "en_US": "Correct a root-company currency rate"
+      },
+      "domain": "currencies",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "res.currency",
+          "res.currency.rate"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "_references/base/models/res_currency.py",
+          "account/models/res_currency.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/currency.rate.update.request.schema.json",
+        "response": "schemas/v1/currency.rate.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "res.company:read",
+          "res.currency.rate:read",
+          "res.currency.rate:write",
+          "res.currency:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_explicit_root_owned_rate_write_or_unlink_as_business_user",
+        "verify": "native_rate_target_state_reread_or_post_unlink_absence_without_ledger_recalculation",
+        "idempotency": "deterministic_closed_payload_key_and_current_root_rate_target_state_replay",
+        "reverse": "currency.rate.update_with_prior_date_and_quote"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_accounting_maintenance_batch.py"
+          ],
+          "reason": "Focused closed-input, legacy omission/key, company/state/ACL and result binding tests; execution is required before acceptance."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_accounting_maintenance_batch_live.py"
+          ],
+          "reason": "One shared public CLI/native ORM workflow passed both isolated aliases in 24.70s as uid5/su=False/company1. Two new IDs and six extensions: exact-current-root currency-rate correction/date/replay, native technical Float readback, conversion/delete fallback and missing denial; explicit foreign-bank positive/negative paired amount set/clear/replay while legacy omitted shapes remain unchanged; reconciled statement membership/detach retaining native lines, posted moves, financial snapshots and matching graphs; posted unsent invoice bank set/clear with native PDF-link sent denial; posted preferred-method wizard default and Incoterm/location set/clear; a real partially reconciled invoice retaining raw matching IDs/amounts and financial lines. Native configuration roles exist only inside the isolated transaction, never sudo business calls. Fresh tracked fixtures, both companies settings, all defaults, currencies/rates and exact caller/native group memberships roll back. Live companies are independent roots; branch context rejection has unit evidence only. PDF uses synthetic DB-only raw bytes and native linking, not generation or delivery. Wizard defaults do not make payments. All hierarchy/currency/precision/localization/hash/lock paths, fully-paid/CABA invoices, existing foreign-invoice revaluation and concurrent exactly-once are not claimed. Legacy currency.rate.record guard is unchanged. No business DB, native source/addon, configuration, service or external-send changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples are deferred until the capability library reaches target coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing is outside this capability batch."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed root-owned maintenance handler; configured native manager and company context are required."
+      },
+      "routing": {
+        "object": "currency.rate",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "更正根公司历史汇率"
+          ],
+          "en_US": [
+            "Correct a root-company currency rate"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "分公司、全局或其他公司汇率维护",
+            "更换汇率所属币种或自动重算已过账账务"
+          ],
+          "en_US": [
+            "Branch, global or other-company rate maintenance",
+            "Changing rate currency or recalculating posted entries"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "currency.rate.delete": {
+      "summary": {
+        "zh_CN": "删除根公司历史汇率",
+        "en_US": "Delete a root-company currency rate"
+      },
+      "domain": "currencies",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "res.currency",
+          "res.currency.rate"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "_references/base/models/res_currency.py",
+          "account/models/res_currency.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/currency.rate.delete.request.schema.json",
+        "response": "schemas/v1/currency.rate.delete.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "res.company:read",
+          "res.currency.rate:read",
+          "res.currency.rate:unlink",
+          "res.currency:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_explicit_root_owned_rate_write_or_unlink_as_business_user",
+        "verify": "native_rate_target_state_reread_or_post_unlink_absence_without_ledger_recalculation",
+        "idempotency": "no_tombstone_missing_target_is_not_replay_success",
+        "reverse": "currency.rate.record_with_original_quote_and_date_not_original_record_id"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_accounting_maintenance_batch.py"
+          ],
+          "reason": "Focused closed-input, legacy omission/key, company/state/ACL and result binding tests; execution is required before acceptance."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_accounting_maintenance_batch_live.py"
+          ],
+          "reason": "One shared public CLI/native ORM workflow passed both isolated aliases in 24.70s as uid5/su=False/company1. Two new IDs and six extensions: exact-current-root currency-rate correction/date/replay, native technical Float readback, conversion/delete fallback and missing denial; explicit foreign-bank positive/negative paired amount set/clear/replay while legacy omitted shapes remain unchanged; reconciled statement membership/detach retaining native lines, posted moves, financial snapshots and matching graphs; posted unsent invoice bank set/clear with native PDF-link sent denial; posted preferred-method wizard default and Incoterm/location set/clear; a real partially reconciled invoice retaining raw matching IDs/amounts and financial lines. Native configuration roles exist only inside the isolated transaction, never sudo business calls. Fresh tracked fixtures, both companies settings, all defaults, currencies/rates and exact caller/native group memberships roll back. Live companies are independent roots; branch context rejection has unit evidence only. PDF uses synthetic DB-only raw bytes and native linking, not generation or delivery. Wizard defaults do not make payments. All hierarchy/currency/precision/localization/hash/lock paths, fully-paid/CABA invoices, existing foreign-invoice revaluation and concurrent exactly-once are not claimed. Legacy currency.rate.record guard is unchanged. No business DB, native source/addon, configuration, service or external-send changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples are deferred until the capability library reaches target coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing is outside this capability batch."
+        }
+      },
+      "status": {
+        "value": "degraded",
+        "reason_code": "idempotency_degraded",
+        "reason": "Native unlink is supported without a tombstone; a missing target cannot prove caller ownership or successful prior deletion."
+      },
+      "routing": {
+        "object": "currency.rate",
+        "actions": [
+          "delete"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "删除根公司历史汇率"
+          ],
+          "en_US": [
+            "Delete a root-company currency rate"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "分公司、全局或其他公司汇率维护",
+            "更换汇率所属币种或自动重算已过账账务"
+          ],
+          "en_US": [
+            "Branch, global or other-company rate maintenance",
+            "Changing rate currency or recalculating posted entries"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
     }
   }
 }

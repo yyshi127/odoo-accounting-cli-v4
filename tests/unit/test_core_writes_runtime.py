@@ -1534,6 +1534,8 @@ def test_public_action_and_closed_capability_batch_are_exact() -> None:
         "journal.group.create",
         "journal.group.update",
         "currency.rate.record",
+        "currency.rate.update",
+        "currency.rate.delete",
         "account.group.create",
         "account.group.update",
         "tax.repartition_lines.replace",

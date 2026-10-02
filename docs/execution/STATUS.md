@@ -1,6 +1,90 @@
 # Execution status
 
-## Current accounting phase — cash-basis setup and posted metadata, 2026-10-02
+## Current accounting phase — rates, foreign bank lines and posted metadata, 2026-10-02
+
+548 registered IDs; 533 implemented handlers (249 reads, 284 writes);
+1072 schemas. Availability: 458 unconfigured, 75 degraded, 15 disabled.
+Enabled integrations: 530 implemented, two planned, one failed. These totals
+include historical non-accounting extensions, not a complete accounting
+denominator, completion percentage or unrestricted ordinary-user permission.
+
+Two new commands and six extensions, not eight new command IDs:
+
+- currency.rate.update/delete — current-root-owned native rate correction or
+  deletion. Update supports date and positive company_units_per_foreign_unit;
+  currency/company cannot be changed. Delete has no tombstone or missing replay.
+- bank.statement.update — complete nonempty transaction_ids replacement,
+  retaining same-company/journal, ownership and contiguous-selection policy.
+  Removed members are detached, not deleted, including reconciled native lines.
+- bank.transaction.record/update — optional paired foreign_currency_id and
+  signed amount_currency; set or clear together. Foreign bank journals are
+  supported, and the third currency differs from the actual journal currency.
+- invoice.update — posted, unsent recipient-bank set/clear in addition to
+  previously supported reference fields; native sent/PDF-link state blocks it.
+- invoice.payment_method.assign — preferred method on draft/posted invoices.
+- invoice.incoterm.update — Incoterm and location on draft/posted invoices.
+
+Rate update rejects an explicit branch context, global/ancestor/foreign-root
+ownership and inaccessible targets. Native Float readback uses the exact
+technical setter chain, not reciprocal-text equality, arbitrary tolerance or
+money rounding. Genuine technical drift remains rejected. Existing
+currency.rate.record behavior is unchanged; its fresh-cache reciprocal replay
+on every quote has not been verified. Old omitted foreign-pair requests and
+keys remain unchanged; explicit pairs gain native/readback checks. Foreign
+update remains unmatched-only. Statement contiguity is a CLI policy, not a
+claim that Odoo itself imposes that native constraint. Other financial edits
+remain draft-only; no hash/lock/company/ACL bypass was introduced.
+
+One shared public CLI/native ORM workflow passed both isolated aliases in
+24.70s as uid5/su=False/company1, verifying all eight targets. It covers actual
+7.123456/8.123456 rate corrections and replay, native conversion/delete fallback,
+USD-bank/EUR-third-currency positive/negative pair set/clear, full native bank
+matching, reconciled statement membership/detachment with financial and matching
+graphs preserved, and posted bank/method/Incoterm edits on a partially reconciled
+invoice. Native payment-register defaults use an explicitly selected journal;
+no actual payment is made. Synthetic DB-only PDF bytes and native document
+linking test sent-state denial, not PDF generation, filestore writes or delivery.
+Fresh cursors verify tracked fixtures, both companies' settings, all defaults,
+currencies/rates and exact caller/native group memberships roll back. Required
+configuration roles exist only inside the isolated transaction.
+
+Local evidence: final62 new unit cases passed in8.37s, three legacy-compatibility
+nodes in0.13s and two registry nodes in14.53s. Server initial63 selected cases
+passed in18.82s; three affected precision regressions passed in1.21s after the
+actual rate bug repair. Final acceptance metadata:two registry nodes passed
+in15.54s. These are scoped runs, not a full-suite claim.
+
+Five failed native attempts are retained:11.32s (bank fixture debit/credit
+direction),9.58s (new rate-update reciprocal readback bug),16.39s (empty-list
+schema error-code assertion),12.11s and16.50s (foreign fixture IDs in a
+current-company test-helper collection; the latter exposes the original cause).
+Each completed DEV fresh rollback before rethrow; E2E did not start. Only the
+final24.70s dual-alias run is acceptance. Repairs preserve the original business
+checks; foreign fixtures/denial now run last without broadening caller scope.
+
+Deployment:15 initial explicit files, nine existing recoverable backups/six new;
+one fixture repair, two precision runtime/unit files, three further single-file
+fixture/diagnostic repairs, then two final metadata/test files. Every overwrite
+checks prior hashes and retains backups. All15 final local/server hashes match.
+Services remain active with unchanged fresh-baseline process IDs/restart counts.
+Server documentation overlays stay untouched. Disk4.96 GiB free/94% used (df);
+no cleanup/deletion. Changed15-file privacy/Ruff findings are zero. Staged-added
+privacy is checked separately; historical document findings are not a clean-tree
+claim.
+
+Unclaimed:live branch topology, all currencies/precision/localizations/hash/lock
+paths, fully paid/CABA invoice edits, existing foreign-invoice revaluation,
+automatic journal selection, PDF generation/sends and concurrent exactly-once.
+The preserved posted-invoice financial snapshot uses company currency.
+No business DB, native source/addon, services/configuration, Pi/V2/V3 or external
+sends were changed. Asset.validate native-addon failure and two actual report
+sends remain unclosed; do not silently install the absent debit-note addon.
+Continue practical accounting gaps; the overall goal remains active.
+
+Registry file SHA256 72ca147d16ee900f02366928bad4a94de2eb2dab723b097901d92e11418eef93;
+canonical registry SHA256 ece5778e19d44d455bf7cd6670c03bc12507c734a670fee1019d4769e630ba8a.
+
+## Previous checkpoint — cash-basis setup and posted metadata, 2026-10-02
 
 546 registered IDs; 531 implemented handlers (249 reads, 282 writes);
 1068 schemas. Availability: 457 unconfigured, 74 degraded, 15 disabled.

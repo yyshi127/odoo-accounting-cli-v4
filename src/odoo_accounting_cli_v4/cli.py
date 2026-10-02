@@ -1386,6 +1386,8 @@ _CAPABILITY_MODELS = {
     "currency.get": "res.currency",
     "currency.rate.list": "res.currency.rate",
     "currency.rate.record": "res.currency.rate",
+    "currency.rate.update": "res.currency.rate",
+    "currency.rate.delete": "res.currency.rate",
     "currency.convert": "res.currency",
     "journal_entry.search": "account.move",
     "journal_entry.get": "account.move",

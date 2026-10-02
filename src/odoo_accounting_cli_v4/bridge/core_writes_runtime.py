@@ -15,6 +15,7 @@ from collections.abc import Mapping
 from copy import deepcopy
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from math import isfinite
 from time import strftime, strptime
 from typing import Any
 
@@ -168,6 +169,8 @@ CAPABILITIES = invoice_preparation.CAPABILITY_IDS | journal_item_processing.CAPA
         "tax.archive",
         "tax.restore",
         "currency.rate.record",
+        "currency.rate.update",
+        "currency.rate.delete",
         "account.group.create",
         "account.group.update",
         "tax.repartition_lines.replace",
@@ -498,6 +501,8 @@ _PRODUCT_CATEGORY_ACCOUNTING_PROFILE_FIELDS = frozenset(
 _ACCOUNTING_REFERENCE_WRITE_CAPABILITIES = frozenset(
     {
         "currency.rate.record",
+        "currency.rate.update",
+        "currency.rate.delete",
         "account.group.create",
         "account.group.update",
         "tax.repartition_lines.replace",
@@ -827,6 +832,8 @@ _PARAMETER_KEYS = {
         "amount",
         "payment_ref",
         "partner_id",
+        "foreign_currency_id",
+        "amount_currency",
     },
     "asset.create": {
         "name",
@@ -975,6 +982,8 @@ _PARAMETER_KEYS = {
         "date",
         "company_units_per_foreign_unit",
     },
+    "currency.rate.update": {"rate_id", "changes"},
+    "currency.rate.delete": {"rate_id"},
     "account.group.create": set(_ACCOUNT_GROUP_FIELDS),
     "account.group.update": {"account_group_id", "changes"},
     "tax.repartition_lines.replace": {
@@ -3030,6 +3039,25 @@ _ACCESS["currency.rate.record"] = {
     ("res.currency.rate", "read"),
     ("res.currency.rate", "create"),
 }
+for _currency_rate_capability, _currency_rate_operation in (
+    ("currency.rate.update", "write"), ("currency.rate.delete", "unlink"),
+):
+    _GROUPS[_currency_rate_capability] = "account.group_account_manager"
+    _MODELS[_currency_rate_capability] = set(_MODELS["currency.rate.record"])
+    _ACCESS[_currency_rate_capability] = {
+        ("res.company", "read"), ("res.currency", "read"),
+        ("res.currency.rate", "read"), ("res.currency.rate", _currency_rate_operation),
+    }
+_MODELS["bank.statement.update"].update({"account.journal", "account.move"})
+_ACCESS["bank.statement.update"].update({
+    ("account.journal", "read"), ("account.move", "read"),
+    ("account.bank.statement.line", "write"),
+})
+_MODELS["bank.transaction.update"].add("res.currency")
+_ACCESS["bank.transaction.update"].add(("res.currency", "read"))
+for _bank_foreign_capability in ("bank.transaction.record", "bank.transaction.update"):
+    _MODELS[_bank_foreign_capability].add("res.currency.rate")
+    _ACCESS[_bank_foreign_capability].add(("res.currency.rate", "read"))
 
 for _capability_id in _ACCOUNT_GROUP_WRITE_CAPABILITIES:
     _MODELS[_capability_id] = {"res.company", "account.group"}
@@ -4267,11 +4295,31 @@ def _valid_payment_fields(values: Any, *, partial: bool) -> bool:
     )
 
 
+def _valid_bank_foreign_pair(values: dict[str, Any]) -> bool:
+    present = {"foreign_currency_id", "amount_currency"} & set(values)
+    if not present:
+        return True
+    if present != {"foreign_currency_id", "amount_currency"}:
+        return False
+    currency_id, amount_text = values["foreign_currency_id"], values["amount_currency"]
+    amount = _signed_decimal(amount_text)
+    if amount is None or _canonical_decimal_text(amount) != amount_text:
+        return False
+    if currency_id is None:
+        return amount_text == "0"
+    if not _is_id(currency_id) or amount == 0:
+        return False
+    if "amount" in values:
+        transaction_amount = _signed_decimal(values["amount"])
+        return transaction_amount is not None and (transaction_amount > 0) == (amount > 0)
+    return True
+
+
 def _valid_bank_update_changes(changes: Any) -> bool:
     if (
         not isinstance(changes, dict)
         or not changes
-        or not set(changes) <= {"date", "amount", "payment_ref", "partner_id"}
+        or not set(changes) <= {"date", "amount", "payment_ref", "partner_id", "foreign_currency_id", "amount_currency"}
     ):
         return False
     if "date" in changes and not _is_date(changes["date"]):
@@ -4282,8 +4330,9 @@ def _valid_bank_update_changes(changes: Any) -> bool:
             return False
     if "payment_ref" in changes and not _is_text(changes["payment_ref"], maximum=200):
         return False
-    return "partner_id" not in changes or (
-        changes["partner_id"] is None or _is_id(changes["partner_id"])
+    return _valid_bank_foreign_pair(changes) and (
+        "partner_id" not in changes or changes["partner_id"] is None
+        or _is_id(changes["partner_id"])
     )
 
 
@@ -4292,7 +4341,7 @@ def _valid_statement_values(values: Any, *, partial: bool) -> bool:
     if not isinstance(values, dict):
         return False
     if partial:
-        if not values or not set(values) <= fields:
+        if not values or not set(values) <= fields | {"transaction_ids"}:
             return False
     elif set(values) != fields:
         return False
@@ -4307,6 +4356,12 @@ def _valid_statement_values(values: Any, *, partial: bool) -> bool:
             balance is None
             or _canonical_decimal_text(balance) != values["balance_end_real"]
         ):
+            return False
+    if "transaction_ids" in values:
+        ids = values["transaction_ids"]
+        if (not isinstance(ids, list) or not 1 <= len(ids) <= 100
+            or not all(_is_id(record_id) for record_id in ids)
+            or ids != sorted(set(ids))):
             return False
     return True
 
@@ -5471,6 +5526,19 @@ def _valid_accounting_reference_write_parameters(
             and _canonical_decimal_text(rate)
             == parameters["company_units_per_foreign_unit"]
         )
+    if capability_id == "currency.rate.delete":
+        return _is_id(parameters["rate_id"])
+    if capability_id == "currency.rate.update":
+        changes = parameters["changes"]
+        if (not _is_id(parameters["rate_id"]) or not isinstance(changes, dict)
+            or not changes or not set(changes) <= {"date", "company_units_per_foreign_unit"}):
+            return False
+        if "date" in changes and not _is_date(changes["date"]):
+            return False
+        if "company_units_per_foreign_unit" in changes:
+            rate = _decimal(changes["company_units_per_foreign_unit"], positive=True)
+            return rate is not None and _canonical_decimal_text(rate) == changes["company_units_per_foreign_unit"]
+        return True
     if capability_id == "account.group.create":
         return _valid_account_group_values(parameters, partial=False)
     if capability_id == "account.group.update":
@@ -5826,6 +5894,8 @@ def _valid_parameters(
         required_keys = _PRODUCT_CREATE_REQUIRED_FIELDS
     elif capability_id == "tax.create":
         required_keys = _TAX_CONFIG_REQUIRED_KEYS
+    elif capability_id == "bank.transaction.record":
+        required_keys = allowed_keys - {"foreign_currency_id", "amount_currency"}
     if not required_keys <= parameter_keys <= allowed_keys:
         return False
     if capability_id in _BATCH_LIFECYCLE_CAPABILITIES:
@@ -6057,6 +6127,7 @@ def _valid_parameters(
             and amount != 0
             and _is_text(parameters["payment_ref"], maximum=200)
             and (parameters["partner_id"] is None or _is_id(parameters["partner_id"]))
+            and _valid_bank_foreign_pair(parameters)
         )
     if capability_id == "asset.create":
         return _valid_asset_create_parameters(parameters)
@@ -6365,6 +6436,8 @@ def _validated_payload(
 def _deterministic_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in {"currency.rate.update", "currency.rate.delete"}:
+        return move_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in invoice_preparation.CAPABILITY_IDS:
         return invoice_preparation.idempotency_key(capability_id, parameters, company_id)
     if capability_id in journal_item_processing.CAPABILITY_IDS:
@@ -11679,7 +11752,9 @@ def _update_move(
     else:
         _validate_journal_update_references(env, changes, company_id, failure_type)
         current = _current_journal_entry_changes(move, set(changes))
-    nonfinancial_fields = {"reference", "payment_reference"} if invoice_action else {"reference"}
+    nonfinancial_fields = {"reference", "payment_reference", "partner_bank_id"} if invoice_action else {"reference"}
+    if invoice_action and move.state == "posted" and "partner_bank_id" in changes and move.is_move_sent:
+        raise _fail(failure_type, "state_conflict", "A sent invoice or generated PDF cannot have its recipient bank changed.", exit_code=5)
     if move.state != "draft" and not (
         move.state == "posted" and set(changes) <= nonfinancial_fields
     ):
@@ -14641,6 +14716,32 @@ def _update_bank_statement(
         "reference": _statement_reference(statement.reference),
         "balance_end_real": _canonical_decimal_text(statement.balance_end_real),
     }
+    membership = "transaction_ids" in changes
+    if membership:
+        journal_id = statement.journal_id.id
+        _ensure_ids(env, "account.journal", {journal_id}, [
+            ("company_id", "=", company_id), ("type", "in", ["bank", "cash"]),
+        ], company_id, failure_type)
+        existing_ids = set(statement.line_ids.ids)
+        target_ids = set(changes["transaction_ids"])
+        transactions = _ensure_ids(env, "account.bank.statement.line", existing_ids | target_ids, [
+            ("company_id", "=", company_id), ("journal_id", "=", journal_id),
+        ], company_id, failure_type)
+        transactions.check_access("write")
+        if any(not transaction.move_id or transaction.statement_id.id not in (False, statement.id)
+               for transaction in transactions):
+            raise _fail(failure_type, "state_conflict", "Statement membership cannot steal another statement's transactions.", exit_code=5)
+        move_ids = {transaction.move_id.id for transaction in transactions}
+        moves = _ensure_ids(env, "account.move", move_ids, [
+            ("company_id", "=", company_id), ("journal_id", "=", journal_id),
+        ], company_id, failure_type)
+        if any(move.move_type != "entry" or move.state != "posted" for move in moves):
+            raise _fail(failure_type, "state_conflict", "Statement members require posted bank journal entries.", exit_code=5)
+        target_transactions = transactions.filtered(lambda transaction: transaction.id in target_ids)
+        if not _bank_statement_transactions_are_contiguous(env, target_transactions, journal_id, company_id):
+            raise _fail(failure_type, "state_conflict", "Statement membership requires contiguous transactions from its original journal.", exit_code=5)
+        original_moves = {transaction.id: transaction.move_id.id for transaction in transactions}
+        actual["transaction_ids"] = sorted(existing_ids)
     target = dict(actual)
     if "reference" in changes:
         target["reference"] = _statement_reference(changes["reference"])
@@ -14648,6 +14749,8 @@ def _update_bank_statement(
         target["balance_end_real"] = _canonical_decimal_text(
             _rounded_statement_balance(statement, changes["balance_end_real"])
         )
+    if membership:
+        target["transaction_ids"] = changes["transaction_ids"]
     if actual == target:
         return _bank_statement_result(statement, company_id), True
     write_values: dict[str, Any] = {}
@@ -14655,14 +14758,33 @@ def _update_bank_statement(
         write_values["reference"] = changes["reference"] or False
     if "balance_end_real" in changes:
         write_values["balance_end_real"] = Decimal(target["balance_end_real"])
+    if membership:
+        from odoo import Command
+
+        write_values["line_ids"] = [Command.set(changes["transaction_ids"])]
     statement.write(write_values)
     statement.invalidate_recordset(
-        ["reference", "balance_end_real", "is_complete", "line_ids"]
+        ["reference", "balance_end_real", "is_complete", "line_ids", "journal_id", "company_id"]
     )
     reread = {
         "reference": _statement_reference(statement.reference),
         "balance_end_real": _canonical_decimal_text(statement.balance_end_real),
     }
+    if membership:
+        transactions.invalidate_recordset()
+        retained = _ensure_ids(env, "account.bank.statement.line", existing_ids | target_ids, [
+            ("company_id", "=", company_id), ("journal_id", "=", journal_id),
+        ], company_id, failure_type)
+        if (statement.company_id.id != company_id or statement.journal_id.id != journal_id
+            or any(transaction.move_id.id != original_moves[transaction.id]
+                   or transaction.statement_id.id != (statement.id if transaction.id in target_ids else False)
+                   for transaction in retained)):
+            raise _fail(failure_type, "odoo_write_error", "Native membership update did not preserve and detach the selected bank transactions.", exit_code=6)
+        _ensure_ids(env, "account.move", move_ids, [
+            ("company_id", "=", company_id), ("journal_id", "=", journal_id),
+            ("move_type", "=", "entry"), ("state", "=", "posted"),
+        ], company_id, failure_type)
+        reread["transaction_ids"] = _record_ids(statement.line_ids)
     if reread != target:
         raise _fail(
             failure_type,
@@ -14883,19 +15005,27 @@ def _bank_transaction(
     return transaction
 
 
-def _bank_transaction_actual_values(transaction: Any) -> dict[str, Any]:
-    return {
+def _bank_transaction_actual_values(transaction: Any, *, include_foreign: bool = False) -> dict[str, Any]:
+    result = {
         "date": str(transaction.date),
         "amount": _canonical_decimal_text(transaction.amount),
         "payment_ref": transaction.payment_ref,
         "partner_id": transaction.partner_id.id or None,
     }
+    if include_foreign:
+        result.update(
+            foreign_currency_id=_relation_id(transaction.foreign_currency_id),
+            amount_currency=_canonical_decimal_text(transaction.amount_currency),
+        )
+    return result
 
 
 def _bank_transaction_target_values(values: dict[str, Any]) -> dict[str, Any]:
     result = dict(values)
     if "amount" in result:
         result["amount"] = _canonical_decimal_text(result["amount"])
+    if "amount_currency" in result:
+        result["amount_currency"] = _canonical_decimal_text(result["amount_currency"])
     return result
 
 
@@ -14998,8 +15128,17 @@ def _update_bank_transaction(
     transaction = _bank_transaction(
         env, parameters["transaction_id"], company_id, failure_type
     )
-    actual = _bank_transaction_actual_values(transaction)
+    include_foreign = "foreign_currency_id" in parameters["changes"]
+    if include_foreign and not _bank_is_default_unmatched(transaction):
+        raise _fail(failure_type, "state_conflict", "Foreign-currency changes require a completely unmatched bank transaction.", exit_code=5)
+    actual = _bank_transaction_actual_values(transaction, include_foreign=include_foreign)
     target = {**actual, **_bank_transaction_target_values(parameters["changes"])}
+    if include_foreign and target["foreign_currency_id"] is not None:
+        _ensure_ids(env, "res.currency", {target["foreign_currency_id"]}, [("active", "=", True)], company_id, failure_type)
+        if target["foreign_currency_id"] == _statement_currency(transaction).id:
+            raise _fail(failure_type, "business_rule_error", "The foreign currency must differ from the journal transaction currency.", exit_code=6)
+        if (Decimal(target["amount_currency"]) > 0) != (Decimal(target["amount"]) > 0):
+            raise _fail(failure_type, "business_rule_error", "Foreign and journal transaction amounts must have the same sign.", exit_code=6)
     if actual == target:
         return _bank_transaction_result(transaction, company_id, failure_type), True
     if not _bank_is_default_unmatched(transaction):
@@ -15021,13 +15160,18 @@ def _update_bank_transaction(
     values = dict(parameters["changes"])
     if "amount" in values:
         values["amount"] = Decimal(values["amount"])
+    if include_foreign:
+        values["foreign_currency_id"] = values["foreign_currency_id"] or False
+        values["amount_currency"] = Decimal(values["amount_currency"])
     if values.get("partner_id") is None and "partner_id" in values:
         values["partner_id"] = False
     transaction.write(values)
     _invalidate_bank_transaction(transaction)
+    if include_foreign:
+        transaction.invalidate_recordset(["foreign_currency_id", "amount_currency"])
     if (
         transaction.move_id.state != "posted"
-        or _bank_transaction_actual_values(transaction) != target
+        or _bank_transaction_actual_values(transaction, include_foreign=include_foreign) != target
         or not _bank_is_default_unmatched(transaction)
     ):
         raise _fail(
@@ -15258,6 +15402,15 @@ def _record_bank_transaction(
                 "The recorded bank transaction is no longer posted.",
                 exit_code=5,
             )
+        if "foreign_currency_id" in parameters:
+            foreign_id = parameters["foreign_currency_id"]
+            if foreign_id is not None:
+                _ensure_ids(env, "res.currency", {foreign_id}, [("active", "=", True)], company_id, failure_type)
+                if foreign_id == _statement_currency(existing).id:
+                    raise _fail(failure_type, "business_rule_error", "The foreign currency must differ from the journal transaction currency.", exit_code=6)
+            if (_relation_id(existing.foreign_currency_id) != foreign_id
+                or not _same_decimal(existing.amount_currency, parameters["amount_currency"])):
+                raise _fail(failure_type, "idempotency_conflict", "The recorded bank transaction no longer matches the requested foreign-currency pair.", exit_code=5)
         return _bank_transaction_result(existing, company_id, failure_type), True
 
     company = _search_one(
@@ -15267,14 +15420,13 @@ def _record_bank_transaction(
         company_id,
         failure_type,
     )
-    _ensure_ids(
+    journal = _ensure_ids(
         env,
         "account.journal",
         {parameters["journal_id"]},
         [
-            ("company_id", "=", company_id),
+            ("company_id", "=", company.id),
             ("type", "in", ["bank", "cash"]),
-            ("currency_id", "in", [False, company.currency_id.id]),
         ],
         company_id,
         failure_type,
@@ -15290,8 +15442,19 @@ def _record_bank_transaction(
         company_id,
         failure_type,
     )
+    foreign_values: dict[str, Any] = {}
+    if "foreign_currency_id" in parameters:
+        if parameters["foreign_currency_id"] is not None:
+            _ensure_ids(env, "res.currency", {parameters["foreign_currency_id"]}, [("active", "=", True)], company_id, failure_type)
+            if parameters["foreign_currency_id"] == _statement_currency(journal).id:
+                raise _fail(failure_type, "business_rule_error", "The foreign currency must differ from the journal transaction currency.", exit_code=6)
+        foreign_values = {
+            "foreign_currency_id": parameters["foreign_currency_id"] or False,
+            "amount_currency": Decimal(parameters["amount_currency"]),
+        }
     transaction = _scoped(env, "account.bank.statement.line", company_id).create(
         {
+            **foreign_values,
             "company_id": company_id,
             "journal_id": parameters["journal_id"],
             "date": parameters["date"],
@@ -15302,7 +15465,11 @@ def _record_bank_transaction(
             "invoice_origin": marker,
         }
     )
-    if transaction.move_id.state != "posted":
+    if (transaction.move_id.state != "posted"
+        or (foreign_values and (
+            _relation_id(transaction.foreign_currency_id) != parameters["foreign_currency_id"]
+            or not _same_decimal(transaction.amount_currency, parameters["amount_currency"])
+        ))):
         raise _fail(
             failure_type,
             "odoo_write_error",
@@ -18029,6 +18196,71 @@ def _record_currency_rate(
             exit_code=6,
         )
     return _currency_rate_result(rate, company_id), False
+
+
+def _owned_currency_rate(
+    env: Any, rate_id: int, company_id: int, failure_type: type[Exception],
+) -> Any:
+    if _root_company_id(env, company_id, failure_type) != company_id:
+        raise _fail(failure_type, "company_unavailable", "Rate maintenance requires its explicit root-company context.", exit_code=3)
+    return _search_one(env, "res.currency.rate", [
+        ("id", "=", rate_id), ("company_id", "=", company_id),
+    ], company_id, failure_type)
+
+
+def _update_currency_rate(
+    env: Any, parameters: dict[str, Any], company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    rate = _owned_currency_rate(env, parameters["rate_id"], company_id, failure_type)
+    changes = parameters["changes"]
+    def matches() -> bool:
+        if "date" in changes and str(rate.name) != changes["date"]:
+            return False
+        if "company_units_per_foreign_unit" not in changes:
+            return True
+        quote = float(Decimal(changes["company_units_per_foreign_unit"]))
+        if not isfinite(quote) or quote <= 0:
+            return False
+        last_rates = rate._get_last_rates_for_companies(rate.company_id | rate.env.company.root_id)
+        expected = (1.0 / quote) * last_rates[rate.company_id]
+        actual = rate.rate
+        return (isfinite(expected) and expected > 0 and isfinite(actual) and actual > 0
+                and actual == expected)
+    if matches():
+        return _currency_rate_result(rate, company_id), True
+    currency_id = rate.currency_id.id
+    if "date" in changes:
+        duplicates = _scoped(env, "res.currency.rate", company_id).search([
+            ("company_id", "=", company_id), ("currency_id", "=", currency_id),
+            ("name", "=", changes["date"]), ("id", "!=", rate.id),
+        ], limit=1)
+        if duplicates:
+            raise _fail(failure_type, "idempotency_conflict", "The currency already has a rate on the requested date.", exit_code=5)
+    values: dict[str, Any] = {}
+    if "date" in changes:
+        values["name"] = changes["date"]
+    if "company_units_per_foreign_unit" in changes:
+        values["inverse_company_rate"] = Decimal(changes["company_units_per_foreign_unit"])
+    rate.write(values)
+    rate.invalidate_recordset()
+    if rate.company_id.id != company_id or rate.currency_id.id != currency_id or not matches():
+        raise _fail(failure_type, "odoo_write_error", "Native currency-rate maintenance did not persist the requested fields.", exit_code=6)
+    return _currency_rate_result(rate, company_id), False
+
+
+def _delete_currency_rate(
+    env: Any, parameters: dict[str, Any], company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    rate = _owned_currency_rate(env, parameters["rate_id"], company_id, failure_type)
+    result = _deleted_result(_currency_rate_result(rate, company_id))
+    rate.unlink()
+    if _scoped(env, "res.currency.rate", company_id).search_count([
+        ("id", "=", parameters["rate_id"]),
+    ], limit=1):
+        raise _fail(failure_type, "odoo_write_error", "Native currency-rate deletion did not remove the selected rate.", exit_code=6)
+    return result, False
 
 
 def _account_group(
@@ -20760,7 +20992,10 @@ def _write_move_processing(
         if (move.payment_state == "blocked") != expected:
             raise _fail(failure_type, "odoo_write_error", "Native payment block state was not persisted.", exit_code=6)
         return _move_result(move, company_id), replay
-    if move.state != "draft":
+    posted_metadata = move.state == "posted" and capability_id in {
+        "invoice.payment_method.assign", "invoice.incoterm.update",
+    }
+    if move.state != "draft" and not posted_metadata:
         raise _fail(failure_type, "state_conflict", "Processing settings require a draft move.", exit_code=6)
     if capability_id.startswith("invoice.currency_rate."):
         expected = float(parameters["rate"]) if capability_id.endswith(".update") else move.expected_currency_rate
@@ -21024,6 +21259,10 @@ def _dispatch_allowed(
         return _write_cash_rounding(env, capability_id, parameters, company_id, failure_type)
     if capability_id == "currency.rate.record":
         return _record_currency_rate(env, parameters, company_id, failure_type)
+    if capability_id == "currency.rate.update":
+        return _update_currency_rate(env, parameters, company_id, failure_type)
+    if capability_id == "currency.rate.delete":
+        return _delete_currency_rate(env, parameters, company_id, failure_type)
     if capability_id in _ACCOUNT_GROUP_WRITE_CAPABILITIES:
         return _write_account_group(
             env, capability_id, parameters, company_id, failure_type
