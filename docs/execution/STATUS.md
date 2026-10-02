@@ -2,6 +2,102 @@
 
 ## Current accounting phase — 2026-10-02
 
+540 registered IDs; 525 implemented handlers (248 reads, 277 writes);
+1056 schemas. Availability: 451 unconfigured, 74 degraded, 15 disabled.
+Enabled integrations: 522 implemented, two planned, one failed. Historical
+non-accounting extensions remain included; these counts are not a complete
+accounting denominator, a completion percentage or a permission guarantee.
+
+Eight genuinely missing invoice-preparation/product-accounting operations:
+
+- invoice.service_dates.get/update — delivery and taxable-supply dates; update
+  is draft-only and allows null clearing. Native date/rate recomputation applies.
+- invoice.alerts.inspect — translated native warnings, sanitized to fixed text
+  fields; no action_call, method execution, automatic deletion or ready claim.
+- accounting_move.origin_links.inspect — native reversal, cashbasis and adjusting
+  relations, filtered to same-company references readable by the real caller.
+  Legal drafts without a native number return a null name, not an invented '/'.
+- invoice.tax_totals.adjust — selected existing unique tax groups, signed decimal
+  amounts at invoice currency precision; native inverse synchronizes tax lines,
+  totals and payment terms, followed by computed-total readback. No arbitrary AML
+  patch, tax base modification or override of the native accounting constraints.
+- product.category.accounting_profile.get — category current-company ORM values
+  and company income/expense defaults separately; category properties can include
+  ir.default fallback, so these are not raw JSONB overrides.
+- product.tax_profile.get — native company-filtered product default sale/purchase
+  taxes and actual product tags. Native ancestor fallback is retained. This is
+  not fiscal tax mapping or an account.tax_ids fallback for a taxless product.
+- product.accounts.resolve — native product/category/company fallback and optional
+  explicit fiscal-position mapping; null means no mapping, not automatic choice.
+  Stock valuation/variation account and journal slots report native values when
+  the installed accounting extension provides them; otherwise null. No picking
+  or logistics capability was added.
+
+One shared public CLI/real ORM workflow passed both isolated aliases in
+20.08s as uid5/su=False/company1. It exercises all eight new IDs, reuses four
+existing setup IDs and checks four immediate target-state replays per alias.
+Date set/clear, native zero-purchase-line alert sanitization without deleting
+lines, actual reversal and direct transaction-local cashbasis/adjusting relation
+fixtures, product/category/company fallbacks and fiscal mapping, current-company
+default tax filtering, sale/purchase minor-unit tax adjustment, balanced moves
+and payment terms are checked. Other tax rows and invoice base rows remain
+unchanged. Posted/missing/foreign/invalid-target denials preserve data.
+
+Business calls never gain sudo or temporary groups. Admin-created synthetic
+objects and temporary category ir.default prerequisites exist only inside the
+isolated test transaction. Fresh-cursor checks prove all tracked objects, exact
+groups, company settings and defaults roll back, including before failure
+rethrow. Per-call savepoints support the shared outer test transaction; actual
+production native failures roll back the action transaction. Immediate replay
+does not imply concurrent exactly-once or an operation-store guarantee.
+
+Native smoke uses the existing independent-root company topology. Parent fallback
+and current-company priority have separate targeted unit evidence, not a claimed
+live parent/child database workflow. Direct cashbasis/adjusting relation fixtures
+prove inspection, not the entire native cashbasis or deferral lifecycle. Receipt,
+all currencies/localizations, hash/lock/source-linked paths and actual external
+send coverage are not claimed. Native displayed alerts are not compliance proof.
+
+Local:39 new cases7.37s after draft-name repair; initial38 plus affected reads924
+passed10.32s, focused new generic writes4 passed and runtime set1 passed. Server
+initial38 new cases6.52s, final39 new cases6.43s. Initial local registry
+loaded old532 expectations before fixture updates:4failed/15passed/1deselected
+384.81s, not acceptance. Server corrected registry:19 passed147.76s, one known
+stale bank_statement_payment_maintenance case
+explicitly deselected; not a full-suite pass. Another historical bridge-set test
+also remains outside this scoped selection. Source/ACL order and counts match
+the concrete runtime; immutable CLI registry is loaded once only in test worker.
+After acceptance metadata/test expectations close, the two affected registry
+cases pass11.73s with18 deselected. No full-suite or receipt acceptance claim.
+
+Failed attempts are retained, not acceptance:9.34s exposed a test zero-quantity
+setup incompatibility (fixed to qty1/price0 without loosening create rules);
+16.15s exposed the actual overly strict draft origin-name contract (normalized
+to null with unit/native regression). Both failed attempts fully rolled back.
+No native ACL or accounting constraint was bypassed to make tests pass.
+
+Deployment uses an explicit31-file prior-SHA allowlist,12 existing backed up and
+19 new, then one fixture-only repair, four draft-name repair files and two
+acceptance metadata/test files, each SHA-guarded with recoverable backups.
+Final server hashes and service PIDs/restart counts are checked separately.
+Local STATUS/HANDOFF are updated; server document overlays stay untouched.
+Changed code/schema/test and staged-added privacy checks precede the normal
+GitHub recovery commit; old historical document findings are not a clean-tree
+claim. Disk was 5.1 GiB initially and5.0 GiB free/94% used at final check;
+no cleanup or deletion was authorized. All31 final local/server file hashes
+match; fresh run service PIDs/restart counts remain stable and all active.
+
+No business database, source/addon, service/configuration, Pi/V2/V3, actual sends
+or service restarts. Still unclosed: asset.validate native addon failure and two
+real external-send integrations requiring separately scoped authority. Debit-note
+addon remains absent and must not be silently installed. Continue useful native
+accounting gaps after checking existing coverage; the overall goal is not complete.
+
+Registry file SHA256 fd2b4b24fcb0ccd313c0c2cf11be5b04335e4d5588e1202fbfc9eea3f282dd3a;
+canonical registry SHA256 8e534f9699b3a6b788f47f6c19c07b29e382d90854a315985f19bba720e9afc9.
+
+## Previous checkpoint — native journal-item processing, 2026-10-02
+
 532 registered IDs; 517 implemented handlers (242 reads, 275 writes);
 1040 schemas. Availability: 443 unconfigured, 74 degraded, 15 disabled.
 Enabled integrations: 514 implemented, two planned, one failed. Counts include

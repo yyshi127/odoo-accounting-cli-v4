@@ -6,6 +6,7 @@ import pytest
 
 from odoo_accounting_cli_v4 import analytic_processing_contracts as analytic_processing
 from odoo_accounting_cli_v4 import company_processing_contracts as company_processing
+from odoo_accounting_cli_v4 import invoice_preparation_contracts as invoice_preparation
 from odoo_accounting_cli_v4 import (
     journal_item_processing_contracts as journal_item_processing,
 )
@@ -1073,7 +1074,7 @@ def _required_page_parameters(capability_id: str) -> dict:
 def test_public_capability_sets_match_fixed_ids_without_report_execution() -> None:
     assert CORE_OBJECT_GET_CAPABILITY_IDS == frozenset(
         {*GET_ID_FIELDS, *SUPPORTING_GET_CAPABILITIES, *analytic_processing.READ_IDS,
-         *company_processing.READ_IDS, *journal_item_processing.GET_IDS}
+         *company_processing.READ_IDS, *journal_item_processing.GET_IDS, *invoice_preparation.READ_IDS}
     )
     assert CORE_OBJECT_READ_CAPABILITY_IDS == frozenset(
         {
@@ -1081,6 +1082,7 @@ def test_public_capability_sets_match_fixed_ids_without_report_execution() -> No
             *analytic_processing.READ_IDS,
             *company_processing.READ_IDS,
             *journal_item_processing.READ_IDS,
+            *invoice_preparation.READ_IDS,
             *PAGE_CAPABILITIES,
             *FISCAL_POSITION_MAPPING_CAPABILITIES,
             *SUPPORTING_GET_CAPABILITIES,

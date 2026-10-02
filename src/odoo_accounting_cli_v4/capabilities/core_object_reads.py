@@ -14,6 +14,7 @@ from typing import Any, Protocol
 from odoo_accounting_cli_v4 import account_processing_contracts as account_processing
 from odoo_accounting_cli_v4 import analytic_processing_contracts as analytic_processing
 from odoo_accounting_cli_v4 import company_processing_contracts as company_processing
+from odoo_accounting_cli_v4 import invoice_preparation_contracts as invoice_preparation
 from odoo_accounting_cli_v4 import (
     invoice_presentation_contracts as invoice_presentation,
 )
@@ -43,6 +44,7 @@ _UTC_DATETIME_PATTERN = re.compile(
 
 CORE_OBJECT_GET_CAPABILITY_IDS = frozenset(
     {
+        *invoice_preparation.READ_IDS,
         "account.account.get",
         "journal.get",
         "tax.get",
@@ -174,6 +176,7 @@ CORE_OBJECT_READ_CAPABILITY_IDS = frozenset(
 )
 
 _ID_FIELDS = {
+    **invoice_preparation.ID_FIELDS,
     "account.account.get": "account_id",
     "journal.get": "journal_id",
     "tax.get": "tax_id",
@@ -516,6 +519,11 @@ def validate_core_object_read_request(
     """Validate and normalize one fixed core-object request."""
 
     request_id, context, parameters = _validate_envelope(capability_id, request)
+    if capability_id in invoice_preparation.READ_IDS:
+        try:
+            return request_id, context, invoice_preparation.normalize_parameters(capability_id, parameters)
+        except ValueError as exc:
+            raise _invalid(str(exc)) from exc
     if capability_id == company_processing.GET_ID:
         try:
             return request_id, context, company_processing.normalize_parameters(capability_id, parameters)
@@ -2831,6 +2839,11 @@ def _valid_account_status_item(item: Any, company_id: int) -> bool:
 
 
 def _valid_item(capability_id: str, item: Any, company_id: int) -> bool:
+    if capability_id in invoice_preparation.READ_IDS:
+        try:
+            return invoice_preparation.valid_read_item(capability_id, item, company_id)
+        except (KeyError, TypeError, ValueError):
+            return False
     if capability_id in journal_item_processing.GET_IDS:
         return journal_item_processing.valid_read_item(capability_id, item, company_id)
     if capability_id == company_processing.GET_ID:
@@ -3125,6 +3138,8 @@ def read_core_object(
             return items[0]
         if items[0]["id"] != parameters[_ID_FIELDS[capability_id]]:
             raise _failed("Odoo returned the wrong accounting object.")
+        if capability_id == "product.accounts.resolve" and items[0]["fiscal_position_id"] != parameters["fiscal_position_id"]:
+            raise _failed("Odoo returned another fiscal position's product accounts.")
         return items[0]
 
     filters = _cursor_filters(parameters)

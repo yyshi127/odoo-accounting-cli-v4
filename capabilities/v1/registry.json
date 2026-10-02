@@ -38508,6 +38508,984 @@
         ]
       },
       "handler_key": "journal_item_reconciliation_inspect"
+    },
+    "accounting_move.origin_links.inspect": {
+      "summary": {
+        "zh_CN": "查看凭证来源关联",
+        "en_US": "Inspect native accounting move origin links"
+      },
+      "domain": "journal_entry",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "res.company",
+          "account.move"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/accounting_move.origin_links.inspect.request.schema.json",
+        "response": "schemas/v1/accounting_move.origin_links.inspect.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.move:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_target_native_accounting_read_as_business_user",
+        "verify": "typed_target_and_optional_fiscal_position_binding",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_invoice_preparation_batch.py"
+          ],
+          "reason": "Closed parameters and typed target binding, schemas and public CLI; native behavior is tested separately."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_invoice_preparation_batch_live.py"
+          ],
+          "reason": "One shared public CLI/real ORM workflow passed both isolated aliases in 20.08s as uid5/su=False/company1: native service-date set/clear and replay; sanitized zero-purchase-line alerts without executing actions; actual reversal and transaction-local direct cashbasis/adjusting relation inspection; category/product defaults, native tax filtering and fiscal-position account mapping; sale/purchase existing tax-group minor-unit inverse adjustments, balance and payment-term readback, replay and unchanged other tax rows. Posted, missing, foreign and invalid-target denials are exercised. Fixtures, exact groups, company settings and defaults roll back in fresh cursors. Direct relation fixtures are not full cashbasis/deferral workflow acceptance; current company topology does not prove every ancestry/localization/currency branch. No business DB, service/addon change, actual send or concurrent exactly-once claim."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed invoice preparation and product accounting operations are implemented; runtime company, ordinary-user ACL and native accounting recomputation apply."
+      },
+      "routing": {
+        "object": "journal_entry",
+        "actions": [
+          "inspect"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "查看凭证来源关联"
+          ],
+          "en_US": [
+            "Inspect native accounting move origin links"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "任意 ORM 字段或方法调用",
+            "跨无关公司访问或绕过原生权限",
+            "执行提醒动作或发送消息"
+          ],
+          "en_US": [
+            "Arbitrary ORM fields or methods",
+            "Unrelated company access or bypassing native ACL",
+            "Executing alert actions or sending messages"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "accounting_move_origin_links_inspect"
+    },
+    "invoice.alerts.inspect": {
+      "summary": {
+        "zh_CN": "查看发票原生提醒",
+        "en_US": "Inspect native invoice alerts without executing actions"
+      },
+      "domain": "invoice",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "res.company",
+          "account.move",
+          "account.move.line",
+          "account.journal",
+          "res.partner",
+          "res.currency"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.alerts.inspect.request.schema.json",
+        "response": "schemas/v1/invoice.alerts.inspect.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.move:read",
+          "account.move.line:read",
+          "account.journal:read",
+          "res.partner:read",
+          "res.currency:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_target_native_accounting_read_as_business_user",
+        "verify": "typed_target_and_optional_fiscal_position_binding",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_invoice_preparation_batch.py"
+          ],
+          "reason": "Closed parameters and typed target binding, schemas and public CLI; native behavior is tested separately."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_invoice_preparation_batch_live.py"
+          ],
+          "reason": "One shared public CLI/real ORM workflow passed both isolated aliases in 20.08s as uid5/su=False/company1: native service-date set/clear and replay; sanitized zero-purchase-line alerts without executing actions; actual reversal and transaction-local direct cashbasis/adjusting relation inspection; category/product defaults, native tax filtering and fiscal-position account mapping; sale/purchase existing tax-group minor-unit inverse adjustments, balance and payment-term readback, replay and unchanged other tax rows. Posted, missing, foreign and invalid-target denials are exercised. Fixtures, exact groups, company settings and defaults roll back in fresh cursors. Direct relation fixtures are not full cashbasis/deferral workflow acceptance; current company topology does not prove every ancestry/localization/currency branch. No business DB, service/addon change, actual send or concurrent exactly-once claim."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed invoice preparation and product accounting operations are implemented; runtime company, ordinary-user ACL and native accounting recomputation apply."
+      },
+      "routing": {
+        "object": "invoice",
+        "actions": [
+          "inspect"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "查看发票原生提醒"
+          ],
+          "en_US": [
+            "Inspect native invoice alerts without executing actions"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "任意 ORM 字段或方法调用",
+            "跨无关公司访问或绕过原生权限",
+            "执行提醒动作或发送消息"
+          ],
+          "en_US": [
+            "Arbitrary ORM fields or methods",
+            "Unrelated company access or bypassing native ACL",
+            "Executing alert actions or sending messages"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "invoice_alerts_inspect"
+    },
+    "invoice.service_dates.get": {
+      "summary": {
+        "zh_CN": "查看发票业务日期",
+        "en_US": "Read invoice service dates"
+      },
+      "domain": "invoice",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "res.company",
+          "account.move"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.service_dates.get.request.schema.json",
+        "response": "schemas/v1/invoice.service_dates.get.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.move:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_target_native_accounting_read_as_business_user",
+        "verify": "typed_target_and_optional_fiscal_position_binding",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_invoice_preparation_batch.py"
+          ],
+          "reason": "Closed parameters and typed target binding, schemas and public CLI; native behavior is tested separately."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_invoice_preparation_batch_live.py"
+          ],
+          "reason": "One shared public CLI/real ORM workflow passed both isolated aliases in 20.08s as uid5/su=False/company1: native service-date set/clear and replay; sanitized zero-purchase-line alerts without executing actions; actual reversal and transaction-local direct cashbasis/adjusting relation inspection; category/product defaults, native tax filtering and fiscal-position account mapping; sale/purchase existing tax-group minor-unit inverse adjustments, balance and payment-term readback, replay and unchanged other tax rows. Posted, missing, foreign and invalid-target denials are exercised. Fixtures, exact groups, company settings and defaults roll back in fresh cursors. Direct relation fixtures are not full cashbasis/deferral workflow acceptance; current company topology does not prove every ancestry/localization/currency branch. No business DB, service/addon change, actual send or concurrent exactly-once claim."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed invoice preparation and product accounting operations are implemented; runtime company, ordinary-user ACL and native accounting recomputation apply."
+      },
+      "routing": {
+        "object": "invoice",
+        "actions": [
+          "get"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "查看发票业务日期"
+          ],
+          "en_US": [
+            "Read invoice service dates"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "任意 ORM 字段或方法调用",
+            "跨无关公司访问或绕过原生权限",
+            "执行提醒动作或发送消息"
+          ],
+          "en_US": [
+            "Arbitrary ORM fields or methods",
+            "Unrelated company access or bypassing native ACL",
+            "Executing alert actions or sending messages"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "invoice_service_dates_get"
+    },
+    "invoice.service_dates.update": {
+      "summary": {
+        "zh_CN": "修改草稿发票业务日期",
+        "en_US": "Update draft invoice service dates"
+      },
+      "domain": "invoice",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.account",
+          "account.move",
+          "account.move.line",
+          "account.tax",
+          "res.company",
+          "res.currency",
+          "res.currency.rate"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.service_dates.update.request.schema.json",
+        "response": "schemas/v1/invoice.service_dates.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.move.line:create",
+          "account.move.line:read",
+          "account.move.line:unlink",
+          "account.move.line:write",
+          "account.move:read",
+          "account.move:write",
+          "account.tax:read",
+          "res.company:read",
+          "res.currency.rate:read",
+          "res.currency:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_draft_invoice_write_and_recomputation_as_business_user",
+        "verify": "same_transaction_native_date_or_computed_tax_group_readback",
+        "idempotency": "serial_current_target_recheck_without_operation_store_or_concurrent_exactly_once",
+        "reverse": "restore_prior_values_subject_to_native_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_invoice_preparation_batch.py"
+          ],
+          "reason": "Closed parameters and typed target binding, schemas and public CLI; native behavior is tested separately."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_invoice_preparation_batch_live.py"
+          ],
+          "reason": "One shared public CLI/real ORM workflow passed both isolated aliases in 20.08s as uid5/su=False/company1: native service-date set/clear and replay; sanitized zero-purchase-line alerts without executing actions; actual reversal and transaction-local direct cashbasis/adjusting relation inspection; category/product defaults, native tax filtering and fiscal-position account mapping; sale/purchase existing tax-group minor-unit inverse adjustments, balance and payment-term readback, replay and unchanged other tax rows. Posted, missing, foreign and invalid-target denials are exercised. Fixtures, exact groups, company settings and defaults roll back in fresh cursors. Direct relation fixtures are not full cashbasis/deferral workflow acceptance; current company topology does not prove every ancestry/localization/currency branch. No business DB, service/addon change, actual send or concurrent exactly-once claim."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples are deferred until the capability library reaches target coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing is outside this capability batch."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed invoice preparation and product accounting operations are implemented; runtime company, ordinary-user ACL and native accounting recomputation apply."
+      },
+      "routing": {
+        "object": "invoice",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "修改草稿发票业务日期"
+          ],
+          "en_US": [
+            "Update draft invoice service dates"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "任意 ORM 字段或方法调用",
+            "跨无关公司访问或绕过原生权限",
+            "执行提醒动作或发送消息"
+          ],
+          "en_US": [
+            "Arbitrary ORM fields or methods",
+            "Unrelated company access or bypassing native ACL",
+            "Executing alert actions or sending messages"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "invoice.tax_totals.adjust": {
+      "summary": {
+        "zh_CN": "调整草稿发票税组金额",
+        "en_US": "Adjust existing draft invoice tax group totals"
+      },
+      "domain": "invoice",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.account",
+          "account.move",
+          "account.move.line",
+          "account.tax",
+          "res.company",
+          "res.currency"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_move.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/invoice.tax_totals.adjust.request.schema.json",
+        "response": "schemas/v1/invoice.tax_totals.adjust.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_invoice"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.move.line:create",
+          "account.move.line:read",
+          "account.move.line:unlink",
+          "account.move.line:write",
+          "account.move:read",
+          "account.move:write",
+          "account.tax:read",
+          "res.company:read",
+          "res.currency:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_draft_invoice_write_and_recomputation_as_business_user",
+        "verify": "same_transaction_native_date_or_computed_tax_group_readback",
+        "idempotency": "serial_current_target_recheck_without_operation_store_or_concurrent_exactly_once",
+        "reverse": "restore_prior_values_subject_to_native_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_invoice_preparation_batch.py"
+          ],
+          "reason": "Closed parameters and typed target binding, schemas and public CLI; native behavior is tested separately."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_invoice_preparation_batch_live.py"
+          ],
+          "reason": "One shared public CLI/real ORM workflow passed both isolated aliases in 20.08s as uid5/su=False/company1: native service-date set/clear and replay; sanitized zero-purchase-line alerts without executing actions; actual reversal and transaction-local direct cashbasis/adjusting relation inspection; category/product defaults, native tax filtering and fiscal-position account mapping; sale/purchase existing tax-group minor-unit inverse adjustments, balance and payment-term readback, replay and unchanged other tax rows. Posted, missing, foreign and invalid-target denials are exercised. Fixtures, exact groups, company settings and defaults roll back in fresh cursors. Direct relation fixtures are not full cashbasis/deferral workflow acceptance; current company topology does not prove every ancestry/localization/currency branch. No business DB, service/addon change, actual send or concurrent exactly-once claim."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples are deferred until the capability library reaches target coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing is outside this capability batch."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed invoice preparation and product accounting operations are implemented; runtime company, ordinary-user ACL and native accounting recomputation apply."
+      },
+      "routing": {
+        "object": "invoice",
+        "actions": [
+          "adjust"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "调整草稿发票税组金额"
+          ],
+          "en_US": [
+            "Adjust existing draft invoice tax group totals"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "任意 ORM 字段或方法调用",
+            "跨无关公司访问或绕过原生权限",
+            "执行提醒动作或发送消息"
+          ],
+          "en_US": [
+            "Arbitrary ORM fields or methods",
+            "Unrelated company access or bypassing native ACL",
+            "Executing alert actions or sending messages"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "product.accounts.resolve": {
+      "summary": {
+        "zh_CN": "解析产品实际会计科目",
+        "en_US": "Resolve native product accounts with an optional fiscal position"
+      },
+      "domain": "product",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "product"
+        ],
+        "models": [
+          "res.company",
+          "product.product",
+          "product.template",
+          "product.category",
+          "account.fiscal.position",
+          "account.fiscal.position.account",
+          "account.account",
+          "account.journal"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/product.py",
+          "account/models/account_move_line.py",
+          "stock_account/models/product.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/product.accounts.resolve.request.schema.json",
+        "response": "schemas/v1/product.accounts.resolve.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "product"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "product.product:read",
+          "product.template:read",
+          "product.category:read",
+          "account.fiscal.position:read",
+          "account.fiscal.position.account:read",
+          "account.account:read",
+          "account.journal:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_target_native_accounting_read_as_business_user",
+        "verify": "typed_target_and_optional_fiscal_position_binding",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_invoice_preparation_batch.py"
+          ],
+          "reason": "Closed parameters and typed target binding, schemas and public CLI; native behavior is tested separately."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_invoice_preparation_batch_live.py"
+          ],
+          "reason": "One shared public CLI/real ORM workflow passed both isolated aliases in 20.08s as uid5/su=False/company1: native service-date set/clear and replay; sanitized zero-purchase-line alerts without executing actions; actual reversal and transaction-local direct cashbasis/adjusting relation inspection; category/product defaults, native tax filtering and fiscal-position account mapping; sale/purchase existing tax-group minor-unit inverse adjustments, balance and payment-term readback, replay and unchanged other tax rows. Posted, missing, foreign and invalid-target denials are exercised. Fixtures, exact groups, company settings and defaults roll back in fresh cursors. Direct relation fixtures are not full cashbasis/deferral workflow acceptance; current company topology does not prove every ancestry/localization/currency branch. No business DB, service/addon change, actual send or concurrent exactly-once claim."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed invoice preparation and product accounting operations are implemented; runtime company, ordinary-user ACL and native accounting recomputation apply."
+      },
+      "routing": {
+        "object": "product",
+        "actions": [
+          "resolve"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "解析产品实际会计科目"
+          ],
+          "en_US": [
+            "Resolve native product accounts with an optional fiscal position"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "任意 ORM 字段或方法调用",
+            "跨无关公司访问或绕过原生权限",
+            "执行提醒动作或发送消息"
+          ],
+          "en_US": [
+            "Arbitrary ORM fields or methods",
+            "Unrelated company access or bypassing native ACL",
+            "Executing alert actions or sending messages"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "product_accounts_resolve"
+    },
+    "product.category.accounting_profile.get": {
+      "summary": {
+        "zh_CN": "查看产品分类会计科目",
+        "en_US": "Read current-company category accounting properties"
+      },
+      "domain": "product",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "product"
+        ],
+        "models": [
+          "res.company",
+          "product.category",
+          "account.account"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/product.py",
+          "account/models/account_move_line.py",
+          "stock_account/models/product.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/product.category.accounting_profile.get.request.schema.json",
+        "response": "schemas/v1/product.category.accounting_profile.get.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "product"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "product.category:read",
+          "account.account:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_target_native_accounting_read_as_business_user",
+        "verify": "typed_target_and_optional_fiscal_position_binding",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_invoice_preparation_batch.py"
+          ],
+          "reason": "Closed parameters and typed target binding, schemas and public CLI; native behavior is tested separately."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_invoice_preparation_batch_live.py"
+          ],
+          "reason": "One shared public CLI/real ORM workflow passed both isolated aliases in 20.08s as uid5/su=False/company1: native service-date set/clear and replay; sanitized zero-purchase-line alerts without executing actions; actual reversal and transaction-local direct cashbasis/adjusting relation inspection; category/product defaults, native tax filtering and fiscal-position account mapping; sale/purchase existing tax-group minor-unit inverse adjustments, balance and payment-term readback, replay and unchanged other tax rows. Posted, missing, foreign and invalid-target denials are exercised. Fixtures, exact groups, company settings and defaults roll back in fresh cursors. Direct relation fixtures are not full cashbasis/deferral workflow acceptance; current company topology does not prove every ancestry/localization/currency branch. No business DB, service/addon change, actual send or concurrent exactly-once claim."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed invoice preparation and product accounting operations are implemented; runtime company, ordinary-user ACL and native accounting recomputation apply."
+      },
+      "routing": {
+        "object": "product",
+        "actions": [
+          "get"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "查看产品分类会计科目"
+          ],
+          "en_US": [
+            "Read current-company category accounting properties"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "任意 ORM 字段或方法调用",
+            "跨无关公司访问或绕过原生权限",
+            "执行提醒动作或发送消息"
+          ],
+          "en_US": [
+            "Arbitrary ORM fields or methods",
+            "Unrelated company access or bypassing native ACL",
+            "Executing alert actions or sending messages"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "product_category_accounting_profile_get"
+    },
+    "product.tax_profile.get": {
+      "summary": {
+        "zh_CN": "查看产品默认税与会计标签",
+        "en_US": "Read native product default taxes and accounting tags"
+      },
+      "domain": "product",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "product"
+        ],
+        "models": [
+          "res.company",
+          "product.product",
+          "product.template",
+          "account.tax",
+          "account.account.tag"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/product.py",
+          "account/models/account_move_line.py",
+          "stock_account/models/product.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/product.tax_profile.get.request.schema.json",
+        "response": "schemas/v1/product.tax_profile.get.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "product"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "product.product:read",
+          "product.template:read",
+          "account.tax:read",
+          "account.account.tag:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_target_native_accounting_read_as_business_user",
+        "verify": "typed_target_and_optional_fiscal_position_binding",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_invoice_preparation_batch.py"
+          ],
+          "reason": "Closed parameters and typed target binding, schemas and public CLI; native behavior is tested separately."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_invoice_preparation_batch_live.py"
+          ],
+          "reason": "One shared public CLI/real ORM workflow passed both isolated aliases in 20.08s as uid5/su=False/company1: native service-date set/clear and replay; sanitized zero-purchase-line alerts without executing actions; actual reversal and transaction-local direct cashbasis/adjusting relation inspection; category/product defaults, native tax filtering and fiscal-position account mapping; sale/purchase existing tax-group minor-unit inverse adjustments, balance and payment-term readback, replay and unchanged other tax rows. Posted, missing, foreign and invalid-target denials are exercised. Fixtures, exact groups, company settings and defaults roll back in fresh cursors. Direct relation fixtures are not full cashbasis/deferral workflow acceptance; current company topology does not prove every ancestry/localization/currency branch. No business DB, service/addon change, actual send or concurrent exactly-once claim."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed invoice preparation and product accounting operations are implemented; runtime company, ordinary-user ACL and native accounting recomputation apply."
+      },
+      "routing": {
+        "object": "product",
+        "actions": [
+          "get"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "查看产品默认税与会计标签"
+          ],
+          "en_US": [
+            "Read native product default taxes and accounting tags"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "任意 ORM 字段或方法调用",
+            "跨无关公司访问或绕过原生权限",
+            "执行提醒动作或发送消息"
+          ],
+          "en_US": [
+            "Arbitrary ORM fields or methods",
+            "Unrelated company access or bypassing native ACL",
+            "Executing alert actions or sending messages"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "product_tax_profile_get"
     }
   }
 }

@@ -12,6 +12,7 @@ import hashlib
 import json
 import re
 from collections.abc import Mapping
+from copy import deepcopy
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from time import strftime, strptime
@@ -21,6 +22,9 @@ from odoo_accounting_cli_v4 import account_processing_contracts as account_proce
 from odoo_accounting_cli_v4 import analytic_processing_contracts as analytic_processing
 from odoo_accounting_cli_v4 import company_processing_contracts as company_processing
 from odoo_accounting_cli_v4 import fiscal_mapping_contracts as fiscal_mappings
+from odoo_accounting_cli_v4 import (
+    invoice_preparation_contracts as invoice_preparation,
+)
 from odoo_accounting_cli_v4 import (
     invoice_presentation_contracts as invoice_presentation,
 )
@@ -44,7 +48,7 @@ from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
 from odoo_accounting_cli_v4 import tax_processing_contracts as tax_processing
 
 ACTION = "accounting.core_write.execute"
-CAPABILITIES = journal_item_processing.CAPABILITY_IDS | company_processing.CAPABILITY_IDS | analytic_processing.CAPABILITY_IDS | journal_processing.CAPABILITY_IDS | account_processing.CAPABILITY_IDS | tax_processing.CAPABILITY_IDS | payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
+CAPABILITIES = invoice_preparation.CAPABILITY_IDS | journal_item_processing.CAPABILITY_IDS | company_processing.CAPABILITY_IDS | analytic_processing.CAPABILITY_IDS | journal_processing.CAPABILITY_IDS | account_processing.CAPABILITY_IDS | tax_processing.CAPABILITY_IDS | payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -3332,6 +3336,26 @@ def _protocol(failure_type: type[Exception]) -> Exception:
     )
 
 
+_PARAMETER_KEYS.update({
+    "invoice.service_dates.update": {"move_id", "changes"},
+    "invoice.tax_totals.adjust": {"move_id", "groups"},
+})
+for _invoice_preparation_capability in invoice_preparation.CAPABILITY_IDS:
+    _GROUPS[_invoice_preparation_capability] = "account.group_account_invoice"
+    _MODELS[_invoice_preparation_capability] = {
+        "res.company", "account.move", "account.move.line", "account.account",
+        "account.tax", "res.currency",
+    }
+    _ACCESS[_invoice_preparation_capability] = {
+        ("res.company", "read"), ("account.move", "read"),
+        ("account.move", "write"), ("account.move.line", "read"),
+        ("account.move.line", "write"), ("account.move.line", "create"),
+        ("account.move.line", "unlink"), ("account.account", "read"),
+        ("account.tax", "read"), ("res.currency", "read"),
+    }
+_MODELS["invoice.service_dates.update"].add("res.currency.rate")
+_ACCESS["invoice.service_dates.update"].add(("res.currency.rate", "read"))
+
 _PARAMETER_KEYS.update(journal_item_processing.PARAMETER_KEYS)
 for _journal_item_capability in journal_item_processing.CAPABILITY_IDS:
     _GROUPS[_journal_item_capability] = (
@@ -5603,6 +5627,11 @@ def _valid_parameters(
 ) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id in invoice_preparation.CAPABILITY_IDS:
+        try:
+            return invoice_preparation.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
     if capability_id in journal_item_processing.CAPABILITY_IDS:
         try:
             return journal_item_processing.normalize_parameters(capability_id, parameters) == parameters
@@ -6256,6 +6285,8 @@ def _validated_payload(
 def _deterministic_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in invoice_preparation.CAPABILITY_IDS:
+        return invoice_preparation.idempotency_key(capability_id, parameters, company_id)
     if capability_id in journal_item_processing.CAPABILITY_IDS:
         return journal_item_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in company_processing.CAPABILITY_IDS:
@@ -20277,6 +20308,64 @@ def _layout_current(line: Any) -> dict[str, Any]:
     return {field: getattr(line, field) for field in invoice_presentation.LAYOUT_KEYS}
 
 
+def _invoice_preparation_tax_groups(totals: Any) -> dict[int, dict[str, Any]]:
+    groups = {}
+    for subtotal in totals["subtotals"]:
+        for group in subtotal["tax_groups"]:
+            if not _is_id(group["id"]) or group["id"] in groups:
+                raise ValueError("Invalid native invoice tax-group identity.")
+            groups[group["id"]] = group
+    return groups
+
+
+def _write_invoice_preparation(
+    env: Any, capability_id: str, parameters: dict[str, Any],
+    company_id: int, failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    with env.cr.savepoint():
+        move = _search_one(env, "account.move", [
+            ("id", "=", parameters["move_id"]), ("company_id", "=", company_id),
+            ("move_type", "in", list(_DOCUMENT_TYPES)),
+        ], company_id, failure_type)
+        if move.state != "draft":
+            raise _fail(failure_type, "state_conflict", "Invoice preparation changes require a draft invoice or bill.", exit_code=6)
+        if capability_id == "invoice.service_dates.update":
+            changes = parameters["changes"]
+            replay = all(_nullable_value(getattr(move, field)) == value for field, value in changes.items())
+            if not replay:
+                move.write({field: False if value is None else value for field, value in changes.items()})
+                move.invalidate_recordset()
+            if any(_nullable_value(getattr(move, field)) != value for field, value in changes.items()):
+                raise _fail(failure_type, "odoo_write_error", "Native invoice service dates did not persist.", exit_code=6)
+            return _move_result(move, company_id), replay
+
+        totals = deepcopy(move.tax_totals)
+        native_groups = _invoice_preparation_tax_groups(totals)
+        targets = {group["tax_group_id"]: Decimal(group["tax_amount"]) for group in parameters["groups"]}
+        if not set(targets) <= set(native_groups):
+            raise _fail(failure_type, "business_rule_error", "Tax adjustment can only target this invoice's existing tax groups.", exit_code=6)
+        for group in parameters["groups"]:
+            if _rounded_currency_amount(move.currency_id, group["tax_amount"]) != targets[group["tax_group_id"]]:
+                raise _fail(failure_type, "business_rule_error", "Tax amounts must already match the invoice currency precision.", exit_code=6)
+
+        def matches(groups: dict[int, dict[str, Any]]) -> bool:
+            return all(
+                group_id in groups
+                and _rounded_currency_amount(move.currency_id, str(groups[group_id]["tax_amount_currency"])) == amount
+                for group_id, amount in targets.items()
+            )
+
+        replay = matches(native_groups)
+        if not replay:
+            for group_id, amount in targets.items():
+                native_groups[group_id]["tax_amount_currency"] = float(amount)
+            move.write({"tax_totals": totals})
+            move.invalidate_recordset()
+        if not matches(_invoice_preparation_tax_groups(move.tax_totals)):
+            raise _fail(failure_type, "odoo_write_error", "Native invoice tax totals did not match the requested adjustment.", exit_code=6)
+        return _move_result(move, company_id), replay
+
+
 def _write_invoice_presentation(
     env: Any, capability_id: str, parameters: dict[str, Any],
     company_id: int, failure_type: type[Exception],
@@ -20593,6 +20682,8 @@ def _dispatch_allowed(
     marker: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if capability_id in invoice_preparation.CAPABILITY_IDS:
+        return _write_invoice_preparation(env, capability_id, parameters, company_id, failure_type)
     if capability_id in journal_item_processing.CAPABILITY_IDS:
         return _write_journal_item_processing(env, capability_id, parameters, company_id, failure_type)
     if capability_id in company_processing.CAPABILITY_IDS:

@@ -1,0 +1,462 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/accounting_move.origin_links.inspect.response.schema.json",
+  "title": "accounting_move.origin_links.inspect response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "success",
+    "capability",
+    "status",
+    "data",
+    "warnings",
+    "error",
+    "odoo",
+    "audit"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v1"
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "success": {
+      "type": "boolean"
+    },
+    "capability": {
+      "const": "accounting_move.origin_links.inspect"
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "data": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/item"
+        }
+      ]
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "error": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "response.schema.json#/$defs/error"
+        }
+      ]
+    },
+    "odoo": {
+      "$ref": "response.schema.json#/$defs/odoo"
+    },
+    "audit": {
+      "$ref": "response.schema.json#/$defs/audit"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "success": {
+            "const": true
+          }
+        },
+        "required": [
+          "success"
+        ]
+      },
+      "then": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "const": "verified"
+          },
+          "data": {
+            "$ref": "#/$defs/item"
+          },
+          "error": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "data": {
+            "type": "null"
+          },
+          "error": {
+            "$ref": "response.schema.json#/$defs/error"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "company_id",
+        "move_type",
+        "state",
+        "reversed_entry",
+        "tax_cash_basis_origin_move",
+        "reversal_moves",
+        "tax_cash_basis_created_moves",
+        "adjusting_entry_origin_moves",
+        "adjusting_entries_moves"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "company_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "move_type": {
+          "enum": [
+            "entry",
+            "in_invoice",
+            "in_receipt",
+            "in_refund",
+            "out_invoice",
+            "out_receipt",
+            "out_refund"
+          ]
+        },
+        "state": {
+          "enum": [
+            "draft",
+            "posted",
+            "cancel"
+          ]
+        },
+        "reversed_entry": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "name",
+                "move_type",
+                "state",
+                "date"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "minLength": 1
+                },
+                "move_type": {
+                  "enum": [
+                    "entry",
+                    "in_invoice",
+                    "in_receipt",
+                    "in_refund",
+                    "out_invoice",
+                    "out_receipt",
+                    "out_refund"
+                  ]
+                },
+                "state": {
+                  "enum": [
+                    "draft",
+                    "posted",
+                    "cancel"
+                  ]
+                },
+                "date": {
+                  "type": "string",
+                  "format": "date"
+                }
+              }
+            }
+          ]
+        },
+        "tax_cash_basis_origin_move": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "name",
+                "move_type",
+                "state",
+                "date"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "minLength": 1
+                },
+                "move_type": {
+                  "enum": [
+                    "entry",
+                    "in_invoice",
+                    "in_receipt",
+                    "in_refund",
+                    "out_invoice",
+                    "out_receipt",
+                    "out_refund"
+                  ]
+                },
+                "state": {
+                  "enum": [
+                    "draft",
+                    "posted",
+                    "cancel"
+                  ]
+                },
+                "date": {
+                  "type": "string",
+                  "format": "date"
+                }
+              }
+            }
+          ]
+        },
+        "reversal_moves": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "name",
+              "move_type",
+              "state",
+              "date"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1
+              },
+              "move_type": {
+                "enum": [
+                  "entry",
+                  "in_invoice",
+                  "in_receipt",
+                  "in_refund",
+                  "out_invoice",
+                  "out_receipt",
+                  "out_refund"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "draft",
+                  "posted",
+                  "cancel"
+                ]
+              },
+              "date": {
+                "type": "string",
+                "format": "date"
+              }
+            }
+          }
+        },
+        "tax_cash_basis_created_moves": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "name",
+              "move_type",
+              "state",
+              "date"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1
+              },
+              "move_type": {
+                "enum": [
+                  "entry",
+                  "in_invoice",
+                  "in_receipt",
+                  "in_refund",
+                  "out_invoice",
+                  "out_receipt",
+                  "out_refund"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "draft",
+                  "posted",
+                  "cancel"
+                ]
+              },
+              "date": {
+                "type": "string",
+                "format": "date"
+              }
+            }
+          }
+        },
+        "adjusting_entry_origin_moves": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "name",
+              "move_type",
+              "state",
+              "date"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1
+              },
+              "move_type": {
+                "enum": [
+                  "entry",
+                  "in_invoice",
+                  "in_receipt",
+                  "in_refund",
+                  "out_invoice",
+                  "out_receipt",
+                  "out_refund"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "draft",
+                  "posted",
+                  "cancel"
+                ]
+              },
+              "date": {
+                "type": "string",
+                "format": "date"
+              }
+            }
+          }
+        },
+        "adjusting_entries_moves": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "name",
+              "move_type",
+              "state",
+              "date"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1
+              },
+              "move_type": {
+                "enum": [
+                  "entry",
+                  "in_invoice",
+                  "in_receipt",
+                  "in_refund",
+                  "out_invoice",
+                  "out_receipt",
+                  "out_refund"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "draft",
+                  "posted",
+                  "cancel"
+                ]
+              },
+              "date": {
+                "type": "string",
+                "format": "date"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

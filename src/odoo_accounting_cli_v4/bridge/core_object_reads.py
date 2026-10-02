@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from odoo_accounting_cli_v4 import invoice_preparation_contracts as invoice_preparation
 from odoo_accounting_cli_v4 import (
     journal_item_processing_contracts as journal_item_processing,
 )
@@ -11,6 +12,7 @@ from odoo_accounting_cli_v4 import (
 ACTION = "accounting.core_object.read"
 CAPABILITY_IDS = frozenset(
     {
+        *invoice_preparation.READ_IDS,
         *journal_item_processing.READ_IDS,
         "account.account.get",
         "journal.get",

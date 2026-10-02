@@ -16,6 +16,12 @@ from odoo_accounting_cli_v4.capabilities.core_object_reads import (
 
 EXPECTED_CAPABILITY_IDS = frozenset(
     {
+        "invoice.service_dates.get",
+        "invoice.alerts.inspect",
+        "accounting_move.origin_links.inspect",
+        "product.category.accounting_profile.get",
+        "product.tax_profile.get",
+        "product.accounts.resolve",
         "journal_item.processing_details.get",
         "journal_item.reconciliation.inspect",
         "journal_item.analytic_lines.list",
@@ -183,6 +189,12 @@ GET_ID_FIELDS = {
 }
 
 PRIMARY_MODELS = {
+    "invoice.service_dates.get": "account.move",
+    "invoice.alerts.inspect": "account.move",
+    "accounting_move.origin_links.inspect": "account.move",
+    "product.category.accounting_profile.get": "product.category",
+    "product.tax_profile.get": "product.product",
+    "product.accounts.resolve": "product.product",
     "journal_item.processing_details.get": "account.move.line",
     "journal_item.reconciliation.inspect": "account.move.line",
     "journal_item.analytic_lines.list": "account.analytic.line",
@@ -1437,6 +1449,7 @@ def _fixture() -> tuple[Env, dict[str, Any]]:
         "budget.analytic": Model("budget.analytic", budgets),
         "budget.line": Model("budget.line", budget_lines),
         "account.fiscal.position": Model("account.fiscal.position", fiscal_positions),
+        "account.fiscal.position.account": Model("account.fiscal.position.account"),
         "account.account.tag": Model("account.account.tag", tags),
         "res.country": Model("res.country", [china, japan]),
         "res.country.group": Model("res.country.group", [asia]),
@@ -1490,6 +1503,11 @@ def _dispatch(
 
 
 def _parameters(capability_id: str) -> dict[str, Any]:
+    if capability_id in {"invoice.service_dates.get", "invoice.alerts.inspect", "accounting_move.origin_links.inspect",
+                         "product.category.accounting_profile.get", "product.tax_profile.get", "product.accounts.resolve"}:
+        from test_invoice_preparation_batch import READ_PARAMETERS
+
+        return dict(READ_PARAMETERS[capability_id])
     if capability_id in {"journal_item.processing_details.get", "journal_item.reconciliation.inspect"}:
         return {"journal_item_id": 31}
     if capability_id == "journal_item.analytic_lines.list":

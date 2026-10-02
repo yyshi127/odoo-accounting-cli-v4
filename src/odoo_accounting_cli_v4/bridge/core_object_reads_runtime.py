@@ -12,6 +12,7 @@ from typing import Any
 from odoo_accounting_cli_v4 import account_processing_contracts as account_processing
 from odoo_accounting_cli_v4 import analytic_processing_contracts as analytic_processing
 from odoo_accounting_cli_v4 import company_processing_contracts as company_processing
+from odoo_accounting_cli_v4 import invoice_preparation_contracts as invoice_preparation
 from odoo_accounting_cli_v4 import (
     invoice_presentation_contracts as invoice_presentation,
 )
@@ -47,6 +48,7 @@ class _JournalItemNotFound(LookupError):
 
 CAPABILITY_IDS = frozenset(
     {
+        *invoice_preparation.READ_IDS,
         *journal_item_processing.READ_IDS,
         "account.account.get",
         "journal.get",
@@ -744,6 +746,17 @@ _SUPPORTING_FIELDS = {
 _ANALYTIC_COLUMN_PATTERN = re.compile(r"^(?:account_id|x_plan[1-9][0-9]*_id)$")
 _PARTNER_REF_MARKER_SUFFIX = re.compile(r"(?:^| )\[ODACV4:[0-9a-f]{64}\]$")
 _REQUIRED_MODELS = {
+    "invoice.service_dates.get": ("res.company", "account.move"),
+    "invoice.alerts.inspect": (
+        "res.company", "account.move", "account.move.line", "account.journal", "res.partner", "res.currency",
+    ),
+    "accounting_move.origin_links.inspect": ("res.company", "account.move"),
+    "product.category.accounting_profile.get": ("res.company", "product.category", "account.account"),
+    "product.tax_profile.get": ("res.company", "product.product", "product.template", "account.tax", "account.account.tag"),
+    "product.accounts.resolve": (
+        "res.company", "product.product", "product.template", "product.category", "account.fiscal.position",
+        "account.fiscal.position.account", "account.account", "account.journal",
+    ),
     journal_item_processing.DETAIL_ID: (
         "res.company", "account.move.line", "account.move", "account.account",
         "product.product", "uom.uom", "account.payment", "account.bank.statement.line", "res.currency",
@@ -1674,6 +1687,11 @@ def _scope_domain(env: Any, capability_id: str, company_id: int) -> list[Any]:
 def _valid_parameters(capability_id: str, parameters: Any) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id in invoice_preparation.READ_IDS:
+        try:
+            return invoice_preparation.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
     if capability_id in journal_item_processing.GET_IDS:
         try:
             return journal_item_processing.normalize_parameters(capability_id, parameters) == parameters
@@ -4800,6 +4818,131 @@ def _normalize_partner_preferences(env: Any, capability_id: str, rows: list[dict
     return result
 
 
+def _product_preparation_rows(
+    env: Any, capability_id: str, parameters: dict[str, Any], company_id: int,
+) -> list[dict[str, Any]]:
+    company = env["res.company"].with_context(allowed_company_ids=[company_id], active_test=False).search([("id", "=", company_id)], limit=1)
+    if not company:
+        return []
+
+    def model(name: str) -> Any:
+        return env[name].with_context(allowed_company_ids=[company_id], active_test=False).with_company(company)
+
+    def check_ids(name: str, ids: set[int], domain: list[Any]) -> None:
+        if ids and set(model(name).search([("id", "in", sorted(ids)), *domain]).ids) != ids:
+            raise ValueError("product-accounting reference outside caller scope")
+
+    if capability_id == invoice_preparation.CATEGORY_ID:
+        category = model("product.category").search([("id", "=", parameters["category_id"])], limit=1)
+        if not category:
+            return []
+        item = {
+            "id": category.id, "company_id": company_id,
+            "income_account_id": category.property_account_income_categ_id.id or None,
+            "expense_account_id": category.property_account_expense_categ_id.id or None,
+            "company_income_account_id": company.income_account_id.id or None,
+            "company_expense_account_id": company.expense_account_id.id or None,
+        }
+        ids = {value for field, value in item.items() if field.endswith("account_id") and value is not None}
+        check_ids("account.account", ids, [("company_ids", "parent_of", [company_id])])
+        return [item]
+
+    product_domain = ["|", ("company_id", "=", False), ("company_id", "parent_of", [company_id])]
+    product = model("product.product").search([("id", "=", parameters["product_id"]), *product_domain], limit=1)
+    if not product:
+        return []
+    template = model("product.template").search([("id", "=", product.product_tmpl_id.id), *product_domain], limit=1)
+    if not template:
+        return []
+    item = {"id": product.id, "company_id": company_id, "template_id": template.id}
+    if capability_id == invoice_preparation.TAX_PROFILE_ID:
+        domain = model("account.tax")._check_company_domain(company)
+        sale_taxes = template.taxes_id.filtered_domain(domain)._filter_taxes_by_company(company)
+        purchase_taxes = template.supplier_taxes_id.filtered_domain(domain)._filter_taxes_by_company(company)
+        item.update(
+            sale_tax_ids=sorted(sale_taxes.ids), purchase_tax_ids=sorted(purchase_taxes.ids),
+            account_tag_ids=sorted(template.account_tag_ids.ids),
+        )
+        check_ids("account.tax", set(sale_taxes.ids) | set(purchase_taxes.ids), domain)
+        check_ids("account.account.tag", set(template.account_tag_ids.ids), [])
+        return [item]
+
+    position = model("account.fiscal.position").browse()
+    if parameters["fiscal_position_id"] is not None:
+        position = model("account.fiscal.position").search([
+            ("id", "=", parameters["fiscal_position_id"]), ("company_id", "parent_of", [company_id]),
+        ], limit=1)
+        if not position:
+            raise _FiscalPositionNotFound
+    accounts = template.get_product_accounts(fiscal_pos=position)
+    if not isinstance(accounts, dict):
+        raise TypeError("invalid native product accounts")
+    item["fiscal_position_id"] = position.id or None
+    for source, target in (
+        ("income", "income_account_id"), ("expense", "expense_account_id"),
+        ("stock_valuation", "stock_valuation_account_id"), ("stock_variation", "stock_variation_account_id"),
+        ("stock_journal", "stock_journal_id"),
+    ):
+        record = accounts.get(source)
+        item[target] = record.id if record else None
+    check_ids("account.account", {item[field] for field in (
+        "income_account_id", "expense_account_id", "stock_valuation_account_id", "stock_variation_account_id",
+    ) if item[field] is not None}, [("company_ids", "parent_of", [company_id])])
+    if item["stock_journal_id"] is not None:
+        check_ids("account.journal", {item["stock_journal_id"]}, [("company_id", "parent_of", [company_id])])
+    return [item]
+
+
+def _invoice_preparation_rows(
+    env: Any, capability_id: str, parameters: dict[str, Any], company_id: int,
+) -> list[dict[str, Any]]:
+    if capability_id in {invoice_preparation.CATEGORY_ID, invoice_preparation.TAX_PROFILE_ID, invoice_preparation.ACCOUNTS_ID}:
+        rows = _product_preparation_rows(env, capability_id, parameters, company_id)
+    else:
+        kinds = move_processing.MOVE_TYPES if capability_id == invoice_preparation.ORIGINS_ID else invoice_preparation.DOCUMENT_TYPES
+        moves = env["account.move"].with_context(allowed_company_ids=[company_id], active_test=False)
+        move = moves.search([
+            ("id", "=", parameters["move_id"]), ("company_id", "=", company_id), ("move_type", "in", sorted(kinds)),
+        ], limit=1)
+        if not move:
+            return []
+        item = {"id": move.id, "company_id": company_id, "move_type": move.move_type, "state": move.state}
+        if capability_id == invoice_preparation.DATES_ID:
+            item.update({field: _optional_date_string(move[field]) for field in invoice_preparation.DATE_FIELDS})
+            item.update(show_delivery_date=move.show_delivery_date, show_taxable_supply_date=move.show_taxable_supply_date)
+        elif capability_id == invoice_preparation.ALERTS_ID:
+            raw_alerts = move._get_alerts()
+            if not isinstance(raw_alerts, dict) or any(not isinstance(key, str) or not key.strip() or not isinstance(value, dict) for key, value in raw_alerts.items()):
+                raise ValueError("invalid native invoice alerts")
+            item["alerts"] = [{
+                "key": key, "level": raw_alerts[key].get("level"), "message": raw_alerts[key].get("message"),
+                "action_label": raw_alerts[key].get("action_text") or None,
+            } for key in sorted(raw_alerts)]
+        else:
+            single_links = {
+                "reversed_entry": move.reversed_entry_id.id or None,
+                "tax_cash_basis_origin_move": move.tax_cash_basis_origin_move_id.id or None,
+            }
+            list_links = {
+                "reversal_moves": move.reversal_move_ids.ids,
+                "tax_cash_basis_created_moves": move.tax_cash_basis_created_move_ids.ids,
+                "adjusting_entry_origin_moves": move.adjusting_entry_origin_move_ids.ids,
+                "adjusting_entries_moves": move.adjusting_entries_move_ids.ids,
+            }
+            ids = {value for value in single_links.values() if value is not None} | {value for values in list_links.values() for value in values}
+            related = moves.search_read(
+                [("id", "in", sorted(ids)), ("company_id", "=", company_id)],
+                ["name", "move_type", "state", "date"], order="id", load=None,
+            ) if ids else []
+            refs = {row["id"]: {**row, "name": _optional_text(row["name"]), "date": _date_string(row["date"])} for row in related}
+            item.update({field: refs.get(value) for field, value in single_links.items()})
+            item.update({field: [refs[value] for value in sorted(set(values)) if value in refs] for field, values in list_links.items()})
+        rows = [item]
+    if any(not invoice_preparation.valid_read_item(capability_id, item, company_id) for item in rows):
+        raise ValueError("invalid native invoice-preparation read")
+    return rows
+
+
 def _company_processing_rows(env: Any, company_id: int) -> list[dict[str, Any]]:
     company = env["res.company"].with_context(allowed_company_ids=[company_id], active_test=False).search([("id", "=", company_id)], limit=1)
     if not company:
@@ -6682,7 +6825,9 @@ def dispatch(
 
         cursor_found = True
         removes_all_taxes = False
-        if capability_id == company_processing.GET_ID:
+        if capability_id in invoice_preparation.READ_IDS:
+            rows = _invoice_preparation_rows(env, capability_id, parameters, company_id)
+        elif capability_id == company_processing.GET_ID:
             rows = _company_processing_rows(env, company_id)
         elif capability_id in journal_item_processing.GET_IDS:
             rows = _journal_item_processing_rows(env, capability_id, parameters, company_id)
@@ -6771,7 +6916,7 @@ def dispatch(
                 cursor_found=False,
             )
 
-        if capability_id == company_processing.GET_ID or capability_id in analytic_processing.READ_IDS or capability_id in journal_item_processing.GET_IDS:
+        if capability_id in invoice_preparation.READ_IDS or capability_id == company_processing.GET_ID or capability_id in analytic_processing.READ_IDS or capability_id in journal_item_processing.GET_IDS:
             items = rows
         elif capability_id == journal_processing.GET_ID:
             items = _normalize_journal_processing(rows, company_id)
