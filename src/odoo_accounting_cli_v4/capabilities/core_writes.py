@@ -81,6 +81,8 @@ CORE_WRITE_CAPABILITY_IDS = invoice_preparation.CAPABILITY_IDS | journal_item_pr
         "invoice.type.switch",
         "journal_entry.update",
         "journal_entry.lines.replace",
+        "journal_entry.lines.add",
+        "journal_entry.lines.remove",
         "journal_entry.duplicate",
         "journal_entry.delete",
         "journal_entry.cancel",
@@ -289,6 +291,8 @@ _JOURNAL_ENTRY_LIFECYCLE_CAPABILITIES = frozenset(
     {
         "journal_entry.update",
         "journal_entry.lines.replace",
+        "journal_entry.lines.add",
+        "journal_entry.lines.remove",
         "journal_entry.duplicate",
         "journal_entry.delete",
         "journal_entry.cancel",
@@ -910,9 +914,9 @@ def _validate_invoice_parameters(parameters: Any) -> dict[str, Any]:
             raise _invalid("Invoice line names must be non-empty strings.")
         if not _valid_id(line["account_id"]):
             raise _invalid("Invoice line account_id must be a positive integer.")
-        quantity = _decimal(line["quantity"], signed=False)
-        if quantity is None or quantity <= 0:
-            raise _invalid("Invoice line quantity must be a positive decimal string.")
+        quantity = _decimal(line["quantity"], signed=True)
+        if quantity is None or quantity == 0:
+            raise _invalid("Invoice line quantity must be a nonzero signed decimal string.")
         if _decimal(line["price_unit"], signed=True) is None:
             raise _invalid("Invoice line price_unit must be a signed decimal string.")
         if "product_id" in line and not _valid_optional_id(line["product_id"]):
@@ -1137,8 +1141,8 @@ def _validate_invoice_line_values(
         )
     if "account_id" in values and not _valid_id(values["account_id"]):
         raise _invalid("Invoice line account_id must be a positive integer.")
-    if "quantity" in values and _decimal(values["quantity"], signed=False) is None:
-        raise _invalid("Invoice line quantity must be an unsigned decimal string.")
+    if "quantity" in values and _decimal(values["quantity"], signed=True) is None:
+        raise _invalid("Invoice line quantity must be a signed decimal string.")
     if "price_unit" in values and _decimal(values["price_unit"], signed=True) is None:
         raise _invalid("Invoice line price_unit must be a signed decimal string.")
     if "discount" in values:
@@ -1260,6 +1264,25 @@ def _validate_journal_line_replacement_parameters(
         "move_id": parameters["move_id"],
         "lines": _validate_journal_lines(parameters["lines"], minimum=1),
     }
+
+
+def _validate_journal_line_membership_parameters(
+    capability_id: str, parameters: Any
+) -> dict[str, Any]:
+    added = capability_id == "journal_entry.lines.add"
+    fields = {"move_id", "expected_line_ids", "lines"} if added else {"move_id", "line_ids"}
+    if not isinstance(parameters, dict) or set(parameters) != fields or not _valid_id(parameters["move_id"]):
+        raise _invalid("Journal-entry line membership parameters do not match the fixed contract.")
+    id_field = "expected_line_ids" if added else "line_ids"
+    identifiers = _validate_ids(parameters[id_field])
+    if identifiers is None or not (0 if added else 1) <= len(identifiers) <= 500 or identifiers != sorted(identifiers):
+        raise _invalid(f"{id_field} must contain sorted unique positive integers within the operation's limit.")
+    normalized = {"move_id": parameters["move_id"], id_field: identifiers}
+    if added:
+        normalized["lines"] = _validate_journal_lines(parameters["lines"], minimum=2)
+        if len(identifiers) + len(normalized["lines"]) > 500:
+            raise _invalid("Existing and appended journal-entry lines must total at most 500.")
+    return normalized
 
 
 def _validate_single_id(parameters: Any, field: str) -> dict[str, Any]:
@@ -4529,6 +4552,8 @@ def validate_core_write_request(
         normalized = _validate_journal_entry_update_parameters(parameters)
     elif capability_id == "journal_entry.lines.replace":
         normalized = _validate_journal_line_replacement_parameters(parameters)
+    elif capability_id in {"journal_entry.lines.add", "journal_entry.lines.remove"}:
+        normalized = _validate_journal_line_membership_parameters(capability_id, parameters)
     elif capability_id in _MOVE_BATCH_LIFECYCLE_CAPABILITIES:
         normalized = _validate_singular_or_batch_ids(
             parameters, "move_id", "move_ids"
@@ -4643,7 +4668,7 @@ def validate_core_write_request(
 def _expected_idempotency_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
-    if capability_id in {"currency.rate.update", "currency.rate.delete"}:
+    if capability_id in {"currency.rate.update", "currency.rate.delete", "journal_entry.lines.add", "journal_entry.lines.remove"}:
         return move_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in invoice_preparation.CAPABILITY_IDS:
         return invoice_preparation.idempotency_key(capability_id, parameters, company_id)
@@ -5382,6 +5407,25 @@ def _validate_result(
         return deepcopy(result)
     if not _valid_result_shape(result) or result["company_id"] != company_id:
         raise _failed("Odoo returned a malformed or out-of-scope core-write result.")
+
+    if capability_id in {"journal_entry.lines.add", "journal_entry.lines.remove"}:
+        added = capability_id == "journal_entry.lines.add"
+        requested = set(parameters["expected_line_ids" if added else "line_ids"])
+        actual = set(result["line_ids"])
+        if (
+            result["model"] != "account.move"
+            or result["id"] != parameters["move_id"]
+            or result["move_type"] != "entry"
+            or result["state"] != "draft"
+            or result["source_id"] is not None
+            or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None
+            or (not actual and result["reconciled"])
+            or (added and (not requested < actual or len(actual - requested) != len(parameters["lines"])))
+            or (not added and (requested & actual or idempotent_replay))
+        ):
+            raise _failed("Odoo returned a mismatched journal-entry line membership result.")
+        return deepcopy(result)
 
     if capability_id in invoice_preparation.CAPABILITY_IDS:
         if (result["model"] != "account.move" or result["id"] != parameters["move_id"]

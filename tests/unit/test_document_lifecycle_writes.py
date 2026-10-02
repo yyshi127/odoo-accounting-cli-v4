@@ -306,11 +306,11 @@ def test_invoice_accounting_date_is_forwarded_and_changes_the_update_key() -> No
                 "lines": [
                     {
                         **_PARAMETERS["invoice.lines.replace"]["lines"][0],
-                        "quantity": "-1",
+                        "quantity": "--1",
                     }
                 ],
             },
-            "unsigned",
+            "decimal",
         ),
         (
             "invoice.lines.replace",

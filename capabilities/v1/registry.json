@@ -6824,31 +6824,19 @@
       "tests": {
         "unit": {
           "status": "implemented",
-          "references": [
-            "tests/unit/test_core_writes.py",
-            "tests/unit/test_core_writes_bridge.py",
-            "tests/unit/test_core_writes_runtime.py",
-            "tests/unit/test_core_write_cli.py"
-          ],
-          "reason": "Unit tests cover the closed request, exact confirmation, fixed bridge action, Odoo-side execution, idempotent replay, and CLI response contract."
+          "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_bridge.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_core_write_cli.py", "tests/unit/test_accounting_entry_membership_batch.py"],
+          "reason": "Signed quantity and existing contracts covered."
         },
-        "integration": {
-          "status": "implemented",
-          "references": [
-            "tests/integration/test_core_write_batch_live.py",
-            "tests/integration/test_accounting_depth_batch_live.py"
-          ],
-          "reason": "The shared dual-database rollback smoke covers rich refund lines and replay."
-        },
+        "integration": {"status":"implemented","references":["tests/integration/test_core_write_batch_live.py","tests/integration/test_accounting_depth_batch_live.py","tests/integration/test_accounting_entry_membership_batch_live.py"],"reason":"Shared native smoke passed; full rollback."},
         "golden": {
           "status": "planned",
           "references": [],
-          "reason": "The golden definition is frozen; implementation evidence is pending."
+          "reason": "Deferred."
         },
         "e2e": {
           "status": "planned",
           "references": [],
-          "reason": "The e2e definition is frozen; implementation evidence is pending."
+          "reason": "Deferred."
         }
       },
       "status": {
@@ -6963,34 +6951,19 @@
       "tests": {
         "unit": {
           "status": "implemented",
-          "references": [
-            "tests/unit/test_core_writes.py",
-            "tests/unit/test_core_writes_bridge.py",
-            "tests/unit/test_core_writes_runtime.py",
-            "tests/unit/test_invoice_financial_headers.py",
-            "tests/unit/test_invoice_financial_headers_runtime.py",
-            "tests/unit/test_core_write_cli.py"
-          ],
-          "reason": "Unit tests cover the closed request, exact confirmation, fixed bridge action, Odoo-side execution, idempotent replay, and CLI response contract."
+          "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_bridge.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_invoice_financial_headers.py", "tests/unit/test_invoice_financial_headers_runtime.py", "tests/unit/test_core_write_cli.py", "tests/unit/test_accounting_entry_membership_batch.py"],
+          "reason": "Signed quantity and existing contracts covered."
         },
-        "integration": {
-          "status": "implemented",
-          "references": [
-            "tests/integration/test_core_write_batch_live.py",
-            "tests/integration/test_accounting_depth_batch_live.py",
-            "tests/integration/test_invoice_financial_headers_prepayment_batch_live.py"
-          ],
-          "reason": "The shared dual-database rollback smoke covers rich invoice fields and replay."
-        },
+        "integration": {"status":"implemented","references":["tests/integration/test_core_write_batch_live.py","tests/integration/test_accounting_depth_batch_live.py","tests/integration/test_invoice_financial_headers_prepayment_batch_live.py","tests/integration/test_accounting_entry_membership_batch_live.py"],"reason":"Shared native smoke passed; full rollback."},
         "golden": {
           "status": "planned",
           "references": [],
-          "reason": "The golden definition is frozen; implementation evidence is pending."
+          "reason": "Deferred."
         },
         "e2e": {
           "status": "planned",
           "references": [],
-          "reason": "The e2e definition is frozen; implementation evidence is pending."
+          "reason": "Deferred."
         }
       },
       "status": {
@@ -8638,32 +8611,19 @@
       "tests": {
         "unit": {
           "status": "implemented",
-          "references": [
-            "tests/unit/test_document_lifecycle_writes.py",
-            "tests/unit/test_document_lifecycle_writes_runtime.py",
-            "tests/unit/test_core_writes_bridge.py",
-            "tests/unit/test_core_write_cli.py",
-            "tests/unit/test_document_lifecycle_write_cli.py"
-          ],
-          "reason": "Unit tests cover the closed request, draft-only replacement, configured-user ACL gates, target-payload replay, bridge contract, and CLI dispatch."
+          "references": ["tests/unit/test_document_lifecycle_writes.py", "tests/unit/test_document_lifecycle_writes_runtime.py", "tests/unit/test_core_writes_bridge.py", "tests/unit/test_core_write_cli.py", "tests/unit/test_document_lifecycle_write_cli.py", "tests/unit/test_accounting_entry_membership_batch.py"],
+          "reason": "Signed quantity and existing contracts covered."
         },
-        "integration": {
-          "status": "implemented",
-          "references": [
-            "tests/integration/test_document_lifecycle_write_batch_live.py",
-            "tests/integration/test_accounting_depth_batch_live.py"
-          ],
-          "reason": "The shared dual-database rollback smoke covers rich invoice lines and replay."
-        },
+        "integration": {"status":"implemented","references":["tests/integration/test_document_lifecycle_write_batch_live.py","tests/integration/test_accounting_depth_batch_live.py","tests/integration/test_accounting_entry_membership_batch_live.py"],"reason":"Shared native smoke passed; full rollback."},
         "golden": {
           "status": "planned",
           "references": [],
-          "reason": "The golden definition is frozen; implementation evidence is pending."
+          "reason": "Deferred."
         },
         "e2e": {
           "status": "planned",
           "references": [],
-          "reason": "The e2e definition is frozen; implementation evidence is pending."
+          "reason": "Deferred."
         }
       },
       "status": {
@@ -21642,34 +21602,19 @@
       "tests": {
         "unit": {
           "status": "implemented",
-          "references": [
-            "tests/unit/test_core_writes.py",
-            "tests/unit/test_core_writes_bridge.py",
-            "tests/unit/test_core_writes_runtime.py",
-            "tests/unit/test_invoice_financial_headers.py",
-            "tests/unit/test_invoice_financial_headers_runtime.py",
-            "tests/unit/test_core_write_cli.py"
-          ],
-          "reason": "Unit tests cover the closed request, exact confirmation, fixed bridge action, Odoo-side execution, idempotent replay, and CLI response contract."
+          "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_bridge.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_invoice_financial_headers.py", "tests/unit/test_invoice_financial_headers_runtime.py", "tests/unit/test_core_write_cli.py", "tests/unit/test_accounting_entry_membership_batch.py"],
+          "reason": "Signed quantity and existing contracts covered."
         },
-        "integration": {
-          "status": "implemented",
-          "references": [
-            "tests/integration/test_core_write_batch_live.py",
-            "tests/integration/test_accounting_depth_batch_live.py",
-            "tests/integration/test_invoice_financial_headers_prepayment_batch_live.py"
-          ],
-          "reason": "The shared dual-database rollback smoke covers rich invoice fields and replay."
-        },
+        "integration": {"status":"implemented","references":["tests/integration/test_core_write_batch_live.py","tests/integration/test_accounting_depth_batch_live.py","tests/integration/test_invoice_financial_headers_prepayment_batch_live.py","tests/integration/test_accounting_entry_membership_batch_live.py"],"reason":"Shared native smoke passed; full rollback."},
         "golden": {
           "status": "planned",
           "references": [],
-          "reason": "The golden definition is frozen; implementation evidence is pending."
+          "reason": "Deferred."
         },
         "e2e": {
           "status": "planned",
           "references": [],
-          "reason": "The e2e definition is frozen; implementation evidence is pending."
+          "reason": "Deferred."
         }
       },
       "status": {
@@ -21781,31 +21726,19 @@
       "tests": {
         "unit": {
           "status": "implemented",
-          "references": [
-            "tests/unit/test_core_writes.py",
-            "tests/unit/test_core_writes_bridge.py",
-            "tests/unit/test_core_writes_runtime.py",
-            "tests/unit/test_core_write_cli.py"
-          ],
-          "reason": "Unit tests cover the closed request, exact confirmation, fixed bridge action, Odoo-side execution, idempotent replay, and CLI response contract."
+          "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_bridge.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_core_write_cli.py", "tests/unit/test_accounting_entry_membership_batch.py"],
+          "reason": "Signed quantity and existing contracts covered."
         },
-        "integration": {
-          "status": "implemented",
-          "references": [
-            "tests/integration/test_core_write_batch_live.py",
-            "tests/integration/test_accounting_depth_batch_live.py"
-          ],
-          "reason": "The shared dual-database rollback smoke covers rich refund lines and replay."
-        },
+        "integration": {"status":"implemented","references":["tests/integration/test_core_write_batch_live.py","tests/integration/test_accounting_depth_batch_live.py","tests/integration/test_accounting_entry_membership_batch_live.py"],"reason":"Shared native smoke passed; full rollback."},
         "golden": {
           "status": "planned",
           "references": [],
-          "reason": "The golden definition is frozen; implementation evidence is pending."
+          "reason": "Deferred."
         },
         "e2e": {
           "status": "planned",
           "references": [],
-          "reason": "The e2e definition is frozen; implementation evidence is pending."
+          "reason": "Deferred."
         }
       },
       "status": {
@@ -24055,10 +23988,10 @@
       },
       "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_native_draft_invoice_business_line_create", "verify": "same_transaction_created_business_line_identity_payload_parent_totals_and_response_schema_validation", "idempotency": "natural_line_payload_recheck_without_database_uniqueness_or_concurrent_exactly_once_guarantee", "reverse": "invoice.line.delete"},
       "tests": {
-        "unit": {"status": "implemented", "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_draft_document_maintenance_runtime.py", "tests/unit/test_draft_document_maintenance_schemas.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover the closed rich-line request, draft and business-line boundaries, source-preserving native execution, dynamic-line synchronization, replay, result binding, registry descriptor, and schemas."},
-        "integration": {"status": "implemented", "references": ["tests/integration/test_draft_document_maintenance_live.py"], "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all six draft-maintenance commands, five immediate replays, and fresh-cursor business-data and temporary-group rollback verification."},
-        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
-        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+        "unit": {"status": "implemented", "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_draft_document_maintenance_runtime.py", "tests/unit/test_draft_document_maintenance_schemas.py", "tests/unit/test_capability_registry.py", "tests/unit/test_accounting_entry_membership_batch.py"], "reason": "Signed quantity and existing contracts covered."},
+        "integration": {"status":"implemented","references":["tests/integration/test_draft_document_maintenance_live.py","tests/integration/test_accounting_entry_membership_batch_live.py"],"reason":"Shared native smoke passed; full rollback."},
+        "golden": {"status": "planned", "references": [], "reason": "Deferred."},
+        "e2e": {"status": "planned", "references": [], "reason": "Deferred."}
       },
       "status": {"value": "degraded", "reason_code": "concurrent_idempotency_limit", "reason": "The handler rechecks the natural rich-line payload before creation, but Odoo provides no database uniqueness constraint for concurrent exactly-once business-line creation."},
       "routing": {"object": "invoice.line", "actions": ["create", "add"], "aliases": {"zh_CN": ["新增发票行", "新增账单行"], "en_US": ["Create invoice line", "Add bill line"]}, "not_for": {"zh_CN": ["替换全部发票行", "新增税行或付款条件行"], "en_US": ["Replacing every invoice line", "Creating tax or payment-term lines"]}, "required_slots": ["database", "company_id", "user_login"]},
@@ -24085,10 +24018,10 @@
       },
       "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_native_draft_invoice_business_line_update", "verify": "same_transaction_target_business_line_payload_parent_totals_and_response_schema_validation", "idempotency": "target_line_payload_state_check_before_native_write", "reverse": "repeat_update_with_previous_business_line_values"},
       "tests": {
-        "unit": {"status": "implemented", "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_draft_document_maintenance_runtime.py", "tests/unit/test_draft_document_maintenance_schemas.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover the closed non-empty patch, draft and business-line boundaries, source-link preservation, dynamic-line synchronization, target-state replay, result binding, registry descriptor, and schemas."},
-        "integration": {"status": "implemented", "references": ["tests/integration/test_draft_document_maintenance_live.py"], "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all six draft-maintenance commands, five immediate replays, and fresh-cursor business-data and temporary-group rollback verification."},
-        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
-        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+        "unit": {"status": "implemented", "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_draft_document_maintenance_runtime.py", "tests/unit/test_draft_document_maintenance_schemas.py", "tests/unit/test_capability_registry.py", "tests/unit/test_accounting_entry_membership_batch.py"], "reason": "Signed quantity and existing contracts covered."},
+        "integration": {"status":"implemented","references":["tests/integration/test_draft_document_maintenance_live.py","tests/integration/test_accounting_entry_membership_batch_live.py"],"reason":"Shared native smoke passed; full rollback."},
+        "golden": {"status": "planned", "references": [], "reason": "Deferred."},
+        "e2e": {"status": "planned", "references": [], "reason": "Deferred."}
       },
       "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
       "routing": {"object": "invoice.line", "actions": ["update"], "aliases": {"zh_CN": ["更新发票行", "修改账单行"], "en_US": ["Update invoice line", "Change bill line"]}, "not_for": {"zh_CN": ["替换全部发票行", "修改税行或付款条件行"], "en_US": ["Replacing every invoice line", "Changing tax or payment-term lines"]}, "required_slots": ["database", "company_id", "user_login"]},
@@ -41494,6 +41427,32 @@
         ]
       },
       "handler_key": "payment_term_compute"
+    },
+    "journal_entry.lines.add": {
+      "summary": {"zh_CN":"保留其他行 ID，追加草稿手工分录行","en_US":"Append balanced rows without replacing other rows"},
+      "domain": "general_ledger",
+      "access": "write",
+      "source": {"modules":["account"],"models":["account.account","account.analytic.account","account.analytic.line","account.analytic.plan","account.journal","account.move","account.move.line","res.company","res.currency","res.currency.rate","res.partner"],"wizards":[],"report_handlers":[],"locations":["account/models/account_move.py","account/models/account_move_line.py"]},
+      "schemas": {"request":"schemas/v1/journal_entry.lines.add.request.schema.json","response":"schemas/v1/journal_entry.lines.add.response.schema.json"},
+      "requirements": {"modules":["account"],"configuration":["database_alias","company_allowlist","user_mapping"],"company":"required","groups":["account.group_account_user"],"acl":["account.account:read","account.analytic.account:read","account.analytic.line:create","account.analytic.line:read","account.analytic.line:unlink","account.analytic.plan:read","account.journal:read","account.move.line:create","account.move.line:read","account.move:read","account.move:write","res.company:read","res.currency.rate:read","res.currency:read","res.partner:read"]},
+      "strategies": {"preview":"exact_confirmation_closed_contract","execute":"native_parent_create_commands_with_balance_check","verify":"same_transaction_membership_and_preserved_rows","idempotency":"serial_expected_ids_and_added_row_match","reverse":"remove_added_rows"},
+      "tests": {"unit":{"status":"implemented","references":["tests/unit/test_accounting_entry_membership_batch.py","tests/unit/test_capability_registry.py"],"reason":"Contract, native writes, preservation and replay."},"integration":{"status":"implemented","references":["tests/integration/test_accounting_entry_membership_batch_live.py"],"reason":"Shared native smoke passed; full rollback."},"golden":{"status":"planned","references":[],"reason":"Deferred."},"e2e":{"status":"planned","references":[],"reason":"Deferred."}},
+      "status": {"value":"unconfigured","reason_code":"runtime_context_required","reason":"Runtime required; serial target replay is not concurrent exactly-once."},
+      "routing": {"object":"account.move","actions":["add_lines"],"aliases":{"zh_CN":["追加手工分录行"],"en_US":["Append manual journal rows"]},"not_for":{"zh_CN":["已过账或系统生成的分录","发票和账单行"],"en_US":["Posted or generated entries","Invoice or bill lines"]},"required_slots":["database","company_id","user_login"]},
+      "handler_key": "core_write"
+    },
+    "journal_entry.lines.remove": {
+      "summary": {"zh_CN":"保留其他行 ID，删除指定草稿手工分录行","en_US":"Remove selected rows without replacing other rows"},
+      "domain": "general_ledger",
+      "access": "write",
+      "source": {"modules":["account"],"models":["account.account","account.analytic.line","account.journal","account.move","account.move.line","res.company"],"wizards":[],"report_handlers":[],"locations":["account/models/account_move.py","account/models/account_move_line.py"]},
+      "schemas": {"request":"schemas/v1/journal_entry.lines.remove.request.schema.json","response":"schemas/v1/journal_entry.lines.remove.response.schema.json"},
+      "requirements": {"modules":["account"],"configuration":["database_alias","company_allowlist","user_mapping"],"company":"required","groups":["account.group_account_user"],"acl":["account.account:read","account.analytic.line:read","account.analytic.line:unlink","account.journal:read","account.move.line:read","account.move.line:unlink","account.move:read","account.move:write","res.company:read"]},
+      "strategies": {"preview":"exact_confirmation_closed_contract","execute":"native_parent_delete_commands_with_balance_check","verify":"same_transaction_membership_and_preserved_rows","idempotency":"missing_rows_reject_without_tombstone","reverse":"recreate_rows_with_new_ids"},
+      "tests": {"unit":{"status":"implemented","references":["tests/unit/test_accounting_entry_membership_batch.py","tests/unit/test_capability_registry.py"],"reason":"Contract, native writes, preservation and replay."},"integration":{"status":"implemented","references":["tests/integration/test_accounting_entry_membership_batch_live.py"],"reason":"Shared native smoke passed; full rollback."},"golden":{"status":"planned","references":[],"reason":"Deferred."},"e2e":{"status":"planned","references":[],"reason":"Deferred."}},
+      "status": {"value":"degraded","reason_code":"deleted_record_tombstone_unavailable","reason":"Absent rows reject: no persistent deletion-attribution tombstone."},
+      "routing": {"object":"account.move","actions":["remove_lines"],"aliases":{"zh_CN":["删除指定手工分录行"],"en_US":["Remove selected manual journal rows"]},"not_for":{"zh_CN":["已过账或系统生成的分录","发票和账单行"],"en_US":["Posted or generated entries","Invoice or bill lines"]},"required_slots":["database","company_id","user_login"]},
+      "handler_key": "core_write"
     }
   }
 }

@@ -1,6 +1,80 @@
 # Execution status
 
-## Current accounting phase — tax and settlement previews, 2026-10-02
+## Current accounting phase — signed invoice quantities and journal-row membership, 2026-10-02
+
+552 registered IDs; 537 implemented handlers (251 reads, 286 writes);
+1080 schemas. Availability: 461 unconfigured, 76 degraded, 15 disabled.
+Enabled integrations: 534 implemented, two planned, one failed. These totals
+include historical non-accounting extensions, not a complete accounting
+denominator, completion percentage or unrestricted ordinary-user permission.
+
+Two new IDs and seven existing-interface extensions:
+
+- journal_entry.lines.add — move_id, the sorted unique expected_line_ids full
+  prior row set (possibly empty), and 2–500 complete balanced manual-entry rows.
+  Prior plus new rows must total at most 500. One native parent create-command
+  write appends after existing sequences, permits intentionally identical pairs
+  and retains other IDs/financial values. Serial replay matches exactly the
+  expected IDs plus the actual appended rows; stale/missing/extra/mismatched
+  states reject. It is target-state proof, not operation attribution or concurrent
+  exactly-once. No new marker, replay store or control framework.
+- journal_entry.lines.remove — move_id and 1–500 sorted unique line_ids, all
+  visible and owned by that draft manual entry. One parent delete-command write
+  uses native balance checks and verifies exactly the requested rows disappear.
+  Other IDs/financial values stay unchanged; selecting all rows may leave an
+  empty draft. Missing rows reject, never successful replay; no tombstone, so
+  availability remains explicitly degraded. Both new commands reject posted,
+  non-general, generated/source-linked and foreign targets without bypassing ACL.
+- customer_invoice.create/vendor_bill.create accept nonzero signed quantity;
+  their existing zero rejection remains. invoice.line.create/update,
+  invoice.lines.replace and custom lines on customer_credit_note.create/
+  vendor_refund.create accept signed quantity while preserving their existing
+  zero allowance. Original decimal strings, omitted fields and old keys remain
+  unchanged. Price was already signed; order/stock quantity contracts are untouched.
+
+Server scoped tests: 97 passed in22.49s. One shared native public-CLI workflow
+passed both isolated aliases in28.35s as uid5/su=False/company1. Seven actual
+negative-quantity inputs use positive/negative mixed lines with positive net
+totals, representative10% excluded taxes and native sale/purchase/custom-refund
+consumers. Appending identical pairs twice, immediate serial replay, four stale
+append conflicts, native unbalanced-delete rollback, balanced subset deletion,
+empty deletion/append, posted/reversal-linked/foreign denials and preserved
+financial rows are verified. Fresh cursors verify tracked fixtures, both companies'
+settings, all defaults, currencies/rates and exact all-user groups roll back.
+
+Retained first native failure: DEV12.31s at an administrator-only generated-entry
+fixture passing raw debit/credit strings into ORM; the native sanitizer compares
+numbers before field conversion. Full fresh rollback completed; E2E did not start.
+Only two test fixture bindings were changed to Decimal; public strings and
+production code stayed unchanged. The successful28.35s run alone is acceptance.
+Initial local scoped checks:69 passed/three test-fixture failures in21.36s; only
+the corrected three passed in14.34s. Two tests had invented an unavailable
+dry-run CLI, replaced with static validator/schema checks, not a new command.
+Three obsolete negative-quantity rejection fixtures were corrected; their25
+selected cases passed in0.59s. Final metadata:two local nodes13.64s and two
+server nodes14.75s. No full-suite claim.
+
+Deployment:17 explicit code/schema/test paths,11 recoverable originals and six
+new files; initial originals downloaded and independently verified. One test-only
+repair and two final metadata/test updates each check prior hashes and keep a
+backup. All17 final local/server hashes match. Changed-path privacy/Ruff findings
+are zero; existing2MiB registry limit is unchanged. Server document overlays stay
+untouched. Services remain active with fresh-baseline PIDs/restart counts unchanged;
+about4.95GiB free, no cleanup. A normal Git checkpoint follows this verified state.
+
+Unclaimed: negative-total invoice type conversion/posting, every tax/currency/
+localization path, all generated-entry business flows, double-negative native
+price consumers, external sends or concurrent exactly-once. No sudo business call,
+business DB, native source/addon, service/configuration or Pi/V2/V3 change.
+Asset.validate native-addon defect and two report sends remain unclosed; installing
+the absent debit-note addon is not authorized. Next: explicit native payment
+registration method/bank inputs and manual-entry tax-report inputs, after actual
+source/consumer verification. Continue capability-first; the overall goal is active.
+
+Registry file SHA256 387fe28b90ccfc5b0e3c0b37b496037bee16e9a9415fa0780a9eab31c69dcc4b;
+canonical registry SHA256 632ce00d6f1bbc0589dee1d12e2eabe24b97b9874e75400cc942a6ccf3e7aa1b.
+
+## Previous checkpoint — tax and settlement previews, 2026-10-02
 
 550 registered IDs; 535 implemented handlers (251 reads, 284 writes);
 1076 schemas. Availability: 460 unconfigured, 75 degraded, 15 disabled.

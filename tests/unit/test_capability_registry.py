@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 550
-EXPECTED_ENABLED_CAPABILITY_COUNT = 535
+EXPECTED_CAPABILITY_COUNT = 552
+EXPECTED_ENABLED_CAPABILITY_COUNT = 537
 EXPECTED_IMPLEMENTED_READ_COUNT = 251
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 284
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 286
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 460
-EXPECTED_DEGRADED_CAPABILITY_COUNT = 75
-EXPECTED_SCHEMA_COUNT = 1076
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 461
+EXPECTED_DEGRADED_CAPABILITY_COUNT = 76
+EXPECTED_SCHEMA_COUNT = 1080
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "4629c9b8f9d64ed109b82500f49cca634f45b6d9743b33bf4e4152209fed8c3c"
+    "ad208f30ebe27b2d2103ae452a2ff63a491ceb866ce8cfcfca19d1717a0920a0"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -445,7 +445,10 @@ ACCOUNTING_MAINTENANCE_WRITES = {"currency.rate.update", "currency.rate.delete",
 ACCOUNTING_SETTLEMENT_WRITES = {"tax.group.create", "tax.group.update", "bank.statement.create", "bank.statement.update"}
 ACCOUNTING_SETTLEMENT_READS = {"tax.compute", "payment_term.compute", "tax.group.get", "tax.group.list"}
 
-IMPLEMENTED_WRITES = ACCOUNTING_MAINTENANCE_WRITES | ACCOUNTING_SETUP_WRITES | ACCOUNTING_WORKFLOWS_WRITES | INVOICE_PREPARATION_WRITES | JOURNAL_ITEM_PROCESSING_WRITES | COMPANY_PROCESSING_WRITES | ANALYTIC_PROCESSING_WRITES | JOURNAL_PROCESSING_WRITES | ACCOUNT_PROCESSING_WRITES | TAX_PROCESSING_WRITES | PAYMENT_TERM_PROCESSING_WRITES | RECONCILIATION_PROCESSING_WRITES | PAYMENT_PROCESSING_WRITES | INVOICE_PRESENTATION_WRITES | MOVE_PROCESSING_WRITES | PARTNER_PREFERENCES_WRITES | PAYMENT_CONFIGURATION_WRITES | FISCAL_MAPPING_WRITES | REPORT_BUDGET_WRITES | {
+ACCOUNTING_ENTRY_MEMBERSHIP_WRITES = {"journal_entry.lines.add", "journal_entry.lines.remove"}
+ACCOUNTING_SIGNED_QUANTITY_WRITES = {"customer_invoice.create", "vendor_bill.create", "invoice.line.create", "invoice.line.update", "invoice.lines.replace", "customer_credit_note.create", "vendor_refund.create"}
+
+IMPLEMENTED_WRITES = ACCOUNTING_ENTRY_MEMBERSHIP_WRITES | ACCOUNTING_MAINTENANCE_WRITES | ACCOUNTING_SETUP_WRITES | ACCOUNTING_WORKFLOWS_WRITES | INVOICE_PREPARATION_WRITES | JOURNAL_ITEM_PROCESSING_WRITES | COMPANY_PROCESSING_WRITES | ANALYTIC_PROCESSING_WRITES | JOURNAL_PROCESSING_WRITES | ACCOUNT_PROCESSING_WRITES | TAX_PROCESSING_WRITES | PAYMENT_TERM_PROCESSING_WRITES | RECONCILIATION_PROCESSING_WRITES | PAYMENT_PROCESSING_WRITES | INVOICE_PRESENTATION_WRITES | MOVE_PROCESSING_WRITES | PARTNER_PREFERENCES_WRITES | PAYMENT_CONFIGURATION_WRITES | FISCAL_MAPPING_WRITES | REPORT_BUDGET_WRITES | {
     "account.group.create",
     "account.group.update",
     "account.tag.archive",
@@ -3014,6 +3017,7 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             "invoice.delete",
             "invoice.line.delete",
             "journal_entry.delete",
+            "journal_entry.lines.remove",
             "payment.delete",
         }:
             assert descriptor["status"]["value"] == "degraded"
@@ -3118,6 +3122,14 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
         else:
             assert descriptor["status"]["value"] == "unconfigured"
             assert descriptor["status"]["reason_code"] == "runtime_context_required"
+        if capability_id in ACCOUNTING_ENTRY_MEMBERSHIP_WRITES | ACCOUNTING_SIGNED_QUANTITY_WRITES:
+            assert descriptor["tests"]["integration"]["reason"] == "Shared native smoke passed; full rollback."
+        if capability_id in ACCOUNTING_ENTRY_MEMBERSHIP_WRITES:
+            assert descriptor["tests"]["unit"]["status"] == "implemented"
+            assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_accounting_entry_membership_batch.py", "tests/unit/test_capability_registry.py"]
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == ["tests/integration/test_accounting_entry_membership_batch_live.py"]
+            continue
         if capability_id in ACCOUNTING_SETTLEMENT_WRITES:
             assert descriptor["tests"]["unit"]["status"] == "implemented"
             assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_accounting_settlement_batch.py"]
@@ -3380,13 +3392,13 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
                 "tests/unit/test_draft_document_maintenance_runtime.py",
                 "tests/unit/test_draft_document_maintenance_schemas.py",
                 "tests/unit/test_capability_registry.py",
-            }
+            } | ({"tests/unit/test_accounting_entry_membership_batch.py"} if capability_id in ACCOUNTING_SIGNED_QUANTITY_WRITES else set())
             assert descriptor["tests"]["integration"] == {
                 "status": "implemented",
                 "references": [
                     "tests/integration/test_draft_document_maintenance_live.py"
-                ],
-                "reason": (
+                ] + (["tests/integration/test_accounting_entry_membership_batch_live.py"] if capability_id in ACCOUNTING_SIGNED_QUANTITY_WRITES else []),
+                "reason": "Shared native smoke passed; full rollback." if capability_id in ACCOUNTING_SIGNED_QUANTITY_WRITES else (
                     "The guarded shared smoke passed both isolated aliases through the "
                     "public CLI as uid 5 with su=False, exercising all six draft-maintenance "
                     "commands, five immediate replays, and fresh-cursor business-data "
@@ -3471,6 +3483,8 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             )
         if capability_id in BATCH_LIFECYCLE_WRITES:
             expected_unit_tests.add("tests/unit/test_lifecycle_batch_contract.py")
+        if capability_id in ACCOUNTING_SIGNED_QUANTITY_WRITES:
+            expected_unit_tests.add("tests/unit/test_accounting_entry_membership_batch.py")
         assert set(descriptor["tests"]["unit"]["references"]) == expected_unit_tests
         if capability_id in {
             "customer_invoice.create",
@@ -3489,7 +3503,7 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             assert descriptor["tests"]["integration"]["references"] == [
                 *prior_tests,
                 "tests/integration/test_invoice_financial_headers_prepayment_batch_live.py",
-            ]
+            ] + (["tests/integration/test_accounting_entry_membership_batch_live.py"] if capability_id in ACCOUNTING_SIGNED_QUANTITY_WRITES else [])
         elif capability_id in INVOICE_COPY_TYPE_WRITES:
             assert descriptor["tests"]["integration"]["status"] == "implemented"
             assert descriptor["tests"]["integration"]["references"] == [
@@ -3539,7 +3553,7 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             assert descriptor["tests"]["integration"]["references"] == [
                 expected_live_test,
                 "tests/integration/test_accounting_depth_batch_live.py",
-            ]
+            ] + (["tests/integration/test_accounting_entry_membership_batch_live.py"] if capability_id in ACCOUNTING_SIGNED_QUANTITY_WRITES else [])
         elif capability_id in DOCUMENT_LIFECYCLE_WRITES:
             assert descriptor["tests"]["integration"]["status"] == "implemented"
             assert descriptor["tests"]["integration"]["references"] == [

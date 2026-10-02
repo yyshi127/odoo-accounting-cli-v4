@@ -69,7 +69,7 @@
                 "minimum": 1
               },
               "quantity": {
-                "$ref": "#/$defs/unsigned_decimal"
+                "$ref": "#/$defs/signed_decimal"
               },
               "price_unit": {
                 "$ref": "#/$defs/signed_decimal"
@@ -191,7 +191,7 @@
           "minimum": 1
         },
         "quantity": {
-          "$ref": "#/$defs/unsigned_decimal"
+          "$ref": "#/$defs/signed_decimal"
         },
         "price_unit": {
           "$ref": "#/$defs/signed_decimal"

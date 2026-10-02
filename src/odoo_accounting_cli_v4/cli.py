@@ -1782,6 +1782,8 @@ _CAPABILITY_MODELS = {
     "journal_entry.create": "account.move",
     "journal_entry.update": "account.move",
     "journal_entry.lines.replace": "account.move",
+    "journal_entry.lines.add": "account.move",
+    "journal_entry.lines.remove": "account.move",
     "journal_entry.duplicate": "account.move",
     "journal_entry.delete": "account.move",
     "journal_entry.cancel": "account.move",

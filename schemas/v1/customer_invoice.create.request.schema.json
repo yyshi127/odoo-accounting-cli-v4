@@ -125,7 +125,7 @@
                 "minimum": 1
               },
               "quantity": {
-                "$ref": "#/$defs/positive_decimal"
+                "$ref": "#/$defs/nonzero_signed_decimal"
               },
               "price_unit": {
                 "$ref": "#/$defs/decimal"
@@ -197,10 +197,10 @@
       "maxLength": 256,
       "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
     },
-    "positive_decimal": {
+    "nonzero_signed_decimal": {
       "type": "string",
       "maxLength": 256,
-      "pattern": "^(?:(?:[1-9][0-9]*)(?:\\.[0-9]+)?|0\\.(?=[0-9]*[1-9])[0-9]+)$(?![\\s\\S])"
+      "pattern": "^-?(?:(?:[1-9][0-9]*)(?:\\.[0-9]+)?|0\\.(?=[0-9]*[1-9])[0-9]+)$(?![\\s\\S])"
     },
     "percentage_decimal": {
       "type": "string",

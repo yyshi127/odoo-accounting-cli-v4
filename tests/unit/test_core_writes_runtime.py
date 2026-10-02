@@ -1856,7 +1856,7 @@ def test_document_create_preserves_signed_prices_and_replays(
         {"price_unit": "-01"},
         {"price_unit": -10},
         {"price_unit": "NaN"},
-        {"quantity": "-1"},
+        {"quantity": "--1"},
         {"discount": "101"},
     ],
 )

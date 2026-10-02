@@ -4,9 +4,9 @@ Updated: 2026-10-02 (Asia/Shanghai)
 
 ## Current authoritative count — 2026-10-02
 
-550 registered IDs;535 implemented handlers (251 reads,284 writes);
-1076 schemas;460 unconfigured,75 degraded,15 disabled. Enabled integrations:
-532 implemented,two planned,one failed. Latest tax/settlement-preview checkpoint
+552 registered IDs;537 implemented handlers (251 reads,286 writes);
+1080 schemas;461 unconfigured,76 degraded,15 disabled. Enabled integrations:
+534 implemented,two planned,one failed. Latest signed-quantity/membership checkpoint
 at the end is authoritative; totals are not a full accounting denominator,
 completion percentage or unrestricted ordinary-user permission guarantee.
 
@@ -6226,3 +6226,68 @@ remain unclosed; do not install the absent debit-note addon. Goal remains active
 
 Registry file SHA256 866230cb26a1b00fed4a498070e4da157531d535a9009dd4e85ff13a71d5963b;
 canonical registry SHA256 4696717ee90d9c3d501bf9153fc7b4184345cc20df1c23d5a13fb47a166f6a53.
+
+## Latest checkpoint — signed quantities and non-destructive manual journal rows, 2026-10-02
+
+Authoritative552registered/537handlers=251reads286writes/1080schemas;
+461unconfigured76degraded15disabled;534implemented/two planned/one failed
+enabled integrations. Two new IDs plus seven extensions, not nine new IDs:
+
+- journal_entry.lines.add has move_id, sorted unique expected_line_ids (full
+  prior membership, 0–500), and 2–500 complete balanced manual-entry rows;
+  prior+new <=500. Actual parent create commands preserve original IDs and
+  financial values and allow duplicate pairs. Immediate serial target replay
+  recognizes exactly the original ID set plus the requested appended rows;
+  no operation marker/history/store and no concurrent exactly-once guarantee.
+- journal_entry.lines.remove has move_id and sorted unique line_ids (1–500).
+  All rows must be visible and owned by the same draft source-unlinked general
+  entry. Parent delete commands retain native balance validation; no auto-balancing
+  or validity-context bypass. Remaining IDs/financial values are preserved.
+  Removing all rows may leave an empty draft. Missing rows reject; no tombstone
+  or replay claim, explicitly degraded. Posted/generated/foreign targets reject.
+- Signed quantity is added to customer_invoice.create/vendor_bill.create
+  (still nonzero) and invoice.line.create/update, invoice.lines.replace,
+  customer_credit_note.create/vendor_refund.create custom rows (old zero rule
+  retained). Numeric text and omissions/old keys remain unchanged. Existing
+  signed prices and all order/stock quantity validators are untouched.
+
+Actual server97scoped tests passed22.49s. Shared public CLI/native ORM workflow
+passed both isolated aliases28.35s as uid5/su=False/company1. Native tests cover
+all nine targets, mixed negative quantities with positive net totals, representative
+10% excluded taxes compared to native invoice/custom-refund consumers; intentional
+duplicate balanced appends, serial replay/stale-state conflicts; unbalanced removal
+rollback, balanced subset/remove-all/empty append; posted, actual reversal-link and
+foreign denials. Other financial rows and posted source graphs are preserved.
+Fresh cursors prove all tracked fixtures, both companies' settings, all defaults,
+currencies/rates and exact all-user group memberships roll back.
+
+Initial native DEV failure12.31s is retained: direct administrator fixture creation
+passed debit/credit strings to the native sanitizer. Fresh rollback completed;
+E2E did not start. Only generated/foreign fixture bindings changed to Decimal.
+Production code/public payload strings are unchanged; successful28.35s alone is
+acceptance. Initial local69pass/three test-fixture failures21.36s, repaired three
+14.34s; no nonexistent CLI dry-run was added. Three old quantity-invalid fixtures
+were updated,25selected cases0.59s. Final metadata local2nodes13.64s/server2nodes
+14.75s. Scope checks only, not an all-tests or all-accounting coverage claim.
+
+Deployment17explicit files:11existing recoverable originals and six new; originals
+downloaded/verified. Test-only repair and final two metadata/test updates keep
+before-hash backups. All17 final local/server hashes match. Changed-path privacy/
+Ruff findings zero; existing2MiB checker limit unchanged, unrelated registry
+descriptors untouched. Public docs updated locally, server doc overlays preserved.
+Services active with unchanged fresh-baseline PIDs/restarts; about4.95GiB free,
+no cleanup. Normal checkpoint is created after this verified state.
+
+Next actual candidates:explicit payment-register method/bank inputs and manual
+entry tax-report fields; complete installed source and real consumer verification
+before implementation. Payment.memo's legacy replay marker must not be overwritten
+without resolving that conflict. Do not reopen this accepted batch or expand to
+stock, native source/addon restoration, external sends or schema-history cleanup.
+Unverified:negative-total type conversion/posting, every tax/currency/localization
+combination, double-negative price native consumers, all generated-entry workflows
+and concurrent exactly-once. Asset.validate addon defect/two report sends remain
+unclosed; absent debit-note installation is not authorized. No business DB/native
+source/addon/service/config/Pi/V2/V3 or sudo business change. Overall goal active.
+
+Registry file SHA256 387fe28b90ccfc5b0e3c0b37b496037bee16e9a9415fa0780a9eab31c69dcc4b;
+canonical registry SHA256 632ce00d6f1bbc0589dee1d12e2eabe24b97b9874e75400cc942a6ccf3e7aa1b.

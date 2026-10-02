@@ -17,6 +17,7 @@ from datetime import date
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from math import isfinite
 from time import strftime, strptime
+from types import SimpleNamespace
 from typing import Any
 
 from odoo_accounting_cli_v4 import account_processing_contracts as account_processing
@@ -68,6 +69,8 @@ CAPABILITIES = invoice_preparation.CAPABILITY_IDS | journal_item_processing.CAPA
         "journal_entry.create",
         "journal_entry.update",
         "journal_entry.lines.replace",
+        "journal_entry.lines.add",
+        "journal_entry.lines.remove",
         "journal_entry.duplicate",
         "journal_entry.delete",
         "journal_entry.cancel",
@@ -790,6 +793,8 @@ _PARAMETER_KEYS = {
     "journal_entry.create": {"journal_id", "date", "lines", "reference"},
     "journal_entry.update": {"move_id", "changes"},
     "journal_entry.lines.replace": {"move_id", "lines"},
+    "journal_entry.lines.add": {"move_id", "expected_line_ids", "lines"},
+    "journal_entry.lines.remove": {"move_id", "line_ids"},
     "journal_entry.duplicate": {"move_id"},
     "journal_entry.delete": {"move_id"},
     "journal_entry.cancel": {"move_id", "move_ids"},
@@ -3458,6 +3463,22 @@ _ACCESS["journal_entry.lines.update"].update({
     ("account.move", "write"), ("account.journal", "read"), ("res.partner", "read"),
     ("res.currency", "read"), ("res.currency.rate", "read"),
 })
+_GROUPS["journal_entry.lines.add"] = "account.group_account_user"
+_MODELS["journal_entry.lines.add"] = set(_MODELS["journal_entry.lines.update"])
+_ACCESS["journal_entry.lines.add"] = (
+    _ACCESS["journal_entry.lines.update"] - {("account.move.line", "write")}
+) | {("account.move.line", "create")}
+_GROUPS["journal_entry.lines.remove"] = "account.group_account_user"
+_MODELS["journal_entry.lines.remove"] = {
+    "res.company", "account.move", "account.move.line", "account.account",
+    "account.journal", "account.analytic.line",
+}
+_ACCESS["journal_entry.lines.remove"] = {
+    ("res.company", "read"), ("account.move", "read"), ("account.move", "write"),
+    ("account.move.line", "read"), ("account.move.line", "unlink"),
+    ("account.account", "read"), ("account.journal", "read"),
+    ("account.analytic.line", "read"), ("account.analytic.line", "unlink"),
+}
 for _journal_item_capability in (
     "invoice.line.unit.assign", "invoice.line.deductibility.update",
 ):
@@ -3946,7 +3967,7 @@ def _valid_document_lines(value: Any) -> bool:
         if (
             not _is_text(line["name"])
             or not _is_id(line["account_id"])
-            or _decimal(line["quantity"], positive=True) is None
+            or _signed_decimal(line["quantity"]) in {None, Decimal(0)}
             or _signed_decimal(line["price_unit"]) is None
             or (
                 "product_id" in line
@@ -4096,7 +4117,7 @@ def _valid_invoice_line_values(value: Any, *, partial: bool) -> bool:
         return False
     if "account_id" in value and not _is_id(value["account_id"]):
         return False
-    if "quantity" in value and _decimal(value["quantity"]) is None:
+    if "quantity" in value and _signed_decimal(value["quantity"]) is None:
         return False
     if "price_unit" in value and _signed_decimal(value["price_unit"]) is None:
         return False
@@ -6032,6 +6053,26 @@ def _valid_parameters(
         return _is_id(parameters["move_id"]) and _valid_entry_lines(
             parameters["lines"], minimum=1
         )
+    if capability_id == "journal_entry.lines.add":
+        ids = parameters["expected_line_ids"]
+        return bool(
+            _is_id(parameters["move_id"])
+            and isinstance(ids, list)
+            and len(ids) <= 500
+            and all(_is_id(item) for item in ids)
+            and ids == sorted(set(ids))
+            and _valid_entry_lines(parameters["lines"])
+            and len(ids) + len(parameters["lines"]) <= 500
+        )
+    if capability_id == "journal_entry.lines.remove":
+        ids = parameters["line_ids"]
+        return bool(
+            _is_id(parameters["move_id"])
+            and isinstance(ids, list)
+            and 1 <= len(ids) <= 500
+            and all(_is_id(item) for item in ids)
+            and ids == sorted(set(ids))
+        )
     if capability_id == "invoice.duplicate":
         return _is_id(parameters["move_id"])
     if capability_id == "invoice.type.switch":
@@ -6449,7 +6490,10 @@ def _validated_payload(
 def _deterministic_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
-    if capability_id in {"currency.rate.update", "currency.rate.delete"}:
+    if capability_id in {
+        "currency.rate.update", "currency.rate.delete",
+        "journal_entry.lines.add", "journal_entry.lines.remove",
+    }:
         return move_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in invoice_preparation.CAPABILITY_IDS:
         return invoice_preparation.idempotency_key(capability_id, parameters, company_id)
@@ -12352,6 +12396,127 @@ def _generated_entry(move: Any) -> bool:
         field_name in fields and bool(getattr(move, field_name, False))
         for field_name in _GENERATED_ENTRY_LINK_FIELDS
     )
+
+
+def _entry_line_membership_snapshot(line: Any) -> dict[str, Any]:
+    values = _journal_item_current(line, journal_item_processing.ENTRY_FIELDS)
+    values["sequence"] = getattr(line, "sequence", 0)
+    fields = getattr(line, "_fields", {})
+    for field in (
+        "balance", "quantity", "price_unit", "discount", "tax_base_amount",
+    ):
+        if field in fields:
+            values[field] = _canonical_decimal_text(getattr(line, field))
+    for field in ("tax_ids", "tax_tag_ids"):
+        if field in fields:
+            values[field] = _relation_ids(getattr(line, field))
+    for field in (
+        "product_id", "tax_line_id", "tax_repartition_line_id", "group_tax_id",
+    ):
+        if field in fields:
+            values[field] = _many2one_id(getattr(line, field))
+    for field in ("display_type", "tax_tag_invert", "date"):
+        if field in fields:
+            values[field] = _nullable_value(getattr(line, field))
+    return values
+
+
+def _write_entry_line_membership(
+    env: Any,
+    capability_id: str,
+    parameters: dict[str, Any],
+    company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    move = _lifecycle_move(
+        env, capability_id, parameters["move_id"], company_id, failure_type
+    )
+    if move.state != "draft":
+        raise _fail(
+            failure_type, "state_conflict",
+            "Journal-entry lines can only be added or removed in draft.", exit_code=5,
+        )
+    current_ids = set(move.line_ids.ids)
+    current = _ensure_ids(
+        env, "account.move.line", current_ids,
+        [("move_id", "=", move.id), ("company_id", "=", company_id)],
+        company_id, failure_type,
+    )
+    if _generated_entry(move) or any(_journal_item_sourced(line) for line in current):
+        raise _fail(
+            failure_type, "business_rule_error",
+            "Only an ordinary source-unlinked general journal entry can have lines added or removed.",
+            exit_code=6,
+        )
+
+    adding = capability_id == "journal_entry.lines.add"
+    if adding:
+        expected_ids = set(parameters["expected_line_ids"])
+        requested = parameters["lines"]
+        company_currency_id = _validate_entry_line_references(
+            env, requested, company_id, failure_type
+        )
+        if current_ids != expected_ids:
+            appended = [line for line in current if line.id not in expected_ids]
+            if expected_ids <= current_ids and _entry_lines_match(
+                _current_entry_lines(SimpleNamespace(line_ids=appended)),
+                requested, company_currency_id,
+            ):
+                return _move_result(move, company_id), True
+            raise _fail(
+                failure_type, "idempotency_conflict",
+                "The journal-entry line set does not match the requested append state.",
+                exit_code=5,
+            )
+        retained_ids = expected_ids
+        sequence = max((getattr(line, "sequence", 0) for line in current), default=0)
+        commands = _replacement_commands(capability_id, requested)[1:]
+        for index, command in enumerate(commands, start=1):
+            command[2]["sequence"] = sequence + index * 10
+    else:
+        removed_ids = set(parameters["line_ids"])
+        _ensure_ids(
+            env, "account.move.line", removed_ids,
+            [("move_id", "=", move.id), ("company_id", "=", company_id)],
+            company_id, failure_type,
+        )
+        retained_ids = current_ids - removed_ids
+        commands = [(2, line_id, 0) for line_id in parameters["line_ids"]]
+
+    before = {
+        line.id: _entry_line_membership_snapshot(line)
+        for line in current if line.id in retained_ids
+    }
+    with env.cr.savepoint():
+        move.write({"line_ids": commands})
+        current.invalidate_recordset()
+        move.invalidate_recordset()
+        final_ids = set(move.line_ids.ids)
+        final = _ensure_ids(
+            env, "account.move.line", final_ids,
+            [("move_id", "=", move.id), ("company_id", "=", company_id)],
+            company_id, failure_type,
+        )
+        preserved = {
+            line.id: _entry_line_membership_snapshot(line)
+            for line in final if line.id in retained_ids
+        }
+        valid = move.state == "draft" and preserved == before
+        if adding:
+            appended = [line for line in final if line.id not in expected_ids]
+            valid = valid and expected_ids <= final_ids and _entry_lines_match(
+                _current_entry_lines(SimpleNamespace(line_ids=appended)),
+                requested, company_currency_id,
+            )
+        else:
+            valid = valid and final_ids == retained_ids
+        if not valid:
+            raise _fail(
+                failure_type, "odoo_write_error",
+                "Native journal-entry line membership did not preserve the requested state and existing rows.",
+                exit_code=6,
+            )
+    return _move_result(move, company_id), False
 
 
 def _delete_draft_move(
@@ -21611,6 +21776,10 @@ def _dispatch_allowed(
         "journal_entry.lines.replace",
     }:
         return _replace_move_lines(
+            env, capability_id, parameters, company_id, failure_type
+        )
+    if capability_id in {"journal_entry.lines.add", "journal_entry.lines.remove"}:
+        return _write_entry_line_membership(
             env, capability_id, parameters, company_id, failure_type
         )
     if capability_id in {
