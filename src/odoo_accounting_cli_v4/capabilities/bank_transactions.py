@@ -218,6 +218,7 @@ def validate_bank_transaction_search_request(
         "journal_id",
         "partner_id",
         "statement_id",
+        "statement_assignment",
         "reconciled",
         "query",
         "limit",
@@ -247,6 +248,10 @@ def validate_bank_transaction_search_request(
         if value is not None and not _valid_id(value):
             raise _invalid(f"parameters.{field} must be null or a positive integer.")
         identifiers[field] = value
+    if "statement_assignment" in parameters and parameters["statement_assignment"] not in ("assigned", "unassigned"):
+        raise _invalid("parameters.statement_assignment must be 'assigned' or 'unassigned'.")
+    if identifiers["statement_id"] is not None and parameters.get("statement_assignment") == "unassigned":
+        raise _invalid("A statement_id cannot be combined with unassigned transactions.")
     reconciled = parameters.get("reconciled")
     if reconciled is not None and not isinstance(reconciled, bool):
         raise _invalid("parameters.reconciled must be null or a boolean.")
@@ -267,6 +272,8 @@ def validate_bank_transaction_search_request(
     }
     if identifiers["statement_id"] is not None:
         filters["statement_id"] = identifiers["statement_id"]
+    if "statement_assignment" in parameters:
+        filters["statement_assignment"] = parameters["statement_assignment"]
     return request_id, context, filters, limit, cursor
 
 
@@ -599,6 +606,8 @@ def search_bank_transactions(
                 filters.get("statement_id") is not None
                 and row["statement_id"] != filters["statement_id"]
             )
+            or (filters.get("statement_assignment") == "assigned" and row["statement_id"] is None)
+            or (filters.get("statement_assignment") == "unassigned" and row["statement_id"] is not None)
         ):
             raise _failed("Odoo returned a bank transaction outside the filters.")
     has_more = len(records) > limit

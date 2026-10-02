@@ -1,6 +1,83 @@
 # Execution status
 
-## Current accounting phase — explicit payment selection and manual tax rows, 2026-10-02
+## Current accounting phase — bank settlement metadata and split counterparts, 2026-10-02
+
+One new command and eight existing-interface extensions. Totals553 registered /
+538 implemented handlers (251 reads,287 writes),1082 schemas;462 unconfigured,
+76 degraded,15 disabled. Enabled integrations535 implemented,two planned,one
+failed. These are registry/handler counts, not an accounting completion percentage
+or a claim that every command is configured or unrestricted for ordinary users.
+
+- NEW bank.transaction.counterparts.replace accepts2–100 ordered P&L rows with
+  account_id,label,signed nonzero decimal balance. Native per-row currency rounding
+  must exactly balance the original liquidity line. One installed bank-widget
+  helper replaces counterparts; liquidity ID/balance/currency/amount_currency stay,
+  and the result must be posted,balanced,without suspense or external matching.
+  Only company-currency bank/cash entries and visible active same-company income/
+  expense accounts; foreign-currency,source/payment/partial/full links and existing
+  tax metadata reject. Identical business rows are allowed. Exact current-state
+  replay; an old request can act again after later changes, not concurrent exactly-once.
+- bank.transaction.record/update/get expose account_number and partner_name:
+  optional nullable trimmed import metadata,set/clear/read. Native creation uses
+  its real partner-retrieval consumers; later metadata updates do not invent a
+  partner-refresh action. Update remains default-unmatched only. Matched payment_ref
+  writes stay rejected because native synchronization resets/deletes counterparts.
+  Get keeps independent optional old-shape compatibility; list/search rows unchanged.
+- bank.transaction.search accepts statement_assignment assigned/unassigned before
+  paging; unassigned with a positive statement_id rejects. Omission keeps old cursors.
+- bank.statement.create/update accept optional nonnull name/date and verify exact
+  native readback/replay; omission keeps old keys/defaults. Later membership changes
+  may recompute native date. bank.statement.search accepts is_complete/is_valid
+  booleans using native ORM validity search before paging, not post-limit filtering.
+- bank.transaction.unmatch also uses native undo for isolated manual P&L rows;
+  old external-match behavior stays. Native checked-entry reviewer rule applies to
+  actual new manual changes; ordinary Odoo permissions/company/confirmation/key stay.
+
+Native bank-account creation ACL is conditional: default UID5 can split without
+creating a bank and can reuse an owned existing bank. If the native helper needs
+an absent account, actual ORM create must be authorized; denial rolls back the
+financial graph. No caller sudo or permanent grant. Creation consumer is verified
+with the installed native contact role temporarily assigned ONLY inside the
+rollback fixture, restored inline, then checked by the all-user-group oracle.
+
+Server271 focused tests42.23s passed; shared public-CLI/native workflow passed
+both isolated aliases26.61s UID5/su=False/company1. Metadata partner consumers,
+header readback,assignment/validity pages,signed split/replace/replay,liquidity,
+manual undo/single writeoff interoperability,unbalanced/FX/foreign denials and
+conditional bank ACL are verified. Fresh cursors verify all tracked fixtures,
+both company settings,all defaults/currencies/rates and exact all-user groups
+rollback. Partial/full/payment/source/tax/reviewer rejection branches have focused
+unit coverage, not additional native-consumer claims from this shared workflow.
+
+Retained native failures:DEV16.24s fixture forgot balance_start recomputes native
+balance_end_real (explicit retained end fixes it); DEV10.92s exposed over-broad
+unconditional bank:create preflight (only this check corrected); DEV12.09s inherited
+collector attempted a tracked company2 transaction during a later company1 call
+(foreign transaction fixture/denial moved last). Each completed full fresh rollback;
+E2E did not start on failures. Only accepted26.61s closes shared native evidence.
+Local198 focused tests93.18s passed. Final metadata3nodes23.35s local/22.21s server
+passed. No unrelated legacy matrix repair or all-tests coverage claim.
+
+25 exact deployed files:18 original recoverable backups downloaded/hash-verified,
+seven new. Repair before-hashes verified1/5/1/final1; all25 final local/server bytes
+match. Registry2083513bytes under unchanged2MiB limit;544 unrelated descriptors
+unchanged. Services active with baseline PIDs/restarts unchanged;4.93GiB free,
+90% used by rounded disk-usage observation. No cleanup/restart/business DB/native
+source/addon/config/Pi/V2/V3/external-send/new store/control-framework change.
+Public docs updated locally; server doc overlays preserved. GitHub checkpoint
+follows verified state; overall capability-building goal stays active.
+
+Next: source audit for batch refunds,native installment payments and repeated/
+consolidated sale/purchase invoicing plus sales down payments. Single partial
+payment/payment schedules/refund origin reads already exist: do not count them
+again. Inspect installed source before freezing the next batch; no speculative
+generic dispatcher. Asset.validate native defect/two report sends remain unclosed;
+absent debit-note addon installation is not authorized.
+
+Registry file SHA2567c46753b18bbf06b51d3064a59a7831fe5221b53061a434d1479bd8da568170a;
+canonical SHA25603153dce6623de233374d8ec62f70117903a8a1b15fdcff658930f7eb41730fe.
+
+## Previous accounting phase — explicit payment selection and manual tax rows, 2026-10-02
 
 Nine existing-interface extensions, zero new command IDs. Totals remain
 552 registered / 537 implemented handlers (251 reads, 286 writes), 1080 schemas;

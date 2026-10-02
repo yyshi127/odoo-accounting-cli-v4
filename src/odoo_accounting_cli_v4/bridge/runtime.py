@@ -5078,10 +5078,8 @@ def _bank_transaction_payload_is_valid(payload: Any) -> bool:
         "reconciled",
         "query",
     }
-    if not isinstance(filters, dict) or set(filters) not in (
-        filter_fields,
-        filter_fields | {"statement_id"},
-    ):
+    if (not isinstance(filters, dict) or not filter_fields <= set(filters)
+            or not set(filters) <= filter_fields | {"statement_id", "statement_assignment"}):
         return False
     for field in ("date_from", "date_to"):
         if filters[field] is not None and not _is_canonical_date(filters[field]):
@@ -5098,6 +5096,10 @@ def _bank_transaction_payload_is_valid(payload: Any) -> bool:
             not isinstance(value, int) or isinstance(value, bool) or value <= 0
         ):
             return False
+    if "statement_assignment" in filters and filters["statement_assignment"] not in ("assigned", "unassigned"):
+        return False
+    if filters.get("statement_id") is not None and filters.get("statement_assignment") == "unassigned":
+        return False
     if filters["reconciled"] is not None and not isinstance(
         filters["reconciled"], bool
     ):
@@ -5117,6 +5119,10 @@ def _bank_transaction_domain(
     if filters is not None:
         if filters.get("statement_id") is not None:
             domains.append([("statement_id", "=", filters["statement_id"])])
+        if filters.get("statement_assignment") == "assigned":
+            domains.append([("statement_id", "!=", False)])
+        elif filters.get("statement_assignment") == "unassigned":
+            domains.append([("statement_id", "=", False)])
         for filter_name, model_field, operator in (
             ("date_from", "date", ">="),
             ("date_to", "date", "<="),

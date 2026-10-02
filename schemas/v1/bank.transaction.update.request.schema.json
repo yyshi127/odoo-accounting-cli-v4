@@ -24,6 +24,8 @@
           "properties": {
             "foreign_currency_id": {"type": ["integer", "null"], "minimum": 1},
             "amount_currency": {"type": "string", "maxLength": 256, "pattern": "^(?:0|-?(?:0\\.[0-9]*[1-9]|[1-9][0-9]*(?:\\.[0-9]*[1-9])?))$(?![\\s\\S])"},
+            "account_number": {"type": ["string", "null"], "minLength": 1, "maxLength": 200, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"},
+            "partner_name": {"type": ["string", "null"], "minLength": 1, "maxLength": 200, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"},
             "date": {"type": "string", "format": "date"},
             "amount": {"type": "string", "maxLength": 256, "pattern": "^-?(?:(?:[1-9][0-9]*)(?:\\.[0-9]+)?|0\\.(?=[0-9]*[1-9])[0-9]+)$(?![\\s\\S])"},
             "payment_ref": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"},

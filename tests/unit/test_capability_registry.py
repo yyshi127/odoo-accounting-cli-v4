@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 552
-EXPECTED_ENABLED_CAPABILITY_COUNT = 537
+EXPECTED_CAPABILITY_COUNT = 553
+EXPECTED_ENABLED_CAPABILITY_COUNT = 538
 EXPECTED_IMPLEMENTED_READ_COUNT = 251
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 286
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 287
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 461
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 462
 EXPECTED_DEGRADED_CAPABILITY_COUNT = 76
-EXPECTED_SCHEMA_COUNT = 1080
+EXPECTED_SCHEMA_COUNT = 1082
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "ad208f30ebe27b2d2103ae452a2ff63a491ceb866ce8cfcfca19d1717a0920a0"
+    "52b21b11bde202247f35e78db4a59cd0e4e099cdb47d502374be77e5b272c460"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -484,6 +484,7 @@ IMPLEMENTED_WRITES = ACCOUNTING_ENTRY_MEMBERSHIP_WRITES | ACCOUNTING_MAINTENANCE
     "asset.pause",
     "asset.validate",
     "bank.transaction.record",
+    "bank.transaction.counterparts.replace",
     "bank.transaction.match",
     "bank.transaction.unmatch",
     "bank.transaction.update",
@@ -1238,6 +1239,20 @@ def test_every_unimplemented_capability_is_honestly_disabled_without_a_handler()
 
 def _prior_payment_tax_input_evidence(capability_id, descriptor):
     """Check only this extension's evidence, retaining the prior exact assertions."""
+    bank_extensions = {"bank.transaction.record", "bank.transaction.update", "bank.transaction.get", "bank.transaction.search",
+                       "bank.statement.create", "bank.statement.update", "bank.statement.search", "bank.transaction.unmatch"}
+    if capability_id in bank_extensions:
+        descriptor = copy.deepcopy(descriptor)
+        units = ["tests/unit/test_bank_settlement_write_contract.py", "tests/unit/test_bank_settlement_inputs_runtime.py",
+                 "tests/unit/test_bank_settlement_reads.py", "tests/unit/test_bank_settlement_inputs_cli.py"]
+        references = descriptor["tests"]["unit"]["references"]
+        assert references[-len(units):] == units
+        descriptor["tests"]["unit"]["references"] = references[:-len(units)]
+        integration = descriptor["tests"]["integration"]["references"]
+        live_test = "tests/integration/test_bank_settlement_inputs_live.py"
+        if live_test in integration:
+            assert integration[-1] == live_test and integration.count(live_test) == 1
+            descriptor["tests"]["integration"]["references"] = integration[:-1]
     if capability_id not in PAYMENT_TAX_INPUT_WRITES | PAYMENT_TAX_INPUT_READS:
         return descriptor
     descriptor = copy.deepcopy(descriptor)
@@ -2913,6 +2928,7 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
     extended_modules.update({capability_id: ["account", "analytic", "base", "mail"] for capability_id in ANALYTIC_PROCESSING_WRITES})
     extended_modules.update({capability_id: ["account", "base", "mail"] for capability_id in JOURNAL_PROCESSING_WRITES})
     extended_modules.update({capability_id: ["account"] for capability_id in ACCOUNT_PROCESSING_WRITES})
+    extended_modules["bank.transaction.counterparts.replace"] = ["account", "account_accountant"]
     extended_modules.update({capability_id: ["account"] for capability_id in TAX_PROCESSING_WRITES})
     extended_modules.update({capability_id: ["account"] for capability_id in PAYMENT_TERM_PROCESSING_WRITES})
     extended_modules.update({capability_id: ["account", "base", "mail"] for capability_id in RECONCILIATION_PROCESSING_WRITES})
@@ -3167,6 +3183,10 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             assert descriptor["status"]["reason_code"] == "runtime_context_required"
         if capability_id in ACCOUNTING_ENTRY_MEMBERSHIP_WRITES | ACCOUNTING_SIGNED_QUANTITY_WRITES:
             assert descriptor["tests"]["integration"]["reason"] == "Shared native smoke passed; full rollback."
+        if capability_id == "bank.transaction.counterparts.replace":
+            assert descriptor["tests"]["unit"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == ["tests/integration/test_bank_settlement_inputs_live.py"]
+            continue
         if capability_id in ACCOUNTING_ENTRY_MEMBERSHIP_WRITES:
             assert descriptor["tests"]["unit"]["status"] == "implemented"
             assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_accounting_entry_membership_batch.py", "tests/unit/test_capability_registry.py"]
@@ -3732,6 +3752,7 @@ def test_payment_bank_batch_has_exact_registry_and_schema_contracts() -> None:
     request_fields = {
         "bank.transaction.search": {
             "statement_id",
+            "statement_assignment",
             "date_from",
             "date_to",
             "journal_id",
@@ -3832,6 +3853,10 @@ def test_payment_bank_batch_has_exact_registry_and_schema_contracts() -> None:
         "amount",
         "payment_ref",
         "partner_id",
+        "foreign_currency_id",
+        "amount_currency",
+        "account_number",
+        "partner_name",
     }
     candidate_ids = registry.load_schema(
         "schemas/v1/bank.transaction.match.request.schema.json"

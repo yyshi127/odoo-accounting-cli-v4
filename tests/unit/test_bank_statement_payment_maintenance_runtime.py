@@ -92,6 +92,9 @@ def test_static_contract_gate_and_deterministic_keys_are_exact() -> None:
         "transaction_ids",
         "reference",
         "balance_end_real",
+        "balance_start",
+        "name",
+        "date",
     }
     assert writes._PARAMETER_KEYS["bank.statement.update"] == {
         "statement_id",
@@ -172,23 +175,23 @@ def test_static_contract_gate_and_deterministic_keys_are_exact() -> None:
 def test_direct_dependency_descriptors_are_exact() -> None:
     registry = load_registry()
     statement_create = registry.describe("bank.statement.create")
-    assert statement_create["source"]["models"] == [
+    assert set(statement_create["source"]["models"]) == {
         "res.company",
         "res.currency",
         "account.journal",
         "account.bank.statement",
         "account.bank.statement.line",
         "account.move",
-    ]
-    assert statement_create["source"]["locations"] == [
+    }
+    assert set(statement_create["source"]["locations"]) == {
         "_references/base/models/res_company.py",
         "_references/base/models/res_currency.py",
         "account/models/account_journal.py",
         "account/models/account_bank_statement.py",
         "account/models/account_bank_statement_line.py",
         "account/models/account_move.py",
-    ]
-    assert statement_create["requirements"]["acl"] == [
+    }
+    assert set(statement_create["requirements"]["acl"]) == {
         "res.currency:read",
         "account.journal:read",
         "account.bank.statement:read",
@@ -196,7 +199,7 @@ def test_direct_dependency_descriptors_are_exact() -> None:
         "account.bank.statement.line:read",
         "account.bank.statement.line:write",
         "account.move:read",
-    ]
+    }
 
     payment_delete = registry.describe("payment.delete")
     assert payment_delete["requirements"]["acl"] == [

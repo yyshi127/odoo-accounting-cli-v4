@@ -23,6 +23,8 @@
             "reference": {"$ref": "#/$defs/nullableText"},
             "balance_end_real": {"$ref": "#/$defs/signedDecimal"},
             "balance_start": {"$ref": "#/$defs/signedDecimal"},
+            "name": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"},
+            "date": {"type": "string", "format": "date"},
             "transaction_ids": {
               "type": "array", "minItems": 1, "maxItems": 100,
               "uniqueItems": true, "items": {"type": "integer", "minimum": 1}

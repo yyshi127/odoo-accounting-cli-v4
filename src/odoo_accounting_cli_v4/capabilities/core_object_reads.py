@@ -261,7 +261,7 @@ _SEARCH_FILTERS = {
     "analytic.account.search": frozenset({"query", "active", "plan_id"}),
     "fiscal_position.search": frozenset({"query", "active", "auto_apply"}),
     "partner.bank_account.search": frozenset({"partner_id", "active"}),
-    "bank.statement.search": frozenset({"journal_id", "date_from", "date_to"}),
+    "bank.statement.search": frozenset({"journal_id", "date_from", "date_to", "is_complete", "is_valid"}),
     "analytic.line.search": frozenset(
         {"query", "date_from", "date_to", "analytic_account_id"}
     ),
@@ -1098,6 +1098,11 @@ def validate_core_object_read_request(
             "date_from": date_from,
             "date_to": date_to,
         }
+        for field in ("is_complete", "is_valid"):
+            if field in parameters:
+                if not isinstance(parameters[field], bool):
+                    raise _invalid(f"parameters.{field} must be a boolean.")
+                filters[field] = parameters[field]
     else:
         allowed = _SEARCH_FILTERS[capability_id]
         if not set(parameters) <= allowed | {"limit", "cursor"}:
@@ -1474,10 +1479,10 @@ def _valid_partner_master_item(item: Any, company_id: int) -> bool:
 
 
 def _valid_bank_item(item: Any, company_id: int) -> bool:
+    optional = {"account_number", "partner_name"}
     return bool(
         isinstance(item, dict)
-        and set(item)
-        == {
+        and set(item) - optional == {
             "id",
             "company_id",
             "statement_id",
@@ -1492,6 +1497,7 @@ def _valid_bank_item(item: Any, company_id: int) -> bool:
             "move",
             "reconciled",
         }
+        and all(_optional_text(item[field]) for field in optional & set(item))
         and _valid_id(item["id"])
         and item["company_id"] == company_id
         and (item["statement_id"] is None or _valid_id(item["statement_id"]))
@@ -3211,6 +3217,11 @@ def read_core_object(
         item["budget"]["id"] != filters["budget_id"] for item in items
     ):
         raise _failed("Odoo returned a budget line from the wrong budget.")
+    if capability_id == "bank.statement.search" and any(
+        item[field] is not filters[field]
+        for item in items for field in ("is_complete", "is_valid") if field in filters
+    ):
+        raise _failed("Odoo returned a bank statement outside the filters.")
     item_ids = [
         item["source_tax"]["id"]
         if capability_id == "fiscal_position.tax_mapping.list"

@@ -18,6 +18,7 @@
         "journal_id": {"type": ["integer", "null"], "minimum": 1, "default": null},
         "partner_id": {"type": ["integer", "null"], "minimum": 1, "default": null},
         "statement_id": {"type": ["integer", "null"], "minimum": 1, "default": null},
+        "statement_assignment": {"enum": ["assigned", "unassigned"]},
         "reconciled": {"type": ["boolean", "null"], "default": null},
         "query": {
           "oneOf": [
@@ -28,7 +29,11 @@
         },
         "limit": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 100},
         "cursor": {"type": ["string", "null"], "minLength": 1, "maxLength": 4096, "default": null}
-      }
+      },
+      "allOf": [{
+        "if": {"properties": {"statement_assignment": {"const": "unassigned"}}, "required": ["statement_assignment"]},
+        "then": {"properties": {"statement_id": {"type": "null"}}}
+      }]
     }
   }
 }

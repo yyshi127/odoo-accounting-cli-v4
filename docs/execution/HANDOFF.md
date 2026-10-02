@@ -6368,3 +6368,88 @@ remain unclosed; absent debit-note installation not authorized. Overall goal act
 
 Registry file SHA256 dce502f954b451eb29328f7a739f3a2607c786813028b0a6fed646bb745d8270;
 canonical SHA256 fe4c73e65f723aa0f5b1d4aa00edbe278472030435a29d16bf0982d58ec07920.
+
+## Bank settlement inputs and counterpart checkpoint — 2026-10-02
+
+Authoritative latest delivery:8 EXT /1 NEW bank.transaction.counterparts.replace.
+Totals553 registered,538 handlers (251 reads/287 writes),1082 schemas; availability
+462 unconfigured/76 degraded/15 disabled; enabled integrations535 implemented/
+two planned/one failed. No full-accounting denominator,percentage or unrestricted
+role claim; overall goal active. Do not reopen this accepted bank batch.
+
+Extensions:bank.transaction.record/update/get account_number and partner_name,
+bank.transaction.search assigned/unassigned statement relation,bank.statement
+create/update optional native name/date,bank.statement.search completeness/native
+validity filters,and bank.transaction.unmatch isolated manual P&L undo. Omitted
+fields retain old normalization/keys/defaults. Nullable bank metadata clears; name/
+date are nonnull. Native partner lookup happens on record creation, not invented
+on update. Get optional additions remain independently old-shape compatible;
+list/search rows unchanged. Explicit filters bind cursors and apply before paging.
+Matched payment_ref updates remain rejected: actual native sync resets counterparts.
+Statement membership can later recompute native date; explicit current header is
+exactly checked. balance_start automatically recomputes native balance_end_real.
+
+NEW accepts transaction_id and2–100 ordered rows account_id/label/balance. IDs
+positive nonboolean,label trimmed1–200,signed canonical nonzero decimal balances.
+Deterministic key uses transactionID plus canonical ordered-row digest; allows
+duplicate business rows. Native company-currency per-row rounding must sum exactly
+to negative liquidity balance. Fixed installed helper,not raw AML create or new
+dispatcher/store. Same-company bank/cash journal/P&L active accounts only; no FX,
+external/payment/partial/full/source links or prior tax/repartition/tag/base metadata.
+Original liquidity ID/financial tuple retained; posted balanced no-suspense exact
+rounded counterpart multiset verified. Manual undo uses native action; exact-state
+replay bypasses actual mutation/reviewer check. Old requests can act after later
+states; no operation attribution/concurrent exactly-once guarantee.
+
+Conditional bank ACL correction is necessary,not a permission bypass:default
+ordinary UID5 has res.partner.bank:read but not create. Native helper only calls
+ordinary create when account_number+partner needs an absent bank. Unconditional
+create preflight removed ONLY for new command; native AccessError still maps to
+unauthorized3,savepoint preserves graph. Existing bank reuse and absent-bank denial
+were actually verified. Actual creation tested UID5/su=False with installed native
+base.group_partner_manager ONLY within rollback transaction; original group IDs
+restored inline and exact all-user groups verified after fresh-cursor rollback.
+
+Evidence:server271 focused tests42.23s; accepted shared public-CLI/native two-alias
+workflow26.61s UID5/su=False/company1. Native metadata/partner consumers,set/clear/
+replay,get,header overrides/readback,assigned/unassigned/complete/valid pages,
+positive/negative split/replace/exact replay/original liquidity,bank creation ACL,
+unbalanced/foreign/FX denials,manual undo and legacy single writeoff interplay.
+All fixture IDs/settings of both companies/all defaults/currencies/rates/exact
+all-user groups fresh rollback verified. Existing partial/full/payment/source/tax/
+reviewer guards are focused units,not extra real-consumer proofs in this workflow.
+Matched-update native denial here is a manual split state,not a new invoice match.
+
+Retained failures all finished full fresh rollback before propagation:E2E not
+started on DEV16.24s native auto-end fixture error,DEV10.92s actual over-broad bank
+ACL bug,and DEV12.09s inherited company1 fixture collector read of company2 tracked
+transaction. First repaired explicit end_real; second corrected ONLY new ACL map;
+third moved owned foreign transaction/denial after all successful ordinary calls.
+No weakening native rules,visibility or result checks. Only accepted26.61s closes
+native evidence. Local198nodes93.18s and final metadata3nodes23.35s/server22.21s
+passed. No all-suite claim or unrelated historical assertion cleanup.
+
+25 explicit deployed code/schema/test files (18 original backups/seven new),all
+final local/server hashes equal. Originals and repair1/2/3/final before-hashes
+downloaded/verified18+1+5+1+1. Registry2083513bytes below unchanged2MiB limit,
+544 unrelated prior descriptors untouched. Privacy/Ruff zero. Local public docs
+updated; server document overlays preserved. Services active with baseline PIDs/
+restart counts unchanged,4.93GiB free/rounded90% used; no cleanup/restart/business
+DB/native source/addon/config/Pi/V2/V3/external-send/caller-sudo/newstore/newgate change.
+Private resumable evidence .tooling/accounting-bank-settlement-audit-20261002:
+native-source/statement-compute,failed-live1/2/3,accepted-live.log,manifest and
+repair before-backups/final-server-facts. Normal GitHub checkpoint follows these
+facts; do not start another native test after this accepted terminal handle.
+
+Next source audit:batch customer/vendor refunds; actual installments_mode and
+multi-payment/partial batch results; multiple/new-round sale/purchase source
+invoicing and sale advance-payment wizard. Existing single partial payment,
+payment_status/payment_schedule/origin_links reads are covered,not new commands.
+Potential native invoice_policy/purchase_method product inputs must respect shared
+template scope; alternatively extend order line read projection. Read actual
+installed source before committing9-target scope. No blanket whole-accounting
+completion; asset.validate addon defect/two report sends remain unclosed,absent
+debit-note addon installation not authorized. Overall goal active.
+
+Registry file SHA2567c46753b18bbf06b51d3064a59a7831fe5221b53061a434d1479bd8da568170a;
+canonical SHA25603153dce6623de233374d8ec62f70117903a8a1b15fdcff658930f7eb41730fe.

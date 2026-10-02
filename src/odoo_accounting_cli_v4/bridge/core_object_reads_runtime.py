@@ -2250,16 +2250,18 @@ def _valid_parameters(capability_id: str, parameters: Any) -> bool:
             and _valid_limit(parameters["limit"])
         )
     if capability_id == "bank.statement.search":
-        if set(parameters) != {
+        required = {
             "journal_id",
             "date_from",
             "date_to",
             "after_id",
             "limit",
-        }:
+        }
+        if not required <= set(parameters) <= required | {"is_complete", "is_valid"}:
             return False
         return bool(
-            (parameters["journal_id"] is None or _valid_id(parameters["journal_id"]))
+            all(isinstance(parameters[field], bool) for field in {"is_complete", "is_valid"} & set(parameters))
+            and (parameters["journal_id"] is None or _valid_id(parameters["journal_id"]))
             and _optional_date(parameters["date_from"])
             and _optional_date(parameters["date_to"])
             and not (
@@ -2509,6 +2511,8 @@ def _raw_get_rows(
                 "company_id",
                 "statement_id",
                 "payment_ref",
+                "account_number",
+                "partner_name",
                 "partner_id",
                 "journal_id",
                 "amount",
@@ -2767,6 +2771,8 @@ def _normalize_bank(
                 "date": _date_string(move["date"]),
                 "payment_date": min(payment_dates) if payment_dates else None,
                 "name": _optional_text(row["payment_ref"]) or "/",
+                "account_number": _optional_text(row.get("account_number")),
+                "partner_name": _optional_text(row.get("partner_name")),
                 "reference": _optional_text(move["ref"]),
                 "partner": _named_reference(
                     {"id": partner_id, "name": partners[partner_id]["complete_name"]}
@@ -3134,6 +3140,9 @@ def _reference_domain(
             domains.append([("date", ">=", parameters["date_from"])])
         if parameters["date_to"] is not None:
             domains.append([("date", "<=", parameters["date_to"])])
+        for field in ("is_complete", "is_valid"):
+            if field in parameters:
+                domains.append([(field, "=", parameters[field])])
     if capability_id == "analytic.account.search" and parameters["plan_id"] is not None:
         domains.append([("plan_id", "=", parameters["plan_id"])])
     if (

@@ -111,6 +111,7 @@ CAPABILITIES = invoice_preparation.CAPABILITY_IDS | journal_item_processing.CAPA
         "bank.transaction.update",
         "bank.transaction.match",
         "bank.transaction.unmatch",
+        "bank.transaction.counterparts.replace",
         "bank.statement.create",
         "bank.statement.update",
         "bank.statement.delete",
@@ -850,6 +851,8 @@ _PARAMETER_KEYS = {
         "partner_id",
         "foreign_currency_id",
         "amount_currency",
+        "account_number",
+        "partner_name",
     },
     "asset.create": {
         "name",
@@ -906,11 +909,14 @@ _PARAMETER_KEYS = {
     "bank.transaction.update": {"transaction_id", "changes"},
     "bank.transaction.match": {"transaction_id", "candidate_line_ids"},
     "bank.transaction.unmatch": {"transaction_id"},
+    "bank.transaction.counterparts.replace": {"transaction_id", "lines"},
     "bank.statement.create": {
         "transaction_ids",
         "reference",
         "balance_end_real",
         "balance_start",
+        "name",
+        "date",
     },
     "bank.statement.update": {"statement_id", "changes"},
     "bank.statement.delete": {"statement_id"},
@@ -3072,9 +3078,30 @@ _ACCESS["bank.statement.update"].update({
 })
 _MODELS["bank.transaction.update"].add("res.currency")
 _ACCESS["bank.transaction.update"].add(("res.currency", "read"))
+_MODELS["bank.transaction.unmatch"].add("account.account")
+_ACCESS["bank.transaction.unmatch"].add(("account.account", "read"))
 for _bank_foreign_capability in ("bank.transaction.record", "bank.transaction.update"):
     _MODELS[_bank_foreign_capability].add("res.currency.rate")
     _ACCESS[_bank_foreign_capability].add(("res.currency.rate", "read"))
+
+_GROUPS["bank.transaction.counterparts.replace"] = "account.group_account_user"
+_MODELS["bank.transaction.counterparts.replace"] = {
+    "res.company", "res.currency", "res.partner", "res.partner.bank",
+    "account.journal", "account.account", "account.bank.statement.line",
+    "account.move", "account.move.line", "account.payment",
+    "account.partial.reconcile", "account.full.reconcile",
+}
+_ACCESS["bank.transaction.counterparts.replace"] = {
+    ("res.company", "read"), ("res.currency", "read"),
+    ("res.partner", "read"), ("res.partner.bank", "read"),
+    ("account.journal", "read"),
+    ("account.account", "read"), ("account.bank.statement.line", "read"),
+    ("account.bank.statement.line", "write"), ("account.move", "read"),
+    ("account.move", "write"), ("account.move.line", "read"),
+    ("account.move.line", "create"), ("account.move.line", "write"),
+    ("account.move.line", "unlink"), ("account.payment", "read"),
+    ("account.partial.reconcile", "read"), ("account.full.reconcile", "read"),
+}
 
 for _capability_id in _ACCOUNT_GROUP_WRITE_CAPABILITIES:
     _MODELS[_capability_id] = {"res.company", "account.group"}
@@ -4392,7 +4419,7 @@ def _valid_bank_update_changes(changes: Any) -> bool:
     if (
         not isinstance(changes, dict)
         or not changes
-        or not set(changes) <= {"date", "amount", "payment_ref", "partner_id", "foreign_currency_id", "amount_currency"}
+        or not set(changes) <= {"date", "amount", "payment_ref", "partner_id", "foreign_currency_id", "amount_currency", "account_number", "partner_name"}
     ):
         return False
     if "date" in changes and not _is_date(changes["date"]):
@@ -4402,6 +4429,10 @@ def _valid_bank_update_changes(changes: Any) -> bool:
         if amount is None or amount == 0:
             return False
     if "payment_ref" in changes and not _is_text(changes["payment_ref"], maximum=200):
+        return False
+    if any(field in changes and changes[field] is not None
+           and not _is_text(changes[field], maximum=200)
+           for field in ("account_number", "partner_name")):
         return False
     return _valid_bank_foreign_pair(changes) and (
         "partner_id" not in changes or changes["partner_id"] is None
@@ -4414,9 +4445,13 @@ def _valid_statement_values(values: Any, *, partial: bool) -> bool:
     if not isinstance(values, dict):
         return False
     if partial:
-        if not values or not set(values) <= fields | {"transaction_ids", "balance_start"}:
+        if not values or not set(values) <= fields | {"transaction_ids", "balance_start", "name", "date"}:
             return False
-    elif not fields <= set(values) <= fields | {"balance_start"}:
+    elif not fields <= set(values) <= fields | {"balance_start", "name", "date"}:
+        return False
+    if "name" in values and not _is_text(values["name"], maximum=200):
+        return False
+    if "date" in values and not _is_date(values["date"]):
         return False
     if "reference" in values and not (
         values["reference"] is None
@@ -5971,9 +6006,9 @@ def _valid_parameters(
     elif capability_id == "tax.create":
         required_keys = _TAX_CONFIG_REQUIRED_KEYS
     elif capability_id == "bank.transaction.record":
-        required_keys = allowed_keys - {"foreign_currency_id", "amount_currency"}
+        required_keys = allowed_keys - {"foreign_currency_id", "amount_currency", "account_number", "partner_name"}
     elif capability_id == "bank.statement.create":
-        required_keys = allowed_keys - {"balance_start"}
+        required_keys = allowed_keys - {"balance_start", "name", "date"}
     elif capability_id == "tax.group.create":
         required_keys = _TAX_GROUP_FIELDS - _TAX_GROUP_ACCOUNT_FIELDS
     if not required_keys <= parameter_keys <= allowed_keys:
@@ -6233,6 +6268,9 @@ def _valid_parameters(
             and _is_text(parameters["payment_ref"], maximum=200)
             and (parameters["partner_id"] is None or _is_id(parameters["partner_id"]))
             and _valid_bank_foreign_pair(parameters)
+            and all(field not in parameters or parameters[field] is None
+                    or _is_text(parameters[field], maximum=200)
+                    for field in ("account_number", "partner_name"))
         )
     if capability_id == "asset.create":
         return _valid_asset_create_parameters(parameters)
@@ -6297,6 +6335,23 @@ def _valid_parameters(
         )
     if capability_id == "bank.transaction.unmatch":
         return _is_id(parameters["transaction_id"])
+    if capability_id == "bank.transaction.counterparts.replace":
+        lines = parameters["lines"]
+        return bool(
+            _is_id(parameters["transaction_id"])
+            and isinstance(lines, list)
+            and 2 <= len(lines) <= 100
+            and all(
+                isinstance(line, dict)
+                and set(line) == {"account_id", "label", "balance"}
+                and _is_id(line["account_id"])
+                and _is_text(line["label"], maximum=200)
+                and (balance := _signed_decimal(line["balance"])) is not None
+                and balance != 0
+                and _canonical_decimal_text(balance) == line["balance"]
+                for line in lines
+            )
+        )
     if capability_id == "bank.statement.create":
         transaction_ids = parameters["transaction_ids"]
         return bool(
@@ -6309,6 +6364,7 @@ def _valid_parameters(
                     "reference": parameters["reference"],
                     "balance_end_real": parameters["balance_end_real"],
                     **({"balance_start": parameters["balance_start"]} if "balance_start" in parameters else {}),
+                    **{field: parameters[field] for field in ("name", "date") if field in parameters},
                 },
                 partial=False,
             )
@@ -7029,12 +7085,15 @@ def _deterministic_key(
     if capability_id in {
         "bank.transaction.update",
         "bank.transaction.match",
+        "bank.transaction.counterparts.replace",
         "reconciliation.write_off",
     }:
         if capability_id == "bank.transaction.update":
             target: Any = parameters["changes"]
         elif capability_id == "bank.transaction.match":
             target = parameters["candidate_line_ids"]
+        elif capability_id == "bank.transaction.counterparts.replace":
+            target = parameters["lines"]
         else:
             target = {
                 "write_off_account_id": parameters["write_off_account_id"],
@@ -14913,6 +14972,8 @@ def _statement_matches(
     company_id: int,
     *,
     balance_start: Decimal | None = None,
+    name: str | None = None,
+    statement_date: str | None = None,
 ) -> bool:
     return bool(
         statement.company_id.id == company_id
@@ -14920,6 +14981,8 @@ def _statement_matches(
         and _statement_reference(statement.reference) == reference
         and Decimal(str(statement.balance_end_real)) == balance_end_real
         and (balance_start is None or Decimal(str(statement.balance_start)) == balance_start)
+        and (name is None or statement.name == name)
+        and (statement_date is None or str(statement.date) == statement_date)
     )
 
 
@@ -14979,6 +15042,8 @@ def _create_bank_statement(
             company_id,
             balance_start=_rounded_statement_balance(overlapping, parameters["balance_start"])
             if "balance_start" in parameters else None,
+            name=parameters.get("name"),
+            statement_date=parameters.get("date"),
         ):
             raise _fail(
                 failure_type,
@@ -15040,6 +15105,7 @@ def _create_bank_statement(
             "balance_end_real": rounded_balance,
             **({"balance_start": _rounded_statement_balance(journal, parameters["balance_start"])}
                if "balance_start" in parameters else {}),
+            **{field: parameters[field] for field in ("name", "date") if field in parameters},
         }
     )
     statement.invalidate_recordset(
@@ -15052,6 +15118,8 @@ def _create_bank_statement(
             "balance_start",
             "is_complete",
             "line_ids",
+            "name",
+            "date",
         ]
     )
     if (
@@ -15064,6 +15132,8 @@ def _create_bank_statement(
             company_id,
             balance_start=_rounded_statement_balance(journal, parameters["balance_start"])
             if "balance_start" in parameters else None,
+            name=parameters.get("name"),
+            statement_date=parameters.get("date"),
         )
     ):
         raise _fail(
@@ -15098,6 +15168,9 @@ def _update_bank_statement(
         actual.pop("balance_end_real")
     if "balance_start" in changes:
         actual["balance_start"] = _canonical_decimal_text(statement.balance_start)
+    for field in ("name", "date"):
+        if field in changes:
+            actual[field] = str(getattr(statement, field)) if field == "date" else statement.name
     membership = "transaction_ids" in changes
     if membership:
         journal_id = statement.journal_id.id
@@ -15135,6 +15208,7 @@ def _update_bank_statement(
         target["balance_start"] = _canonical_decimal_text(
             _rounded_statement_balance(statement, changes["balance_start"])
         )
+    target.update({field: changes[field] for field in ("name", "date") if field in changes})
     if membership:
         target["transaction_ids"] = changes["transaction_ids"]
     if actual == target:
@@ -15146,13 +15220,14 @@ def _update_bank_statement(
         write_values["balance_end_real"] = Decimal(target["balance_end_real"])
     if "balance_start" in changes:
         write_values["balance_start"] = Decimal(target["balance_start"])
+    write_values.update({field: changes[field] for field in ("name", "date") if field in changes})
     if membership:
         from odoo import Command
 
         write_values["line_ids"] = [Command.set(changes["transaction_ids"])]
     statement.write(write_values)
     statement.invalidate_recordset(
-        ["reference", "balance_start", "balance_end", "balance_end_real", "is_complete", "line_ids", "journal_id", "company_id"]
+        ["reference", "balance_start", "balance_end", "balance_end_real", "is_complete", "line_ids", "journal_id", "company_id", "name", "date"]
     )
     reread = {
         "reference": _statement_reference(statement.reference),
@@ -15164,6 +15239,9 @@ def _update_bank_statement(
             raise _fail(failure_type, "odoo_write_error", "Native starting-balance update did not recompute the ending balance.", exit_code=6)
     if "balance_start" in changes:
         reread["balance_start"] = _canonical_decimal_text(statement.balance_start)
+    for field in ("name", "date"):
+        if field in changes:
+            reread[field] = str(getattr(statement, field)) if field == "date" else statement.name
     if membership:
         transactions.invalidate_recordset()
         retained = _ensure_ids(env, "account.bank.statement.line", existing_ids | target_ids, [
@@ -15399,7 +15477,10 @@ def _bank_transaction(
     return transaction
 
 
-def _bank_transaction_actual_values(transaction: Any, *, include_foreign: bool = False) -> dict[str, Any]:
+def _bank_transaction_actual_values(
+    transaction: Any, *, include_foreign: bool = False,
+    metadata_fields: set[str] | None = None,
+) -> dict[str, Any]:
     result = {
         "date": str(transaction.date),
         "amount": _canonical_decimal_text(transaction.amount),
@@ -15411,6 +15492,8 @@ def _bank_transaction_actual_values(transaction: Any, *, include_foreign: bool =
             foreign_currency_id=_relation_id(transaction.foreign_currency_id),
             amount_currency=_canonical_decimal_text(transaction.amount_currency),
         )
+    for field in metadata_fields or ():
+        result[field] = getattr(transaction, field) or None
     return result
 
 
@@ -15457,6 +15540,22 @@ def _bank_is_default_unmatched(transaction: Any) -> bool:
         and not lines.full_reconcile_id
         and not transaction.payment_ids
         and not transaction.is_reconciled
+    )
+
+
+def _bank_has_isolated_lines(transaction: Any) -> bool:
+    liquidity, _suspense, _other = _bank_parts(transaction)
+    lines = transaction.move_id.line_ids
+    return bool(
+        len(liquidity) == 1
+        and not (lines.matched_debit_ids | lines.matched_credit_ids)
+        and not lines.full_reconcile_id
+        and not transaction.payment_ids
+        and not any(
+            getattr(line, "reconciled_lines_ids", False)
+            or getattr(line, "payment_id", False)
+            for line in lines
+        )
     )
 
 
@@ -15523,9 +15622,12 @@ def _update_bank_transaction(
         env, parameters["transaction_id"], company_id, failure_type
     )
     include_foreign = "foreign_currency_id" in parameters["changes"]
+    metadata_fields = {"account_number", "partner_name"} & set(parameters["changes"])
     if include_foreign and not _bank_is_default_unmatched(transaction):
         raise _fail(failure_type, "state_conflict", "Foreign-currency changes require a completely unmatched bank transaction.", exit_code=5)
-    actual = _bank_transaction_actual_values(transaction, include_foreign=include_foreign)
+    actual = _bank_transaction_actual_values(
+        transaction, include_foreign=include_foreign, metadata_fields=metadata_fields,
+    )
     target = {**actual, **_bank_transaction_target_values(parameters["changes"])}
     if include_foreign and target["foreign_currency_id"] is not None:
         _ensure_ids(env, "res.currency", {target["foreign_currency_id"]}, [("active", "=", True)], company_id, failure_type)
@@ -15559,13 +15661,19 @@ def _update_bank_transaction(
         values["amount_currency"] = Decimal(values["amount_currency"])
     if values.get("partner_id") is None and "partner_id" in values:
         values["partner_id"] = False
+    for field in metadata_fields:
+        values[field] = values[field] or False
     transaction.write(values)
     _invalidate_bank_transaction(transaction)
     if include_foreign:
         transaction.invalidate_recordset(["foreign_currency_id", "amount_currency"])
+    if metadata_fields:
+        transaction.invalidate_recordset(sorted(metadata_fields))
     if (
         transaction.move_id.state != "posted"
-        or _bank_transaction_actual_values(transaction, include_foreign=include_foreign) != target
+        or _bank_transaction_actual_values(
+            transaction, include_foreign=include_foreign, metadata_fields=metadata_fields,
+        ) != target
         or not _bank_is_default_unmatched(transaction)
     ):
         raise _fail(
@@ -15648,12 +15756,29 @@ def _unmatch_bank_transaction(
     if not _bank_external_match_ids(transaction):
         if _bank_is_default_unmatched(transaction):
             return _bank_transaction_result(transaction, company_id, failure_type), True
-        raise _fail(
-            failure_type,
-            "state_conflict",
-            "The bank transaction is not in its default unmatched state.",
-            exit_code=5,
-        )
+        if not _bank_has_isolated_lines(transaction):
+            raise _fail(
+                failure_type,
+                "state_conflict",
+                "The bank transaction has non-isolated reconciliation sources.",
+                exit_code=5,
+            )
+        _ensure_ids(env, "account.move.line", set(transaction.move_id.line_ids.ids), [
+            ("move_id", "=", transaction.move_id.id), ("company_id", "=", company_id),
+        ], company_id, failure_type)
+        _liquidity, _suspense, other = _bank_parts(transaction)
+        account_ids = {
+            line.account_id.id for line in other
+            if not (getattr(line, "tax_repartition_line_id", False)
+                    or getattr(line, "tax_line_id", False)
+                    or getattr(line, "display_type", None) == "tax")
+        }
+        _ensure_ids(env, "account.account", account_ids, [
+            ("company_ids", "in", [company_id]),
+            ("account_type", "in", ["income", "income_other", "expense", "expense_other", "expense_depreciation", "expense_direct_cost"]),
+        ], company_id, failure_type)
+        if transaction.checked and transaction.is_reconciled and not transaction.move_id._is_user_able_to_review():
+            raise _fail(failure_type, "business_rule_error", "Validated entries can only be changed by your accountant.", exit_code=6)
     transaction.action_undo_reconciliation()
     _invalidate_bank_transaction(transaction)
     if not _bank_is_default_unmatched(transaction):
@@ -15663,6 +15788,81 @@ def _unmatch_bank_transaction(
             "Odoo did not restore the default unmatched bank transaction.",
             exit_code=6,
         )
+    return _bank_transaction_result(transaction, company_id, failure_type), False
+
+
+def _replace_bank_counterparts(
+    env: Any, parameters: dict[str, Any], company_id: int,
+    failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    transaction = _bank_transaction(env, parameters["transaction_id"], company_id, failure_type)
+    company = _search_one(env, "res.company", [("id", "=", company_id)], company_id, failure_type)
+    journal = _ensure_ids(env, "account.journal", {transaction.journal_id.id}, [
+        ("company_id", "=", company_id), ("type", "in", ["bank", "cash"]),
+    ], company_id, failure_type)
+    currency = company.currency_id
+    if transaction.foreign_currency_id or _statement_currency(journal).id != currency.id:
+        raise _fail(failure_type, "state_conflict", "Counterpart replacement requires a company-currency bank transaction without a foreign currency.", exit_code=5)
+    _ensure_ids(env, "res.currency", {currency.id}, [], company_id, failure_type)
+    _ensure_ids(env, "account.move", {transaction.move_id.id}, [
+        ("company_id", "=", company_id), ("journal_id", "=", journal.id),
+        ("move_type", "=", "entry"), ("state", "=", "posted"),
+    ], company_id, failure_type)
+    lines = _ensure_ids(env, "account.move.line", set(transaction.move_id.line_ids.ids), [
+        ("company_id", "=", company_id), ("move_id", "=", transaction.move_id.id),
+    ], company_id, failure_type)
+    liquidity, _suspense, _other = _bank_parts(transaction)
+    if not _bank_has_isolated_lines(transaction) or any(
+        line.tax_ids or line.tax_repartition_line_id or line.tax_tag_ids
+        or getattr(line, "group_tax_id", False) or getattr(line, "tax_line_id", False)
+        or getattr(line, "tax_base_amount", 0) or line.display_type == "tax"
+        for line in lines
+    ):
+        raise _fail(failure_type, "state_conflict", "Only isolated bank entries without existing tax lines or tax metadata can replace counterparts.", exit_code=5)
+    _ensure_ids(env, "account.account", {line["account_id"] for line in parameters["lines"]}, [
+        ("company_ids", "in", [company_id]), ("active", "=", True),
+        ("account_type", "in", ["income", "income_other", "expense", "expense_other", "expense_depreciation", "expense_direct_cost"]),
+    ], company_id, failure_type)
+    _ensure_ids(env, "res.partner", {transaction.partner_id.id} if transaction.partner_id else set(),
+                [("company_id", "in", [False, company_id])], company_id, failure_type)
+    requested = [
+        (line["account_id"], line["label"], _rounded_currency_amount(currency, line["balance"]))
+        for line in parameters["lines"]
+    ]
+    if any(balance == 0 for _account, _label, balance in requested) or sum(
+        (balance for _account, _label, balance in requested), Decimal(0)
+    ) != -Decimal(str(liquidity.balance)):
+        raise _fail(failure_type, "business_rule_error", "Requested counterparts must exactly balance the native liquidity line at company-currency precision.", exit_code=6)
+    expected = sorted((account, label, _canonical_decimal_text(balance)) for account, label, balance in requested)
+
+    def matches() -> bool:
+        current_liquidity, suspense, counterparts = _bank_parts(transaction)
+        return bool(
+            len(current_liquidity) == 1 and not suspense and transaction.is_reconciled
+            and len(counterparts) == len(requested)
+            and sorted((line.account_id.id, line.name, _canonical_decimal_text(line.balance))
+                       for line in counterparts) == expected
+        )
+
+    if matches():
+        return _bank_transaction_result(transaction, company_id, failure_type), True
+    if transaction.checked and transaction.is_reconciled and not transaction.move_id._is_user_able_to_review():
+        raise _fail(failure_type, "business_rule_error", "Validated entries can only be changed by your accountant.", exit_code=6)
+    liquidity_snapshot = (liquidity.id, _canonical_decimal_text(liquidity.balance),
+                          liquidity.currency_id.id, _canonical_decimal_text(liquidity.amount_currency))
+    values = [{
+        "account_id": account, "name": label, "balance": float(balance),
+        "currency_id": currency.id, "amount_currency": float(balance),
+        "partner_id": transaction.partner_id.id or False,
+    } for account, label, balance in requested]
+    transaction._set_move_line_to_statement_line_move(liquidity, values)
+    _invalidate_bank_transaction(transaction)
+    current_liquidity, _suspense, _other = _bank_parts(transaction)
+    if (transaction.move_id.state != "posted" or not _bank_has_isolated_lines(transaction)
+        or len(current_liquidity) != 1 or not matches()
+        or (current_liquidity.id, _canonical_decimal_text(current_liquidity.balance),
+            current_liquidity.currency_id.id, _canonical_decimal_text(current_liquidity.amount_currency)) != liquidity_snapshot):
+        raise _fail(failure_type, "odoo_write_error", "Odoo did not replace the requested isolated bank counterparts.", exit_code=6)
     return _bank_transaction_result(transaction, company_id, failure_type), False
 
 
@@ -15774,6 +15974,7 @@ def _record_bank_transaction(
     marker: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    metadata_fields = {"account_number", "partner_name"} & set(parameters)
     existing = _scoped(env, "account.bank.statement.line", company_id).search(
         [
             ("company_id", "=", company_id),
@@ -15805,6 +16006,11 @@ def _record_bank_transaction(
             if (_relation_id(existing.foreign_currency_id) != foreign_id
                 or not _same_decimal(existing.amount_currency, parameters["amount_currency"])):
                 raise _fail(failure_type, "idempotency_conflict", "The recorded bank transaction no longer matches the requested foreign-currency pair.", exit_code=5)
+        if metadata_fields:
+            if any((getattr(existing, field) or None) != parameters[field] for field in metadata_fields):
+                raise _fail(failure_type, "idempotency_conflict", "The recorded bank transaction no longer matches the requested bank metadata.", exit_code=5)
+            _ensure_ids(env, "res.partner", {existing.partner_id.id} if existing.partner_id else set(),
+                        [("company_id", "in", [False, company_id])], company_id, failure_type)
         return _bank_transaction_result(existing, company_id, failure_type), True
 
     company = _search_one(
@@ -15849,6 +16055,7 @@ def _record_bank_transaction(
     transaction = _scoped(env, "account.bank.statement.line", company_id).create(
         {
             **foreign_values,
+            **{field: parameters[field] or False for field in metadata_fields},
             "company_id": company_id,
             "journal_id": parameters["journal_id"],
             "date": parameters["date"],
@@ -15859,7 +16066,11 @@ def _record_bank_transaction(
             "invoice_origin": marker,
         }
     )
+    if metadata_fields:
+        _ensure_ids(env, "res.partner", {transaction.partner_id.id} if transaction.partner_id else set(),
+                    [("company_id", "in", [False, company_id])], company_id, failure_type)
     if (transaction.move_id.state != "posted"
+        or any((getattr(transaction, field) or None) != parameters[field] for field in metadata_fields)
         or (foreign_values and (
             _relation_id(transaction.foreign_currency_id) != parameters["foreign_currency_id"]
             or not _same_decimal(transaction.amount_currency, parameters["amount_currency"])
@@ -22056,6 +22267,8 @@ def _dispatch_allowed(
         return _match_bank_transaction(env, parameters, company_id, failure_type)
     if capability_id == "bank.transaction.unmatch":
         return _unmatch_bank_transaction(env, parameters, company_id, failure_type)
+    if capability_id == "bank.transaction.counterparts.replace":
+        return _replace_bank_counterparts(env, parameters, company_id, failure_type)
     if capability_id == "reconciliation.write_off":
         return _write_off_bank_transaction(env, parameters, company_id, failure_type)
     return _record_bank_transaction(

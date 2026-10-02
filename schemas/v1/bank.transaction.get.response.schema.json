@@ -43,7 +43,7 @@
           "type": "null"
         },
         {
-          "$ref": "bank.transaction.list.response.schema.json#/$defs/item"
+          "$ref": "#/$defs/item"
         }
       ]
     },
@@ -92,7 +92,7 @@
             "const": "verified"
           },
           "data": {
-            "$ref": "bank.transaction.list.response.schema.json#/$defs/item"
+            "$ref": "#/$defs/item"
           },
           "error": {
             "type": "null"
@@ -110,5 +110,29 @@
         }
       }
     }
-  ]
+  ],
+  "$defs": {
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "company_id", "date", "payment_date", "name", "reference", "partner", "journal", "amount", "currency", "move", "reconciled", "statement_id"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "company_id": {"type": "integer", "minimum": 1},
+        "date": {"type": "string", "format": "date"},
+        "payment_date": {"oneOf": [{"type": "null"}, {"type": "string", "format": "date"}]},
+        "name": {"$ref": "bank.transaction.list.response.schema.json#/$defs/nullableText"},
+        "reference": {"$ref": "bank.transaction.list.response.schema.json#/$defs/nullableText"},
+        "partner": {"oneOf": [{"type": "null"}, {"$ref": "bank.transaction.list.response.schema.json#/$defs/partner"}]},
+        "journal": {"$ref": "bank.transaction.list.response.schema.json#/$defs/journal"},
+        "amount": {"$ref": "bank.transaction.list.response.schema.json#/$defs/decimal"},
+        "currency": {"$ref": "bank.transaction.list.response.schema.json#/$defs/currency"},
+        "move": {"$ref": "bank.transaction.list.response.schema.json#/$defs/move"},
+        "reconciled": {"type": "boolean"},
+        "statement_id": {"type": ["integer", "null"], "minimum": 1},
+        "account_number": {"$ref": "bank.transaction.list.response.schema.json#/$defs/nullableText"},
+        "partner_name": {"$ref": "bank.transaction.list.response.schema.json#/$defs/nullableText"}
+      }
+    }
+  }
 }

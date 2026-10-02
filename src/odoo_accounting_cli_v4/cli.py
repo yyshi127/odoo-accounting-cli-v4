@@ -1806,6 +1806,7 @@ _CAPABILITY_MODELS = {
     "bank.transaction.update": "account.bank.statement.line",
     "bank.transaction.match": "account.bank.statement.line",
     "bank.transaction.unmatch": "account.bank.statement.line",
+    "bank.transaction.counterparts.replace": "account.bank.statement.line",
     "bank.transaction.delete": "account.bank.statement.line",
     "reconciliation.write_off": "account.bank.statement.line",
     "payment.duplicate": "account.payment",

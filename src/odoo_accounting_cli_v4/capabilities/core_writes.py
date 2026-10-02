@@ -92,6 +92,7 @@ CORE_WRITE_CAPABILITY_IDS = invoice_preparation.CAPABILITY_IDS | journal_item_pr
         "payment.reset_to_draft",
         "bank.transaction.update",
         "bank.transaction.match",
+        "bank.transaction.counterparts.replace",
         "bank.transaction.unmatch",
         "bank.statement.create",
         "bank.statement.update",
@@ -381,6 +382,7 @@ _BANK_RECONCILIATION_WRITE_CAPABILITIES = frozenset(
     {
         "bank.transaction.update",
         "bank.transaction.match",
+        "bank.transaction.counterparts.replace",
         "bank.transaction.unmatch",
         "reconciliation.write_off",
     }
@@ -1574,7 +1576,7 @@ def _validate_bank_foreign_currency_pair(values: dict[str, Any]) -> None:
 def _validate_bank_transaction_parameters(parameters: Any) -> dict[str, Any]:
     expected = {"journal_id", "date", "amount", "payment_ref", "partner_id"}
     if (not isinstance(parameters, dict) or not expected <= set(parameters)
-            or not set(parameters) <= expected | {"foreign_currency_id", "amount_currency"}):
+            or not set(parameters) <= expected | {"foreign_currency_id", "amount_currency", "account_number", "partner_name"}):
         raise _invalid("Bank-transaction parameters do not match the fixed contract.")
     if not _valid_id(parameters["journal_id"]):
         raise _invalid("parameters.journal_id must be a positive integer.")
@@ -1587,6 +1589,9 @@ def _validate_bank_transaction_parameters(parameters: Any) -> dict[str, Any]:
         raise _invalid("parameters.payment_ref must be a non-empty string.")
     if not _valid_optional_id(parameters["partner_id"]):
         raise _invalid("parameters.partner_id must be null or a positive integer.")
+    for field in ("account_number", "partner_name"):
+        if field in parameters and not _is_nullable_bounded_text(parameters[field], 200):
+            raise _invalid(f"parameters.{field} must be null or a trimmed 1-200 character string.")
     _validate_bank_foreign_currency_pair(parameters)
     return dict(parameters)
 
@@ -1600,7 +1605,7 @@ def _validate_bank_transaction_update_parameters(parameters: Any) -> dict[str, A
     if not _valid_id(parameters["transaction_id"]):
         raise _invalid("parameters.transaction_id must be a positive integer.")
     changes = parameters["changes"]
-    allowed = {"date", "amount", "payment_ref", "partner_id", "foreign_currency_id", "amount_currency"}
+    allowed = {"date", "amount", "payment_ref", "partner_id", "foreign_currency_id", "amount_currency", "account_number", "partner_name"}
     if not isinstance(changes, dict) or not changes or not set(changes) <= allowed:
         raise _invalid("parameters.changes contains no supported bank update.")
     if "date" in changes and not _is_date(changes["date"]):
@@ -1613,13 +1618,16 @@ def _validate_bank_transaction_update_parameters(parameters: Any) -> dict[str, A
         raise _invalid("changes.payment_ref must be a trimmed 1-200 character string.")
     if "partner_id" in changes and not _valid_optional_id(changes["partner_id"]):
         raise _invalid("changes.partner_id must be null or a positive integer.")
+    for field in ("account_number", "partner_name"):
+        if field in changes and not _is_nullable_bounded_text(changes[field], 200):
+            raise _invalid(f"changes.{field} must be null or a trimmed 1-200 character string.")
     _validate_bank_foreign_currency_pair(changes)
     return {"transaction_id": parameters["transaction_id"], "changes": dict(changes)}
 
 
 def _validate_bank_statement_values(values: Any, *, partial: bool) -> dict[str, Any]:
     required = {"reference", "balance_end_real", "transaction_ids"}
-    allowed = required | {"balance_start"}
+    allowed = required | {"balance_start", "name", "date"}
     if (
         not isinstance(values, dict)
         or (partial and (not values or not set(values) <= allowed))
@@ -1639,6 +1647,10 @@ def _validate_bank_statement_values(values: Any, *, partial: bool) -> dict[str, 
         or _is_bounded_text(normalized["reference"], 200)
     ):
         raise _invalid("reference must be null or a trimmed 1-200 character string.")
+    if "name" in normalized and not _is_bounded_text(normalized["name"], 200):
+        raise _invalid("name must be a trimmed 1-200 character string.")
+    if "date" in normalized and not _is_date(normalized["date"]):
+        raise _invalid("date must be a YYYY-MM-DD date.")
     for field in ("balance_start", "balance_end_real"):
         if field in normalized and _canonical_decimal(normalized[field], signed=True) is None:
             raise _invalid(f"{field} must be a canonical signed decimal string.")
@@ -1712,6 +1724,25 @@ def _validate_write_off_parameters(parameters: Any) -> dict[str, Any]:
             "parameters.expected_residual_amount must be a nonzero decimal string."
         )
     return dict(parameters)
+
+
+def _validate_bank_counterparts_parameters(parameters: Any) -> dict[str, Any]:
+    if not isinstance(parameters, dict) or set(parameters) != {"transaction_id", "lines"}:
+        raise _invalid("Bank-counterpart parameters do not match the fixed contract.")
+    if not _valid_id(parameters["transaction_id"]):
+        raise _invalid("parameters.transaction_id must be a positive integer.")
+    lines = parameters["lines"]
+    if not isinstance(lines, list) or not 2 <= len(lines) <= 100:
+        raise _invalid("parameters.lines must contain 2 to 100 bank-counterpart rows.")
+    for line in lines:
+        if not isinstance(line, dict) or set(line) != {"account_id", "label", "balance"}:
+            raise _invalid("Bank-counterpart rows must contain account_id, label and balance only.")
+        if not _valid_id(line["account_id"]) or not _is_bounded_text(line["label"], 200):
+            raise _invalid("Bank-counterpart rows require a positive account_id and trimmed 1-200 character label.")
+        balance = _canonical_decimal(line["balance"], signed=True)
+        if balance is None or balance == 0:
+            raise _invalid("Bank-counterpart balance must be a canonical nonzero signed decimal string.")
+    return {"transaction_id": parameters["transaction_id"], "lines": [dict(line) for line in lines]}
 
 
 def _validate_analytic_account_create_parameters(parameters: Any) -> dict[str, Any]:
@@ -4601,6 +4632,8 @@ def validate_core_write_request(
         normalized = _validate_bank_transaction_update_parameters(parameters)
     elif capability_id == "bank.transaction.match":
         normalized = _validate_bank_match_parameters(parameters)
+    elif capability_id == "bank.transaction.counterparts.replace":
+        normalized = _validate_bank_counterparts_parameters(parameters)
     elif capability_id == "bank.transaction.unmatch":
         normalized = _validate_single_id(parameters, "transaction_id")
     elif capability_id == "reconciliation.write_off":
@@ -5209,6 +5242,8 @@ def _expected_idempotency_key(
         target = parameters["changes"]
     elif capability_id == "bank.transaction.match":
         target = parameters["candidate_line_ids"]
+    elif capability_id == "bank.transaction.counterparts.replace":
+        target = parameters["lines"]
     elif capability_id == "reconciliation.write_off":
         target = {
             "write_off_account_id": parameters["write_off_account_id"],
@@ -5863,6 +5898,16 @@ def _validate_result(
                 capability_id == "bank.statement.update"
                 and "transaction_ids" in parameters["changes"]
                 and result["line_ids"] != parameters["changes"]["transaction_ids"]
+            )
+            or (
+                capability_id == "bank.statement.create"
+                and "name" in parameters
+                and result["name"] != parameters["name"]
+            )
+            or (
+                capability_id == "bank.statement.update"
+                and "name" in parameters["changes"]
+                and result["name"] != parameters["changes"]["name"]
             )
             or (capability_id == "bank.statement.delete" and idempotent_replay)
             or result["partial_reconcile_ids"]
@@ -6682,6 +6727,13 @@ def _validate_result(
             or not result["line_ids"]
         ):
             raise _failed("Odoo returned a mismatched bank-transaction result.")
+        if capability_id == "bank.transaction.counterparts.replace" and (
+            not result["reconciled"]
+            or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None
+            or len(result["line_ids"]) != len(parameters["lines"]) + 1
+        ):
+            raise _failed("Odoo returned an incomplete bank-counterpart replacement result.")
         return deepcopy(result)
     if capability_id in _DRAFT_DOCUMENT_MAINTENANCE_CAPABILITIES:
         line_action = capability_id.startswith("invoice.line.")
