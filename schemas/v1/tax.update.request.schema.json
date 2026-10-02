@@ -22,14 +22,19 @@
           "properties": {
             "name": {"$ref": "#/$defs/name"},
             "type_tax_use": {"enum": ["sale", "purchase", "none"]},
-            "amount_type": {"enum": ["fixed", "percent", "division"]},
+            "amount_type": {"enum": ["fixed", "percent", "division", "group"]},
             "amount": {"type": "number", "minimum": -1000000, "maximum": 1000000},
             "sequence": {"type": "integer", "minimum": 0},
             "tax_group_id": {"type": ["integer", "null"], "minimum": 1},
             "invoice_label": {"$ref": "#/$defs/nullableText"},
             "price_include_override": {"enum": ["tax_included", "tax_excluded", null]},
             "include_base_amount": {"type": "boolean"},
-            "is_base_affected": {"type": "boolean"}
+            "is_base_affected": {"type": "boolean"},
+            "children_tax_ids": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "integer", "minimum": 1}},
+            "tax_scope": {"enum": ["service", "consu", null]},
+            "analytic": {"type": "boolean"},
+            "tax_exigibility": {"enum": ["on_invoice", "on_payment"]},
+            "cash_basis_transition_account_id": {"type": ["integer", "null"], "minimum": 1}
           }
         }
       }

@@ -1075,13 +1075,15 @@ def _required_page_parameters(capability_id: str) -> dict:
 def test_public_capability_sets_match_fixed_ids_without_report_execution() -> None:
     assert CORE_OBJECT_GET_CAPABILITY_IDS == frozenset(
         {*GET_ID_FIELDS, *SUPPORTING_GET_CAPABILITIES, *analytic_processing.READ_IDS,
-         *company_processing.READ_IDS, *journal_item_processing.GET_IDS, *invoice_preparation.READ_IDS}
+         *company_processing.READ_IDS, *journal_item_processing.GET_IDS, *invoice_preparation.READ_IDS,
+         "cash_rounding.compute"}
     )
     assert CORE_OBJECT_READ_CAPABILITY_IDS == frozenset(
         {
             *GET_ID_FIELDS,
             *analytic_processing.READ_IDS,
             *company_processing.READ_IDS,
+            "cash_rounding.compute",
             *journal_item_processing.READ_IDS,
             *invoice_preparation.READ_IDS,
             *PAGE_CAPABILITIES,

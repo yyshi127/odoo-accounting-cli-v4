@@ -1,6 +1,95 @@
 # Execution status
 
-## Current accounting phase — 2026-10-02
+## Current accounting phase — cash-basis setup and posted metadata, 2026-10-02
+
+546 registered IDs; 531 implemented handlers (249 reads, 282 writes);
+1068 schemas. Availability: 457 unconfigured, 74 degraded, 15 disabled.
+Enabled integrations: 528 implemented, two planned, one failed. Counts include
+historical non-accounting extensions; they are not a complete accounting
+denominator, completion percentage or ordinary-user permission guarantee.
+
+This batch adds two command IDs and extends six existing capabilities:
+
+- company.cash_basis_configuration.update — native company cash-basis enable,
+  journal and base-account set/clear/readback/replay.
+- cash_rounding.compute — native currency-aware signed amount calculation,
+  returning base amount, rounded amount and difference; no accounting write.
+- company.processing_settings.get — the three new cash-basis settings.
+- tax.create/update — grouped taxes and optional children_tax_ids, tax_scope,
+  analytic, tax_exigibility and cash_basis_transition_account_id.
+- invoice.update — posted reference and payment_reference only.
+- journal_entry.update — posted reference only, not a new payment_reference field.
+- invoice.presentation_settings.update — posted narration and invoice_user_id only.
+
+New tax fields are omitted when absent, retaining old normalized request/key
+shapes. Native transition-account reconciliation, reference company domains,
+tax grouping and invoice computation apply. A native group-to-leaf write may
+retain children: UI onchange is not run, and non-group calculation ignores them.
+Company tax_exigibility is root-delegated; root writes natively propagate to
+branches, while an explicit branch boolean is rejected even on replay. Company
+ORM writes do not run settings UI onchange or delete existing cash-basis taxes.
+The three required getter additions need synchronized SDK, bridge and schema;
+old strict response-validator compatibility is not claimed.
+
+Posted metadata edits retain native ACL, company, lock and hash checks. All
+other fields remain draft-only, and valid posted reconciliation links are
+preserved. Reference edits may change journal-item display labels, not their
+financial fields. There is no financial-state unlock, sudo business call or PDF
+regeneration guarantee. Cash rounding normalizes with currency.round first
+and calls the native compute_difference; signed/zero inputs are supported.
+
+One shared public CLI/native ORM workflow passed both isolated aliases in
+22.30s as uid5/su=False/company1. It verifies all eight capability targets:
+advanced/group taxes and actual native invoice computation; company set/clear/
+get/replay without onchange; unpaid sale/purchase posted metadata; posted entry
+references; restricted financial/shipping denials; a real partial reconciliation
+followed by metadata edits with matching IDs/amounts and source/counterpart
+financial lines unchanged; positive/negative/zero/minor-unit cash rounding.
+Fresh-cursor checks confirm all fixtures, both companies' settings, all defaults,
+currency/rates and exact caller/native group memberships roll back.
+
+Necessary native configuration roles exist only inside the isolated transaction.
+The installed live topology has independent roots: branch denial/ancestor domains
+have unit evidence, not an accepted live branch propagation workflow. Cash-basis
+entry generation/undo, fully paid invoice edits, every lock/hash/localization,
+currency/rounding method, invoice-rounding accounting flow, concurrent exactly-
+once and actual sends remain unclaimed. The fully paid result shape has SDK unit
+coverage only; it is not a fully paid native-flow acceptance.
+
+Local evidence: 52 new cases passed in7.10s; five affected read checks in0.41s;
+four scoped registry nodes passed across initial three plus one repaired node.
+Initial in-flight failures are retained and are not accepted evidence. Server
+initial gate:52 passed/one old exact-capability-set test failed in6.65s, so native
+did not start. The one-string test correction then passed alone in0.48s.
+Final acceptance metadata:two affected registry nodes passed in11.85s. These are
+scoped/combined runs, not a full-suite claim.
+
+First actual native attempt failed in10.82s: DEV completed fresh rollback,
+E2E did not start. Its partial graph assertion compared default many-to-one
+display labels that legitimately changed with references. A test-only load=None
+repair retains all nine raw accounting fields and both financial snapshots;
+runtime code and native constraints were not loosened. Only the final22.30s
+dual-alias run is acceptance.
+
+Deployment:21 initial explicit files (14 existing backed up/seven new), one
+existing exact-set test repair, one live-fixture repair, then two final metadata/
+test files. Every overwrite checks prior hashes and has recoverable backups.
+All22 final local/server hashes match. Services remain active with unchanged
+fresh-baseline process IDs/restart counts. Server docs stay untouched.
+Disk4.97 GiB free/94% used (df); no cleanup or deletion. Changed22-file privacy
+findings and Ruff diagnostics are zero. Staged-added privacy is checked separately;
+historical document findings are not represented as a clean-tree claim.
+
+No business database, native source/addon, service/configuration, Pi/V2/V3,
+external sends or service restart was changed. Still unclosed:asset.validate
+native-addon failure and two external-send integrations requiring separately
+scoped authority. Debit-note addon is absent; do not silently install or repair
+native addons. Continue practical accounting gaps; the overall goal is active.
+
+Registry file SHA256 02e931fcfa25cd08d712731c6287f314389b0bbc84b966e48f5883591f90f7e8;
+canonical registry SHA256 2e20214ae8099e27c34af41966cc6b04292101e6cf634f8efaed180d806feece.
+
+## Previous checkpoint — native accounting workflows, 2026-10-02
 
 544 registered IDs; 529 implemented handlers (248 reads, 281 writes);
 1064 schemas. Availability: 455 unconfigured, 74 degraded, 15 disabled.

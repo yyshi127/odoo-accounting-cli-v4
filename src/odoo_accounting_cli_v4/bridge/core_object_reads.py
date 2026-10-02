@@ -25,6 +25,7 @@ CAPABILITY_IDS = frozenset(
         "bank.transaction.get",
         "cash_rounding.get",
         "cash_rounding.list",
+        "cash_rounding.compute",
         "journal_item.search",
         "journal_item.get",
         "journal.group.get",

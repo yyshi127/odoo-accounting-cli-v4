@@ -141,7 +141,10 @@
         "account_journal_suspense_account_id",
         "transfer_account_id",
         "account_discount_expense_allocation_id",
-        "account_discount_income_allocation_id"
+        "account_discount_income_allocation_id",
+        "tax_exigibility",
+        "tax_cash_basis_journal_id",
+        "account_cash_basis_base_account_id"
       ],
       "properties": {
         "id": {
@@ -150,6 +153,17 @@
         },
         "company_id": {
           "type": "integer",
+          "minimum": 1
+        },
+        "tax_exigibility": {
+          "type": "boolean"
+        },
+        "tax_cash_basis_journal_id": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "account_cash_basis_base_account_id": {
+          "type": ["integer", "null"],
           "minimum": 1
         },
         "account_journal_early_pay_discount_gain_account_id": {

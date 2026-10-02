@@ -22,10 +22,11 @@ FIELD_GROUPS = {
     "company.default_accounts.assign": {"income_account_id", "expense_account_id"},
     "company.bank_defaults.assign": {"account_journal_suspense_account_id", "transfer_account_id"},
     "company.discount_allocation_accounts.assign": {"account_discount_income_allocation_id", "account_discount_expense_allocation_id"},
+    "company.cash_basis_configuration.update": {"tax_exigibility", "tax_cash_basis_journal_id", "account_cash_basis_base_account_id"},
 }
 CAPABILITY_IDS = frozenset(FIELD_GROUPS)
 PARAMETER_KEYS = {capability: {"changes"} for capability in CAPABILITY_IDS}
-BOOL_FIELDS = {"qr_code", "link_qr_code", "display_invoice_amount_total_words", "display_invoice_tax_company_currency", "account_use_credit_limit", "autopost_bills"}
+BOOL_FIELDS = {"qr_code", "link_qr_code", "display_invoice_amount_total_words", "display_invoice_tax_company_currency", "account_use_credit_limit", "autopost_bills", "tax_exigibility"}
 CHOICES = {
     "fiscalyear_last_month": {str(month) for month in range(1, 13)},
     "tax_calculation_rounding_method": {"round_globally", "round_per_line"},
@@ -46,6 +47,8 @@ RELATION_MODELS = {
     "transfer_account_id": "account.account",
     "account_discount_income_allocation_id": "account.account",
     "account_discount_expense_allocation_id": "account.account",
+    "tax_cash_basis_journal_id": "account.journal",
+    "account_cash_basis_base_account_id": "account.account",
 }
 SETTING_FIELDS = tuple(sorted(set().union(*FIELD_GROUPS.values())))
 GET_FIELDS = ("id", "company_id", *SETTING_FIELDS)

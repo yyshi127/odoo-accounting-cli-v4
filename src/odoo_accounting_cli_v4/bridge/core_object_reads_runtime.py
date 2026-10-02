@@ -11,6 +11,7 @@ from typing import Any
 
 from odoo_accounting_cli_v4 import account_processing_contracts as account_processing
 from odoo_accounting_cli_v4 import analytic_processing_contracts as analytic_processing
+from odoo_accounting_cli_v4 import cash_rounding_contracts as cash_rounding
 from odoo_accounting_cli_v4 import company_processing_contracts as company_processing
 from odoo_accounting_cli_v4 import invoice_preparation_contracts as invoice_preparation
 from odoo_accounting_cli_v4 import (
@@ -81,6 +82,7 @@ CAPABILITY_IDS = frozenset(
         "reconciliation.model.get",
         "cash_rounding.list",
         "cash_rounding.get",
+        cash_rounding.COMPUTE_ID,
         "journal.group.list",
         "journal.group.get",
         "payment.method_definition.list",
@@ -189,6 +191,7 @@ _GET_IDS = {
         "reconciliation_model_id",
     ),
     "cash_rounding.get": ("account.cash.rounding", "cash_rounding_id"),
+    cash_rounding.COMPUTE_ID: ("account.cash.rounding", "cash_rounding_id"),
     "journal.group.get": ("account.journal.group", "journal_group_id"),
     "partner.bill_validation_preferences.get": ("res.partner", "partner_id"),
     "partner.invoice_delivery_preferences.get": ("res.partner", "partner_id"),
@@ -846,6 +849,7 @@ _REQUIRED_MODELS = {
         "account.cash.rounding",
         "account.account",
     ),
+    cash_rounding.COMPUTE_ID: ("res.company", "account.cash.rounding", "res.currency"),
     "journal.group.list": (
         "res.company",
         "account.journal.group",
@@ -1688,6 +1692,11 @@ def _scope_domain(env: Any, capability_id: str, company_id: int) -> list[Any]:
 def _valid_parameters(capability_id: str, parameters: Any) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id == cash_rounding.COMPUTE_ID:
+        try:
+            return cash_rounding.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
     if capability_id in invoice_preparation.READ_IDS:
         try:
             return invoice_preparation.normalize_parameters(capability_id, parameters) == parameters
@@ -4951,6 +4960,32 @@ def _invoice_preparation_rows(
     return rows
 
 
+def _cash_rounding_compute_rows(
+    env: Any, parameters: dict[str, Any], company_id: int,
+) -> list[dict[str, Any]]:
+    context = {"allowed_company_ids": [company_id], "active_test": False}
+    rounding = env["account.cash.rounding"].with_context(**context).search([
+        ("id", "=", parameters["cash_rounding_id"]),
+    ], limit=1)
+    currency = env["res.currency"].with_context(**context).search([
+        ("id", "=", parameters["currency_id"]),
+    ], limit=1)
+    if not rounding or not currency:
+        return []
+    amount = float(parameters["amount"])
+    base_amount = currency.round(amount)
+    difference = rounding.compute_difference(currency, amount)
+    rounded_amount = currency.round(base_amount + difference)
+    item = {
+        "id": rounding.id, "company_id": company_id, "currency_id": currency.id,
+        "amount": parameters["amount"], "base_amount": _decimal_string(base_amount),
+        "rounded_amount": _decimal_string(rounded_amount), "difference": _decimal_string(difference),
+    }
+    if not cash_rounding.valid_read_item(item, company_id):
+        raise ValueError("invalid native cash-rounding calculation")
+    return [item]
+
+
 def _company_processing_rows(env: Any, company_id: int) -> list[dict[str, Any]]:
     company = env["res.company"].with_context(allowed_company_ids=[company_id], active_test=False).search([("id", "=", company_id)], limit=1)
     if not company:
@@ -6835,6 +6870,8 @@ def dispatch(
         removes_all_taxes = False
         if capability_id in invoice_preparation.READ_IDS:
             rows = _invoice_preparation_rows(env, capability_id, parameters, company_id)
+        elif capability_id == cash_rounding.COMPUTE_ID:
+            rows = _cash_rounding_compute_rows(env, parameters, company_id)
         elif capability_id == company_processing.GET_ID:
             rows = _company_processing_rows(env, company_id)
         elif capability_id in journal_item_processing.GET_IDS:
@@ -6924,7 +6961,7 @@ def dispatch(
                 cursor_found=False,
             )
 
-        if capability_id in invoice_preparation.READ_IDS or capability_id == company_processing.GET_ID or capability_id in analytic_processing.READ_IDS or capability_id in journal_item_processing.GET_IDS:
+        if capability_id in invoice_preparation.READ_IDS or capability_id in {company_processing.GET_ID, cash_rounding.COMPUTE_ID} or capability_id in analytic_processing.READ_IDS or capability_id in journal_item_processing.GET_IDS:
             items = rows
         elif capability_id == journal_processing.GET_ID:
             items = _normalize_journal_processing(rows, company_id)

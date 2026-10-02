@@ -683,7 +683,7 @@ _JOURNAL_DEFAULT_ACCOUNT_TYPES = {
     "credit": frozenset({"liability_credit_card"}),
     "general": _ACCOUNT_TYPES,
 }
-_TAX_CONFIG_KEYS = frozenset(
+_TAX_CONFIG_REQUIRED_KEYS = frozenset(
     {
         "name",
         "type_tax_use",
@@ -697,8 +697,12 @@ _TAX_CONFIG_KEYS = frozenset(
         "is_base_affected",
     }
 )
+_TAX_CONFIG_KEYS = _TAX_CONFIG_REQUIRED_KEYS | frozenset({
+    "children_tax_ids", "tax_scope", "analytic", "tax_exigibility",
+    "cash_basis_transition_account_id",
+})
 _TAX_USE_TYPES = frozenset({"sale", "purchase", "none"})
-_TAX_AMOUNT_TYPES = frozenset({"fixed", "percent", "division"})
+_TAX_AMOUNT_TYPES = frozenset({"fixed", "percent", "division", "group"})
 _TAX_PRICE_INCLUDE_OVERRIDES = frozenset({"tax_included", "tax_excluded"})
 
 _DOCUMENT_CREATE_REQUIRED_KEYS = frozenset(
@@ -3451,6 +3455,15 @@ _ACCESS['company.credit_policy.update'] = {('ir.default', 'read'), ('res.company
 _GROUPS['company.exchange_configuration.update'] = "base.group_erp_manager"
 _MODELS['company.exchange_configuration.update'] = {'res.company', 'account.account', 'ir.default', 'account.journal'}
 _ACCESS['company.exchange_configuration.update'] = {('res.company', 'read'), ('ir.default', 'read'), ('res.company', 'write'), ('account.journal', 'read'), ('account.account', 'read')}
+_GROUPS["company.cash_basis_configuration.update"] = "base.group_erp_manager"
+_MODELS["company.cash_basis_configuration.update"] = {"res.company", "account.account", "account.journal", "ir.default"}
+_ACCESS["company.cash_basis_configuration.update"] = {
+    ("res.company", "read"), ("res.company", "write"),
+    ("account.account", "read"), ("account.journal", "read"), ("ir.default", "read"),
+}
+for _tax_configuration_capability in ("tax.create", "tax.update"):
+    _MODELS[_tax_configuration_capability].add("account.account")
+    _ACCESS[_tax_configuration_capability].add(("account.account", "read"))
 _GROUPS['company.fiscal_year_end.update'] = "base.group_erp_manager"
 _MODELS['company.fiscal_year_end.update'] = {'res.company', 'ir.default'}
 _ACCESS['company.fiscal_year_end.update'] = {('ir.default', 'read'), ('res.company', 'write'), ('res.company', 'read')}
@@ -4582,7 +4595,7 @@ def _valid_tax_values(values: Any, *, partial: bool) -> bool:
     if partial:
         if not values or not set(values) <= _TAX_CONFIG_KEYS:
             return False
-    elif set(values) != _TAX_CONFIG_KEYS:
+    elif not _TAX_CONFIG_REQUIRED_KEYS <= set(values) <= _TAX_CONFIG_KEYS:
         return False
     if "name" in values and not _is_text(values["name"], maximum=256):
         return False
@@ -4612,9 +4625,24 @@ def _valid_tax_values(values: Any, *, partial: bool) -> bool:
         or values["price_include_override"] in _TAX_PRICE_INCLUDE_OVERRIDES
     ):
         return False
+    if "children_tax_ids" in values:
+        children = values["children_tax_ids"]
+        if (not isinstance(children, list) or len(children) > 100
+            or not all(_is_id(child) for child in children)
+            or children != sorted(set(children))):
+            return False
+    if "tax_scope" in values and values["tax_scope"] not in (None, "service", "consu"):
+        return False
+    if "tax_exigibility" in values and values["tax_exigibility"] not in ("on_invoice", "on_payment"):
+        return False
+    if "cash_basis_transition_account_id" in values and not (
+        values["cash_basis_transition_account_id"] is None
+        or _is_id(values["cash_basis_transition_account_id"])
+    ):
+        return False
     return all(
         field_name not in values or isinstance(values[field_name], bool)
-        for field_name in ("include_base_amount", "is_base_affected")
+        for field_name in ("include_base_amount", "is_base_affected", "analytic")
     )
 
 
@@ -5796,6 +5824,8 @@ def _valid_parameters(
         required_keys = frozenset({"name"})
     elif capability_id == "product.create":
         required_keys = _PRODUCT_CREATE_REQUIRED_FIELDS
+    elif capability_id == "tax.create":
+        required_keys = _TAX_CONFIG_REQUIRED_KEYS
     if not required_keys <= parameter_keys <= allowed_keys:
         return False
     if capability_id in _BATCH_LIFECYCLE_CAPABILITIES:
@@ -10387,6 +10417,8 @@ def _validate_tax_references(
     values: dict[str, Any],
     company_id: int,
     failure_type: type[Exception],
+    *,
+    tax: Any = None,
 ) -> None:
     tax_group_id = values.get("tax_group_id")
     if tax_group_id is not None:
@@ -10398,6 +10430,32 @@ def _validate_tax_references(
             company_id,
             failure_type,
         )
+    if set(values) & {"children_tax_ids", "type_tax_use", "tax_scope"}:
+        children = values.get("children_tax_ids", _record_ids(getattr(tax, "children_tax_ids", [])))
+        if tax is not None and tax.id in children:
+            raise _fail(failure_type, "business_rule_error", "A tax cannot be its own child.", exit_code=6)
+        tax_use = values.get("type_tax_use", getattr(tax, "type_tax_use", "sale"))
+        scope = values.get("tax_scope", getattr(tax, "tax_scope", False)) or False
+        if children:
+            _ensure_ids(env, "account.tax", set(children), [
+                ("company_id", "parent_of", [company_id]),
+                ("type_tax_use", "in", ["none", tax_use]),
+                ("tax_scope", "in", [False, scope]),
+                ("amount_type", "!=", "group"),
+            ], company_id, failure_type)
+    if set(values) & {"tax_exigibility", "cash_basis_transition_account_id"}:
+        exigibility = values.get("tax_exigibility", getattr(tax, "tax_exigibility", "on_invoice"))
+        account_id = values.get(
+            "cash_basis_transition_account_id",
+            _relation_id(getattr(tax, "cash_basis_transition_account_id", False)),
+        )
+        if exigibility == "on_payment" and account_id is None:
+            raise _fail(failure_type, "business_rule_error", "Cash-basis taxes require a reconcilable transition account.", exit_code=6)
+        if account_id is not None:
+            domain = [("company_ids", "parent_of", [company_id])]
+            account = _ensure_ids(env, "account.account", {account_id}, domain, company_id, failure_type)
+            if exigibility == "on_payment" and not account.reconcile:
+                raise _fail(failure_type, "business_rule_error", "Cash-basis taxes require a reconcilable transition account.", exit_code=6)
 
 
 def _automatic_tax_group_id(env: Any, tax: Any, company_id: int) -> int | None:
@@ -10433,6 +10491,16 @@ def _tax_matches(
         "include_base_amount": tax.include_base_amount,
         "is_base_affected": tax.is_base_affected,
     }
+    for field in ("tax_scope", "analytic", "tax_exigibility", "cash_basis_transition_account_id", "children_tax_ids"):
+        if field in values:
+            value = getattr(tax, field)
+            if field == "children_tax_ids":
+                value = _record_ids(value)
+            elif field == "cash_basis_transition_account_id":
+                value = _relation_id(value)
+            elif field == "tax_scope":
+                value = value or None
+            comparisons[field] = value
     expected = dict(values)
     if expected.get("sequence") is None and "sequence" in expected:
         expected["sequence"] = 1
@@ -10452,9 +10520,11 @@ def _tax_values(values: dict[str, Any], *, creating: bool) -> dict[str, Any]:
             result.pop("tax_group_id")
         else:
             result["tax_group_id"] = False
-    for field_name in ("invoice_label", "price_include_override"):
+    for field_name in ("invoice_label", "price_include_override", "tax_scope", "cash_basis_transition_account_id"):
         if field_name in result and result[field_name] is None:
             result[field_name] = False
+    if "children_tax_ids" in result:
+        result["children_tax_ids"] = [(6, 0, result["children_tax_ids"])]
     return result
 
 
@@ -10471,6 +10541,7 @@ def _create_tax_config(
             ("company_id", "=", company_id),
             ("name", "=", parameters["name"]),
             ("type_tax_use", "=", parameters["type_tax_use"]),
+            ("tax_scope", "=", parameters.get("tax_scope") or False),
         ],
         limit=2,
     )
@@ -10530,8 +10601,8 @@ def _update_tax_config(
     write_changes = dict(changes)
     if "tax_group_id" in write_changes and write_changes["tax_group_id"] is None:
         write_changes["tax_group_id"] = automatic_group_id
-    _validate_tax_references(env, write_changes, company_id, failure_type)
-    if "name" in changes or "type_tax_use" in changes:
+    _validate_tax_references(env, write_changes, company_id, failure_type, tax=tax)
+    if set(changes) & {"name", "type_tax_use", "tax_scope"}:
         target_name = changes.get("name", tax.name)
         target_use = changes.get("type_tax_use", tax.type_tax_use)
         candidates = _scoped(env, "account.tax", company_id).search(
@@ -10539,6 +10610,7 @@ def _update_tax_config(
                 ("company_id", "=", company_id),
                 ("name", "=", target_name),
                 ("type_tax_use", "=", target_use),
+                ("tax_scope", "=", changes.get("tax_scope", getattr(tax, "tax_scope", False)) or False),
             ],
             limit=2,
         )
@@ -11607,15 +11679,18 @@ def _update_move(
     else:
         _validate_journal_update_references(env, changes, company_id, failure_type)
         current = _current_journal_entry_changes(move, set(changes))
-    if current == changes:
-        return _move_result(move, company_id), True
-    if move.state != "draft":
+    nonfinancial_fields = {"reference", "payment_reference"} if invoice_action else {"reference"}
+    if move.state != "draft" and not (
+        move.state == "posted" and set(changes) <= nonfinancial_fields
+    ):
         raise _fail(
             failure_type,
             "state_conflict",
-            "Only a draft accounting move can be updated.",
+            "Only draft moves or posted nonfinancial reference fields can be updated.",
             exit_code=5,
         )
+    if current == changes:
+        return _move_result(move, company_id), True
 
     field_map = (
         {
@@ -18169,6 +18244,8 @@ def _write_company_processing(
         changes = parameters["changes"]
         if capability_id == "company.fiscal_year_end.update" and company.parent_id:
             raise _fail(failure_type, "company_unavailable", "Fiscal year-end is root-delegated; target its root company explicitly.", exit_code=3)
+        if capability_id == "company.cash_basis_configuration.update" and "tax_exigibility" in changes and company.parent_id:
+            raise _fail(failure_type, "company_unavailable", "Cash-basis activation is root-delegated; target its root company explicitly.", exit_code=3)
         for field, value in changes.items():
             model = company_processing.RELATION_MODELS.get(field)
             if model and value is not None:
@@ -18189,7 +18266,9 @@ def _write_company_processing(
                             domain.append(("reconcile", "=", True))
                     else:
                         domain.append(("account_type", "in", ["income", "income_other", "expense", "expense_other"]))
-                if model == "account.journal":
+                if capability_id == "company.cash_basis_configuration.update":
+                    domain = [("company_ids" if model == "account.account" else "company_id", "parent_of", [company_id])]
+                elif model == "account.journal":
                     domain.append(("type", "=", "general"))
                 _ensure_ids(env, model, {value}, domain, company_id, failure_type)
         current = _company_processing_values(company)
@@ -20569,8 +20648,13 @@ def _write_invoice_presentation(
         ("id", "=", parameters["move_id"]), ("company_id", "=", company_id),
         ("move_type", "in", sorted(invoice_presentation.INVOICE_TYPES)),
     ], company_id, failure_type)
-    if move.state != "draft":
-        raise _fail(failure_type, "state_conflict", "Presentation changes require a draft invoice or receipt.", exit_code=6)
+    posted_metadata = (
+        capability_id == "invoice.presentation_settings.update"
+        and move.state == "posted"
+        and set(parameters["changes"]) <= {"narration", "invoice_user_id"}
+    )
+    if move.state != "draft" and not posted_metadata:
+        raise _fail(failure_type, "state_conflict", "Only draft presentation or posted narration and salesperson settings can change.", exit_code=6)
     if capability_id == "invoice.presentation_settings.update":
         changes = dict(parameters["changes"])
         shipping = changes.get("partner_shipping_id")

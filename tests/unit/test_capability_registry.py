@@ -39,21 +39,22 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 544
-EXPECTED_ENABLED_CAPABILITY_COUNT = 529
-EXPECTED_IMPLEMENTED_READ_COUNT = 248
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 281
+EXPECTED_CAPABILITY_COUNT = 546
+EXPECTED_ENABLED_CAPABILITY_COUNT = 531
+EXPECTED_IMPLEMENTED_READ_COUNT = 249
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 282
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 455
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 457
 EXPECTED_DEGRADED_CAPABILITY_COUNT = 74
-EXPECTED_SCHEMA_COUNT = 1064
+EXPECTED_SCHEMA_COUNT = 1068
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "aa40adbac45c5f5faaa15796f642c9ea533cb3a23c276145dba88eec1913edf3"
+    "43e89b4b0c89c3c935401e86e4a3aaabaaadc40928150848076c79409d28bd3e"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
 )
 IMPLEMENTED_READS = {
+    "cash_rounding.compute": "cash_rounding_compute",
     "invoice.service_dates.get": "invoice_service_dates_get",
     "invoice.alerts.inspect": "invoice_alerts_inspect",
     "accounting_move.origin_links.inspect": "accounting_move_origin_links_inspect",
@@ -409,6 +410,7 @@ ANALYTIC_PROCESSING_READS = {'analytic.applicability.resolve', 'analytic.account
 
 COMPANY_PROCESSING_WRITES = {
     "company.bill_processing_policy.update",
+    "company.cash_basis_configuration.update",
     "company.cash_discount_accounts.assign",
     "company.credit_policy.update",
     "company.exchange_configuration.update",
@@ -433,7 +435,10 @@ ACCOUNTING_WORKFLOWS_WRITES = {"invoice.reverse_and_reissue", "company.default_a
 ACCOUNTING_WORKFLOWS_EXTENDED_WRITES = {"journal_entry.lines.update", "reconciliation.undo", "journal.sequence_policy.update"}
 ACCOUNTING_WORKFLOWS_READS = {"bank.transaction.list", "bank.transaction.search", "bank.transaction.get", "payment.get", "company.processing_settings.get"}
 
-IMPLEMENTED_WRITES = ACCOUNTING_WORKFLOWS_WRITES | INVOICE_PREPARATION_WRITES | JOURNAL_ITEM_PROCESSING_WRITES | COMPANY_PROCESSING_WRITES | ANALYTIC_PROCESSING_WRITES | JOURNAL_PROCESSING_WRITES | ACCOUNT_PROCESSING_WRITES | TAX_PROCESSING_WRITES | PAYMENT_TERM_PROCESSING_WRITES | RECONCILIATION_PROCESSING_WRITES | PAYMENT_PROCESSING_WRITES | INVOICE_PRESENTATION_WRITES | MOVE_PROCESSING_WRITES | PARTNER_PREFERENCES_WRITES | PAYMENT_CONFIGURATION_WRITES | FISCAL_MAPPING_WRITES | REPORT_BUDGET_WRITES | {
+ACCOUNTING_SETUP_WRITES = {"company.cash_basis_configuration.update", "tax.create", "tax.update", "invoice.update", "journal_entry.update", "invoice.presentation_settings.update"}
+ACCOUNTING_SETUP_READS = {"cash_rounding.compute", "company.processing_settings.get"}
+
+IMPLEMENTED_WRITES = ACCOUNTING_SETUP_WRITES | ACCOUNTING_WORKFLOWS_WRITES | INVOICE_PREPARATION_WRITES | JOURNAL_ITEM_PROCESSING_WRITES | COMPANY_PROCESSING_WRITES | ANALYTIC_PROCESSING_WRITES | JOURNAL_PROCESSING_WRITES | ACCOUNT_PROCESSING_WRITES | TAX_PROCESSING_WRITES | PAYMENT_TERM_PROCESSING_WRITES | RECONCILIATION_PROCESSING_WRITES | PAYMENT_PROCESSING_WRITES | INVOICE_PRESENTATION_WRITES | MOVE_PROCESSING_WRITES | PARTNER_PREFERENCES_WRITES | PAYMENT_CONFIGURATION_WRITES | FISCAL_MAPPING_WRITES | REPORT_BUDGET_WRITES | {
     "account.group.create",
     "account.group.update",
     "account.tag.archive",
@@ -905,6 +910,7 @@ RETURN_JOURNAL_ANALYSIS_LIVE_READS = {
     "journal_item.analysis.summary",
 }
 CORE_OBJECT_READ_HANDLERS = {
+    "cash_rounding.compute": "cash_rounding_compute",
     "invoice.service_dates.get": "invoice_service_dates_get",
     "invoice.alerts.inspect": "invoice_alerts_inspect",
     "accounting_move.origin_links.inspect": "accounting_move_origin_links_inspect",
@@ -1242,6 +1248,11 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
             ]
             continue
         assert descriptor["tests"]["unit"]["status"] == "implemented"
+        if capability_id in ACCOUNTING_SETUP_READS:
+            assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_accounting_setup_batch.py"]
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == ["tests/integration/test_accounting_setup_batch_live.py"]
+            continue
         if capability_id in ACCOUNTING_WORKFLOWS_READS:
             assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_accounting_workflows_batch.py"]
             assert descriptor["tests"]["integration"]["status"] == "implemented"
@@ -3079,6 +3090,12 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
         else:
             assert descriptor["status"]["value"] == "unconfigured"
             assert descriptor["status"]["reason_code"] == "runtime_context_required"
+        if capability_id in ACCOUNTING_SETUP_WRITES:
+            assert descriptor["tests"]["unit"]["status"] == "implemented"
+            assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_accounting_setup_batch.py"]
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == ["tests/integration/test_accounting_setup_batch_live.py"]
+            continue
         if capability_id in ACCOUNTING_RULES_FISCAL_YEAR_WRITES:
             assert descriptor["tests"]["unit"]["status"] == "implemented"
             assert set(descriptor["tests"]["unit"]["references"]) == {

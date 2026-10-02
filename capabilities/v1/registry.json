@@ -9045,7 +9045,7 @@
       },
       "strategies": {
         "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_native_draft_account_move_write_action",
+        "execute": "native_draft_header_write_or_posted_existing_reference_fields_only",
         "verify": "same_transaction_target_header_payload_reread_and_response_schema_validation",
         "idempotency": "target_header_payload_state_check_before_native_write",
         "reverse": "repeat_update_with_previous_header_values"
@@ -9054,23 +9054,16 @@
         "unit": {
           "status": "implemented",
           "references": [
-            "tests/unit/test_document_lifecycle_writes.py",
-            "tests/unit/test_document_lifecycle_writes_runtime.py",
-            "tests/unit/test_invoice_financial_headers.py",
-            "tests/unit/test_invoice_financial_headers_runtime.py",
-            "tests/unit/test_core_writes_bridge.py",
-            "tests/unit/test_core_write_cli.py",
-            "tests/unit/test_document_lifecycle_write_cli.py"
+            "tests/unit/test_accounting_setup_batch.py"
           ],
-          "reason": "Unit tests cover the closed request, draft-only update, configured-user ACL gates, target-payload replay, bridge contract, and CLI dispatch."
+          "reason": "Closed typed inputs, legacy request/key compatibility, native scopes and posted nonfinancial boundaries."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_document_lifecycle_write_batch_live.py",
-            "tests/integration/test_invoice_financial_headers_prepayment_batch_live.py"
+            "tests/integration/test_accounting_setup_batch_live.py"
           ],
-          "reason": "The guarded shared live smoke verifies native draft header updates and target-payload replay against both isolated database aliases."
+          "reason": "One shared public CLI/native ORM workflow passed both isolated aliases in 22.30s as uid5/su=False/company1. Two new IDs and six extensions: company cash-basis assign/clear/get/replay; optional advanced tax fields, native grouped-tax invoice computation and transition-account rules; sale/purchase posted reference and narration/user edits including a partially reconciled invoice with raw matching IDs/amounts unchanged; posted entry references; financial/shipping denials; positive/negative/zero/minor-unit native currency-aware cash-rounding computation. Native configuration roles exist only inside the isolated transaction; caller never gains sudo. Fresh fixtures, both companies settings, all defaults, currencies/rates and exact caller/native group memberships roll back. Root cash-basis boolean natively propagates to branches; the live topology uses independent roots, not a tested branch workflow. Company ORM write does not run settings UI onchange or delete cash-basis taxes. Group-to-leaf native write need not clear children; non-group calculation ignores retained children. Actual cash-basis entry lifecycle, all hierarchy/currency/localization/hash/lock paths, PDF regeneration, external sends and concurrent exactly-once are not claimed. No business DB, native source/addon or service changes."
         },
         "golden": {
           "status": "planned",
@@ -9095,10 +9088,10 @@
         ],
         "aliases": {
           "zh_CN": [
-            "更新草稿发票或账单"
+            "修改草稿字段或已过账引用信息"
           ],
           "en_US": [
-            "Update a draft invoice or bill"
+            "Update draft fields or posted nonfinancial references"
           ]
         },
         "not_for": {
@@ -10688,7 +10681,7 @@
       },
       "strategies": {
         "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_native_draft_account_move_write_action",
+        "execute": "native_draft_header_write_or_posted_existing_reference_fields_only",
         "verify": "same_transaction_target_header_payload_reread_and_response_schema_validation",
         "idempotency": "target_header_payload_state_check_before_native_write",
         "reverse": "repeat_update_with_previous_header_values"
@@ -10697,20 +10690,16 @@
         "unit": {
           "status": "implemented",
           "references": [
-            "tests/unit/test_document_lifecycle_writes.py",
-            "tests/unit/test_document_lifecycle_writes_runtime.py",
-            "tests/unit/test_core_writes_bridge.py",
-            "tests/unit/test_core_write_cli.py",
-            "tests/unit/test_document_lifecycle_write_cli.py"
+            "tests/unit/test_accounting_setup_batch.py"
           ],
-          "reason": "Unit tests cover the closed request, draft-only update, configured-user ACL gates, target-payload replay, bridge contract, and CLI dispatch."
+          "reason": "Closed typed inputs, legacy request/key compatibility, native scopes and posted nonfinancial boundaries."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_document_lifecycle_write_batch_live.py"
+            "tests/integration/test_accounting_setup_batch_live.py"
           ],
-          "reason": "The guarded shared live smoke verifies native draft header updates and target-payload replay against both isolated database aliases."
+          "reason": "One shared public CLI/native ORM workflow passed both isolated aliases in 22.30s as uid5/su=False/company1. Two new IDs and six extensions: company cash-basis assign/clear/get/replay; optional advanced tax fields, native grouped-tax invoice computation and transition-account rules; sale/purchase posted reference and narration/user edits including a partially reconciled invoice with raw matching IDs/amounts unchanged; posted entry references; financial/shipping denials; positive/negative/zero/minor-unit native currency-aware cash-rounding computation. Native configuration roles exist only inside the isolated transaction; caller never gains sudo. Fresh fixtures, both companies settings, all defaults, currencies/rates and exact caller/native group memberships roll back. Root cash-basis boolean natively propagates to branches; the live topology uses independent roots, not a tested branch workflow. Company ORM write does not run settings UI onchange or delete cash-basis taxes. Group-to-leaf native write need not clear children; non-group calculation ignores retained children. Actual cash-basis entry lifecycle, all hierarchy/currency/localization/hash/lock paths, PDF regeneration, external sends and concurrent exactly-once are not claimed. No business DB, native source/addon or service changes."
         },
         "golden": {
           "status": "planned",
@@ -10735,10 +10724,10 @@
         ],
         "aliases": {
           "zh_CN": [
-            "更新草稿总账分录"
+            "修改草稿字段或已过账引用信息"
           ],
           "en_US": [
-            "Update a draft general journal entry"
+            "Update draft fields or posted nonfinancial references"
           ]
         },
         "not_for": {
@@ -19982,33 +19971,118 @@
       "handler_key": "core_write"
     },
     "tax.create": {
-      "summary": {"zh_CN": "创建税", "en_US": "Create an accounting tax"},
+      "summary": {
+        "zh_CN": "创建税",
+        "en_US": "Create an accounting tax"
+      },
       "domain": "taxes",
       "access": "write",
       "source": {
-        "modules": ["account", "base"],
-        "models": ["res.company", "account.tax.group", "account.tax"],
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "account.tax.group",
+          "account.tax",
+          "account.account"
+        ],
         "wizards": [],
         "report_handlers": [],
-        "locations": ["_references/base/models/res_company.py", "account/models/account_tax.py"]
+        "locations": [
+          "_references/base/models/res_company.py",
+          "account/models/account_tax.py",
+          "account/models/account_account.py"
+        ]
       },
-      "schemas": {"request": "schemas/v1/tax.create.request.schema.json", "response": "schemas/v1/tax.create.response.schema.json"},
+      "schemas": {
+        "request": "schemas/v1/tax.create.request.schema.json",
+        "response": "schemas/v1/tax.create.response.schema.json"
+      },
       "requirements": {
-        "modules": ["account", "base"],
-        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
         "company": "required",
-        "groups": ["account.group_account_manager"],
-        "acl": ["res.company:read", "account.tax.group:read", "account.tax:read", "account.tax:create"]
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.tax.group:read",
+          "account.tax:read",
+          "account.tax:create",
+          "account.account:read"
+        ]
       },
-      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_accounting_configuration_write_action_as_configured_business_user", "verify": "post_write_same_transaction_reread_and_response_schema_validation", "idempotency": "capability_company_and_full_normalized_parameters_sha256_request_key_with_company_tax_name_and_type_tax_use_natural_key_reread_without_concurrent_exactly_once_guarantee", "reverse": "tax.archive"},
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_accounting_configuration_write_action_as_configured_business_user",
+        "verify": "post_write_same_transaction_reread_and_response_schema_validation",
+        "idempotency": "legacy_unchanged_parameter_key_or_explicit_advanced_fields_scope_identity_current_native_target_recheck_without_operation_store_or_concurrent_exactly_once",
+        "reverse": "tax.archive"
+      },
       "tests": {
-        "unit": {"status": "implemented", "references": ["tests/unit/test_accounting_config_writes.py", "tests/unit/test_accounting_config_writes_runtime.py", "tests/unit/test_accounting_config_write_cli.py", "tests/unit/test_accounting_config_write_registry.py"], "reason": "Unit tests cover the closed request contract, fixed company-scoped execution, natural-key replay, registry schemas, and CLI dispatch."},
-        "integration": {"status": "implemented", "references": ["tests/integration/test_accounting_config_write_batch_live.py"], "reason": "The shared guarded transactional smoke verifies first execution, immediate replay, and rollback in both dedicated isolated database aliases."},
-        "golden": {"status": "planned", "references": [], "reason": "The golden definition is frozen; implementation evidence is pending."},
-        "e2e": {"status": "planned", "references": [], "reason": "The e2e definition is frozen; implementation evidence is pending."}
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_accounting_setup_batch.py"
+          ],
+          "reason": "Closed typed inputs, legacy request/key compatibility, native scopes and posted nonfinancial boundaries."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_accounting_setup_batch_live.py"
+          ],
+          "reason": "One shared public CLI/native ORM workflow passed both isolated aliases in 22.30s as uid5/su=False/company1. Two new IDs and six extensions: company cash-basis assign/clear/get/replay; optional advanced tax fields, native grouped-tax invoice computation and transition-account rules; sale/purchase posted reference and narration/user edits including a partially reconciled invoice with raw matching IDs/amounts unchanged; posted entry references; financial/shipping denials; positive/negative/zero/minor-unit native currency-aware cash-rounding computation. Native configuration roles exist only inside the isolated transaction; caller never gains sudo. Fresh fixtures, both companies settings, all defaults, currencies/rates and exact caller/native group memberships roll back. Root cash-basis boolean natively propagates to branches; the live topology uses independent roots, not a tested branch workflow. Company ORM write does not run settings UI onchange or delete cash-basis taxes. Group-to-leaf native write need not clear children; non-group calculation ignores retained children. Actual cash-basis entry lifecycle, all hierarchy/currency/localization/hash/lock paths, PDF regeneration, external sends and concurrent exactly-once are not claimed. No business DB, native source/addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
       },
-      "status": {"value": "degraded", "reason_code": "concurrent_idempotency_limit", "reason": "The fixed handler is implemented and replays the company, name, and tax-use natural key, but Odoo does not provide a native request-id uniqueness constraint, so concurrent exactly-once creation is not guaranteed."},
-      "routing": {"object": "tax", "actions": ["create"], "aliases": {"zh_CN": ["创建税"], "en_US": ["Create an accounting tax"]}, "not_for": {"zh_CN": [], "en_US": []}, "required_slots": ["database", "company_id", "user_login"]},
+      "status": {
+        "value": "degraded",
+        "reason_code": "concurrent_idempotency_limit",
+        "reason": "The fixed handler is implemented and replays the company, name, and tax-use natural key, but Odoo does not provide a native request-id uniqueness constraint, so concurrent exactly-once creation is not guaranteed."
+      },
+      "routing": {
+        "object": "tax",
+        "actions": [
+          "create"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "创建税"
+          ],
+          "en_US": [
+            "Create an accounting tax"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [],
+          "en_US": []
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
       "handler_key": "core_write"
     },
     "tax.group.get": {
@@ -20519,33 +20593,118 @@
       "handler_key": "core_write"
     },
     "tax.update": {
-      "summary": {"zh_CN": "更新税", "en_US": "Update an accounting tax"},
+      "summary": {
+        "zh_CN": "更新税",
+        "en_US": "Update an accounting tax"
+      },
       "domain": "taxes",
       "access": "write",
       "source": {
-        "modules": ["account", "base"],
-        "models": ["res.company", "account.tax.group", "account.tax"],
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "account.tax.group",
+          "account.tax",
+          "account.account"
+        ],
         "wizards": [],
         "report_handlers": [],
-        "locations": ["_references/base/models/res_company.py", "account/models/account_tax.py"]
+        "locations": [
+          "_references/base/models/res_company.py",
+          "account/models/account_tax.py",
+          "account/models/account_account.py"
+        ]
       },
-      "schemas": {"request": "schemas/v1/tax.update.request.schema.json", "response": "schemas/v1/tax.update.response.schema.json"},
+      "schemas": {
+        "request": "schemas/v1/tax.update.request.schema.json",
+        "response": "schemas/v1/tax.update.response.schema.json"
+      },
       "requirements": {
-        "modules": ["account", "base"],
-        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
         "company": "required",
-        "groups": ["account.group_account_manager"],
-        "acl": ["res.company:read", "account.tax.group:read", "account.tax:read", "account.tax:write"]
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.tax.group:read",
+          "account.tax:read",
+          "account.tax:write",
+          "account.account:read"
+        ]
       },
-      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_accounting_configuration_write_action_as_configured_business_user", "verify": "post_write_same_transaction_reread_and_response_schema_validation", "idempotency": "deterministic_request_key_and_current_target_state_recheck_without_operation_store_or_protection_from_intermediate_changes", "reverse": "tax.update_with_prior_values"},
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_accounting_configuration_write_action_as_configured_business_user",
+        "verify": "post_write_same_transaction_reread_and_response_schema_validation",
+        "idempotency": "deterministic_request_key_and_current_target_state_recheck_without_operation_store_or_protection_from_intermediate_changes",
+        "reverse": "tax.update_with_prior_values"
+      },
       "tests": {
-        "unit": {"status": "implemented", "references": ["tests/unit/test_accounting_config_writes.py", "tests/unit/test_accounting_config_writes_runtime.py", "tests/unit/test_accounting_config_write_cli.py", "tests/unit/test_accounting_config_write_registry.py"], "reason": "Unit tests cover the closed request contract, fixed company-scoped execution, target-state replay, registry schemas, and CLI dispatch."},
-        "integration": {"status": "implemented", "references": ["tests/integration/test_accounting_config_write_batch_live.py"], "reason": "The shared guarded transactional smoke verifies first execution, immediate replay, and rollback in both dedicated isolated database aliases."},
-        "golden": {"status": "planned", "references": [], "reason": "The golden definition is frozen; implementation evidence is pending."},
-        "e2e": {"status": "planned", "references": [], "reason": "The e2e definition is frozen; implementation evidence is pending."}
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_accounting_setup_batch.py"
+          ],
+          "reason": "Closed typed inputs, legacy request/key compatibility, native scopes and posted nonfinancial boundaries."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_accounting_setup_batch_live.py"
+          ],
+          "reason": "One shared public CLI/native ORM workflow passed both isolated aliases in 22.30s as uid5/su=False/company1. Two new IDs and six extensions: company cash-basis assign/clear/get/replay; optional advanced tax fields, native grouped-tax invoice computation and transition-account rules; sale/purchase posted reference and narration/user edits including a partially reconciled invoice with raw matching IDs/amounts unchanged; posted entry references; financial/shipping denials; positive/negative/zero/minor-unit native currency-aware cash-rounding computation. Native configuration roles exist only inside the isolated transaction; caller never gains sudo. Fresh fixtures, both companies settings, all defaults, currencies/rates and exact caller/native group memberships roll back. Root cash-basis boolean natively propagates to branches; the live topology uses independent roots, not a tested branch workflow. Company ORM write does not run settings UI onchange or delete cash-basis taxes. Group-to-leaf native write need not clear children; non-group calculation ignores retained children. Actual cash-basis entry lifecycle, all hierarchy/currency/localization/hash/lock paths, PDF regeneration, external sends and concurrent exactly-once are not claimed. No business DB, native source/addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
       },
-      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
-      "routing": {"object": "tax", "actions": ["update"], "aliases": {"zh_CN": ["更新税"], "en_US": ["Update an accounting tax"]}, "not_for": {"zh_CN": [], "en_US": []}, "required_slots": ["database", "company_id", "user_login"]},
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."
+      },
+      "routing": {
+        "object": "tax",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "更新税"
+          ],
+          "en_US": [
+            "Update an accounting tax"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [],
+          "en_US": []
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
       "handler_key": "core_write"
     },
     "user.accounting_access.inspect": {
@@ -29362,7 +29521,7 @@
       },
       "strategies": {
         "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_native_invoice_fields_or_fiscal_action",
+        "execute": "native_draft_presentation_or_posted_narration_salesperson_only_no_pdf_regeneration",
         "verify": "same_transaction_native_payload_recheck",
         "idempotency": "native_current_payload_recheck_missing_deleted_line_is_not_found",
         "reverse": "restore_previous_values_subject_to_native_state_and_acl"
@@ -29371,16 +29530,16 @@
         "unit": {
           "status": "implemented",
           "references": [
-            "tests/unit/test_invoice_presentation_batch.py"
+            "tests/unit/test_accounting_setup_batch.py"
           ],
-          "reason": "Shared closed schemas, public/runtime contracts, native layout and fiscal actions, replay and scope boundaries."
+          "reason": "Closed typed inputs, legacy request/key compatibility, native scopes and posted nonfinancial boundaries."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_invoice_presentation_batch_live.py"
+            "tests/integration/test_accounting_setup_batch_live.py"
           ],
-          "reason": "The shared rollback-only public CLI/real-ORM smoke passed both isolated aliases as uid 5 with su=False: all eight new IDs and seven immediate replays; native sanitized terms, shipping/responsible settings; sections, subsections, notes, native zero-accounting/parent/order and scoped keyset pagination; existing empty/long native labels; layout edits preserve totals; native fiscal price/tax/account recomputation with native balance and dynamic-sync guards; product-line deletion, incomplete ordering, posted and foreign-company denial; fresh-cursor business-record and temporary-group rollback. No external delivery, cron, addon modification or service changes."
+          "reason": "One shared public CLI/native ORM workflow passed both isolated aliases in 22.30s as uid5/su=False/company1. Two new IDs and six extensions: company cash-basis assign/clear/get/replay; optional advanced tax fields, native grouped-tax invoice computation and transition-account rules; sale/purchase posted reference and narration/user edits including a partially reconciled invoice with raw matching IDs/amounts unchanged; posted entry references; financial/shipping denials; positive/negative/zero/minor-unit native currency-aware cash-rounding computation. Native configuration roles exist only inside the isolated transaction; caller never gains sudo. Fresh fixtures, both companies settings, all defaults, currencies/rates and exact caller/native group memberships roll back. Root cash-basis boolean natively propagates to branches; the live topology uses independent roots, not a tested branch workflow. Company ORM write does not run settings UI onchange or delete cash-basis taxes. Group-to-leaf native write need not clear children; non-group calculation ignores retained children. Actual cash-basis entry lifecycle, all hierarchy/currency/localization/hash/lock paths, PDF regeneration, external sends and concurrent exactly-once are not claimed. No business DB, native source/addon or service changes."
         },
         "golden": {
           "status": "planned",
@@ -29405,22 +29564,20 @@
         ],
         "aliases": {
           "zh_CN": [
-            "修改发票展示设置"
+            "修改发票展示设置，已过账仅备注和销售员"
           ],
           "en_US": [
-            "Update draft invoice shipping partner, responsible user and terms"
+            "Update invoice presentation; posted only terms and salesperson"
           ]
         },
         "not_for": {
           "zh_CN": [
-            "修改已过账单据",
-            "任意修改记账行或金额",
-            "操作其他公司单据"
+            "修改已过账单据财务字段或收货方",
+            "绕过原生哈希、锁账或ACL"
           ],
           "en_US": [
-            "Changing posted documents",
-            "Arbitrary accounting-line or amount edits",
-            "Another company invoice"
+            "Financial or shipping changes to posted documents",
+            "Bypassing native hashes, locks or ACLs"
           ]
         },
         "required_slots": [
@@ -37345,16 +37502,16 @@
         "unit": {
           "status": "implemented",
           "references": [
-            "tests/unit/test_accounting_workflows_batch.py"
+            "tests/unit/test_accounting_setup_batch.py"
           ],
-          "reason": "Closed typed inputs, schema and target binding; compatible legacy branches remain covered."
+          "reason": "Closed typed inputs, legacy request/key compatibility, native scopes and posted nonfinancial boundaries."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_accounting_workflows_batch_live.py"
+            "tests/integration/test_accounting_setup_batch_live.py"
           ],
-          "reason": "Shared native CLI workflow: both isolated aliases passed32.80s as uid5/su=False/company1. Verified sale/purchase reversal plus draft reissue and replay, native foreign-currency line edits, full/partial matching-group leaf undo and shrinking replay, statement-scoped bank pagination and actual payment bank matches, three company account assignments/clearing/readback and product fallback, purchase self-billing sequence. Native configuration roles and independent bank fixtures exist only in the test transaction. Fresh-cursor objects, caller groups, company settings, defaults and currency/rate rollback checks passed. Bank response additions require synchronized SDK/bridge/schema. No business DB, native source/addon, service, external-send or operation-store changes. Prior-paid reissue, cashbasis/exchange undo workflows, all ancestry/currency/localization/lock/hash branches, all setting consumers and concurrent exactly-once are not claimed."
+          "reason": "One shared public CLI/native ORM workflow passed both isolated aliases in 22.30s as uid5/su=False/company1. Two new IDs and six extensions: company cash-basis assign/clear/get/replay; optional advanced tax fields, native grouped-tax invoice computation and transition-account rules; sale/purchase posted reference and narration/user edits including a partially reconciled invoice with raw matching IDs/amounts unchanged; posted entry references; financial/shipping denials; positive/negative/zero/minor-unit native currency-aware cash-rounding computation. Native configuration roles exist only inside the isolated transaction; caller never gains sudo. Fresh fixtures, both companies settings, all defaults, currencies/rates and exact caller/native group memberships roll back. Root cash-basis boolean natively propagates to branches; the live topology uses independent roots, not a tested branch workflow. Company ORM write does not run settings UI onchange or delete cash-basis taxes. Group-to-leaf native write need not clear children; non-group calculation ignores retained children. Actual cash-basis entry lifecycle, all hierarchy/currency/localization/hash/lock paths, PDF regeneration, external sends and concurrent exactly-once are not claimed. No business DB, native source/addon or service changes."
         },
         "golden": {
           "status": "planned",
@@ -40110,6 +40267,232 @@
         ]
       },
       "handler_key": "core_write"
+    },
+    "company.cash_basis_configuration.update": {
+      "summary": {
+        "zh_CN": "设置现金收付制会计配置",
+        "en_US": "Update native cash-basis accounting configuration"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "account.journal",
+          "ir.default",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "_references/base/models/res_company.py",
+          "account/models/company.py",
+          "stock_account/models/res_company.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/company.cash_basis_configuration.update.request.schema.json",
+        "response": "schemas/v1/company.cash_basis_configuration.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "base.group_erp_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.journal:read",
+          "ir.default:read",
+          "res.company:read",
+          "res.company:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_cash_basis_company_write_root_boolean_delegation_syncs_branches_branch_boolean_requires_explicit_root",
+        "verify": "same_transaction_native_current_company_setting_readback",
+        "idempotency": "serial_current_target_setting_recheck_without_operation_store_or_concurrent_exactly_once",
+        "reverse": "restore_prior_settings_subject_to_native_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_accounting_setup_batch.py"
+          ],
+          "reason": "Closed typed inputs, legacy request/key compatibility, native scopes and posted nonfinancial boundaries."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_accounting_setup_batch_live.py"
+          ],
+          "reason": "One shared public CLI/native ORM workflow passed both isolated aliases in 22.30s as uid5/su=False/company1. Two new IDs and six extensions: company cash-basis assign/clear/get/replay; optional advanced tax fields, native grouped-tax invoice computation and transition-account rules; sale/purchase posted reference and narration/user edits including a partially reconciled invoice with raw matching IDs/amounts unchanged; posted entry references; financial/shipping denials; positive/negative/zero/minor-unit native currency-aware cash-rounding computation. Native configuration roles exist only inside the isolated transaction; caller never gains sudo. Fresh fixtures, both companies settings, all defaults, currencies/rates and exact caller/native group memberships roll back. Root cash-basis boolean natively propagates to branches; the live topology uses independent roots, not a tested branch workflow. Company ORM write does not run settings UI onchange or delete cash-basis taxes. Group-to-leaf native write need not clear children; non-group calculation ignores retained children. Actual cash-basis entry lifecycle, all hierarchy/currency/localization/hash/lock paths, PDF regeneration, external sends and concurrent exactly-once are not claimed. No business DB, native source/addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed handler implemented; runtime checks configured database, native caller permissions and company context."
+      },
+      "routing": {
+        "object": "company",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置现金收付制会计配置"
+          ],
+          "en_US": [
+            "Update native cash-basis accounting configuration"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [],
+          "en_US": []
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "cash_rounding.compute": {
+      "summary": {
+        "zh_CN": "计算现金舍入金额与差额",
+        "en_US": "Compute native currency-aware cash rounding"
+      },
+      "domain": "accounting_master_data",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "res.company",
+          "account.cash.rounding",
+          "res.currency"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "_references/base/models/res_company.py",
+          "account/models/account_cash_rounding.py",
+          "_references/base/models/res_currency.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/cash_rounding.compute.request.schema.json",
+        "response": "schemas/v1/cash_rounding.compute.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read",
+          "account.cash.rounding:read",
+          "res.currency:read"
+        ]
+      },
+      "strategies": {
+        "preview": "not_applicable_read_only",
+        "execute": "native_currency_round_and_cash_rounding_compute_difference_as_business_user",
+        "verify": "closed_result_bound_to_rule_currency_company_and_original_canonical_amount",
+        "idempotency": "not_applicable_read_only",
+        "reverse": "not_applicable_read_only"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_accounting_setup_batch.py"
+          ],
+          "reason": "Closed typed inputs, legacy request/key compatibility, native scopes and posted nonfinancial boundaries."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_accounting_setup_batch_live.py"
+          ],
+          "reason": "One shared public CLI/native ORM workflow passed both isolated aliases in 22.30s as uid5/su=False/company1. Two new IDs and six extensions: company cash-basis assign/clear/get/replay; optional advanced tax fields, native grouped-tax invoice computation and transition-account rules; sale/purchase posted reference and narration/user edits including a partially reconciled invoice with raw matching IDs/amounts unchanged; posted entry references; financial/shipping denials; positive/negative/zero/minor-unit native currency-aware cash-rounding computation. Native configuration roles exist only inside the isolated transaction; caller never gains sudo. Fresh fixtures, both companies settings, all defaults, currencies/rates and exact caller/native group memberships roll back. Root cash-basis boolean natively propagates to branches; the live topology uses independent roots, not a tested branch workflow. Company ORM write does not run settings UI onchange or delete cash-basis taxes. Group-to-leaf native write need not clear children; non-group calculation ignores retained children. Actual cash-basis entry lifecycle, all hierarchy/currency/localization/hash/lock paths, PDF regeneration, external sends and concurrent exactly-once are not claimed. No business DB, native source/addon or service changes."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed handler implemented; runtime checks configured database, native caller permissions and company context."
+      },
+      "routing": {
+        "object": "cash_rounding",
+        "actions": [
+          "compute"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "计算现金舍入金额与差额"
+          ],
+          "en_US": [
+            "Compute native currency-aware cash rounding"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [],
+          "en_US": []
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "cash_rounding_compute"
     }
   }
 }

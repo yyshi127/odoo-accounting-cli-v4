@@ -601,7 +601,7 @@ _ACCOUNT_TYPES = frozenset(
 )
 _JOURNAL_TYPES = frozenset({"sale", "purchase", "cash", "bank", "credit", "general"})
 _TAX_USES = frozenset({"sale", "purchase", "none"})
-_TAX_AMOUNT_TYPES = frozenset({"fixed", "percent", "division"})
+_TAX_AMOUNT_TYPES = frozenset({"group", "fixed", "percent", "division"})
 _PRICE_INCLUDE_OVERRIDES = frozenset({"tax_included", "tax_excluded"})
 
 
@@ -2249,6 +2249,11 @@ def _validate_tax_configuration_values(values: Any, *, partial: bool) -> dict[st
         "price_include_override",
         "include_base_amount",
         "is_base_affected",
+        "children_tax_ids",
+        "tax_scope",
+        "analytic",
+        "tax_exigibility",
+        "cash_basis_transition_account_id",
     }
     allowed = required | optional
     if (
@@ -2293,9 +2298,26 @@ def _validate_tax_configuration_values(values: Any, *, partial: bool) -> dict[st
         or normalized["price_include_override"] in _PRICE_INCLUDE_OVERRIDES
     ):
         raise _invalid("price_include_override is not supported.")
-    for field in ("include_base_amount", "is_base_affected"):
+    for field in ("include_base_amount", "is_base_affected", "analytic"):
         if field in normalized and not isinstance(normalized[field], bool):
             raise _invalid(f"{field} must be a boolean.")
+    if "children_tax_ids" in normalized:
+        children = _validate_ids(normalized["children_tax_ids"])
+        if children is None or len(children) > 100:
+            raise _invalid("children_tax_ids must contain at most 100 unique positive IDs.")
+        normalized["children_tax_ids"] = sorted(children)
+    if "tax_scope" in normalized and normalized["tax_scope"] not in (
+        None, "service", "consu"
+    ):
+        raise _invalid("tax_scope must be null, service, or consu.")
+    if "tax_exigibility" in normalized and normalized["tax_exigibility"] not in (
+        "on_invoice", "on_payment"
+    ):
+        raise _invalid("tax_exigibility must be on_invoice or on_payment.")
+    if "cash_basis_transition_account_id" in normalized and not _valid_optional_id(
+        normalized["cash_basis_transition_account_id"]
+    ):
+        raise _invalid("cash_basis_transition_account_id must be null or a positive integer.")
     if not partial:
         normalized.setdefault("sequence", None)
         normalized.setdefault("tax_group_id", None)
@@ -5447,9 +5469,14 @@ def _validate_result(
         layout = capability_id.startswith("invoice.layout_line.")
         source_id = result["source_id"] if capability_id.endswith(".create") else parameters.get("line_id")
         if (result["model"] != "account.move" or result["id"] != parameters["move_id"]
-            or result["move_type"] not in invoice_presentation.INVOICE_TYPES or result["state"] != "draft"
+            or result["move_type"] not in invoice_presentation.INVOICE_TYPES
+            or result["state"] not in ({"draft", "posted"}
+                if capability_id == "invoice.presentation_settings.update"
+                and set(parameters["changes"]) <= {"narration", "invoice_user_id"}
+                else {"draft"})
             or result["source_id"] != source_id or (layout and not _valid_id(source_id))
-            or result["partial_reconcile_ids"] or result["full_reconcile_id"] is not None
+            or (result["state"] == "draft"
+                and (result["partial_reconcile_ids"] or result["full_reconcile_id"] is not None))
             or (layout and capability_id.endswith((".create", ".update")) and source_id not in result["line_ids"])
             or (capability_id == "invoice.layout_line.delete" and source_id in result["line_ids"])):
             raise _failed("Odoo returned a mismatched invoice presentation result.")
@@ -6586,6 +6613,14 @@ def _validate_result(
             else {"draft"}
             if capability_id
             in {"invoice.reset_to_draft", "journal_entry.reset_to_draft"}
+            else ({"draft", "posted"}
+                  if set(parameters["changes"]) <= {"reference", "payment_reference"}
+                  else {"draft"})
+            if capability_id == "invoice.update"
+            else ({"draft", "posted"}
+                  if set(parameters["changes"]) <= {"reference"}
+                  else {"draft"})
+            if capability_id == "journal_entry.update"
             else {"draft", "posted", "cancel"}
             if idempotent_replay
             else {"draft"}

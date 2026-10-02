@@ -13,6 +13,7 @@ from typing import Any, Protocol
 
 from odoo_accounting_cli_v4 import account_processing_contracts as account_processing
 from odoo_accounting_cli_v4 import analytic_processing_contracts as analytic_processing
+from odoo_accounting_cli_v4 import cash_rounding_contracts as cash_rounding
 from odoo_accounting_cli_v4 import company_processing_contracts as company_processing
 from odoo_accounting_cli_v4 import invoice_preparation_contracts as invoice_preparation
 from odoo_accounting_cli_v4 import (
@@ -64,6 +65,7 @@ CORE_OBJECT_GET_CAPABILITY_IDS = frozenset(
         "payment.method.get",
         "reconciliation.model.get",
         "cash_rounding.get",
+        cash_rounding.COMPUTE_ID,
         "journal.group.get",
         "partner.bill_validation_preferences.get",
         "partner.invoice_delivery_preferences.get",
@@ -196,6 +198,7 @@ _ID_FIELDS = {
     "payment.method.get": "payment_method_line_id",
     "reconciliation.model.get": "reconciliation_model_id",
     "cash_rounding.get": "cash_rounding_id",
+    cash_rounding.COMPUTE_ID: "cash_rounding_id",
     "journal.group.get": "journal_group_id",
     "partner.bill_validation_preferences.get": "partner_id",
     "partner.invoice_delivery_preferences.get": "partner_id",
@@ -519,6 +522,11 @@ def validate_core_object_read_request(
     """Validate and normalize one fixed core-object request."""
 
     request_id, context, parameters = _validate_envelope(capability_id, request)
+    if capability_id == cash_rounding.COMPUTE_ID:
+        try:
+            return request_id, context, cash_rounding.normalize_parameters(capability_id, parameters)
+        except ValueError as exc:
+            raise _invalid(str(exc)) from exc
     if capability_id in invoice_preparation.READ_IDS:
         try:
             return request_id, context, invoice_preparation.normalize_parameters(capability_id, parameters)
@@ -2841,6 +2849,8 @@ def _valid_account_status_item(item: Any, company_id: int) -> bool:
 
 
 def _valid_item(capability_id: str, item: Any, company_id: int) -> bool:
+    if capability_id == cash_rounding.COMPUTE_ID:
+        return cash_rounding.valid_read_item(item, company_id)
     if capability_id in invoice_preparation.READ_IDS:
         try:
             return invoice_preparation.valid_read_item(capability_id, item, company_id)
@@ -3140,6 +3150,10 @@ def read_core_object(
             return items[0]
         if items[0]["id"] != parameters[_ID_FIELDS[capability_id]]:
             raise _failed("Odoo returned the wrong accounting object.")
+        if capability_id == cash_rounding.COMPUTE_ID and any(
+            items[0][field] != parameters[field] for field in ("currency_id", "amount")
+        ):
+            raise _failed("Odoo returned a cash-rounding calculation for another input.")
         if capability_id == "product.accounts.resolve" and items[0]["fiscal_position_id"] != parameters["fiscal_position_id"]:
             raise _failed("Odoo returned another fiscal position's product accounts.")
         return items[0]

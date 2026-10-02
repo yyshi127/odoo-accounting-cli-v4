@@ -4,9 +4,9 @@ Updated: 2026-10-02 (Asia/Shanghai)
 
 ## Current authoritative count — 2026-10-02
 
-544 registered IDs;529 implemented handlers (248 reads,281 writes);
-1064 schemas;455 unconfigured,74 degraded,15 disabled. Enabled integrations:
-526 implemented,two planned,one failed. Latest accounting-workflow checkpoint
+546 registered IDs;531 implemented handlers (249 reads,282 writes);
+1068 schemas;457 unconfigured,74 degraded,15 disabled. Enabled integrations:
+528 implemented,two planned,one failed. Latest cash-basis/posted-metadata checkpoint
 at the end is authoritative; totals are not a full accounting denominator,
 completion percentage or unrestricted ordinary-user permission guarantee.
 
@@ -6023,3 +6023,62 @@ propagation from assignment.
 
 Registry file SHA256 77e61d0662284448a94b2a0b062055c0e4b8f3b0eeb2eebe61ee31106de5fa35;
 canonical registry SHA256 62843210c9338fff6e489ae385b8e72be28b666254d408e191b0146249aac2ef.
+
+## Latest checkpoint — cash-basis setup and posted metadata, 2026-10-02
+
+Authoritative:546 registered;531 handlers=249 reads+282 writes;1068 schemas;
+457 unconfigured/74 degraded/15 disabled. Enabled integration evidence:
+528 implemented/two planned/one failed. Two new IDs plus six extensions,
+not eight new commands; see the current STATUS section for exact scope.
+
+New:company.cash_basis_configuration.update;cash_rounding.compute.
+Extended:company.processing_settings.get;tax.create;tax.update;invoice.update;
+journal_entry.update;invoice.presentation_settings.update. Optional tax fields
+preserve omitted request/key shapes. Posted edits allow only existing invoice
+reference/payment_reference, entry reference, and presentation narration/user;
+other fields remain draft-only with native company/ACL/lock/hash checks.
+
+Root cash-basis boolean is natively delegated to branches; explicit branch
+boolean requests are rejected. Actual live topology is independent roots,
+not a branch propagation acceptance. ORM company writes do not invoke settings
+UI onchange or remove cash-basis taxes. Group-to-leaf native tax writes may
+retain children, ignored by non-group computation. Getter response/schema/SDK/
+bridge additions must deploy together; old strict response compatibility is
+not claimed. Reference edits can change AML labels without changing money.
+
+One shared public CLI/native ORM smoke accepted both isolated aliases22.30s,
+UID5/su=False/company1. Native grouped-tax invoice computation, company config
+set/clear/get/replay, posted sale/purchase/entry metadata, real partial matching
+IDs/amounts and both source/counterpart financial lines, field denials and native
+signed/zero/minor-unit rounding passed. Both aliases fresh-verified exact fixture,
+settings, default, currency/rate and caller/native group rollback. Configuration
+roles are transaction-only; business calls never gain sudo.
+
+Local52 new unit cases7.10s;five read checks0.41s;four selected registry nodes
+across3+1 repaired run. Server52 cases passed before one outdated exact-set
+test failed6.65s;native did not start. Repair-only exact-set node1pass0.48s.
+Final metadata2registry nodes11.85s. No full-suite claim. First native10.82s
+failed on default many-to-one label comparison;DEV fully rolled back and E2E
+was not started. Test-only load=None retains all nine raw graph fields plus
+both financial snapshots. Only the final22.30s run is dual-alias acceptance.
+
+Initial21-file checksum-guarded deployment14existing backups/seven new;
+one existing exact-set test repair;one fixture-only repair;two final metadata/
+test files with recoverable backups. All22 final local/server hashes match.
+Server documentation overlays stay untouched. Services active with unchanged
+fresh-baseline process IDs/restart counts. Disk4.97 GiB free/94% used (df);
+no deletion. Changed22-file privacy/Ruff findings zero; staged-added content
+is checked separately without claiming historical document findings are absent.
+
+No business DB, native source/addon, services/configuration, Pi/V2/V3 or sends
+changed. Unclaimed:actual cash-basis entry generation/undo, fully paid native
+metadata edits, all ancestry/currency/rounding/localization/lock/hash branches,
+invoice-rounding accounting flow, PDF regeneration and concurrent exactly-once.
+Fully paid result shapes have SDK unit evidence only. Continue concrete useful
+accounting gaps after checking installed source and existing capabilities;
+do not re-run this closed native batch merely for counts. Remaining external
+sends and asset.validate failure need separately scoped authority; do not
+silently install the absent debit-note addon. Overall goal remains active.
+
+Registry file SHA256 02e931fcfa25cd08d712731c6287f314389b0bbc84b966e48f5883591f90f7e8;
+canonical registry SHA256 2e20214ae8099e27c34af41966cc6b04292101e6cf634f8efaed180d806feece.

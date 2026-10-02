@@ -26,6 +26,7 @@ EXPECTED_CAPABILITY_IDS = frozenset(
         "journal_item.reconciliation.inspect",
         "journal_item.analytic_lines.list",
         "company.processing_settings.get",
+        "cash_rounding.compute",
         "analytic.account.balance.inspect",
         "analytic.account.invoice_usage.inspect",
         "analytic.applicability.resolve",
@@ -199,6 +200,7 @@ PRIMARY_MODELS = {
     "journal_item.reconciliation.inspect": "account.move.line",
     "journal_item.analytic_lines.list": "account.analytic.line",
     "company.processing_settings.get": "res.company",
+    "cash_rounding.compute": "account.cash.rounding",
     "analytic.account.balance.inspect": "account.analytic.account",
     "analytic.account.invoice_usage.inspect": "account.analytic.account",
     "analytic.applicability.resolve": "account.analytic.plan",
@@ -1514,6 +1516,8 @@ def _parameters(capability_id: str) -> dict[str, Any]:
         return {"journal_item_id": 71, "limit": 100, "after_id": None}
     if capability_id == "company.processing_settings.get":
         return {}
+    if capability_id == "cash_rounding.compute":
+        return {"cash_rounding_id": 31, "currency_id": 6, "amount": "12.34"}
     if capability_id in {
         "analytic.account.balance.inspect", "analytic.account.invoice_usage.inspect",
         "analytic.applicability.resolve", "analytic.distribution.resolve",
