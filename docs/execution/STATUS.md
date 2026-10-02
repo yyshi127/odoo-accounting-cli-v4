@@ -1,6 +1,78 @@
 # Execution status
 
-## Current accounting phase — native invoice line inputs, 2026-10-02
+## Current accounting phase — document searches and invoice bulk lines, 2026-10-02
+
+Two NEW commands and seven EXT queries. 558 registered /543 handlers (253 reads,290 writes),
+1092 schemas;465 unconfigured,78 degraded,15 disabled. Enabled
+integrations:540 implemented,two planned,one failed. Counts are not a full
+accounting denominator,completion percentage or configured permission guarantee.
+
+- NEW invoice.lines.update accepts1-200 unique line_id/changes pairs, normalizes
+  their ID order and uses one native parent write without replacing business IDs.
+  NEW invoice.lines.add accepts1-200 full business rows and sorted unique
+  expected_line_ids (including existing section/subsection/note IDs; empty is
+  allowed). It preserves existing rows and permits identical duplicate additions.
+  Both reuse existing line field/reference/source restrictions and exact CLI
+  confirmation. Native tax/payment-term/non-deductible AML rows may change.
+- Append replay verifies current expected membership and new-row payload multiset.
+  It has no history marker and cannot prove old values stayed unchanged between
+  calls or concurrent exactly-once attribution; its registry status is degraded.
+  The first write verifies untouched business/layout inputs. Sparse update keeps
+  old whole-target checks except explicit changed unit permits native recomputation
+  of omitted price/tax fields. Explicit caller inputs must persist.
+- invoice.search adds invoice_date_from/to,due_date_from/to,currency_id,
+  invoice_user_id,payment_term_id,fiscal_position_id. Existing date_from/to still
+  mean accounting date. Owner/term/fiscal explicit null means unassigned; omission
+  means no filter. journal_entry.search adds account_id membership and native
+  header currency_id. Its returned currency and debit/credit/balance remain the
+  original company-currency projection, not the header currency.
+- journal_item.search adds currency_id,due_date_from/to,reconciled,move_types,
+  query; explicit false is effective. Receivable/payable open-items add move_id
+  and move_types, retaining posted/open/company/side scope. Existing open-item
+  due-date/currency filters were already present and are not counted as new gaps.
+- invoice.analysis.search/summary add journal_id,currency_id,due_date_from/to.
+  Filter currency is native document/line currency; totals keep their native
+  company-currency meaning. All new filters run before pagination/grouping.
+  Omitted new keys retain old normalization and cursor bindings; null date/query
+  means no filter. No new response projection/global model gate/control store.
+
+Local837 selected tests passed70.92s; server837
+passed41.48s. Additional old SDK842 tests passed215.85s. The one shared
+dual-isolated native workflow passed24.29s under UID5,su=False,company1,
+covering all nine targets,filtered/legacy pagination,foreign-header/company-currency
+projection,report totals,duplicate append,sparse update,replays,layout IDs,
+native tax/non-deductible synchronization and membership/unit/posted/foreign
+denials. Fresh rollback checked every owned fixture,all users/groups/implied
+groups,both company settings,all defaults and all currencies/rates. Source-linked
+SO/PO restrictions,unit-only bulk native recomputation and cross-filter cursor
+misuse have focused tests only; this shared native fixture does not claim them.
+
+Initial native attempt ended after a root test seed omitted the old required
+nullable journal partner_id. Its full fresh rollback completed. Only that fixture
+was corrected; one repair native workflow was then accepted. Do not relaunch an
+accepted handle. The original server unit result remains valid; no API-code
+repair or Odoo addon/source modification was needed.
+
+Exactly31 CLI code/schema/test files deployed;20 existing originals plus one
+fixture-repair original and one final-registry original backed up,downloaded and
+hash-checked. The other549 registry descriptors are semantically unchanged.
+Registry2090293B stays below the unchanged2MiB public checker
+and4MiB loader. New privacy/lint findings zero; two old lint diagnostics and old
+public-document findings remain. Expanded legacy registry evidence assertions
+and core-object test lookup gaps remain outside scope; no full-suite-green claim.
+Services and audited native source hashes unchanged. No business DB,service
+configuration/restart,inventory workflow,cleanup or V2/V3/Pi changes. Public docs
+stay local, preserving server overlays. Native evidence and recovery manifests
+are private in .tooling/accounting-document-search-batch-20261002.
+
+Next: choose another small set of actual accounting gaps from native code and
+SDK/registry contracts; prioritize usable commands rather than aliases or gates.
+Current candidate areas are invoice multi-line removal and genuinely missing
+document/product/tax searches; freeze semantics before implementing. Missing
+debit-note addon,custom exchange addon fixes,asset validation and report-send
+authority remain separate constraints,not reasons to inflate the command count.
+
+## Previous checkpoint — native invoice line inputs, 2026-10-02
 
 Eight EXT, zero NEW. Totals remain 556 registered /541 handlers (253 reads,
 288 writes),1088 schemas;464 unconfigured,77 degraded,15 disabled. Enabled

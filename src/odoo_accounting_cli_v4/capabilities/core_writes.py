@@ -73,6 +73,8 @@ CORE_WRITE_CAPABILITY_IDS = invoice_preparation.CAPABILITY_IDS | journal_item_pr
         "invoice.lines.replace",
         "invoice.line.create",
         "invoice.line.update",
+        "invoice.lines.update",
+        "invoice.lines.add",
         "invoice.line.delete",
         "invoice.delete",
         "invoice.cancel",
@@ -1303,6 +1305,35 @@ def _validate_journal_line_replacement_parameters(
         "move_id": parameters["move_id"],
         "lines": _validate_journal_lines(parameters["lines"], minimum=1),
     }
+
+
+def _validate_invoice_bulk_line_parameters(
+    capability_id: str, parameters: Any
+) -> dict[str, Any]:
+    adding = capability_id == "invoice.lines.add"
+    fields = {"move_id", "lines"} | ({"expected_line_ids"} if adding else set())
+    if not isinstance(parameters, dict) or set(parameters) != fields or not _valid_id(parameters["move_id"]):
+        raise _invalid("Bulk invoice-line parameters do not match the fixed contract.")
+    lines = parameters["lines"]
+    if not isinstance(lines, list) or not 1 <= len(lines) <= 200:
+        raise _invalid("parameters.lines must contain between 1 and 200 rows.")
+    normalized: dict[str, Any] = {"move_id": parameters["move_id"]}
+    if adding:
+        expected = _validate_ids(parameters["expected_line_ids"])
+        if expected is None or expected != sorted(expected):
+            raise _invalid("expected_line_ids must be sorted unique positive integers.")
+        normalized["expected_line_ids"] = expected
+        normalized["lines"] = [_validate_invoice_line_values(line, partial=False) for line in lines]
+    else:
+        rows = []
+        seen: set[int] = set()
+        for line in lines:
+            if not isinstance(line, dict) or set(line) != {"line_id", "changes"} or not _valid_id(line["line_id"]) or line["line_id"] in seen:
+                raise _invalid("Bulk invoice updates require distinct positive line_id values.")
+            seen.add(line["line_id"])
+            rows.append({"line_id": line["line_id"], "changes": _validate_invoice_line_values(line["changes"], partial=True)})
+        normalized["lines"] = sorted(rows, key=lambda line: line["line_id"])
+    return normalized
 
 
 def _validate_journal_line_membership_parameters(
@@ -4685,6 +4716,8 @@ def validate_core_write_request(
         normalized = _validate_invoice_update_parameters(parameters)
     elif capability_id == "invoice.lines.replace":
         normalized = _validate_invoice_line_replacement_parameters(parameters)
+    elif capability_id in {"invoice.lines.update", "invoice.lines.add"}:
+        normalized = _validate_invoice_bulk_line_parameters(capability_id, parameters)
     elif capability_id == "invoice.duplicate":
         normalized = _validate_single_id(parameters, "move_id")
     elif capability_id == "invoice.type.switch":
@@ -4811,6 +4844,9 @@ def validate_core_write_request(
 def _expected_idempotency_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in {"invoice.lines.update", "invoice.lines.add"}:
+        canonical = json.dumps(parameters, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        return f"{capability_id}:{parameters['move_id']}:{hashlib.sha256(canonical).hexdigest()[:32]}"
     if (
         capability_id == "sale.order.down_payment.create"
         or (capability_id in {"sale.order.invoice.create", "purchase.order.bill.create"} and "order_ids" in parameters)
@@ -5572,6 +5608,16 @@ def _validate_result(
         return deepcopy(result)
     if not _valid_result_shape(result) or result["company_id"] != company_id:
         raise _failed("Odoo returned a malformed or out-of-scope core-write result.")
+
+    if capability_id in {"invoice.lines.update", "invoice.lines.add"}:
+        selected = (set(parameters["expected_line_ids"]) if capability_id == "invoice.lines.add" else {line["line_id"] for line in parameters["lines"]})
+        if (result["model"] != "account.move" or result["id"] != parameters["move_id"]
+            or result["move_type"] not in _INVOICE_MOVE_TYPES or result["state"] != "draft"
+            or result["source_id"] is not None or not result["line_ids"]
+            or not selected <= set(result["line_ids"])
+            or result["partial_reconcile_ids"] or result["full_reconcile_id"] is not None):
+            raise _failed("Odoo returned a mismatched bulk invoice-line result.")
+        return deepcopy(result)
 
     if capability_id in {"journal_entry.lines.add", "journal_entry.lines.remove"}:
         added = capability_id == "journal_entry.lines.add"

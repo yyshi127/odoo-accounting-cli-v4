@@ -187,7 +187,7 @@ def _filters(parameters: dict[str, Any], *, require_dates: bool) -> dict[str, An
         raise _invalid("parameters dates must use YYYY-MM-DD syntax.")
     if date_from is not None and date_from > date_to:
         raise _invalid("parameters.date_from cannot be after parameters.date_to.")
-    return {
+    filters = {
         "date_from": date_from,
         "date_to": date_to,
         "move_types": _optional_enum_list(parameters, "move_types", MOVE_TYPES),
@@ -198,6 +198,20 @@ def _filters(parameters: dict[str, Any], *, require_dates: bool) -> dict[str, An
         "partner_id": _optional_id(parameters, "partner_id"),
         "product_id": _optional_id(parameters, "product_id"),
     }
+    for key in ("journal_id", "currency_id"):
+        if key in parameters:
+            if not _positive_id(parameters[key]):
+                raise _invalid(f"parameters.{key} must be a positive integer.")
+            filters[key] = parameters[key]
+    for key in ("due_date_from", "due_date_to"):
+        if key in parameters:
+            value = parameters[key]
+            if value is not None and not _date(value):
+                raise _invalid(f"parameters.{key} must be null or a YYYY-MM-DD date.")
+            filters[key] = value
+    if filters.get("due_date_from") is not None and filters.get("due_date_to") is not None and filters["due_date_from"] > filters["due_date_to"]:
+        raise _invalid("parameters.due_date_from cannot be after parameters.due_date_to.")
+    return filters
 
 
 def validate_invoice_analysis_request(
@@ -220,6 +234,10 @@ def validate_invoice_analysis_request(
         "payment_states",
         "partner_id",
         "product_id",
+        "journal_id",
+        "currency_id",
+        "due_date_from",
+        "due_date_to",
     }
     if capability_id == "invoice.analysis.search":
         if not set(parameters) <= common | {"limit", "cursor"}:
@@ -443,6 +461,13 @@ def _valid_search_item(
         if expected is not None and (
             item[field] is None or item[field]["id"] != expected
         ):
+            return False
+    for parameter, field in (("journal_id", "journal"), ("currency_id", "currency")):
+        if parameter in parameters and item[field]["id"] != parameters[parameter]:
+            return False
+    for parameter, lower in (("due_date_from", True), ("due_date_to", False)):
+        bound = parameters.get(parameter)
+        if bound is not None and (item["due_date"] is None or (item["due_date"] < bound if lower else item["due_date"] > bound)):
             return False
     return True
 

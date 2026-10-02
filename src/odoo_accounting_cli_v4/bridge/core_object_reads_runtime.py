@@ -2319,7 +2319,7 @@ def _valid_parameters(capability_id: str, parameters: Any) -> bool:
                 parameters["auto_apply"], bool
             )
         return True
-    if set(parameters) != {
+    required = {
         "date_from",
         "date_to",
         "move_id",
@@ -2329,7 +2329,26 @@ def _valid_parameters(capability_id: str, parameters: Any) -> bool:
         "posted_only",
         "after_id",
         "limit",
-    }:
+    }
+    optional = {"currency_id", "due_date_from", "due_date_to", "reconciled", "move_types", "query"}
+    if not required <= set(parameters) <= required | optional:
+        return False
+    if "currency_id" in parameters and not _valid_id(parameters["currency_id"]):
+        return False
+    if any(not _optional_date(parameters[field]) for field in ("due_date_from", "due_date_to") if field in parameters):
+        return False
+    if parameters.get("due_date_from") is not None and parameters.get("due_date_to") is not None and parameters["due_date_from"] > parameters["due_date_to"]:
+        return False
+    if "reconciled" in parameters and not isinstance(parameters["reconciled"], bool):
+        return False
+    if "move_types" in parameters:
+        move_types = ("entry", "out_invoice", "out_refund", "in_invoice", "in_refund", "out_receipt", "in_receipt")
+        values = parameters["move_types"]
+        if not isinstance(values, list) or not values or values != [value for value in move_types if value in values]:
+            return False
+    if parameters.get("query") is not None and not (
+        isinstance(parameters["query"], str) and parameters["query"] == parameters["query"].strip() and 1 <= len(parameters["query"]) <= 200
+    ):
         return False
     if (
         not _optional_date(parameters["date_from"])
@@ -2799,6 +2818,16 @@ def _journal_item_domain(
     for field in ("move_id", "account_id", "partner_id", "journal_id"):
         if parameters[field] is not None:
             domains.append([(field, "=", parameters[field])])
+    for parameter, field, operator in (
+        ("currency_id", "currency_id", "="), ("due_date_from", "date_maturity", ">="),
+        ("due_date_to", "date_maturity", "<="), ("reconciled", "reconciled", "="),
+        ("move_types", "move_type", "in"),
+    ):
+        if parameter in parameters and parameters[parameter] is not None:
+            domains.append([(field, operator, parameters[parameter])])
+    if parameters.get("query") is not None:
+        domains.append(["|", "|", ("name", "ilike", parameters["query"]),
+                        ("move_id.name", "ilike", parameters["query"]), ("move_id.ref", "ilike", parameters["query"])])
     if parameters["posted_only"]:
         domains.append([("parent_state", "=", "posted")])
     if include_after and parameters["after_id"] is not None:

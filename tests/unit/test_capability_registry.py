@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 556
-EXPECTED_ENABLED_CAPABILITY_COUNT = 541
+EXPECTED_CAPABILITY_COUNT = 558
+EXPECTED_ENABLED_CAPABILITY_COUNT = 543
 EXPECTED_IMPLEMENTED_READ_COUNT = 253
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 288
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 290
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 464
-EXPECTED_DEGRADED_CAPABILITY_COUNT = 77
-EXPECTED_SCHEMA_COUNT = 1088
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 465
+EXPECTED_DEGRADED_CAPABILITY_COUNT = 78
+EXPECTED_SCHEMA_COUNT = 1092
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "6305fa981dd9163f344ee7e448b019c541f39dc0f25382f0c78974e2a80331ff"
+    "f197e2e80a0d919cd767d7a9960e4a8ad97504b3fff752d9e7c164b35ea8daf8"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -623,6 +623,8 @@ ACCOUNTING_DELIVERY_WRITES = {
     "report.customer_statement.send",
     "report.followup.send",
 }
+INVOICE_BULK_LINE_WRITES = {"invoice.lines.update", "invoice.lines.add"}
+IMPLEMENTED_WRITES |= INVOICE_BULK_LINE_WRITES
 ENABLED_WRITES = IMPLEMENTED_WRITES | ACCOUNTING_DELIVERY_WRITES
 EXTENDED_WRITES = {
     "asset.cancel",
@@ -1261,6 +1263,23 @@ def test_every_unimplemented_capability_is_honestly_disabled_without_a_handler()
 
 def _prior_payment_tax_input_evidence(capability_id, descriptor):
     """Check only this extension's evidence, retaining the prior exact assertions."""
+    search_extensions = {"invoice.search", "journal_entry.search", "journal_item.search",
+                         "receivable.open_items.list", "payable.open_items.list",
+                         "invoice.analysis.search", "invoice.analysis.summary"}
+    if capability_id in search_extensions:
+        descriptor = copy.deepcopy(descriptor)
+        units = ["tests/unit/test_document_search_batch_contract.py", "tests/unit/test_document_search_batch_runtime.py",
+                 "tests/unit/test_document_search_header_runtime.py", "tests/unit/test_document_search_batch_cli.py"]
+        references = descriptor["tests"]["unit"]["references"]
+        assert references[-len(units):] == units
+        descriptor["tests"]["unit"]["references"] = references[:-len(units)]
+        integration = descriptor["tests"]["integration"]["references"]
+        live_test = "tests/integration/test_document_search_bulk_lines_live.py"
+        if live_test in integration:
+            assert integration[-1] == live_test and integration.count(live_test) == 1
+            descriptor["tests"]["integration"]["references"] = integration[:-1]
+        if capability_id == "journal_item.search":
+            descriptor["tests"]["integration"]["reason"] = "Shared native payment/tax smoke passed; full rollback."
     if capability_id in ORDER_DOCUMENT_LIVE_READS:
         descriptor = copy.deepcopy(descriptor)
         references = descriptor["tests"]["unit"]["references"]
@@ -3081,7 +3100,10 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
             expected_acl.add("res.company:read")
         expected_acl -= runtime_support_acl.get(capability_id, set())
         assert set(descriptor["requirements"]["acl"]) == expected_acl
-        if capability_id == "currency.rate.delete":
+        if capability_id == "invoice.lines.add":
+            assert descriptor["status"]["value"] == "degraded"
+            assert descriptor["status"]["reason_code"] == "serial_state_replay_only"
+        elif capability_id == "currency.rate.delete":
             assert descriptor["status"]["value"] == "degraded"
             assert descriptor["status"]["reason_code"] == "idempotency_degraded"
         elif capability_id == "analytic.account.duplicate":
@@ -3264,6 +3286,19 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
         else:
             assert descriptor["status"]["value"] == "unconfigured"
             assert descriptor["status"]["reason_code"] == "runtime_context_required"
+        if capability_id in INVOICE_BULK_LINE_WRITES:
+            assert descriptor["tests"]["unit"] == {
+                "status": "implemented", "references": ["tests/unit/test_invoice_bulk_lines_contract.py",
+                    "tests/unit/test_invoice_bulk_lines_runtime.py", "tests/unit/test_document_search_batch_cli.py",
+                    "tests/unit/test_capability_registry.py"],
+                "reason": "Bulk closed contracts, native parent writes and business row membership covered."}
+            integration = descriptor["tests"]["integration"]
+            if integration["status"] == "implemented":
+                assert integration["references"] == ["tests/integration/test_document_search_bulk_lines_live.py"]
+                assert integration["reason"] == "Shared native document search and invoice bulk smoke passed; full rollback."
+            else:
+                assert integration["status"] == "planned" and not integration["references"]
+            continue
         if capability_id == "sale.order.down_payment.create":
             assert descriptor["tests"]["unit"]["status"] == "implemented"
             assert descriptor["tests"]["unit"]["references"] == INVOICE_ROUNDS_UNIT_TESTS + ["tests/unit/test_capability_registry.py"]
@@ -4243,3 +4278,29 @@ def test_runtime_schema_enforces_request_and_response_semantics() -> None:
             "schemas/v1/account.account.list.response.schema.json",
             invalid_response,
         )
+
+
+def test_document_search_bulk_line_targets_match_the_fixed_runtime() -> None:
+    registry = load_registry()
+    extensions = {"invoice.search", "journal_entry.search", "journal_item.search",
+                  "receivable.open_items.list", "payable.open_items.list",
+                  "invoice.analysis.search", "invoice.analysis.summary"}
+    for capability_id in extensions:
+        descriptor = registry.describe(capability_id)
+        assert descriptor["handler_key"] == IMPLEMENTED_READS[capability_id]
+        assert descriptor["tests"]["unit"]["references"][-4:] == [
+            "tests/unit/test_document_search_batch_contract.py", "tests/unit/test_document_search_batch_runtime.py",
+            "tests/unit/test_document_search_header_runtime.py", "tests/unit/test_document_search_batch_cli.py"]
+    for capability_id in INVOICE_BULK_LINE_WRITES:
+        descriptor = registry.describe(capability_id)
+        assert descriptor["handler_key"] == "core_write"
+        assert set(descriptor["source"]["models"]) == CORE_WRITE_MODELS[capability_id]
+        assert descriptor["requirements"]["groups"] == [CORE_WRITE_GROUPS[capability_id]]
+        assert set(descriptor["requirements"]["acl"]) == {f"{model}:{operation}" for model, operation in CORE_WRITE_ACCESS[capability_id]}
+        assert descriptor["status"]["value"] == ("degraded" if capability_id.endswith("add") else "unconfigured")
+        assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_invoice_bulk_lines_contract.py",
+            "tests/unit/test_invoice_bulk_lines_runtime.py", "tests/unit/test_document_search_batch_cli.py",
+            "tests/unit/test_capability_registry.py"]
+        integration = descriptor["tests"]["integration"]
+        assert integration["status"] in {"planned", "implemented"}
+        assert integration["references"] == (["tests/integration/test_document_search_bulk_lines_live.py"] if integration["status"] == "implemented" else [])

@@ -24,6 +24,10 @@
         "payment_states": {"type": ["array", "null"], "minItems": 1, "maxItems": 7, "uniqueItems": true, "items": {"enum": ["not_paid", "in_payment", "paid", "partial", "reversed", "blocked", "invoicing_legacy"]}, "default": null},
         "partner_id": {"type": ["integer", "null"], "minimum": 1, "default": null},
         "product_id": {"type": ["integer", "null"], "minimum": 1, "default": null},
+        "journal_id": {"type": "integer", "minimum": 1},
+        "currency_id": {"type": "integer", "minimum": 1},
+        "due_date_from": {"type": ["string", "null"], "format": "date"},
+        "due_date_to": {"type": ["string", "null"], "format": "date"},
         "limit": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 100},
         "cursor": {"type": ["string", "null"], "minLength": 1, "maxLength": 4096, "default": null}
       }

@@ -251,8 +251,15 @@ _JOURNAL_ITEM_FILTERS = frozenset(
         "partner_id",
         "journal_id",
         "posted_only",
+        "currency_id",
+        "due_date_from",
+        "due_date_to",
+        "reconciled",
+        "move_types",
+        "query",
     }
 )
+_JOURNAL_MOVE_TYPE_ORDER = ("entry", "out_invoice", "out_refund", "in_invoice", "in_refund", "out_receipt", "in_receipt")
 _SEARCH_FILTERS = {
     "partner.search": frozenset(
         {"query", "active", "company_type", "customer", "supplier"}
@@ -1027,6 +1034,31 @@ def validate_core_object_read_request(
         if not isinstance(posted_only, bool):
             raise _invalid("parameters.posted_only must be a boolean.")
         filters["posted_only"] = posted_only
+        if "currency_id" in parameters:
+            if not _valid_id(parameters["currency_id"]):
+                raise _invalid("parameters.currency_id must be a positive integer.")
+            filters["currency_id"] = parameters["currency_id"]
+        for field in ("due_date_from", "due_date_to"):
+            if field in parameters:
+                if not _optional_date(parameters[field]):
+                    raise _invalid(f"parameters.{field} must be null or a YYYY-MM-DD date.")
+                filters[field] = parameters[field]
+        if filters.get("due_date_from") is not None and filters.get("due_date_to") is not None and filters["due_date_from"] > filters["due_date_to"]:
+            raise _invalid("parameters.due_date_from cannot be after parameters.due_date_to.")
+        if "reconciled" in parameters:
+            if not isinstance(parameters["reconciled"], bool):
+                raise _invalid("parameters.reconciled must be a boolean.")
+            filters["reconciled"] = parameters["reconciled"]
+        if "move_types" in parameters:
+            values = parameters["move_types"]
+            if not isinstance(values, list) or not values or any(not isinstance(value, str) or value not in _JOURNAL_MOVE_TYPE_ORDER for value in values) or len(set(values)) != len(values):
+                raise _invalid("parameters.move_types must contain unique supported types.")
+            filters["move_types"] = [value for value in _JOURNAL_MOVE_TYPE_ORDER if value in values]
+        if "query" in parameters:
+            query = parameters["query"]
+            if query is not None and (not isinstance(query, str) or not 1 <= len(query) <= 200 or query != query.strip()):
+                raise _invalid("parameters.query must be null or trimmed 1-200 character text.")
+            filters["query"] = query
     elif capability_id == "partner.search":
         if not set(parameters) <= _SEARCH_FILTERS[capability_id] | {
             "limit",
@@ -3222,6 +3254,14 @@ def read_core_object(
         for item in items for field in ("is_complete", "is_valid") if field in filters
     ):
         raise _failed("Odoo returned a bank statement outside the filters.")
+    if capability_id == "journal_item.search":
+        for item in items:
+            if ("currency_id" in filters and item["currency"]["id"] != filters["currency_id"]) or ("reconciled" in filters and item["reconciled"] is not filters["reconciled"]) or ("move_types" in filters and item["move"]["move_type"] not in filters["move_types"]):
+                raise _failed("Odoo returned a journal item outside the filters.")
+            for key, lower in (("due_date_from", True), ("due_date_to", False)):
+                bound = filters.get(key)
+                if bound is not None and (item["date_maturity"] is None or (item["date_maturity"] < bound if lower else item["date_maturity"] > bound)):
+                    raise _failed("Odoo returned a journal item outside the due dates.")
     item_ids = [
         item["source_tax"]["id"]
         if capability_id == "fiscal_position.tax_mapping.list"

@@ -156,6 +156,12 @@ def _enum_list(value: Any, allowed: frozenset[str]) -> bool:
 def _common_parameters(parameters: dict[str, Any], *, require_dates: bool) -> bool:
     date_from = parameters["date_from"]
     date_to = parameters["date_to"]
+    if any(not _positive_id(parameters[field]) for field in ("journal_id", "currency_id") if field in parameters):
+        return False
+    if any(parameters[field] is not None and not _canonical_date(parameters[field]) for field in ("due_date_from", "due_date_to") if field in parameters):
+        return False
+    if parameters.get("due_date_from") is not None and parameters.get("due_date_to") is not None and parameters["due_date_from"] > parameters["due_date_to"]:
+        return False
     return bool(
         (date_from is None) == (date_to is None)
         and (not require_dates or date_from is not None)
@@ -185,8 +191,10 @@ def _valid_parameters(capability_id: str, parameters: Any) -> bool:
         "partner_id",
         "product_id",
     }
+    optional = {"journal_id", "currency_id", "due_date_from", "due_date_to"}
     if capability_id == "invoice.analysis.search":
-        if set(parameters) != common | {"after", "limit"}:
+        required = common | {"after", "limit"}
+        if not required <= set(parameters) <= required | optional:
             return False
         return bool(
             _common_parameters(parameters, require_dates=False)
@@ -194,7 +202,8 @@ def _valid_parameters(capability_id: str, parameters: Any) -> bool:
             and _integer(parameters["limit"])
             and 1 <= parameters["limit"] <= 1001
         )
-    if set(parameters) != common | {"group_by"}:
+    required = common | {"group_by"}
+    if not required <= set(parameters) <= required | optional:
         return False
     return bool(
         _common_parameters(parameters, require_dates=True)
@@ -290,6 +299,12 @@ def _base_domain(company_id: int, parameters: dict[str, Any]) -> list[Any]:
     ):
         if parameters[parameter] is not None:
             domain.append((field, "=", parameters[parameter]))
+    for parameter, field, operator in (
+        ("journal_id", "journal_id", "="), ("currency_id", "currency_id", "="),
+        ("due_date_from", "invoice_date_due", ">="), ("due_date_to", "invoice_date_due", "<="),
+    ):
+        if parameter in parameters and parameters[parameter] is not None:
+            domain.append((field, operator, parameters[parameter]))
     return domain
 
 

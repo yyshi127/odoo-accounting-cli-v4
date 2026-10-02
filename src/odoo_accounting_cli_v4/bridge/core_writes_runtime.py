@@ -56,6 +56,8 @@ CAPABILITIES = invoice_preparation.CAPABILITY_IDS | journal_item_processing.CAPA
         "vendor_bill.create",
         "invoice.update",
         "invoice.lines.replace",
+        "invoice.lines.update",
+        "invoice.lines.add",
         "invoice.line.create",
         "invoice.line.update",
         "invoice.line.delete",
@@ -278,6 +280,8 @@ _INVOICE_LIFECYCLE_CAPABILITIES = frozenset(
     {
         "invoice.update",
         "invoice.lines.replace",
+        "invoice.lines.update",
+        "invoice.lines.add",
         "invoice.line.create",
         "invoice.line.update",
         "invoice.line.delete",
@@ -794,6 +798,8 @@ _PARAMETER_KEYS = {
     },
     "invoice.update": {"move_id", "changes"},
     "invoice.lines.replace": {"move_id", "lines"},
+    "invoice.lines.update": {"move_id", "lines"},
+    "invoice.lines.add": {"move_id", "expected_line_ids", "lines"},
     "invoice.line.create": {"move_id", "line"},
     "invoice.line.update": {"move_id", "line_id", "changes"},
     "invoice.line.delete": {"move_id", "line_id"},
@@ -3322,6 +3328,13 @@ for _capability_id in (
     )
 
 _MODELS["invoice.lines.replace"].add("account.analytic.account")
+for _capability_id, _single_capability in (
+    ("invoice.lines.update", "invoice.line.update"),
+    ("invoice.lines.add", "invoice.line.create"),
+):
+    _GROUPS[_capability_id] = _GROUPS[_single_capability]
+    _MODELS[_capability_id] = set(_MODELS[_single_capability])
+    _ACCESS[_capability_id] = set(_ACCESS[_single_capability])
 
 for _capability_id in ("journal_entry.create", "journal_entry.lines.replace"):
     _MODELS[_capability_id].update({"res.currency", "account.analytic.account"})
@@ -6189,6 +6202,21 @@ def _valid_parameters(
         return _is_id(parameters["move_id"]) and _valid_replacement_invoice_lines(
             parameters["lines"]
         )
+    if capability_id in {"invoice.lines.update", "invoice.lines.add"}:
+        lines = parameters["lines"]
+        if not _is_id(parameters["move_id"]) or not isinstance(lines, list) or not 1 <= len(lines) <= 200:
+            return False
+        if capability_id == "invoice.lines.update":
+            return all(
+                isinstance(item, dict) and set(item) == {"line_id", "changes"}
+                and _is_id(item["line_id"]) and _valid_invoice_line_values(item["changes"], partial=True)
+                for item in lines
+            ) and [item["line_id"] for item in lines] == sorted({item["line_id"] for item in lines})
+        ids = parameters["expected_line_ids"]
+        return (
+            isinstance(ids, list) and all(_is_id(item) for item in ids) and ids == sorted(set(ids))
+            and all(_valid_invoice_line_values(item, partial=False) for item in lines)
+        )
     if capability_id == "invoice.line.create":
         return _is_id(parameters["move_id"]) and _valid_invoice_line_values(
             parameters["line"], partial=False
@@ -7089,6 +7117,9 @@ def _deterministic_key(
             allow_nan=False,
         ).encode("utf-8")
         digest = hashlib.sha256(canonical).hexdigest()[:32]
+        return f"{capability_id}:{parameters['move_id']}:{digest}"
+    if capability_id in {"invoice.lines.update", "invoice.lines.add"}:
+        digest = hashlib.sha256(json.dumps(parameters, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")).hexdigest()[:32]
         return f"{capability_id}:{parameters['move_id']}:{digest}"
     if capability_id == "asset.validate":
         return f"asset.validate:{parameters['asset_id']}"
@@ -12682,6 +12713,153 @@ def _update_invoice_line(
             exit_code=6,
         )
     return _move_result(move, company_id, source_id=line.id), False
+
+
+def _invoice_bulk_line_snapshot(line: Any) -> dict[str, Any]:
+    fields = getattr(line, "_fields", {})
+    values: dict[str, Any] = {}
+    for field in (
+        "name", "display_type", "sequence", "product_id", "account_id", "quantity",
+        "price_unit", "discount", "tax_ids", "analytic_distribution",
+        *_DEFERRED_LINE_DATE_FIELDS, *_INVOICE_LINE_INPUT_FIELDS,
+        "sale_line_ids", "purchase_line_id", "collapse_prices", "collapse_composition",
+    ):
+        if field not in fields:
+            continue
+        value = getattr(line, field)
+        if field in {"product_id", "account_id", "product_uom_id", "purchase_line_id"}:
+            value = _many2one_id(value)
+        elif field in {"quantity", "price_unit", "discount", "deductible_amount"}:
+            value = _canonical_decimal_text(value)
+        elif field in {"tax_ids", "sale_line_ids"}:
+            value = _relation_ids(value)
+        elif field == "analytic_distribution":
+            value = _normalized_analytic_distribution(value)
+        elif field in _DEFERRED_LINE_DATE_FIELDS:
+            value = _nullable_value(value)
+        values[field] = value
+    return values
+
+
+def _invoice_added_lines_match(lines: list[Any], requested: list[dict[str, Any]]) -> bool:
+    if len(lines) != len(requested):
+        return False
+    candidates = [[index for index, line in enumerate(lines) if _invoice_line_matches(line, values)] for values in requested]
+    assigned: dict[int, int] = {}
+
+    def assign(request_index: int, visited: set[int]) -> bool:
+        for line_index in candidates[request_index]:
+            if line_index in visited:
+                continue
+            visited.add(line_index)
+            if line_index not in assigned or assign(assigned[line_index], visited):
+                assigned[line_index] = request_index
+                return True
+        return False
+
+    return all(assign(index, set()) for index in range(len(requested)))
+
+
+def _write_invoice_bulk_lines(
+    env: Any, capability_id: str, parameters: dict[str, Any],
+    company_id: int, failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    move = _lifecycle_move(env, capability_id, parameters["move_id"], company_id, failure_type)
+    if move.state != "draft":
+        raise _fail(failure_type, "state_conflict", "Bulk invoice-line changes require a draft invoice or bill.", exit_code=5)
+    before_ids = set(move.invoice_line_ids.ids)
+    current_lines = _ensure_ids(env, "account.move.line", before_ids, [
+        ("move_id", "=", move.id), ("company_id", "=", company_id),
+    ], company_id, failure_type)
+    by_id = {line.id: line for line in current_lines}
+    updating = capability_id == "invoice.lines.update"
+    requested = parameters["lines"]
+    targets: dict[int, dict[str, Any]] = {}
+    unit_changed: set[int] = set()
+    if updating:
+        selected_ids = {item["line_id"] for item in requested}
+        if not selected_ids <= before_ids:
+            raise _fail(failure_type, "record_not_found", "A requested invoice business line was not found.", exit_code=4)
+        for item in requested:
+            line = by_id[item["line_id"]]
+            current = _current_invoice_line(line)
+            if current is None:
+                raise _fail(failure_type, "record_not_found", "A requested invoice business line was not found.", exit_code=4)
+            target = {**current, **item["changes"]}
+            _validate_invoice_line_references(env, move, [target], company_id, failure_type)
+            current.update(_current_invoice_line_inputs(line, item["changes"]))
+            if _journal_item_sourced(line) and (
+                "product_id" in item["changes"] and item["changes"]["product_id"] != current["product_id"]
+                or any(
+                    current[field] != (_canonical_decimal_text(item["changes"][field]) if field == "deductible_amount" else item["changes"][field])
+                    for field in _INVOICE_LINE_INPUT_FIELDS if field in item["changes"]
+                )
+            ):
+                raise _fail(failure_type, "business_rule_error", "Source-linked invoice business lines cannot change product, unit or deductibility by this capability.", exit_code=6)
+            if "product_uom_id" in item["changes"] and item["changes"]["product_uom_id"] != current["product_uom_id"]:
+                unit_changed.add(line.id)
+            targets[line.id] = target
+        if all(_invoice_line_matches(by_id[item["line_id"]], targets[item["line_id"]]) for item in requested):
+            return _move_result(move, company_id), True
+        preserved_ids = before_ids - selected_ids
+        commands = [(1, item["line_id"], _invoice_line_write_values(item["changes"])) for item in requested]
+    else:
+        expected_ids = set(parameters["expected_line_ids"])
+        _ensure_ids(env, "account.move.line", expected_ids, [
+            ("move_id", "=", move.id), ("company_id", "=", company_id),
+        ], company_id, failure_type)
+        _validate_invoice_line_references(env, move, requested, company_id, failure_type)
+        if before_ids != expected_ids:
+            appended = [line for line in current_lines if line.id not in expected_ids]
+            if expected_ids <= before_ids and _invoice_added_lines_match(appended, requested):
+                return _move_result(move, company_id), True
+            raise _fail(failure_type, "idempotency_conflict", "The invoice-line membership does not match the requested append state.", exit_code=5)
+        preserved_ids = before_ids
+        sequence = max((getattr(line, "sequence", 0) for line in current_lines), default=0)
+        commands = [(0, 0, {
+            "display_type": "product", "sequence": sequence + index * 10,
+            **_invoice_line_write_values(values),
+        }) for index, values in enumerate(requested, start=1)]
+    before = {line_id: _invoice_bulk_line_snapshot(by_id[line_id]) for line_id in preserved_ids}
+    selected_identity = {
+        line_id: (getattr(by_id[line_id], "display_type", None), _relation_ids(getattr(by_id[line_id], "sale_line_ids", [])), _many2one_id(getattr(by_id[line_id], "purchase_line_id", None)))
+        for line_id in targets
+    }
+    for command in commands:
+        for field, value in command[2].items():
+            if isinstance(value, Decimal):
+                command[2][field] = float(value)
+    with env.cr.savepoint():
+        move.write({"invoice_line_ids": commands})
+        current_lines.invalidate_recordset()
+        move.invalidate_recordset()
+        final_ids = set(move.invoice_line_ids.ids)
+        final_lines = _ensure_ids(env, "account.move.line", final_ids, [
+            ("move_id", "=", move.id), ("company_id", "=", company_id),
+        ], company_id, failure_type)
+        final_by_id = {line.id: line for line in final_lines}
+        valid = move.state == "draft" and move.company_id.id == company_id and preserved_ids <= final_ids and before == {
+            line_id: _invoice_bulk_line_snapshot(final_by_id[line_id]) for line_id in preserved_ids if line_id in final_by_id
+        }
+        if updating:
+            valid = valid and final_ids == before_ids
+            for item in requested:
+                line = final_by_id.get(item["line_id"])
+                if line is None:
+                    valid = False
+                    continue
+                identity = (getattr(line, "display_type", None), _relation_ids(getattr(line, "sale_line_ids", [])), _many2one_id(getattr(line, "purchase_line_id", None)))
+                persisted = _current_invoice_line(line, item["changes"])
+                expected = _normalized_invoice_replacement_lines([targets[item["line_id"]]])[0]
+                valid = valid and identity == selected_identity[item["line_id"]] and persisted is not None and (
+                    all(persisted[field] == expected[field] for field in item["changes"])
+                    if item["line_id"] in unit_changed else _invoice_line_matches(line, targets[item["line_id"]])
+                )
+        else:
+            valid = valid and _invoice_added_lines_match([line for line in final_lines if line.id not in before_ids], requested)
+        if not valid:
+            raise _fail(failure_type, "odoo_write_error", "Native bulk invoice-line changes did not preserve the requested rows and existing line membership.", exit_code=6)
+    return _move_result(move, company_id), False
 
 
 def _delete_invoice_line(
@@ -22749,6 +22927,8 @@ def _dispatch_allowed(
         return _write_entry_line_membership(
             env, capability_id, parameters, company_id, failure_type
         )
+    if capability_id in {"invoice.lines.update", "invoice.lines.add"}:
+        return _write_invoice_bulk_lines(env, capability_id, parameters, company_id, failure_type)
     if capability_id in {
         "invoice.cancel",
         "invoice.reset_to_draft",

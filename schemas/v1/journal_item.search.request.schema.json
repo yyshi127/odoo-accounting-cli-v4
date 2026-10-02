@@ -77,6 +77,15 @@
           "type": "boolean",
           "default": false
         },
+        "currency_id": {"type": "integer", "minimum": 1},
+        "due_date_from": {"type": ["string", "null"], "format": "date"},
+        "due_date_to": {"type": ["string", "null"], "format": "date"},
+        "reconciled": {"type": "boolean"},
+        "move_types": {
+          "type": "array", "minItems": 1, "maxItems": 7, "uniqueItems": true,
+          "items": {"enum": ["entry", "out_invoice", "out_refund", "in_invoice", "in_refund", "out_receipt", "in_receipt"]}
+        },
+        "query": {"type": ["string", "null"], "minLength": 1, "maxLength": 200, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"},
         "limit": {
           "type": "integer",
           "minimum": 1,

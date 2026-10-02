@@ -27,17 +27,16 @@ _SIDE_ACCOUNT_TYPES = {
     "receivable": "asset_receivable",
     "payable": "liability_payable",
 }
-_MOVE_TYPES = frozenset(
-    {
-        "entry",
-        "out_invoice",
-        "out_refund",
-        "in_invoice",
-        "in_refund",
-        "out_receipt",
-        "in_receipt",
-    }
+_MOVE_TYPE_ORDER = (
+    "entry",
+    "out_invoice",
+    "out_refund",
+    "in_invoice",
+    "in_refund",
+    "out_receipt",
+    "in_receipt",
 )
+_MOVE_TYPES = frozenset(_MOVE_TYPE_ORDER)
 _FILTER_FIELDS = frozenset(
     {
         "date_from",
@@ -49,6 +48,8 @@ _FILTER_FIELDS = frozenset(
         "journal_id",
         "currency_id",
         "query",
+        "move_id",
+        "move_types",
     }
 )
 _ROW_FIELDS = frozenset(
@@ -301,6 +302,15 @@ def _validate_request(
         "currency_id": ids["currency_id"],
         "query": query,
     }
+    if "move_id" in parameters:
+        if not _valid_id(parameters["move_id"]):
+            raise _invalid("parameters.move_id must be a positive integer.")
+        filters["move_id"] = parameters["move_id"]
+    if "move_types" in parameters:
+        values = parameters["move_types"]
+        if not isinstance(values, list) or not values or any(not isinstance(value, str) or value not in _MOVE_TYPES for value in values) or len(set(values)) != len(values):
+            raise _invalid("parameters.move_types must contain unique supported types.")
+        filters["move_types"] = [value for value in _MOVE_TYPE_ORDER if value in values]
     return request_id, context, filters, limit, cursor
 
 
@@ -526,6 +536,8 @@ def _valid_row(row: Any, *, company_id: int, side: str) -> bool:
 
 def _matches_filters(row: dict[str, Any], filters: dict[str, Any]) -> bool:
     partner = row["partner"]
+    if ("move_id" in filters and row["move"]["id"] != filters["move_id"]) or ("move_types" in filters and row["move"]["move_type"] not in filters["move_types"]):
+        return False
     if (
         (filters["date_from"] is not None and row["date"] < filters["date_from"])
         or (filters["date_to"] is not None and row["date"] > filters["date_to"])

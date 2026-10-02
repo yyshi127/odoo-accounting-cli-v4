@@ -1934,15 +1934,19 @@ def _account_reference(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _journal_entry_filters_are_valid(filters: Any) -> bool:
-    if not isinstance(filters, dict) or set(filters) != {
+    required = {
         "date_from",
         "date_to",
         "states",
         "journal_id",
         "partner_id",
         "query",
-    }:
+    }
+    if not isinstance(filters, dict) or not required <= set(filters) or set(filters) - required - {"currency_id", "account_id"}:
         return False
+    for key in ("currency_id", "account_id"):
+        if key in filters and (not isinstance(filters[key], int) or isinstance(filters[key], bool) or filters[key] <= 0):
+            return False
     for key in ("date_from", "date_to"):
         value = filters[key]
         if value is not None and not _is_canonical_date(value):
@@ -2021,6 +2025,9 @@ def _journal_entry_domain(
         domains.append([("journal_id", "=", filters["journal_id"])])
     if filters["partner_id"] is not None:
         domains.append([("partner_id", "=", filters["partner_id"])])
+    for key, field in (("currency_id", "currency_id"), ("account_id", "line_ids.account_id")):
+        if key in filters:
+            domains.append([(field, "=", filters[key])])
     if filters["query"] is not None:
         domains.append(
             [
@@ -2447,7 +2454,7 @@ def _invoice_search_payload_is_valid(payload: Any) -> bool:
     ):
         return False
     filters = payload["filters"]
-    if not isinstance(filters, dict) or set(filters) != {
+    required = {
         "date_from",
         "date_to",
         "document_types",
@@ -2456,8 +2463,22 @@ def _invoice_search_payload_is_valid(payload: Any) -> bool:
         "journal_id",
         "partner_id",
         "query",
-    }:
+    }
+    optional = {"invoice_date_from", "invoice_date_to", "due_date_from", "due_date_to",
+                "currency_id", "invoice_user_id", "payment_term_id", "fiscal_position_id"}
+    if not isinstance(filters, dict) or not required <= set(filters) or set(filters) - required - optional:
         return False
+    for lower, upper in (("invoice_date_from", "invoice_date_to"), ("due_date_from", "due_date_to")):
+        for key in (lower, upper):
+            if filters.get(key) is not None and not _is_canonical_date(filters[key]):
+                return False
+        if filters.get(lower) is not None and filters.get(upper) is not None and filters[lower] > filters[upper]:
+            return False
+    for key in ("currency_id", "invoice_user_id", "payment_term_id", "fiscal_position_id"):
+        if key not in filters or (key != "currency_id" and filters[key] is None):
+            continue
+        if not isinstance(filters[key], int) or isinstance(filters[key], bool) or filters[key] <= 0:
+            return False
     for key in ("date_from", "date_to"):
         if filters[key] is not None and not _is_canonical_date(filters[key]):
             return False
@@ -2569,6 +2590,17 @@ def _invoice_domain(
         domains.append([("journal_id", "=", filters["journal_id"])])
     if filters["partner_id"] is not None:
         domains.append([("partner_id", "=", filters["partner_id"])])
+    for key, field, operator in (
+        ("invoice_date_from", "invoice_date", ">="), ("invoice_date_to", "invoice_date", "<="),
+        ("due_date_from", "invoice_date_due", ">="), ("due_date_to", "invoice_date_due", "<="),
+        ("currency_id", "currency_id", "="),
+    ):
+        if filters.get(key) is not None:
+            domains.append([(field, operator, filters[key])])
+    for key, field in (("invoice_user_id", "invoice_user_id"), ("payment_term_id", "invoice_payment_term_id"),
+                       ("fiscal_position_id", "fiscal_position_id")):
+        if key in filters:
+            domains.append([(field, "=", filters[key] if filters[key] is not None else False)])
     if filters["query"] is not None:
         domains.append(
             [
@@ -4625,7 +4657,7 @@ def _open_item_payload_is_valid(payload: Any) -> bool:
     ):
         return False
     filters = payload["filters"]
-    if not isinstance(filters, dict) or set(filters) != {
+    required = {
         "date_from",
         "date_to",
         "due_date_from",
@@ -4635,8 +4667,18 @@ def _open_item_payload_is_valid(payload: Any) -> bool:
         "journal_id",
         "currency_id",
         "query",
-    }:
+    }
+    if not isinstance(filters, dict) or not required <= set(filters) or set(filters) - required - {"move_id", "move_types"}:
         return False
+    if "move_id" in filters and (not isinstance(filters["move_id"], int) or isinstance(filters["move_id"], bool) or filters["move_id"] <= 0):
+        return False
+    if "move_types" in filters:
+        values = filters["move_types"]
+        choices = ("entry", "out_invoice", "out_refund", "in_invoice", "in_refund", "out_receipt", "in_receipt")
+        if not isinstance(values, list) or not values or not all(isinstance(value, str) for value in values):
+            return False
+        if values != [value for value in choices if value in values]:
+            return False
     for field in ("date_from", "date_to", "due_date_from", "due_date_to"):
         if filters[field] is not None and not _is_canonical_date(filters[field]):
             return False
@@ -4711,6 +4753,10 @@ def _open_item_domain(
     ):
         if filters[filter_name] is not None:
             domains.append([(model_field, operator, filters[filter_name])])
+    if "move_id" in filters:
+        domains.append([("move_id", "=", filters["move_id"])])
+    if "move_types" in filters:
+        domains.append([("move_id.move_type", "in", filters["move_types"])])
     if filters["query"] is not None:
         domains.append(
             list(

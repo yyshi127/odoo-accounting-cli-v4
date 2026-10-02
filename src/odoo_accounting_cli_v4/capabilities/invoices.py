@@ -55,6 +55,14 @@ _FILTER_FIELDS = frozenset(
         "journal_id",
         "partner_id",
         "query",
+        "invoice_date_from",
+        "invoice_date_to",
+        "due_date_from",
+        "due_date_to",
+        "currency_id",
+        "invoice_user_id",
+        "payment_term_id",
+        "fiscal_position_id",
     }
 )
 _HEADER_FIELDS = frozenset(
@@ -409,6 +417,21 @@ def validate_invoice_search_request(
         "partner_id": ids["partner_id"],
         "query": query,
     }
+    for start, end in (("invoice_date_from", "invoice_date_to"), ("due_date_from", "due_date_to")):
+        for key in (start, end):
+            if key in parameters:
+                value = parameters[key]
+                if value is not None and not _is_date(value):
+                    raise _invalid(f"parameters.{key} must be null or a YYYY-MM-DD date.")
+                filters[key] = value
+        if filters.get(start) is not None and filters.get(end) is not None and filters[start] > filters[end]:
+            raise _invalid(f"parameters.{start} cannot be after parameters.{end}.")
+    for key in ("currency_id", "invoice_user_id", "payment_term_id", "fiscal_position_id"):
+        if key in parameters:
+            value = parameters[key]
+            if not _valid_id(value) and not (key != "currency_id" and value is None):
+                raise _invalid(f"parameters.{key} must be a positive integer" + (" or null." if key != "currency_id" else "."))
+            filters[key] = value
     return request_id, context, filters, limit, cursor
 
 
@@ -669,6 +692,13 @@ def _validate_search_rows(
     for row in rows:
         if not _valid_header(row, company_id=company_id, fields=_HEADER_FIELDS):
             raise _failed("Odoo returned an invalid or out-of-scope invoice.")
+        for prefix, field in (("invoice_date", "invoice_date"), ("due_date", "invoice_date_due")):
+            for suffix, operator in (("from", "minimum"), ("to", "maximum")):
+                bound = filters.get(f"{prefix}_{suffix}")
+                if bound is not None and (row[field] is None or (row[field] < bound if operator == "minimum" else row[field] > bound)):
+                    raise _failed("Odoo returned an invoice outside the requested dates.")
+        if "currency_id" in filters and row["currency"]["id"] != filters["currency_id"]:
+            raise _failed("Odoo returned an invoice outside the requested currency.")
         if (
             (filters["date_from"] is not None and row["date"] < filters["date_from"])
             or (filters["date_to"] is not None and row["date"] > filters["date_to"])

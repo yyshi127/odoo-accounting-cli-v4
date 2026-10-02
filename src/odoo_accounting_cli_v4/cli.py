@@ -1787,6 +1787,8 @@ _CAPABILITY_MODELS = {
     "vendor_bill.create": "account.move",
     "invoice.update": "account.move",
     "invoice.lines.replace": "account.move",
+    "invoice.lines.update": "account.move",
+    "invoice.lines.add": "account.move",
     "invoice.line.create": "account.move.line",
     "invoice.line.update": "account.move.line",
     "invoice.line.delete": "account.move.line",

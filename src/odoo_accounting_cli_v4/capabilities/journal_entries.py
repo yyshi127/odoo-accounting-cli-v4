@@ -44,7 +44,7 @@ _DISPLAY_TYPES = frozenset(
     }
 )
 _FILTER_FIELDS = frozenset(
-    {"date_from", "date_to", "states", "journal_id", "partner_id", "query"}
+    {"date_from", "date_to", "states", "journal_id", "partner_id", "query", "currency_id", "account_id"}
 )
 _SEARCH_FIELDS = frozenset(
     {
@@ -310,6 +310,11 @@ def validate_journal_entry_search_request(
         "partner_id": ids["partner_id"],
         "query": query,
     }
+    for key in ("currency_id", "account_id"):
+        if key in parameters:
+            if not _valid_id(parameters[key]):
+                raise _invalid(f"parameters.{key} must be a positive integer.")
+            filters[key] = parameters[key]
     return request_id, context, filters, limit, cursor
 
 
