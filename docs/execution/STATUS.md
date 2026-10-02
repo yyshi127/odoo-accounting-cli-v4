@@ -10,8 +10,12 @@ matched the preceding checkpoint. Existing read-only accounting-access tests
 passed all four dual-alias/company cases in59.58s. Historical export evidence and
 deferred-failure/addon hashes were freshly rechecked, not rerun as new acceptance.
 The proposal does not narrow the objective or mark any unverified work complete.
-Next: resolve the fixed workflow/role boundary and audit required end-to-end
-evidence before another optional-field expansion. Overall goal stays active.
+The user subsequently confirmed daily-core acceptance first, with nonzero assets,
+automatic multi-period deferral, final period locking and statutory tax closing
+explicitly remaining unfinished later work. The acceptance document now fixes
+twelve connected scenarios for closure, not twelve new commands or per-command
+gates. Next: verify those scenarios and repair actual blockers, not optional-field
+expansion. Overall goal stays active; native-plugin changes remain unauthorized.
 
 ## Current accounting phase — business-line searches and bulk removal, 2026-10-02
 

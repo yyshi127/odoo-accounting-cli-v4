@@ -2,9 +2,12 @@
 
 Updated: 2026-10-02 (Asia/Shanghai)
 
-Completion planning now has a proposed, finite workflow/evidence crosswalk in
-[ACCOUNTING_ACCEPTANCE.md](ACCOUNTING_ACCEPTANCE.md). It is not an approved
-scope reduction or a completion claim. No new command was implemented by the
+Completion planning now has a finite workflow/evidence crosswalk in
+[ACCOUNTING_ACCEPTANCE.md](ACCOUNTING_ACCEPTANCE.md). The user confirmed
+daily-core acceptance first; nonzero assets, multi-period automatic deferral,
+final period locking and statutory tax closing remain unfinished later work.
+This is not a reduction of the overall goal or a completion claim.
+No new command was implemented by the
 audit; the latest capability checkpoint and counts below remain authoritative.
 Separate ordinary-user availability, fixture-only prerequisites, native blockers
 and actual missing handlers when planning closure. Do not resume unlimited
