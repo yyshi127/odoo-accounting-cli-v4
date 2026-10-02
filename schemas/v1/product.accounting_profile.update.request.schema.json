@@ -23,7 +23,9 @@
             "income_account_id": {"$ref": "#/$defs/nullableId"},
             "expense_account_id": {"$ref": "#/$defs/nullableId"},
             "sale_tax_ids": {"$ref": "#/$defs/sortedUniqueIds"},
-            "purchase_tax_ids": {"$ref": "#/$defs/sortedUniqueIds"}
+            "purchase_tax_ids": {"$ref": "#/$defs/sortedUniqueIds"},
+            "invoice_policy": {"enum": ["order", "delivery"]},
+            "purchase_method": {"enum": ["purchase", "receive"]}
           }
         }
       }

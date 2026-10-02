@@ -85,12 +85,12 @@ def _valid_result(result: Any) -> bool:
     )
 
 
-def _valid_batch_result(result: Any) -> bool:
+def _valid_batch_result(result: Any, *, minimum: int = 2, maximum: int = 100) -> bool:
     return (
         isinstance(result, dict)
         and set(result) == _BATCH_RESULT_FIELDS
         and _positive_integer(result["processed_count"])
-        and 2 <= result["processed_count"] <= 100
+        and minimum <= result["processed_count"] <= maximum
         and isinstance(result["items"], list)
         and len(result["items"]) == result["processed_count"]
         and all(_valid_result(item) for item in result["items"])
@@ -123,9 +123,19 @@ class OdooCoreWritePort:
         parameters: dict[str, Any],
     ) -> dict[str, Any]:
         self._user_id = None
-        batch_request = capability_id == "invoice.reverse_and_reissue" or (
+        round_batch = (
+            capability_id in {"sale.order.invoice.create", "purchase.order.bill.create"}
+            and "order_ids" in parameters
+        ) or (
+            capability_id in {"receivable.payment.register", "payable.payment.register"}
+            and parameters.get("group_payment") is False
+        )
+        batch_request = round_batch or capability_id == "invoice.reverse_and_reissue" or (
             capability_id in _BATCH_LIFECYCLE_CAPABILITIES
             and ("move_ids" in parameters or "payment_ids" in parameters)
+        ) or (
+            capability_id in {"customer_credit_note.create", "vendor_refund.create"}
+            and "move_ids" in parameters
         )
         page = self._client.invoke(
             _ACTION,
@@ -148,7 +158,8 @@ class OdooCoreWritePort:
             or not (
                 page["result"] is None
                 or (
-                    _valid_batch_result(page["result"])
+                    _valid_batch_result(page["result"], minimum=1 if round_batch else 2,
+                                        maximum=1000 if round_batch else 100)
                     if batch_request
                     else _valid_result(page["result"])
                 )

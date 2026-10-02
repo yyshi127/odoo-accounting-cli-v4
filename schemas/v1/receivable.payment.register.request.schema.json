@@ -36,13 +36,7 @@
         },
         {
           "required": ["move_ids"],
-          "properties": {
-            "move_id": false,
-            "amount": false,
-            "payment_difference_handling": false,
-            "writeoff_account_id": false,
-            "writeoff_label": false
-          }
+          "properties": {"move_id": false}
         }
       ],
       "properties": {
@@ -73,6 +67,9 @@
           "type": "string",
           "format": "date"
         },
+        "installments_mode": {"enum": ["full", "next", "overdue", "before_date"]},
+        "group_payment": {"type": "boolean"},
+        "installment_cutoff_date": {"type": "string", "format": "date"},
         "amount": {
           "$ref": "#/$defs/positive_canonical_decimal"
         },
@@ -90,6 +87,17 @@
           "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$(?![\\s\\S])"
         }
       },
+      "allOf": [
+        {
+          "if": {"required": ["installments_mode"], "properties": {"installments_mode": {"const": "before_date"}}},
+          "then": {"required": ["installment_cutoff_date"]},
+          "else": {"properties": {"installment_cutoff_date": false}}
+        },
+        {
+          "if": {"required": ["group_payment"], "properties": {"group_payment": {"const": false}}},
+          "then": {"properties": {"amount": false}}
+        }
+      ],
       "if": {
         "required": ["payment_difference_handling"],
         "properties": {

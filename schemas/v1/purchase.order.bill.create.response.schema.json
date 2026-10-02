@@ -5,7 +5,22 @@
   "type": "object",
   "allOf": [
     {"$ref": "response.schema.json"},
-    {"properties": {"capability": {"const": "purchase.order.bill.create"}, "data": {"oneOf": [{"type": "null"}, {"$ref": "core-write-result.schema.json"}]}}},
-    {"if": {"properties": {"success": {"const": true}}, "required": ["success"]}, "then": {"properties": {"status": {"const": "verified"}, "data": {"$ref": "core-write-result.schema.json"}, "error": {"type": "null"}}}}
-  ]
+    {"properties": {"capability": {"const": "purchase.order.bill.create"}, "data": {"oneOf": [{"type": "null"}, {"$ref": "core-write-result.schema.json"}, {"$ref": "#/$defs/order_invoice_batch"}]}}},
+    {"if": {"properties": {"success": {"const": true}}, "required": ["success"]}, "then": {"properties": {"status": {"const": "verified"}, "data": {"oneOf": [{"$ref": "core-write-result.schema.json"}, {"$ref": "#/$defs/order_invoice_batch"}]}, "error": {"type": "null"}}}}
+  ],
+  "$defs": {
+    "order_invoice_batch": {
+      "type": "object", "additionalProperties": false, "required": ["idempotent_replay", "result"],
+      "properties": {
+        "idempotent_replay": {"type": "boolean"},
+        "result": {
+          "type": "object", "additionalProperties": false, "required": ["items", "processed_count"],
+          "properties": {
+            "items": {"type": "array", "minItems": 1, "maxItems": 1000, "uniqueItems": true, "items": {"allOf": [{"$ref": "core-write-result.schema.json#/properties/result"}, {"properties": {"model": {"const": "account.move"}, "id": {"type": "integer", "minimum": 1}, "move_type": {"enum": ["in_invoice", "in_refund"]}}}]}},
+            "processed_count": {"type": "integer", "minimum": 1, "maximum": 1000}
+          }
+        }
+      }
+    }
+  }
 }

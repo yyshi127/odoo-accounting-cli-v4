@@ -204,6 +204,7 @@ CAPABILITIES = invoice_preparation.CAPABILITY_IDS | journal_item_processing.CAPA
         "sale.order.cancel",
         "sale.order.reset_to_draft",
         "sale.order.invoice.create",
+        "sale.order.down_payment.create",
         "stock.transfer.create",
         "stock.transfer.confirm",
         "stock.transfer.assign",
@@ -345,6 +346,7 @@ _ORDER_WRITE_CAPABILITIES = (
     | _ORDER_TRANSITION_CAPABILITIES
 )
 _SALE_ORDER_INVOICE_CAPABILITY = "sale.order.invoice.create"
+_SALE_DOWN_PAYMENT_CAPABILITY = "sale.order.down_payment.create"
 _STOCK_TRANSFER_CREATE_CAPABILITY = "stock.transfer.create"
 _STOCK_TRANSFER_ACTION_CAPABILITIES = frozenset(
     {
@@ -497,6 +499,8 @@ _PRODUCT_ACCOUNTING_PROFILE_FIELDS = frozenset(
         "expense_account_id",
         "sale_tax_ids",
         "purchase_tax_ids",
+        "invoice_policy",
+        "purchase_method",
     }
 )
 _PRODUCT_CATEGORY_ACCOUNTING_PROFILE_FIELDS = frozenset(
@@ -748,6 +752,10 @@ _ENTRY_LINE_OPTIONAL_KEYS = frozenset(
 _PAYMENT_REGISTER_REFERENCE_FIELDS = frozenset(
     {"payment_method_line_id", "partner_bank_id"}
 )
+_PAYMENT_INSTALLMENT_FIELDS = frozenset(
+    {"installments_mode", "group_payment", "installment_cutoff_date"}
+)
+_PRODUCT_POLICY_FIELDS = {"invoice_policy": {"order", "delivery"}, "purchase_method": {"purchase", "receive"}}
 _REFUND_REQUIRED_KEYS = frozenset({"move_id", "date", "reason"})
 _PAYMENT_REGISTER_REQUIRED_KEYS = frozenset({"move_id", "journal_id", "payment_date"})
 _PAYMENT_REGISTER_MANY_REQUIRED_KEYS = frozenset(
@@ -832,8 +840,8 @@ _PARAMETER_KEYS = {
     },
     "reconciliation.apply": {"line_ids", "invoice_id", "outstanding_line_id"},
     "payment.cancel": {"payment_id", "payment_ids"},
-    "customer_credit_note.create": {"move_id", "date", "reason", "lines"},
-    "vendor_refund.create": {"move_id", "date", "reason", "lines"},
+    "customer_credit_note.create": {"move_id", "move_ids", "date", "reason", "lines"},
+    "vendor_refund.create": {"move_id", "move_ids", "date", "reason", "lines"},
     "payment.post": {"payment_id", "payment_ids"},
     "reconciliation.undo": {
         "mode",
@@ -1053,7 +1061,8 @@ _PARAMETER_KEYS = {
     "sale.order.confirm": {"order_id"},
     "sale.order.cancel": {"order_id"},
     "sale.order.reset_to_draft": {"order_id"},
-    "sale.order.invoice.create": {"order_id"},
+    "sale.order.invoice.create": {"order_id", "order_ids", "consolidated_billing", "deduct_down_payments"},
+    "sale.order.down_payment.create": {"order_id", "method", "amount"},
     "stock.transfer.create": {
         "picking_type_id",
         "location_id",
@@ -1084,7 +1093,7 @@ _PARAMETER_KEYS = {
     "purchase.order.confirm": {"order_id"},
     "purchase.order.cancel": {"order_id"},
     "purchase.order.reset_to_draft": {"order_id"},
-    "purchase.order.bill.create": {"order_id"},
+    "purchase.order.bill.create": {"order_id", "order_ids"},
     "purchase_bill.match": {"bill_id", "pairs"},
     "purchase_bill.lines.unmatch": {"bill_id", "bill_line_ids"},
     "payment_term.create": {"name", "company_id", "lines"}
@@ -1261,6 +1270,7 @@ _GROUPS = {
     "sale.order.cancel": "sales_team.group_sale_salesman",
     "sale.order.reset_to_draft": "sales_team.group_sale_salesman",
     "sale.order.invoice.create": "sales_team.group_sale_salesman",
+    "sale.order.down_payment.create": "sales_team.group_sale_salesman",
     "stock.transfer.create": "stock.group_stock_user",
     "stock.transfer.confirm": "stock.group_stock_user",
     "stock.transfer.assign": "stock.group_stock_user",
@@ -2731,6 +2741,15 @@ _ACCESS[_SALE_ORDER_INVOICE_CAPABILITY] = {
     ("account.move", "create"),
     ("account.move.line", "read"),
 }
+_MODELS[_SALE_DOWN_PAYMENT_CAPABILITY] = _MODELS[_SALE_ORDER_INVOICE_CAPABILITY] | {
+    "sale.advance.payment.inv", "account.tax",
+}
+_ACCESS[_SALE_DOWN_PAYMENT_CAPABILITY] = _ACCESS[_SALE_ORDER_INVOICE_CAPABILITY] | {
+    ("sale.advance.payment.inv", "create"), ("sale.order.line", "create"),
+    ("sale.order.line", "write"), ("account.tax", "read"), ("account.move", "write"),
+}
+for _payment_round_capability in ("receivable.payment.register", "payable.payment.register"):
+    _PARAMETER_KEYS[_payment_round_capability].update(_PAYMENT_INSTALLMENT_FIELDS)
 
 _STOCK_TRANSFER_MODELS = {
     "res.company",
@@ -3879,6 +3898,29 @@ def _valid_batch_ids(value: Any) -> bool:
     )
 
 
+def _valid_round_ids(value: Any, *, minimum: int) -> bool:
+    return isinstance(value, list) and minimum <= len(value) <= 100 and all(
+        _is_id(item) for item in value
+    ) and value == sorted(set(value))
+
+
+def _payment_round_operation(parameters: dict[str, Any]) -> bool:
+    return bool(_PAYMENT_INSTALLMENT_FIELDS & set(parameters)) or (
+        "move_ids" in parameters and bool({"amount", "payment_difference_handling", "writeoff_account_id", "writeoff_label"} & set(parameters))
+    )
+
+
+def _valid_payment_installments(parameters: dict[str, Any]) -> bool:
+    mode = parameters.get("installments_mode")
+    return bool(
+        ("installments_mode" not in parameters or isinstance(mode, str) and mode in {"full", "next", "overdue", "before_date"})
+        and ("group_payment" not in parameters or isinstance(parameters["group_payment"], bool))
+        and not (parameters.get("group_payment") is False and "amount" in parameters)
+        and ((mode == "before_date" and _is_date(parameters.get("installment_cutoff_date")))
+             or (mode != "before_date" and "installment_cutoff_date" not in parameters))
+    )
+
+
 def _is_date(value: Any) -> bool:
     if not isinstance(value, str):
         return False
@@ -4988,7 +5030,8 @@ def _valid_purchase_bill_parameters(
     capability_id: str, parameters: dict[str, Any]
 ) -> bool:
     if capability_id == "purchase.order.bill.create":
-        return _is_id(parameters["order_id"])
+        return (set(parameters) == {"order_ids"} and _valid_round_ids(parameters["order_ids"], minimum=1)
+                if "order_ids" in parameters else set(parameters) == {"order_id"} and _is_id(parameters["order_id"]))
     if not _is_id(parameters["bill_id"]):
         return False
     if capability_id == "purchase_bill.lines.unmatch":
@@ -5796,7 +5839,8 @@ def _valid_product_accounting_profile_values(
         if field_name in values
     ):
         return False
-    return all(
+    return all(field not in values or isinstance(values[field], str) and values[field] in choices
+               for field, choices in _PRODUCT_POLICY_FIELDS.items()) and all(
         isinstance(values[field_name], list)
         and values[field_name] == sorted(set(values[field_name]))
         and all(_is_id(item) for item in values[field_name])
@@ -5972,7 +6016,7 @@ def _valid_parameters(
         "customer_credit_note.create",
         "vendor_refund.create",
     }:
-        required_keys = _REFUND_REQUIRED_KEYS
+        required_keys = frozenset({"move_ids", "date", "reason"}) if "move_ids" in parameters else _REFUND_REQUIRED_KEYS
     elif capability_id in {
         "receivable.payment.register",
         "payable.payment.register",
@@ -6011,6 +6055,8 @@ def _valid_parameters(
         required_keys = allowed_keys - {"balance_start", "name", "date"}
     elif capability_id == "tax.group.create":
         required_keys = _TAX_GROUP_FIELDS - _TAX_GROUP_ACCOUNT_FIELDS
+    elif capability_id in {_SALE_ORDER_INVOICE_CAPABILITY, "purchase.order.bill.create"}:
+        required_keys = frozenset({"order_ids"}) if "order_ids" in parameters else frozenset({"order_id"})
     if not required_keys <= parameter_keys <= allowed_keys:
         return False
     if capability_id in _BATCH_LIFECYCLE_CAPABILITIES:
@@ -6025,7 +6071,17 @@ def _valid_parameters(
             parameters[batch_field]
         )
     if capability_id == _SALE_ORDER_INVOICE_CAPABILITY:
-        return _is_id(parameters["order_id"])
+        if "order_ids" not in parameters:
+            return parameter_keys == {"order_id"} and _is_id(parameters["order_id"])
+        return "order_id" not in parameters and _valid_round_ids(parameters["order_ids"], minimum=1) and all(
+            field not in parameters or isinstance(parameters[field], bool)
+            for field in ("consolidated_billing", "deduct_down_payments")
+        )
+    if capability_id == _SALE_DOWN_PAYMENT_CAPABILITY:
+        amount = _decimal(parameters["amount"], positive=True)
+        return bool(_is_id(parameters["order_id"]) and isinstance(parameters["method"], str) and parameters["method"] in {"percentage", "fixed"}
+                    and amount is not None and _canonical_decimal_text(amount) == parameters["amount"]
+                    and (parameters["method"] != "percentage" or amount <= 100))
     if capability_id in _STOCK_TRANSFER_CAPABILITIES:
         return _valid_stock_transfer_parameters(capability_id, parameters)
     if capability_id in _PURCHASE_BILL_CAPABILITIES:
@@ -6166,7 +6222,8 @@ def _valid_parameters(
         "vendor_refund.create",
     }:
         return (
-            _is_id(parameters["move_id"])
+            (_valid_round_ids(parameters["move_ids"], minimum=2) and "move_id" not in parameters and "lines" not in parameters
+             if "move_ids" in parameters else _is_id(parameters["move_id"]))
             and _is_date(parameters["date"])
             and _is_text(parameters["reason"], maximum=200)
             and (
@@ -6183,18 +6240,12 @@ def _valid_parameters(
             for field in _PAYMENT_REGISTER_REFERENCE_FIELDS
         ):
             return False
+        if not _valid_payment_installments(parameters):
+            return False
         if "move_ids" in parameters:
             move_ids = parameters["move_ids"]
-            return (
-                set(parameters) <= _PAYMENT_REGISTER_MANY_REQUIRED_KEYS | _PAYMENT_REGISTER_REFERENCE_FIELDS
-                and isinstance(move_ids, list)
-                and 2 <= len(move_ids) <= 100
-                and all(_is_id(move_id) for move_id in move_ids)
-                and len(set(move_ids)) == len(move_ids)
-                and move_ids == sorted(move_ids)
-                and _is_id(parameters["journal_id"])
-                and _is_date(parameters["payment_date"])
-            )
+            if "move_id" in parameters or not _valid_round_ids(move_ids, minimum=2):
+                return False
         handling = parameters.get("payment_difference_handling")
         if "payment_difference_handling" in parameters and handling not in (
             "open",
@@ -6214,7 +6265,7 @@ def _valid_parameters(
         elif {"writeoff_account_id", "writeoff_label"} & parameter_keys:
             return False
         return (
-            _is_id(parameters["move_id"])
+            ("move_ids" in parameters or _is_id(parameters["move_id"]))
             and _is_id(parameters["journal_id"])
             and _is_date(parameters["payment_date"])
             and (
@@ -6832,7 +6883,9 @@ def _deterministic_key(
     if capability_id in {"account.tag.archive", "account.tag.restore"}:
         return f"{capability_id}:{parameters['account_tag_id']}"
     if capability_id == _SALE_ORDER_INVOICE_CAPABILITY:
-        return f"{capability_id}:{parameters['order_id']}"
+        return None if "order_ids" in parameters else f"{capability_id}:{parameters['order_id']}"
+    if capability_id == _SALE_DOWN_PAYMENT_CAPABILITY:
+        return None
     if capability_id == _STOCK_TRANSFER_CREATE_CAPABILITY:
         return None
     if capability_id == _STOCK_TRANSFER_QUANTITIES_CAPABILITY:
@@ -6852,7 +6905,7 @@ def _deterministic_key(
     if capability_id in _STOCK_TRANSFER_ACTION_CAPABILITIES:
         return f"{capability_id}:{parameters['transfer_id']}"
     if capability_id == "purchase.order.bill.create":
-        return f"purchase.order.bill.create:{parameters['order_id']}"
+        return None if "order_ids" in parameters else f"purchase.order.bill.create:{parameters['order_id']}"
     if capability_id in {"invoice.line.create", "invoice.line.update"}:
         content = (
             parameters["line"]
@@ -7240,6 +7293,8 @@ def _deterministic_key(
         capability_id in {"receivable.payment.register", "payable.payment.register"}
         and "move_ids" in parameters
     ):
+        if _payment_round_operation(parameters):
+            return None
         canonical = json.dumps(
             parameters,
             ensure_ascii=False,
@@ -7254,7 +7309,7 @@ def _deterministic_key(
         "invoice.reverse_and_reissue",
     } or (
         capability_id in {"receivable.payment.register", "payable.payment.register"}
-        and "amount" in parameters
+        and ("amount" in parameters or _payment_round_operation(parameters))
     ):
         return None
     primary_name = (
@@ -9035,6 +9090,11 @@ def _update_product(
     return _product_result(checked_template, checked_product, company_id), False
 
 
+def _validate_product_policy_fields(template: Any, changes: dict[str, Any], failure_type: type[Exception]) -> None:
+    if any(field in changes and field not in template._fields for field in _PRODUCT_POLICY_FIELDS):
+        raise _fail(failure_type, "state_conflict", "The installed product template does not expose the requested invoicing policy.", exit_code=5)
+
+
 def _duplicate_product(
     env: Any,
     parameters: dict[str, Any],
@@ -9207,12 +9267,29 @@ def _update_product_accounting_profile(
     company_id: int,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if set(parameters["changes"]) <= set(_PRODUCT_POLICY_FIELDS):
+        product = _search_one(env, "product.product", [
+            ("id", "=", parameters["product_id"]), ("company_id", "in", [False, company_id]),
+        ], company_id, failure_type)
+        template = _search_one(env, "product.template", [
+            ("id", "=", product.product_tmpl_id.id), ("company_id", "in", [False, company_id]),
+        ], company_id, failure_type)
+        changes = parameters["changes"]
+        _validate_product_policy_fields(template, changes, failure_type)
+        if all(getattr(template, field) == value for field, value in changes.items()):
+            return _product_result(template, product, company_id), True
+        template.write(changes)
+        template.invalidate_recordset(list(changes))
+        if any(getattr(template, field) != value for field, value in changes.items()):
+            raise _fail(failure_type, "odoo_write_error", "Odoo did not retain the template invoicing policies.", exit_code=6)
+        return _product_result(template, product, company_id), False
     template, product = _fixed_product(
         env, parameters["product_id"], company_id, failure_type
     )
     template = template.with_company(company_id)
     changes = parameters["changes"]
-    write_values: dict[str, Any] = {}
+    _validate_product_policy_fields(template, changes, failure_type)
+    write_values: dict[str, Any] = {field: changes[field] for field in _PRODUCT_POLICY_FIELDS if field in changes}
     for source, target in (
         ("income_account_id", "property_account_income_id"),
         ("expense_account_id", "property_account_expense_id"),
@@ -9241,6 +9318,7 @@ def _update_product_accounting_profile(
             )
             write_values[target] = [(6, 0, changes[source])]
     current = _product_accounting_profile_values(template)
+    current.update({field: getattr(template, field) for field in _PRODUCT_POLICY_FIELDS if field in changes})
     target_values = {**current, **changes}
     if target_values == current:
         return _product_result(template, product, company_id), True
@@ -9251,9 +9329,11 @@ def _update_product_accounting_profile(
             "property_account_expense_id",
             "taxes_id",
             "supplier_taxes_id",
-        ]
+        ] + [field for field in _PRODUCT_POLICY_FIELDS if field in changes]
     )
-    if _product_accounting_profile_values(template) != target_values:
+    actual = _product_accounting_profile_values(template)
+    actual.update({field: getattr(template, field) for field in _PRODUCT_POLICY_FIELDS if field in changes})
+    if actual != target_values:
         raise _fail(
             failure_type,
             "odoo_write_error",
@@ -13234,6 +13314,8 @@ def _create_refund(
     marker: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if "move_ids" in parameters:
+        return _create_refund_round(env, capability_id, parameters, company_id, key, marker, failure_type)
     source_type = (
         "out_invoice"
         if capability_id == "customer_credit_note.create"
@@ -13385,10 +13467,88 @@ def _create_refund(
     return _move_result(refunds, company_id, source_id=source.id), False
 
 
+def _round_moves_for_key(env: Any, capability_id: str, parameters: dict[str, Any], company_id: int,
+                         key: str, failure_type: type[Exception]) -> tuple[Any, str, str]:
+    key_marker = _idempotency_key_marker(capability_id, company_id, key)
+    operation_marker = _operation_marker(capability_id, key, parameters)
+    moves = _scoped(env, "account.move", company_id).search([
+        ("company_id", "=", company_id), ("invoice_origin", "ilike", key_marker),
+    ], order="id", limit=1001).filtered(lambda move: _move_has_marker(move, key_marker))
+    if moves and (len(moves) > 1000 or any(not _move_has_marker(move, operation_marker) for move in moves)):
+        raise _fail(failure_type, "idempotency_conflict", "The operation key was already used with other parameters.", exit_code=5)
+    return moves, operation_marker, key_marker
+
+
+def _mark_invoice_round(move: Any, operation_marker: str, key_marker: str, failure_type: type[Exception]) -> None:
+    tokens = [token.strip() for token in str(move.invoice_origin or "").split(";") if token.strip()]
+    for marker in (operation_marker, key_marker):
+        if marker not in tokens:
+            tokens.append(marker)
+    move.write({"invoice_origin": ";".join(tokens)})
+    if not _move_has_marker(move, operation_marker) or not _move_has_marker(move, key_marker):
+        raise _fail(failure_type, "odoo_write_error", "Odoo did not retain the invoice operation markers.", exit_code=6)
+
+
+def _create_refund_round(env: Any, capability_id: str, parameters: dict[str, Any], company_id: int,
+                         key: str, marker: str, failure_type: type[Exception]) -> tuple[dict[str, Any], bool]:
+    source_type = "out_invoice" if capability_id == "customer_credit_note.create" else "in_invoice"
+    refund_type = "out_refund" if source_type == "out_invoice" else "in_refund"
+    sources = _ensure_ids(env, "account.move", set(parameters["move_ids"]), [
+        ("company_id", "=", company_id), ("move_type", "=", source_type),
+    ], company_id, failure_type)
+    existing, operation_marker, key_marker = _round_moves_for_key(
+        env, capability_id, parameters, company_id, key, failure_type,
+    )
+    by_id = {source.id: source for source in sources}
+
+    def verified(refunds: Any, code: str) -> dict[str, Any]:
+        source_ids = [_many2one_id(refund.reversed_entry_id) for refund in refunds]
+        if (len(refunds) != len(sources) or set(source_ids) != set(by_id)
+                or any(refund.company_id.id != company_id or refund.move_type != refund_type
+                       or refund.state not in ({"draft", "posted", "cancel"} if code == "idempotency_conflict" else {"draft"})
+                       or str(refund.date) != parameters["date"]
+                       or refund.currency_id.id != by_id[refund.reversed_entry_id.id].currency_id.id
+                       or refund.partner_id.id != by_id[refund.reversed_entry_id.id].partner_id.id
+                       or refund.journal_id.id != by_id[refund.reversed_entry_id.id].journal_id.id
+                       or _rounded_currency_amount(refund.currency_id, str(refund.amount_total))
+                       != _rounded_currency_amount(by_id[refund.reversed_entry_id.id].currency_id, str(by_id[refund.reversed_entry_id.id].amount_total))
+                       for refund in refunds)):
+            raise _fail(failure_type, code, "Odoo did not return the full source-linked refund set.", exit_code=5 if code == "idempotency_conflict" else 6)
+        items = [_move_result(refund, company_id, source_id=refund.reversed_entry_id.id)
+                 for refund in sorted(refunds, key=lambda record: record.id)]
+        return {"items": items, "processed_count": len(items)}
+
+    if existing:
+        return verified(existing, "idempotency_conflict"), True
+    if any(source.state != "posted" for source in sources):
+        raise _fail(failure_type, "state_conflict", "Only posted source documents can be refunded.", exit_code=5)
+    refunds = _scoped(env, "account.move", company_id).browse([])
+    for source in sorted(sources, key=lambda record: record.id):
+        wizard = _scoped(env, "account.move.reversal", company_id).with_context(
+            active_model="account.move", active_ids=[source.id],
+        ).create({"move_ids": [(6, 0, [source.id])], "journal_id": source.journal_id.id,
+                  "date": parameters["date"], "reason": parameters["reason"]})
+        wizard.refund_moves()
+        refunds |= wizard.new_move_ids
+    result = verified(refunds, "odoo_write_error")
+    refunds.write({"invoice_origin": f"{operation_marker};{key_marker};{marker}"})
+    return result, False
+
+
 def _payment_sources(payment: Any) -> set[int]:
     return set(_record_ids(payment.reconciled_invoice_ids)) | set(
         _record_ids(payment.reconciled_bill_ids)
     )
+
+
+def _round_payment_sources(payment: Any) -> set[int]:
+    lines = payment.move_id.line_ids.filtered(
+        lambda line: line.account_id.account_type in {"asset_receivable", "liability_payable"}
+    )
+    partials = lines.matched_debit_ids | lines.matched_credit_ids
+    counterparts = partials.debit_move_id.move_id | partials.credit_move_id.move_id
+    return {move.id for move in counterparts
+            if move.id != payment.move_id.id and move.move_type in _DOCUMENT_TYPES}
 
 
 def _rounded_currency_amount(currency: Any, value: str) -> Decimal:
@@ -13628,6 +13788,8 @@ def _register_payment(
     key: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if _payment_round_operation(parameters):
+        return _register_payment_round(env, capability_id, parameters, company_id, key, failure_type)
     if "move_ids" in parameters:
         return _register_many_payments(
             env, capability_id, parameters, company_id, key, failure_type
@@ -13847,6 +14009,151 @@ def _register_payment(
                 exit_code=6,
             )
     return _payment_result(payment, company_id, source_id=source.id), False
+
+
+def _register_payment_round(env: Any, capability_id: str, parameters: dict[str, Any], company_id: int,
+                            key: str, failure_type: type[Exception]) -> tuple[dict[str, Any], bool]:
+    move_ids = parameters.get("move_ids", [parameters.get("move_id")])
+    move_types = ["out_invoice", "out_refund"] if capability_id == "receivable.payment.register" else ["in_invoice", "in_refund"]
+    sources = _ensure_ids(env, "account.move", set(move_ids), [
+        ("company_id", "=", company_id), ("move_type", "in", move_types),
+    ], company_id, failure_type)
+    source_types = {source.move_type for source in sources}
+    if len(source_types) != 1:
+        raise _fail(failure_type, "state_conflict", "The selected payment sources must have one native payment direction.", exit_code=5)
+    payment_type = "inbound" if next(iter(source_types)) in {"out_invoice", "in_refund"} else "outbound"
+    references = _register_payment_references(env, parameters, payment_type, company_id, failure_type)
+    existing_moves, operation_marker, key_marker = _round_moves_for_key(
+        env, capability_id, parameters, company_id, key, failure_type,
+    )
+    separate = parameters.get("group_payment") is False
+
+    def verified(payments: Any, code: str, expected: list[tuple[dict[str, Any], set[int]]] | None = None) -> dict[str, Any]:
+        rows = sorted(payments, key=lambda payment: payment.id)
+        if not 1 <= len(rows) <= 1000 or (not separate and len(rows) != 1):
+            raise _fail(failure_type, code, "Odoo returned an invalid native payment count.", exit_code=5 if code == "idempotency_conflict" else 6)
+        if expected is not None and len(rows) != len(expected):
+            raise _fail(failure_type, code, "Odoo did not create the native payment set.", exit_code=6)
+        remaining = list(expected or [])
+        linked_by_id = {}
+        for payment in rows:
+            linked = _round_payment_sources(payment)
+            linked_by_id[payment.id] = linked
+            currency = payment.currency_id
+            if (payment.company_id.id != company_id or payment.move_id.company_id.id != company_id
+                    or payment.state == "canceled" or payment.journal_id.id != parameters["journal_id"]
+                    or str(payment.date) != parameters["payment_date"] or payment.payment_type != payment_type
+                    or not linked or not linked <= set(move_ids)
+                    or _rounded_currency_amount(currency, str(payment.amount)) <= 0
+                    or not _move_has_marker(payment.move_id, operation_marker) or not _move_has_marker(payment.move_id, key_marker)
+                    or not _register_payment_references_match(payment, references, payment_type)
+                    or ("amount" in parameters and _rounded_currency_amount(currency, str(payment.amount))
+                        != _rounded_currency_amount(currency, parameters["amount"]))):
+                raise _fail(failure_type, code, "The payment operation conflicts with its native accounting result.", exit_code=5 if code == "idempotency_conflict" else 6)
+            if expected is not None:
+                matches = [index for index, (values, source_set) in enumerate(remaining)
+                           if linked <= source_set and currency.id == values["currency_id"]
+                           and _rounded_currency_amount(currency, str(payment.amount)) == _rounded_currency_amount(currency, str(values["amount"]))
+                           and payment.memo == values["memo"]
+                           and all(not values.get(field) or _many2one_id(getattr(payment, field)) == values[field]
+                                   for field in _PAYMENT_REGISTER_REFERENCE_FIELDS)]
+                if not matches:
+                    raise _fail(failure_type, code, "Odoo did not retain the native payment amount, references, or source links.", exit_code=6)
+                native_values, _source_set = remaining.pop(matches[0])
+                for writeoff in native_values.get("write_off_line_vals", []):
+                    lines = payment.move_id.line_ids.filtered(
+                        lambda line, expected_line=writeoff, payment_currency=currency: line.account_id.id == expected_line["account_id"]
+                        and line.name == expected_line["name"] and line.currency_id.id == expected_line["currency_id"]
+                        and _rounded_currency_amount(payment_currency, str(line.amount_currency))
+                        == _rounded_currency_amount(payment_currency, str(expected_line["amount_currency"]))
+                    )
+                    if len(lines) != 1:
+                        raise _fail(failure_type, code, "Odoo did not retain the native payment write-off account, label, and amount.", exit_code=6)
+        items = [_payment_result(payment, company_id, source_id=next(iter(linked)) if len(linked := linked_by_id[payment.id]) == 1 else None)
+                 for payment in rows]
+        return {"items": items, "processed_count": len(items)} if separate else items[0]
+
+    if existing_moves:
+        payments = _scoped(env, "account.payment", company_id).search([
+            ("company_id", "=", company_id), ("move_id", "in", existing_moves.ids),
+        ], order="id", limit=1001)
+        if set(payments.move_id.ids) != set(existing_moves.ids) or len(payments) != len(existing_moves):
+            raise _fail(failure_type, "idempotency_conflict", "The payment operation marker identifies a different accounting set.", exit_code=5)
+        return verified(payments, "idempotency_conflict"), True
+    if any(source.state != "posted" or Decimal(str(source.amount_residual)) <= 0 for source in sources):
+        raise _fail(failure_type, "state_conflict", "The selected documents have no posted residual to pay.", exit_code=5)
+    _ensure_ids(env, "account.journal", {parameters["journal_id"]}, [
+        ("company_id", "=", company_id), ("type", "in", ["bank", "cash"]),
+    ], company_id, failure_type)
+    context = {"active_model": "account.move", "active_ids": move_ids,
+               "default_invoice_origin": f"{operation_marker};{key_marker}"}
+    if parameters.get("installments_mode") == "before_date":
+        context["active_domain"] = [("next_payment_date", "<=", parameters["installment_cutoff_date"])]
+    wizard = _scoped(env, "account.payment.register", company_id).with_context(**context).create({
+        "journal_id": parameters["journal_id"], "payment_date": parameters["payment_date"],
+        "group_payment": not separate, **references,
+    })
+    batches = wizard.batches
+    edit_mode = bool(wizard.can_edit_wizard and batches and (len(batches[0]["lines"]) == 1 or wizard.group_payment))
+    if not separate and (len(batches) != 1 or not edit_mode):
+        raise _fail(failure_type, "state_conflict", "The native wizard cannot combine these sources into one editable payment.", exit_code=5)
+    if ({"amount", "payment_difference_handling", "writeoff_account_id", "writeoff_label"} & set(parameters)) and not edit_mode:
+        raise _fail(failure_type, "state_conflict", "The native non-editable route cannot honor an explicit amount or write-off.", exit_code=5)
+    _validate_register_wizard_references(wizard, references, payment_type, failure_type)
+    totals = wizard._get_total_amounts_to_pay(batches)
+    mode = parameters.get("installments_mode", "full")
+    if mode != "full" and totals["installment_mode"] != mode:
+        raise _fail(failure_type, "state_conflict", "The requested installment mode is not the mode offered by the native wizard.", exit_code=5)
+    amount = parameters.get("amount", str(totals["full_amount"] if mode == "full" else totals["amount_by_default"]))
+    rounded = _rounded_currency_amount(wizard.currency_id, amount)
+    full = _rounded_currency_amount(wizard.currency_id, str(totals["full_amount"]))
+    if rounded <= 0 or rounded > full:
+        raise _fail(failure_type, "state_conflict", "The payment amount is outside the native payable amount.", exit_code=5)
+    if mode != "full" and rounded != _rounded_currency_amount(wizard.currency_id, str(totals["amount_by_default"])):
+        raise _fail(failure_type, "state_conflict", "A non-full installment payment must use its native offered amount.", exit_code=5)
+    values = {"installments_mode": mode}
+    if edit_mode:
+        values.update(amount=float(rounded), communication=key)
+    if "amount" in parameters:
+        values["payment_difference_handling"] = "open"
+    if "payment_difference_handling" in parameters:
+        values["payment_difference_handling"] = parameters["payment_difference_handling"]
+    if parameters.get("payment_difference_handling") == "reconcile":
+        _ensure_ids(env, "account.account", {parameters["writeoff_account_id"]}, [
+            ("company_ids", "in", [company_id]), ("active", "=", True),
+        ], company_id, failure_type)
+        values["writeoff_account_id"] = parameters["writeoff_account_id"]
+        if "writeoff_label" in parameters:
+            values["writeoff_label"] = parameters["writeoff_label"]
+        if wizard.early_payment_discount_mode or wizard.writeoff_is_exchange_account:
+            raise _fail(failure_type, "state_conflict", "The native discount or exchange route cannot honor this explicit write-off.", exit_code=5)
+    wizard.write(values)
+    if wizard.installments_mode != mode:
+        raise _fail(failure_type, "state_conflict", "The native wizard did not retain the requested installment mode.", exit_code=5)
+    if edit_mode and _rounded_currency_amount(wizard.currency_id, str(wizard.amount)) != rounded:
+        raise _fail(failure_type, "state_conflict", "The native wizard did not retain the requested payment amount.", exit_code=5)
+    if parameters.get("payment_difference_handling") == "reconcile" and (
+        wizard.early_payment_discount_mode or wizard.writeoff_is_exchange_account
+        or _rounded_currency_amount(wizard.currency_id, str(wizard.payment_difference))
+        != _rounded_currency_amount(wizard.currency_id, str(totals["full_amount_for_difference" if mode == "full" else "amount_for_difference"])) - rounded
+    ):
+        raise _fail(failure_type, "state_conflict", "The native wizard cannot retain the requested explicit payment difference.", exit_code=5)
+    expected = []
+    if edit_mode:
+        expected.append((wizard._create_payment_vals_from_wizard(batches[0]), set(batches[0]["lines"].move_id.ids)))
+    else:
+        lines_to_pay = totals["lines"] if mode != "full" else wizard.line_ids
+        for batch in batches:
+            for line in batch["lines"]:
+                if line.id not in lines_to_pay.ids:
+                    continue
+                line_batch = {**batch, "lines": batch["lines"].filtered(lambda candidate, line_id=line.id: candidate.id == line_id),
+                              "payment_values": {**batch["payment_values"], "payment_type": "inbound" if line.balance > 0 else "outbound"}}
+                expected.append((wizard._create_payment_vals_from_batch(line_batch), {line.move_id.id}))
+    if not 1 <= len(expected) <= 1000:
+        raise _fail(failure_type, "state_conflict", "The native payment set is outside the supported result bound.", exit_code=5)
+    payments = wizard._create_payments()
+    return verified(payments, "odoo_write_error", expected), False
 
 
 def _pair_partials(lines: Any) -> Any:
@@ -17289,6 +17596,136 @@ def _create_sale_order_invoice(
             exit_code=6,
         )
     return _move_result(linked, company_id, source_id=order.id), False
+
+
+def _order_invoice_round(env: Any, capability_id: str, parameters: dict[str, Any], company_id: int,
+                         key: str, failure_type: type[Exception]) -> tuple[dict[str, Any], bool]:
+    sale = capability_id == _SALE_ORDER_INVOICE_CAPABILITY
+    model = "sale.order" if sale else "purchase.order"
+    orders = _ensure_ids(env, model, set(parameters["order_ids"]), [("company_id", "=", company_id)], company_id, failure_type)
+    existing, operation_marker, key_marker = _round_moves_for_key(env, capability_id, parameters, company_id, key, failure_type)
+    order_ids = set(orders.ids)
+
+    def linked_ids(move: Any) -> set[int]:
+        return _sale_invoice_order_ids(move) if sale else {
+            line.purchase_line_id.order_id.id for line in move.invoice_line_ids if line.purchase_line_id
+        }
+
+    def verified(moves: Any, code: str) -> dict[str, Any]:
+        covered = set()
+        items = []
+        for move in sorted(moves, key=lambda record: record.id):
+            linked = linked_ids(move)
+            if (move.company_id.id != company_id or not linked or not linked <= order_ids
+                    or move.move_type not in ({"out_invoice", "out_refund"} if sale else {"in_invoice", "in_refund"})
+                    or move.state not in ({"draft", "posted", "cancel"} if code == "idempotency_conflict" else {"draft"})):
+                raise _fail(failure_type, code, "Odoo returned an invalid source-order accounting graph.", exit_code=5 if code == "idempotency_conflict" else 6)
+            covered.update(linked)
+            items.append(_move_result(move, company_id, source_id=next(iter(linked)) if len(linked) == 1 else None))
+        if not 1 <= len(items) <= 1000 or covered != order_ids:
+            raise _fail(failure_type, code, "Odoo did not return the selected source-order invoice set.", exit_code=5 if code == "idempotency_conflict" else 6)
+        return {"items": items, "processed_count": len(items)}
+
+    if existing:
+        return verified(existing, "idempotency_conflict"), True
+    if any(order.state != ("sale" if sale else "purchase") or order.invoice_status != "to invoice" for order in orders):
+        raise _fail(failure_type, "state_conflict", "Every selected order must be confirmed and currently invoiceable.", exit_code=5)
+    expected = {}
+    for order in orders:
+        lines = order._get_invoiceable_lines(parameters.get("deduct_down_payments", True)) if sale else order.order_line
+        for line in lines:
+            if not line.display_type:
+                quantity = Decimal(-1) if sale and line.is_downpayment else Decimal(str(line.qty_to_invoice))
+                if quantity:
+                    expected[line.id] = quantity
+    if sale:
+        if parameters.get("consolidated_billing", True):
+            native = orders._create_invoices(grouped=False, final=parameters.get("deduct_down_payments", True))
+        else:
+            native = _scoped(env, "account.move", company_id).browse([])
+            for order in orders:
+                native |= order._create_invoices(grouped=True, final=parameters.get("deduct_down_payments", True))
+        moves = _ensure_ids(env, "account.move", set(native.ids), [("company_id", "=", company_id)], company_id, failure_type)
+    else:
+        domain = [("company_id", "=", company_id), ("invoice_line_ids.purchase_line_id.order_id", "in", parameters["order_ids"])]
+        before = set(_scoped(env, "account.move", company_id).search(domain).ids)
+        orders.action_create_invoice()
+        moves = _scoped(env, "account.move", company_id).search(domain, order="id").filtered(lambda move: move.id not in before)
+    result = verified(moves, "odoo_write_error")
+    actual = {}
+    for move in moves:
+        sign = Decimal(-1) if move.move_type.endswith("refund") else Decimal(1)
+        for line in move.invoice_line_ids:
+            if line.display_type not in (False, "product") and not (
+                sale and line.display_type == "line_section" and any(
+                    source.id in expected and source.product_id.type == "combo" for source in line.sale_line_ids
+                )
+            ):
+                continue
+            source_lines = line.sale_line_ids if sale else ([line.purchase_line_id] if line.purchase_line_id else [])
+            quantity_sign = sign if line.display_type in (False, "product") else Decimal(1)
+            for source_line in source_lines:
+                if source_line.id in expected:
+                    actual[source_line.id] = actual.get(source_line.id, Decimal(0)) + quantity_sign * Decimal(str(line.quantity))
+                elif Decimal(str(line.quantity)):
+                    raise _fail(failure_type, "odoo_write_error", "Odoo created an accounting quantity outside the native invoiceable source lines.", exit_code=6)
+    if not expected or actual != expected:
+        raise _fail(failure_type, "odoo_write_error", "Odoo did not retain the native invoiceable quantities and line links.", exit_code=6)
+    for move in moves:
+        _mark_invoice_round(move, operation_marker, key_marker, failure_type)
+    return result, False
+
+
+def _create_sale_down_payment(env: Any, parameters: dict[str, Any], company_id: int,
+                             key: str, failure_type: type[Exception]) -> tuple[dict[str, Any], bool]:
+    order = _search_one(env, "sale.order", [("id", "=", parameters["order_id"]), ("company_id", "=", company_id)], company_id, failure_type)
+    existing, operation_marker, key_marker = _round_moves_for_key(env, _SALE_DOWN_PAYMENT_CAPABILITY, parameters, company_id, key, failure_type)
+
+    def verified(invoice: Any, code: str) -> dict[str, Any]:
+        lines = invoice.invoice_line_ids.filtered(lambda line: line.display_type in (False, "product"))
+        if (len(invoice) != 1 or invoice.company_id.id != company_id or invoice.move_type != "out_invoice"
+                or invoice.state not in ({"draft", "posted", "cancel"} if code == "idempotency_conflict" else {"draft"})
+                or _sale_invoice_order_ids(invoice) != {order.id} or not lines
+                or any(not line.is_downpayment or not line.sale_line_ids
+                       or any(not source.is_downpayment or source.order_id.id != order.id for source in line.sale_line_ids)
+                       for line in lines)
+                or _rounded_currency_amount(invoice.currency_id, str(invoice.amount_total)) <= 0
+                or (parameters["method"] == "fixed" and _rounded_currency_amount(invoice.currency_id, str(invoice.amount_total))
+                    != _rounded_currency_amount(invoice.currency_id, parameters["amount"]))):
+            raise _fail(failure_type, code, "Odoo did not return the requested down-payment accounting graph and amount.", exit_code=5 if code == "idempotency_conflict" else 6)
+        return _move_result(invoice, company_id, source_id=order.id)
+
+    if existing:
+        return verified(existing, "idempotency_conflict"), True
+    if order.state != "sale":
+        raise _fail(failure_type, "state_conflict", "Only a confirmed sales order can create a down payment.", exit_code=5)
+    wizard = _scoped(env, "sale.advance.payment.inv", company_id).with_context(active_model="sale.order", active_ids=[order.id]).create({
+        "sale_order_ids": [(6, 0, [order.id])], "advance_payment_method": parameters["method"],
+        "amount" if parameters["method"] == "percentage" else "fixed_amount": float(Decimal(parameters["amount"])),
+    })
+    wizard._check_amount_is_positive()
+    base_lines = [line._prepare_base_line_for_taxes_computation() for line in order.order_line if not line.display_type]
+    tax = _scoped(env, "account.tax", company_id)
+    tax._add_tax_details_in_base_lines(base_lines, order.company_id)
+    tax._round_base_lines_tax_details(base_lines, order.company_id)
+    expected_lines = tax._prepare_down_payment_lines(
+        base_lines=base_lines, company=order.company_id,
+        amount_type="percent" if parameters["method"] == "percentage" else "fixed",
+        amount=float(Decimal(parameters["amount"])), computation_key=f"down_payment,{wizard.id}",
+    )
+    expected_amount = sum(
+        Decimal(str(line["tax_details"]["total_excluded_currency"]))
+        + Decimal(str(line["tax_details"]["delta_total_excluded_currency"]))
+        + sum(Decimal(str(tax_data["tax_amount_currency"])) for tax_data in line["tax_details"]["taxes_data"])
+        for line in expected_lines
+    )
+    native = wizard._create_invoices(order)
+    invoice = _ensure_ids(env, "account.move", set(native.ids), [("company_id", "=", company_id)], company_id, failure_type)
+    result = verified(invoice, "odoo_write_error")
+    if _rounded_currency_amount(invoice.currency_id, str(invoice.amount_total)) != _rounded_currency_amount(invoice.currency_id, str(expected_amount)):
+        raise _fail(failure_type, "odoo_write_error", "Odoo did not retain the native down-payment amount.", exit_code=6)
+    _mark_invoice_round(invoice, operation_marker, key_marker, failure_type)
+    return result, False
 
 
 def _stock_transfer_result(picking: Any, company_id: int) -> dict[str, Any]:
@@ -21920,7 +22357,11 @@ def _dispatch_allowed(
             env, capability_id, parameters, company_id, failure_type
         )
     if capability_id == _SALE_ORDER_INVOICE_CAPABILITY:
+        if "order_ids" in parameters:
+            return _order_invoice_round(env, capability_id, parameters, company_id, key, failure_type)
         return _create_sale_order_invoice(env, parameters, company_id, failure_type)
+    if capability_id == _SALE_DOWN_PAYMENT_CAPABILITY:
+        return _create_sale_down_payment(env, parameters, company_id, key, failure_type)
     if capability_id == _STOCK_TRANSFER_CREATE_CAPABILITY:
         return _create_stock_transfer(
             env, parameters, company_id, key, marker, failure_type
@@ -21934,6 +22375,8 @@ def _dispatch_allowed(
     if capability_id == _STOCK_TRANSFER_VALIDATE_CAPABILITY:
         return _validate_stock_transfer(env, parameters, company_id, failure_type)
     if capability_id == "purchase.order.bill.create":
+        if "order_ids" in parameters:
+            return _order_invoice_round(env, capability_id, parameters, company_id, key, failure_type)
         return _create_purchase_bill(env, parameters, company_id, failure_type)
     if capability_id == "purchase_bill.match":
         return _match_purchase_bill_lines(env, parameters, company_id, failure_type)

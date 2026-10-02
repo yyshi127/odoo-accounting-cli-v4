@@ -87,13 +87,13 @@ def test_many_payment_registration_sorts_ids_and_uses_parameter_digest(
             "move_ids": [1, 2],
             "journal_id": 7,
             "payment_date": "2026-09-01",
-            "amount": "1",
+            "amount": "0",
         },
         {
             "move_ids": [1, 2],
             "journal_id": 7,
             "payment_date": "2026-09-01",
-            "payment_difference_handling": "open",
+            "payment_difference_handling": "invalid",
         },
         {
             "move_ids": [1, 2],
@@ -113,6 +113,16 @@ def test_many_payment_registration_rejects_invalid_shapes(
         registry.validate_instance(
             f"schemas/v1/{capability_id}.request.schema.json", request
         )
+
+
+@pytest.mark.parametrize("capability_id", CAPABILITIES)
+@pytest.mark.parametrize("extra", [{"amount": "1"}, {"payment_difference_handling": "open"}])
+def test_many_payment_explicit_controls_use_the_new_operation_route(capability_id, extra, registry):
+    request = _request(capability_id, {"move_ids": [1, 2], "journal_id": 7, "payment_date": "2026-09-01", **extra})
+    _, context, parameters = validate_core_write_request(capability_id, request)
+    assert all(parameters[name] == value for name, value in extra.items())
+    assert _expected_idempotency_key(capability_id, parameters, context["company_id"]) is None
+    registry.validate_instance(f"schemas/v1/{capability_id}.request.schema.json", request)
 
 
 @pytest.mark.parametrize("capability_id", CAPABILITIES)

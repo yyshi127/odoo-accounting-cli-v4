@@ -12,9 +12,15 @@
     "parameters": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["order_id"],
+      "oneOf": [
+        {"required": ["order_id"], "properties": {"order_ids": false, "consolidated_billing": false, "deduct_down_payments": false}},
+        {"required": ["order_ids"], "properties": {"order_id": false}}
+      ],
       "properties": {
-        "order_id": {"type": "integer", "minimum": 1}
+        "order_id": {"type": "integer", "minimum": 1},
+        "order_ids": {"type": "array", "minItems": 1, "maxItems": 100, "uniqueItems": true, "items": {"type": "integer", "minimum": 1}},
+        "consolidated_billing": {"type": "boolean"},
+        "deduct_down_payments": {"type": "boolean"}
       }
     }
   }

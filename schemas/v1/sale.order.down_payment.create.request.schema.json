@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/sale.order.down_payment.create.request.schema.json",
+  "title": "sale.order.down_payment.create request",
+  "type": "object",
+  "allOf": [
+    {"$ref": "request.schema.json"},
+    {
+      "properties": {
+        "parameters": {
+          "type": "object", "additionalProperties": false, "required": ["order_id", "method", "amount"],
+          "properties": {
+            "order_id": {"type": "integer", "minimum": 1},
+            "method": {"enum": ["percentage", "fixed"]},
+            "amount": {"$ref": "receivable.payment.register.request.schema.json#/$defs/positive_canonical_decimal"}
+          },
+          "if": {"properties": {"method": {"const": "percentage"}}, "required": ["method"]},
+          "then": {"properties": {"amount": {"pattern": "^(?:100|[1-9][0-9]?(?:\\.[0-9]*[1-9])?|0\\.[0-9]*[1-9])$(?![\\s\\S])"}}}
+        }
+      }
+    }
+  ]
+}

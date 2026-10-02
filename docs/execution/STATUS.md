@@ -1,6 +1,93 @@
 # Execution status
 
-## Current accounting phase — bank settlement metadata and split counterparts, 2026-10-02
+## Current accounting phase — invoice rounds, installments and down payments, 2026-10-02
+
+One NEW command and eight existing-interface extensions. Totals: 554 registered /
+539 handlers (251 reads, 288 writes), 1084 schemas; 462 unconfigured, 77 degraded,
+15 disabled. Enabled integrations: 536 implemented, two planned, one failed.
+These are capability/handler counts, not an accounting completion percentage or
+an assertion that every handler has runtime configuration or unrestricted access.
+
+- NEW sale.order.down_payment.create uses the installed advance-payment wizard:
+  one confirmed order, percentage or fixed positive amount, linked draft invoice,
+  caller-selected operation key and immediate replay. Percentage is at most 100.
+  The installed tax helper supplies the expected rounded amount, including its
+  final deltas; no caller sudo or substitute invoice/line creation is introduced.
+- customer_credit_note.create/vendor_refund.create accept move_ids (2–100) for
+  full native reversals. Each source supplies its actual journal. Whole-selection
+  markers reject reusing a key for different or disjoint sources. The old single
+  move_id/custom-line route remains unchanged; this is not partial batch reversal.
+- receivable.payment.register/payable.payment.register accept native full/next/
+  overdue/before_date installment modes, a before-date cutoff, and group_payment.
+  False grouping returns native per-term payments. Editable grouped many-source
+  requests can use amount and existing difference/writeoff controls; noneditable
+  routes never silently ignore them. Explicit new paths use caller operation keys;
+  old omitted-input keys/shapes remain. Real AR/AP partial-reconcile links, not
+  information-only invoice_ids/reconciled_invoice_ids, identify new-path sources.
+- sale.order.invoice.create/purchase.order.bill.create accept order_ids (1–100)
+  for currently invoiceable quantities, later rounds and multiple source orders.
+  Sale supports consolidated_billing and deduct_down_payments; purchase keeps
+  native grouping. Ordinary source links/quantities and actual invoice/refund types
+  are verified. False sale consolidation invokes the same native helper per order
+  and unions results; True/default and old single-order paths remain unchanged.
+- product.accounting_profile.get/update expose invoice_policy and purchase_method.
+  Optional get fields are independently old-shape compatible and nullable when a
+  native field is absent; explicit writes require the installed field. Policy-only
+  updates accept visible shared/multi-variant templates. Policies affect the whole
+  template across variants/companies, not company-dependent account properties.
+  Mixed account/tax updates retain the old company-specific/single-variant scope.
+
+Only fixed new order/per-term routes permit items/count 1–1000; generic lifecycle
+batch validation remains 2–100. No new dispatcher, store, gate or control framework.
+Persisted operation/key markers are not database-unique concurrent exactly-once.
+Omitted-amount replay verifies persisted identity, references and actual sources;
+it does not reconstruct an earlier wizard amount after residuals have changed.
+
+Server 346 focused tests passed in 50.98s; local same selection 346 in 57.72s.
+One accepted shared public-CLI/native workflow passed both isolated aliases in
+53.74s as UID5/su=False/company1. It verifies full batch customer/vendor refunds,
+cash-refund directions, all four installment modes/cutoff/per-term results,
+grouped partial payment/replay, sale/purchase 40+60 later rounds, sale merged and
+separate two-order results, percentage/fixed advances and final 70 deduction,
+shared-template variant reads, foreign denial and native product-manager ACL.
+Sales/purchase/product groups are temporary only within the rollback fixture.
+Fresh cursors prove all tracked fixtures, both companies' settings, all defaults,
+currencies/rates and exact all-user groups rolled back. No stock/picking lifecycle
+is claimed. Taxed down-payment combinations and new-route writeoff consumers are
+focused-unit coverage, not additional native workflow claims from this fixture.
+
+Actual native failures were retained and repaired without weakening result proofs:
+missing refund wizard journal/source; thin-port batch-shape rejection; an unpaid
+source reversal naturally leaving no cash-refund residual (fixture now settles
+sources first); information-only payment associations changing source_id on replay;
+old purchase fixture taxes_id versus installed tax_ids; and the installed custom
+exchange addon reading singleton is_exchange during separate multi-invoice create.
+The last is avoided only by independent native calls for False consolidation.
+True/default still delegates native grouping: heterogeneous groups yielding multiple
+invoices may expose that addon defect. No generic fallback/addon repair is claimed.
+All failed native attempts completed fresh rollback before propagating failure.
+Final metadata three nodes passed locally 25.50s / server 17.81s; no all-suite claim
+or unrelated legacy matrix/asset/report repair.
+
+31 explicit deployed code/schema/test paths: 24 distinct existing files and seven
+new. Original 22-file backup plus repair before-hashes 1/2/2/1/2/1/2/final1 are
+downloaded and verified. All 31 final local/server hashes match; 545 unrelated
+registry descriptors unchanged. Registry 2086174 bytes under unchanged 2MiB limit.
+Services active with baseline PIDs/restarts unchanged; 4.91GiB free, rounded 90%
+used. No cleanup/restart/business DB/native source/addon/config/Pi/V2/V3/external
+send/caller-sudo change. Public docs updated locally, server doc overlays preserved.
+Normal GitHub checkpoint follows verified state; overall goal stays active.
+
+Next: inspect installed source and existing contracts for remaining high-frequency
+accounting gaps, including source-order-line read projections and invoice handling;
+do not recount existing schedules/origin/partial-payment commands as new. Asset
+validate native defect/two report sends remain unclosed; absent debit-note addon
+installation and general custom exchange-addon repair are not authorized.
+
+Registry file SHA256 92612d00ff1b10249968068c60a338c20f38300a3103bc418e6cb6cdfe79536e;
+canonical SHA256 6af0692cb52982816bc6f20a9e66b045f02249c3bac516d9ca03ca6a930fcc28.
+
+## Previous accounting phase — bank settlement metadata and split counterparts, 2026-10-02
 
 One new command and eight existing-interface extensions. Totals553 registered /
 538 implemented handlers (251 reads,287 writes),1082 schemas;462 unconfigured,

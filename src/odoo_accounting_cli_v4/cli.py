@@ -1729,6 +1729,7 @@ _CAPABILITY_MODELS = {
     "sale.order.cancel": "sale.order",
     "sale.order.reset_to_draft": "sale.order",
     "sale.order.invoice.create": "account.move",
+    "sale.order.down_payment.create": "account.move",
     "purchase.order.create": "purchase.order",
     "purchase.order.update_draft": "purchase.order",
     "purchase.order.lines.replace": "purchase.order",
@@ -2820,7 +2821,12 @@ def _execute_write_run(
         return document
 
     if (capability_id in _BATCH_LIFECYCLE_CAPABILITY_IDS
-            or capability_id == "invoice.reverse_and_reissue") and "items" in result:
+            or capability_id in {
+                "invoice.reverse_and_reissue", "customer_credit_note.create",
+                "vendor_refund.create", "receivable.payment.register",
+                "payable.payment.register", "sale.order.invoice.create",
+                "purchase.order.bill.create",
+            }) and "items" in result:
         record_ids = [item["id"] for item in result["items"]]
         result_model = _CAPABILITY_MODELS[capability_id]
         verification = {

@@ -499,6 +499,7 @@ PARAMETERS = {
     "sale.order.cancel": {"order_id": 101},
     "sale.order.reset_to_draft": {"order_id": 101},
     "sale.order.invoice.create": {"order_id": 101},
+    "sale.order.down_payment.create": {"order_id": 101, "method": "percentage", "amount": "25"},
     "stock.transfer.create": {
         "picking_type_id": 2,
         "location_id": 8,
@@ -1418,7 +1419,7 @@ def _result(capability_id: str, **changes) -> dict:
         }
         result.update(changes)
         return result
-    if capability_id == "sale.order.invoice.create":
+    if capability_id in {"sale.order.invoice.create", "sale.order.down_payment.create"}:
         result = {
             "model": "account.move",
             "id": 907,

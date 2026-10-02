@@ -5400,6 +5400,12 @@ def _dispatch_product_accounting_profile(
             "cost_method": selection_slot(
                 "cost_method", {"standard", "fifo", "average"}
             ),
+            "invoice_policy": (
+                template.invoice_policy if "invoice_policy" in template._fields else None
+            ),
+            "purchase_method": (
+                template.purchase_method if "purchase_method" in template._fields else None
+            ),
         },
     }
 

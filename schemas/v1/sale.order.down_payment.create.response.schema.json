@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/sale.order.down_payment.create.response.schema.json",
+  "title": "sale.order.down_payment.create response",
+  "type": "object",
+  "allOf": [
+    {"$ref": "response.schema.json"},
+    {"properties": {"capability": {"const": "sale.order.down_payment.create"}, "data": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/down_payment"}]}}},
+    {"if": {"properties": {"success": {"const": true}}, "required": ["success"]}, "then": {"properties": {"status": {"const": "verified"}, "data": {"$ref": "#/$defs/down_payment"}, "error": {"type": "null"}}}}
+  ],
+  "$defs": {
+    "down_payment": {
+      "allOf": [
+        {"$ref": "core-write-result.schema.json"},
+        {"properties": {"result": {"properties": {"model": {"const": "account.move"}, "id": {"type": "integer", "minimum": 1}, "move_type": {"const": "out_invoice"}, "source_id": {"type": "integer", "minimum": 1}}}}}
+      ]
+    }
+  }
+}

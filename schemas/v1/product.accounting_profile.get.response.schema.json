@@ -199,7 +199,15 @@
         "modules": {"$ref": "#/$defs/modules"},
         "accounts": {"$ref": "#/$defs/accounts"},
         "valuation": {"$ref": "#/$defs/valuation"},
-        "cost_method": {"$ref": "#/$defs/cost_method"}
+        "cost_method": {"$ref": "#/$defs/cost_method"},
+        "invoice_policy": {
+          "enum": [null, "order", "delivery"],
+          "description": "Native template-shared sales invoicing policy; affects every variant and company, not a company-dependent property. Null when the native field is unavailable."
+        },
+        "purchase_method": {
+          "enum": [null, "purchase", "receive"],
+          "description": "Native template-shared purchase billing policy; affects every variant and company, not a company-dependent property. Null when the native field is unavailable."
+        }
       }
     }
   }

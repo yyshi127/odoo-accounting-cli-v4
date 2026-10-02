@@ -5840,130 +5840,7 @@
       "routing": {"object": "currency.rate", "actions": ["record"], "aliases": {"zh_CN": ["记录公司汇率"], "en_US": ["Record a company currency rate"]}, "not_for": {"zh_CN": ["修改或删除历史汇率"], "en_US": ["Editing or deleting a historical rate"]}, "required_slots": ["database", "company_id", "user_login"]},
       "handler_key": "core_write"
     },
-    "customer_credit_note.create": {
-      "summary": {
-        "zh_CN": "创建客户贷项通知单",
-        "en_US": "Create a customer credit note"
-      },
-      "domain": "invoices_and_bills",
-      "access": "write",
-      "source": {
-        "modules": [
-          "account"
-        ],
-        "models": [
-          "res.company",
-          "res.partner.bank",
-          "account.journal",
-          "account.move",
-          "account.move.reversal",
-          "res.partner",
-          "product.product",
-          "account.account",
-          "account.tax",
-          "account.move.line",
-          "account.analytic.account"
-        ],
-        "wizards": [
-          "account.move.reversal"
-        ],
-        "report_handlers": [],
-        "locations": [
-          "_references/base/models/res_company.py",
-          "_references/base/models/res_bank.py",
-          "account/models/account_journal.py",
-          "account/models/account_move.py",
-          "account/wizard/account_move_reversal.py"
-        ]
-      },
-      "schemas": {
-        "request": "schemas/v1/customer_credit_note.create.request.schema.json",
-        "response": "schemas/v1/customer_credit_note.create.response.schema.json"
-      },
-      "requirements": {
-        "modules": [
-          "account"
-        ],
-        "configuration": [
-          "database_alias",
-          "company_allowlist",
-          "user_mapping"
-        ],
-        "company": "required",
-        "groups": [
-          "account.group_account_invoice"
-        ],
-        "acl": [
-          "res.partner.bank:read",
-          "account.journal:read",
-          "account.move:read",
-          "account.move:write",
-          "account.move:create",
-          "account.move.reversal:create",
-          "res.partner:read",
-          "account.account:read",
-          "account.tax:read",
-          "account.move.line:read",
-          "account.move.line:create",
-          "account.move.line:write",
-          "account.move.line:unlink"
-        ]
-      },
-      "strategies": {
-        "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_accounting_core_write_action_as_configured_business_user",
-        "verify": "same_transaction_rich_refund_line_reread_and_schema_validation",
-        "idempotency": "odoo_persisted_business_marker_and_result_replay",
-        "reverse": "create_a_new_correcting_invoice"
-      },
-      "tests": {
-        "unit": {
-          "status": "implemented",
-          "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_bridge.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_core_write_cli.py", "tests/unit/test_accounting_entry_membership_batch.py"],
-          "reason": "Signed quantity and existing contracts covered."
-        },
-        "integration": {"status":"implemented","references":["tests/integration/test_core_write_batch_live.py","tests/integration/test_accounting_depth_batch_live.py","tests/integration/test_accounting_entry_membership_batch_live.py"],"reason":"Shared native smoke passed; full rollback."},
-        "golden": {
-          "status": "planned",
-          "references": [],
-          "reason": "Deferred."
-        },
-        "e2e": {
-          "status": "planned",
-          "references": [],
-          "reason": "Deferred."
-        }
-      },
-      "status": {
-        "value": "unconfigured",
-        "reason_code": "runtime_context_required",
-        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."
-      },
-      "routing": {
-        "object": "customer_credit_note",
-        "actions": [
-          "create"
-        ],
-        "aliases": {
-          "zh_CN": [
-            "创建客户贷项通知单"
-          ],
-          "en_US": [
-            "Create a customer credit note"
-          ]
-        },
-        "not_for": {
-          "zh_CN": [],
-          "en_US": []
-        },
-        "required_slots": [
-          "database",
-          "company_id",
-          "user_login"
-        ]
-      },
-      "handler_key": "core_write"
-    },
+    "customer_credit_note.create": {"summary":{"zh_CN":"创建客户贷项通知单","en_US":"Create a customer credit note"},"domain":"invoices_and_bills","access":"write","source":{"modules":["account"],"models":["res.company","res.partner.bank","account.journal","account.move","account.move.reversal","res.partner","product.product","account.account","account.tax","account.move.line","account.analytic.account"],"wizards":["account.move.reversal"],"report_handlers":[],"locations":["_references/base/models/res_company.py","_references/base/models/res_bank.py","account/models/account_journal.py","account/models/account_move.py","account/wizard/account_move_reversal.py"]},"schemas":{"request":"schemas/v1/customer_credit_note.create.request.schema.json","response":"schemas/v1/customer_credit_note.create.response.schema.json"},"requirements":{"modules":["account"],"configuration":["database_alias","company_allowlist","user_mapping"],"company":"required","groups":["account.group_account_invoice"],"acl":["res.partner.bank:read","account.journal:read","account.move:read","account.move:write","account.move:create","account.move.reversal:create","res.partner:read","account.account:read","account.tax:read","account.move.line:read","account.move.line:create","account.move.line:write","account.move.line:unlink"]},"strategies":{"preview":"exact_capability_confirmation_and_closed_request_validation","execute":"fixed_accounting_core_write_action_as_configured_business_user","verify":"same_transaction_rich_refund_line_reread_and_schema_validation","idempotency":"odoo_persisted_business_marker_and_result_replay","reverse":"create_a_new_correcting_invoice"},"tests":{"unit":{"status":"implemented","references":["tests/unit/test_core_writes.py","tests/unit/test_core_writes_bridge.py","tests/unit/test_core_writes_runtime.py","tests/unit/test_core_write_cli.py","tests/unit/test_accounting_entry_membership_batch.py","tests/unit/test_invoice_rounds_write_contract.py","tests/unit/test_invoice_rounds_runtime.py","tests/unit/test_invoice_rounds_product_reads.py","tests/unit/test_invoice_rounds_cli.py"],"reason":"Signed quantity and existing contracts covered."},"integration":{"status":"implemented","references":["tests/integration/test_core_write_batch_live.py","tests/integration/test_accounting_depth_batch_live.py","tests/integration/test_accounting_entry_membership_batch_live.py","tests/integration/test_invoice_rounds_live.py"],"reason":"Shared native smoke passed; full rollback."},"golden":{"status":"planned","references":[],"reason":"Deferred."},"e2e":{"status":"planned","references":[],"reason":"Deferred."}},"status":{"value":"unconfigured","reason_code":"runtime_context_required","reason":"The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime. Batch move_ids creates full native refunds for 2-100 posted sources with operation/key markers binding the complete selection. Markers are not concurrency-unique."},"routing":{"object":"customer_credit_note","actions":["create"],"aliases":{"zh_CN":["创建客户贷项通知单"],"en_US":["Create a customer credit note"]},"not_for":{"zh_CN":[],"en_US":[]},"required_slots":["database","company_id","user_login"]},"handler_key":"core_write"},
     "customer_invoice.create": {
       "summary": {
         "zh_CN": "创建草稿客户发票",
@@ -11505,19 +11382,7 @@
       },
       "handler_key": "payable_open_items_list"
     },
-    "payable.payment.register": {
-      "summary": {"zh_CN": "登记供应商账单付款（支持多账单合并）或供应商退款收款", "en_US": "Register vendor bill payments (including grouped bills) or refund receipts"},
-      "domain": "payments",
-      "access": "write",
-      "source": {"modules": ["account"], "models": ["res.company", "account.account", "account.journal", "account.move", "account.move.line", "account.payment", "account.payment.register", "account.partial.reconcile", "account.full.reconcile", "account.payment.method.line", "res.partner.bank"], "wizards": ["account.payment.register"], "report_handlers": [], "locations": ["_references/base/models/res_company.py", "account/models/account_account.py", "account/models/account_journal.py", "account/models/account_move.py", "account/models/account_move_line.py", "account/models/account_payment.py", "account/wizard/account_payment_register.py", "account/models/account_payment_method.py", "_references/base/models/res_bank.py"]},
-      "schemas": {"request": "schemas/v1/payable.payment.register.request.schema.json", "response": "schemas/v1/payable.payment.register.response.schema.json"},
-      "requirements": {"modules": ["account"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["account.group_account_invoice"], "acl": ["account.account:read", "account.journal:read", "account.move:read", "account.move.line:read", "account.payment:read", "account.payment:create", "account.payment.register:create", "account.move.line:write", "account.partial.reconcile:read", "account.partial.reconcile:create", "account.full.reconcile:read", "account.payment.method.line:read", "res.partner.bank:read"]},
-      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_single_or_full_grouped_invoice_payment_registration_as_configured_business_user", "verify": "same_transaction_single_or_grouped_residual_and_replay_validation", "idempotency": "single_document_legacy_key_or_company_and_normalized_batch_digest_with_odoo_persisted_business_marker_and_result_replay", "reverse": "payment.cancel"},
-      "tests": {"unit": {"status": "implemented", "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_bridge.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_payment_register_writeoff_runtime.py", "tests/unit/test_payment_register_many_contract.py", "tests/unit/test_payment_register_many_runtime.py", "tests/unit/test_core_write_cli.py", "tests/unit/test_accounting_payment_tax_inputs_batch.py", "tests/unit/test_entry_payment_explicit_inputs_contract.py", "tests/unit/test_payment_tax_input_runtime.py"], "reason": "Existing contracts and explicit payment/tax input extensions are covered."}, "integration": {"status": "implemented", "references": ["tests/integration/test_core_write_batch_live.py", "tests/integration/test_accounting_depth_batch_live.py", "tests/integration/test_invoice_cash_refund_batch_live.py", "tests/integration/test_payment_register_many_batch_live.py", "tests/integration/test_accounting_payment_tax_inputs_batch_live.py"], "reason": "Shared native payment/tax smoke passed; full rollback."}, "golden": {"status": "planned", "references": [], "reason": "Deferred."}, "e2e": {"status": "planned", "references": [], "reason": "Deferred."}},
-      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
-      "routing": {"object": "payable.payment", "actions": ["register"], "aliases": {"zh_CN": ["登记供应商付款", "登记供应商退款收款"], "en_US": ["Register a vendor payment", "Register a vendor refund receipt", "Register one payment for multiple vendor bills"]}, "not_for": {"zh_CN": [], "en_US": []}, "required_slots": ["database", "company_id", "user_login"]},
-      "handler_key": "core_write"
-    },
+    "payable.payment.register": {"summary":{"zh_CN":"登记供应商账单付款（支持多账单合并）或供应商退款收款","en_US":"Register vendor bill payments (including grouped bills) or refund receipts"},"domain":"payments","access":"write","source":{"modules":["account"],"models":["res.company","account.account","account.journal","account.move","account.move.line","account.payment","account.payment.register","account.partial.reconcile","account.full.reconcile","account.payment.method.line","res.partner.bank"],"wizards":["account.payment.register"],"report_handlers":[],"locations":["_references/base/models/res_company.py","account/models/account_account.py","account/models/account_journal.py","account/models/account_move.py","account/models/account_move_line.py","account/models/account_payment.py","account/wizard/account_payment_register.py","account/models/account_payment_method.py","_references/base/models/res_bank.py"]},"schemas":{"request":"schemas/v1/payable.payment.register.request.schema.json","response":"schemas/v1/payable.payment.register.response.schema.json"},"requirements":{"modules":["account"],"configuration":["database_alias","company_allowlist","user_mapping"],"company":"required","groups":["account.group_account_invoice"],"acl":["account.account:read","account.journal:read","account.move:read","account.move.line:read","account.payment:read","account.payment:create","account.payment.register:create","account.move.line:write","account.partial.reconcile:read","account.partial.reconcile:create","account.full.reconcile:read","account.payment.method.line:read","res.partner.bank:read"]},"strategies":{"preview":"exact_capability_confirmation_and_closed_request_validation","execute":"fixed_single_or_full_grouped_invoice_payment_registration_as_configured_business_user","verify":"same_transaction_single_or_grouped_residual_and_replay_validation","idempotency":"single_document_legacy_key_or_company_and_normalized_batch_digest_with_odoo_persisted_business_marker_and_result_replay","reverse":"payment.cancel"},"tests":{"unit":{"status":"implemented","references":["tests/unit/test_core_writes.py","tests/unit/test_core_writes_bridge.py","tests/unit/test_core_writes_runtime.py","tests/unit/test_payment_register_writeoff_runtime.py","tests/unit/test_payment_register_many_contract.py","tests/unit/test_payment_register_many_runtime.py","tests/unit/test_core_write_cli.py","tests/unit/test_accounting_payment_tax_inputs_batch.py","tests/unit/test_entry_payment_explicit_inputs_contract.py","tests/unit/test_payment_tax_input_runtime.py","tests/unit/test_invoice_rounds_write_contract.py","tests/unit/test_invoice_rounds_runtime.py","tests/unit/test_invoice_rounds_product_reads.py","tests/unit/test_invoice_rounds_cli.py"],"reason":"Existing contracts and explicit payment/tax input extensions are covered."},"integration":{"status":"implemented","references":["tests/integration/test_core_write_batch_live.py","tests/integration/test_accounting_depth_batch_live.py","tests/integration/test_invoice_cash_refund_batch_live.py","tests/integration/test_payment_register_many_batch_live.py","tests/integration/test_accounting_payment_tax_inputs_batch_live.py","tests/integration/test_invoice_rounds_live.py"],"reason":"Shared native payment/tax smoke passed; full rollback."},"golden":{"status":"planned","references":[],"reason":"Deferred."},"e2e":{"status":"planned","references":[],"reason":"Deferred."}},"status":{"value":"unconfigured","reason_code":"runtime_context_required","reason":"The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime. Explicit installment/group options use native next/overdue/before-date/full amounts and actual payment graphs; editable grouped batches support partial amounts. Operation markers distinguish sequential rounds but are not concurrency-unique."},"routing":{"object":"payable.payment","actions":["register"],"aliases":{"zh_CN":["登记供应商付款","登记供应商退款收款"],"en_US":["Register a vendor payment","Register a vendor refund receipt","Register one payment for multiple vendor bills"]},"not_for":{"zh_CN":[],"en_US":[]},"required_slots":["database","company_id","user_login"]},"handler_key":"core_write"},
     "payment.method.get": {
       "summary": {
         "zh_CN": "获取付款方式详情",
@@ -13347,171 +13212,8 @@
       },
       "handler_key": "product_search"
     },
-    "product.accounting_profile.get": {
-      "summary": {
-        "zh_CN": "读取产品会计配置",
-        "en_US": "Get a product accounting profile"
-      },
-      "domain": "accounting_master_data",
-      "access": "read",
-      "source": {
-        "modules": [
-          "product",
-          "account",
-          "stock_account"
-        ],
-        "models": [
-          "res.company",
-          "product.product",
-          "product.template",
-          "product.category",
-          "account.account"
-        ],
-        "wizards": [],
-        "report_handlers": [],
-        "locations": [
-          "_references/base/models/res_company.py",
-          "_references/product/models/product_product.py",
-          "_references/product/models/product_template.py",
-          "_references/product/models/product_category.py",
-          "account/models/product.py",
-          "stock_account/models/product.py"
-        ]
-      },
-      "schemas": {
-        "request": "schemas/v1/product.accounting_profile.get.request.schema.json",
-        "response": "schemas/v1/product.accounting_profile.get.response.schema.json"
-      },
-      "requirements": {
-        "modules": [
-          "product"
-        ],
-        "configuration": [
-          "database_alias",
-          "company_allowlist",
-          "user_mapping"
-        ],
-        "company": "required",
-        "groups": [
-          "base.group_user"
-        ],
-        "acl": [
-          "res.company:read",
-          "product.product:read",
-          "product.template:read",
-          "product.category:read",
-          "account.account:read"
-        ]
-      },
-      "strategies": {
-        "preview": "not_applicable_read_only",
-        "execute": "fixed_company_relative_product_accounting_profile",
-        "verify": "final_odoo_account_mapping_and_response_schema_validation",
-        "idempotency": "not_applicable_read_only",
-        "reverse": "not_applicable_read_only"
-      },
-      "tests": {
-        "unit": {
-          "status": "implemented",
-          "references": [
-            "tests/unit/test_product_accounting_profile.py",
-            "tests/unit/test_product_accounting_profile_bridge.py",
-            "tests/unit/test_capability_batch_runtime.py",
-            "tests/unit/test_capability_batch_cli.py"
-          ],
-          "reason": "Unit tests cover the closed request and response, optional module slots, final company-relative account mapping, and CLI dispatch."
-        },
-        "integration": {
-          "status": "implemented",
-          "references": [
-            "tests/integration/test_product_accounting_write_batch_live.py",
-            "tests/integration/test_journal_item_processing_batch_live.py"
-          ],
-          "reason": "Existing native product-accounting write workflow already positively verified category fallback/product overrides. Current shared line-processing workflow also reads a synthetic company-specific product and category as ordinary uid5/su=False before temporary analytic permissions in both isolated aliases. Full fresh-cursor fixture/group rollback verified; unavailable legacy stock slots remain explicit, not invented."
-        },
-        "golden": {
-          "status": "planned",
-          "references": [],
-          "reason": "The golden definition is frozen; implementation evidence is pending."
-        },
-        "e2e": {
-          "status": "planned",
-          "references": [],
-          "reason": "The e2e definition is frozen; implementation evidence is pending."
-        }
-      },
-      "status": {
-        "value": "unconfigured",
-        "reason_code": "runtime_context_required",
-        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."
-      },
-      "routing": {
-        "object": "product.accounting_profile",
-        "actions": [
-          "get"
-        ],
-        "aliases": {
-          "zh_CN": [
-            "读取产品会计配置"
-          ],
-          "en_US": [
-            "Get a product accounting profile"
-          ]
-        },
-        "not_for": {
-          "zh_CN": [],
-          "en_US": []
-        },
-        "required_slots": [
-          "database",
-          "company_id",
-          "user_login"
-        ]
-      },
-      "handler_key": "product_accounting_profile_get"
-    },
-    "product.accounting_profile.update": {
-      "summary": {"zh_CN": "更新产品会计配置", "en_US": "Update a product accounting profile"},
-      "domain": "accounting_master_data",
-      "access": "write",
-      "source": {
-        "modules": ["base", "product", "account"],
-        "models": ["res.company", "account.account", "account.tax", "product.template", "product.product"],
-        "wizards": [],
-        "report_handlers": [],
-        "locations": ["_references/base/models/res_company.py", "_references/product/models/product_product.py", "_references/product/models/product_template.py", "account/models/product.py"]
-      },
-      "schemas": {"request": "schemas/v1/product.accounting_profile.update.request.schema.json", "response": "schemas/v1/product.accounting_profile.update.response.schema.json"},
-      "requirements": {
-        "modules": ["base", "product", "account"],
-        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
-        "company": "required",
-        "groups": ["product.group_product_manager"],
-        "acl": ["res.company:read", "account.account:read", "account.tax:read", "product.template:read", "product.template:write", "product.product:read"]
-      },
-      "strategies": {
-        "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_company_specific_single_variant_product_accounting_profile_update",
-        "verify": "same_transaction_company_relative_product_reread_and_response_schema_validation",
-        "idempotency": "deterministic_product_target_and_changes_digest32_request_key_with_current_target_state_recheck_without_operation_store_or_intermediate_change_protection",
-        "reverse": "product.accounting_profile.update_with_prior_values"
-      },
-      "tests": {
-        "unit": {"status": "implemented", "references": ["tests/unit/test_product_accounting_write_public.py", "tests/unit/test_product_accounting_writes_runtime.py"], "reason": "Focused tests cover the closed public contract, fixed company and single-variant runtime scope, result validation, registry schemas, and CLI dispatch."},
-        "integration": {"status": "implemented", "references": ["tests/integration/test_product_accounting_write_batch_live.py"], "reason": "The guarded shared transactional smoke passed both isolated database aliases as uid 5 with su=False, verifying execution and immediate replay for all eight writes plus rollback of business data and temporary product-manager/stock-manager grants."},
-        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
-        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
-      },
-      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is registered; availability depends on runtime configuration, company-scoped product data, and product-manager access."},
-      "routing": {
-        "object": "product.accounting_profile",
-        "actions": ["update"],
-        "aliases": {"zh_CN": ["更新产品会计配置"], "en_US": ["Update a product accounting profile"]},
-        "not_for": {"zh_CN": ["库存计价账户或计价方法", "物流路由或库存操作", "多变体产品模板"], "en_US": ["Stock-valuation accounts or costing methods", "Logistics routes or inventory operations", "Multi-variant product templates"]},
-        "required_slots": ["database", "company_id", "user_login"]
-      },
-      "handler_key": "core_write"
-    },
+    "product.accounting_profile.get": {"summary":{"zh_CN":"读取产品会计配置","en_US":"Get a product accounting profile"},"domain":"accounting_master_data","access":"read","source":{"modules":["product","account","stock_account"],"models":["res.company","product.product","product.template","product.category","account.account"],"wizards":[],"report_handlers":[],"locations":["_references/base/models/res_company.py","_references/product/models/product_product.py","_references/product/models/product_template.py","_references/product/models/product_category.py","account/models/product.py","stock_account/models/product.py","sale/models/product_template.py","purchase/models/product.py"]},"schemas":{"request":"schemas/v1/product.accounting_profile.get.request.schema.json","response":"schemas/v1/product.accounting_profile.get.response.schema.json"},"requirements":{"modules":["product"],"configuration":["database_alias","company_allowlist","user_mapping"],"company":"required","groups":["base.group_user"],"acl":["res.company:read","product.product:read","product.template:read","product.category:read","account.account:read"]},"strategies":{"preview":"not_applicable_read_only","execute":"fixed_company_relative_product_accounting_profile","verify":"final_odoo_account_mapping_and_response_schema_validation","idempotency":"not_applicable_read_only","reverse":"not_applicable_read_only"},"tests":{"unit":{"status":"implemented","references":["tests/unit/test_product_accounting_profile.py","tests/unit/test_product_accounting_profile_bridge.py","tests/unit/test_capability_batch_runtime.py","tests/unit/test_capability_batch_cli.py","tests/unit/test_invoice_rounds_write_contract.py","tests/unit/test_invoice_rounds_runtime.py","tests/unit/test_invoice_rounds_product_reads.py","tests/unit/test_invoice_rounds_cli.py"],"reason":"Unit tests cover the closed request and response, optional module slots, final company-relative account mapping, and CLI dispatch."},"integration":{"status":"implemented","references":["tests/integration/test_product_accounting_write_batch_live.py","tests/integration/test_journal_item_processing_batch_live.py","tests/integration/test_invoice_rounds_live.py"],"reason":"Existing native product-accounting write workflow already positively verified category fallback/product overrides. Current shared line-processing workflow also reads a synthetic company-specific product and category as ordinary uid5/su=False before temporary analytic permissions in both isolated aliases. Full fresh-cursor fixture/group rollback verified; unavailable legacy stock slots remain explicit, not invented."},"golden":{"status":"planned","references":[],"reason":"The golden definition is frozen; implementation evidence is pending."},"e2e":{"status":"planned","references":[],"reason":"The e2e definition is frozen; implementation evidence is pending."}},"status":{"value":"unconfigured","reason_code":"runtime_context_required","reason":"The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime. Optional invoice_policy and purchase_method are native template-shared policies affecting every variant and company, not company-dependent properties. Absent native addon fields project null on get and reject only explicit policy writes; policy-only updates accept visible shared/multi-variant templates."},"routing":{"object":"product.accounting_profile","actions":["get"],"aliases":{"zh_CN":["读取产品会计配置"],"en_US":["Get a product accounting profile"]},"not_for":{"zh_CN":[],"en_US":[]},"required_slots":["database","company_id","user_login"]},"handler_key":"product_accounting_profile_get"},
+    "product.accounting_profile.update": {"summary":{"zh_CN":"更新产品会计配置","en_US":"Update a product accounting profile"},"domain":"accounting_master_data","access":"write","source":{"modules":["base","product","account"],"models":["res.company","account.account","account.tax","product.template","product.product"],"wizards":[],"report_handlers":[],"locations":["_references/base/models/res_company.py","_references/product/models/product_product.py","_references/product/models/product_template.py","account/models/product.py","sale/models/product_template.py","purchase/models/product.py"]},"schemas":{"request":"schemas/v1/product.accounting_profile.update.request.schema.json","response":"schemas/v1/product.accounting_profile.update.response.schema.json"},"requirements":{"modules":["base","product","account"],"configuration":["database_alias","company_allowlist","user_mapping"],"company":"required","groups":["product.group_product_manager"],"acl":["res.company:read","account.account:read","account.tax:read","product.template:read","product.template:write","product.product:read"]},"strategies":{"preview":"exact_capability_confirmation_and_closed_request_validation","execute":"fixed_company_specific_single_variant_account_tax_update_or_visible_template_shared_global_policy_only_update","verify":"same_transaction_company_relative_product_reread_and_response_schema_validation","idempotency":"deterministic_product_target_and_changes_digest32_request_key_with_current_target_state_recheck_without_operation_store_or_intermediate_change_protection","reverse":"product.accounting_profile.update_with_prior_values"},"tests":{"unit":{"status":"implemented","references":["tests/unit/test_product_accounting_write_public.py","tests/unit/test_product_accounting_writes_runtime.py","tests/unit/test_invoice_rounds_write_contract.py","tests/unit/test_invoice_rounds_runtime.py","tests/unit/test_invoice_rounds_product_reads.py","tests/unit/test_invoice_rounds_cli.py"],"reason":"Focused tests cover the closed public contract, fixed company and single-variant runtime scope, result validation, registry schemas, and CLI dispatch."},"integration":{"status":"implemented","references":["tests/integration/test_product_accounting_write_batch_live.py","tests/integration/test_invoice_rounds_live.py"],"reason":"The guarded shared transactional smoke passed both isolated database aliases as uid 5 with su=False, verifying execution and immediate replay for all eight writes plus rollback of business data and temporary product-manager/stock-manager grants."},"golden":{"status":"planned","references":[],"reason":"Golden examples are deferred until the capability library reaches target coverage."},"e2e":{"status":"planned","references":[],"reason":"Natural-language routing is outside this capability batch."}},"status":{"value":"unconfigured","reason_code":"runtime_context_required","reason":"The fixed handler is registered; availability depends on runtime configuration, company-scoped product data, and product-manager access. Optional invoice_policy and purchase_method are native template-shared policies affecting every variant and company, not company-dependent properties. Absent native addon fields project null on get and reject only explicit policy writes; policy-only updates accept visible shared/multi-variant templates."},"routing":{"object":"product.accounting_profile","actions":["update"],"aliases":{"zh_CN":["更新产品会计配置"],"en_US":["Update a product accounting profile"]},"not_for":{"zh_CN":["库存计价账户或计价方法","物流路由或库存操作","共享或多变体模板的账户/税设置更新（仅 policy 更新除外；允许可见模板，影响模板全部变体及使用该模板的公司）"],"en_US":["Stock-valuation accounts or costing methods","Logistics routes or inventory operations","Account/tax updates on shared or multi-variant templates (policy-only updates are allowed for visible templates and affect all variants and companies using the template)"]},"required_slots":["database","company_id","user_login"]},"handler_key":"core_write"},
     "product.archive": {
       "summary": {"zh_CN": "归档产品", "en_US": "Archive a product"},
       "domain": "accounting_master_data",
@@ -14041,19 +13743,7 @@
       },
       "handler_key": "receivable_open_items_list"
     },
-    "receivable.payment.register": {
-      "summary": {"zh_CN": "登记客户发票收款（支持多发票合并）或退款", "en_US": "Register customer invoice receipts (including grouped invoices) or refunds"},
-      "domain": "payments",
-      "access": "write",
-      "source": {"modules": ["account"], "models": ["res.company", "account.account", "account.journal", "account.move", "account.move.line", "account.payment", "account.payment.register", "account.partial.reconcile", "account.full.reconcile", "account.payment.method.line", "res.partner.bank"], "wizards": ["account.payment.register"], "report_handlers": [], "locations": ["_references/base/models/res_company.py", "account/models/account_account.py", "account/models/account_journal.py", "account/models/account_move.py", "account/models/account_move_line.py", "account/models/account_payment.py", "account/wizard/account_payment_register.py", "account/models/account_payment_method.py", "_references/base/models/res_bank.py"]},
-      "schemas": {"request": "schemas/v1/receivable.payment.register.request.schema.json", "response": "schemas/v1/receivable.payment.register.response.schema.json"},
-      "requirements": {"modules": ["account"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["account.group_account_invoice"], "acl": ["account.account:read", "account.journal:read", "account.move:read", "account.move.line:read", "account.payment:read", "account.payment:create", "account.payment.register:create", "account.move.line:write", "account.partial.reconcile:read", "account.partial.reconcile:create", "account.full.reconcile:read", "account.payment.method.line:read", "res.partner.bank:read"]},
-      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_single_or_full_grouped_invoice_payment_registration_as_configured_business_user", "verify": "same_transaction_single_or_grouped_residual_and_replay_validation", "idempotency": "single_document_legacy_key_or_company_and_normalized_batch_digest_with_odoo_persisted_business_marker_and_result_replay", "reverse": "payment.cancel"},
-      "tests": {"unit": {"status": "implemented", "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_bridge.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_payment_register_writeoff_runtime.py", "tests/unit/test_payment_register_many_contract.py", "tests/unit/test_payment_register_many_runtime.py", "tests/unit/test_core_write_cli.py", "tests/unit/test_accounting_payment_tax_inputs_batch.py", "tests/unit/test_entry_payment_explicit_inputs_contract.py", "tests/unit/test_payment_tax_input_runtime.py"], "reason": "Existing contracts and explicit payment/tax input extensions are covered."}, "integration": {"status": "implemented", "references": ["tests/integration/test_core_write_batch_live.py", "tests/integration/test_accounting_depth_batch_live.py", "tests/integration/test_invoice_cash_refund_batch_live.py", "tests/integration/test_payment_register_many_batch_live.py", "tests/integration/test_accounting_payment_tax_inputs_batch_live.py"], "reason": "Shared native payment/tax smoke passed; full rollback."}, "golden": {"status": "planned", "references": [], "reason": "Deferred."}, "e2e": {"status": "planned", "references": [], "reason": "Deferred."}},
-      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
-      "routing": {"object": "receivable.payment", "actions": ["register"], "aliases": {"zh_CN": ["登记客户收款", "登记客户退款"], "en_US": ["Register a customer receipt", "Register a customer refund", "Register one receipt for multiple customer invoices"]}, "not_for": {"zh_CN": [], "en_US": []}, "required_slots": ["database", "company_id", "user_login"]},
-      "handler_key": "core_write"
-    },
+    "receivable.payment.register": {"summary":{"zh_CN":"登记客户发票收款（支持多发票合并）或退款","en_US":"Register customer invoice receipts (including grouped invoices) or refunds"},"domain":"payments","access":"write","source":{"modules":["account"],"models":["res.company","account.account","account.journal","account.move","account.move.line","account.payment","account.payment.register","account.partial.reconcile","account.full.reconcile","account.payment.method.line","res.partner.bank"],"wizards":["account.payment.register"],"report_handlers":[],"locations":["_references/base/models/res_company.py","account/models/account_account.py","account/models/account_journal.py","account/models/account_move.py","account/models/account_move_line.py","account/models/account_payment.py","account/wizard/account_payment_register.py","account/models/account_payment_method.py","_references/base/models/res_bank.py"]},"schemas":{"request":"schemas/v1/receivable.payment.register.request.schema.json","response":"schemas/v1/receivable.payment.register.response.schema.json"},"requirements":{"modules":["account"],"configuration":["database_alias","company_allowlist","user_mapping"],"company":"required","groups":["account.group_account_invoice"],"acl":["account.account:read","account.journal:read","account.move:read","account.move.line:read","account.payment:read","account.payment:create","account.payment.register:create","account.move.line:write","account.partial.reconcile:read","account.partial.reconcile:create","account.full.reconcile:read","account.payment.method.line:read","res.partner.bank:read"]},"strategies":{"preview":"exact_capability_confirmation_and_closed_request_validation","execute":"fixed_single_or_full_grouped_invoice_payment_registration_as_configured_business_user","verify":"same_transaction_single_or_grouped_residual_and_replay_validation","idempotency":"single_document_legacy_key_or_company_and_normalized_batch_digest_with_odoo_persisted_business_marker_and_result_replay","reverse":"payment.cancel"},"tests":{"unit":{"status":"implemented","references":["tests/unit/test_core_writes.py","tests/unit/test_core_writes_bridge.py","tests/unit/test_core_writes_runtime.py","tests/unit/test_payment_register_writeoff_runtime.py","tests/unit/test_payment_register_many_contract.py","tests/unit/test_payment_register_many_runtime.py","tests/unit/test_core_write_cli.py","tests/unit/test_accounting_payment_tax_inputs_batch.py","tests/unit/test_entry_payment_explicit_inputs_contract.py","tests/unit/test_payment_tax_input_runtime.py","tests/unit/test_invoice_rounds_write_contract.py","tests/unit/test_invoice_rounds_runtime.py","tests/unit/test_invoice_rounds_product_reads.py","tests/unit/test_invoice_rounds_cli.py"],"reason":"Existing contracts and explicit payment/tax input extensions are covered."},"integration":{"status":"implemented","references":["tests/integration/test_core_write_batch_live.py","tests/integration/test_accounting_depth_batch_live.py","tests/integration/test_invoice_cash_refund_batch_live.py","tests/integration/test_payment_register_many_batch_live.py","tests/integration/test_accounting_payment_tax_inputs_batch_live.py","tests/integration/test_invoice_rounds_live.py"],"reason":"Shared native payment/tax smoke passed; full rollback."},"golden":{"status":"planned","references":[],"reason":"Deferred."},"e2e":{"status":"planned","references":[],"reason":"Deferred."}},"status":{"value":"unconfigured","reason_code":"runtime_context_required","reason":"The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime. Explicit installment/group options use native next/overdue/before-date/full amounts and actual payment graphs; editable grouped batches support partial amounts. Operation markers distinguish sequential rounds but are not concurrency-unique."},"routing":{"object":"receivable.payment","actions":["register"],"aliases":{"zh_CN":["登记客户收款","登记客户退款"],"en_US":["Register a customer receipt","Register a customer refund","Register one receipt for multiple customer invoices"]},"not_for":{"zh_CN":[],"en_US":[]},"required_slots":["database","company_id","user_login"]},"handler_key":"core_write"},
     "reconciliation.apply": {
       "summary": {
         "zh_CN": "执行部分或完全核销",
@@ -20026,130 +19716,7 @@
       },
       "handler_key": "core_write"
     },
-    "vendor_refund.create": {
-      "summary": {
-        "zh_CN": "创建供应商退款单",
-        "en_US": "Create a vendor refund"
-      },
-      "domain": "invoices_and_bills",
-      "access": "write",
-      "source": {
-        "modules": [
-          "account"
-        ],
-        "models": [
-          "res.company",
-          "res.partner.bank",
-          "account.journal",
-          "account.move",
-          "account.move.reversal",
-          "res.partner",
-          "product.product",
-          "account.account",
-          "account.tax",
-          "account.move.line",
-          "account.analytic.account"
-        ],
-        "wizards": [
-          "account.move.reversal"
-        ],
-        "report_handlers": [],
-        "locations": [
-          "_references/base/models/res_company.py",
-          "_references/base/models/res_bank.py",
-          "account/models/account_journal.py",
-          "account/models/account_move.py",
-          "account/wizard/account_move_reversal.py"
-        ]
-      },
-      "schemas": {
-        "request": "schemas/v1/vendor_refund.create.request.schema.json",
-        "response": "schemas/v1/vendor_refund.create.response.schema.json"
-      },
-      "requirements": {
-        "modules": [
-          "account"
-        ],
-        "configuration": [
-          "database_alias",
-          "company_allowlist",
-          "user_mapping"
-        ],
-        "company": "required",
-        "groups": [
-          "account.group_account_invoice"
-        ],
-        "acl": [
-          "res.partner.bank:read",
-          "account.journal:read",
-          "account.move:read",
-          "account.move:write",
-          "account.move:create",
-          "account.move.reversal:create",
-          "res.partner:read",
-          "account.account:read",
-          "account.tax:read",
-          "account.move.line:read",
-          "account.move.line:create",
-          "account.move.line:write",
-          "account.move.line:unlink"
-        ]
-      },
-      "strategies": {
-        "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_accounting_core_write_action_as_configured_business_user",
-        "verify": "same_transaction_rich_refund_line_reread_and_schema_validation",
-        "idempotency": "odoo_persisted_business_marker_and_result_replay",
-        "reverse": "create_a_new_correcting_bill"
-      },
-      "tests": {
-        "unit": {
-          "status": "implemented",
-          "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_bridge.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_core_write_cli.py", "tests/unit/test_accounting_entry_membership_batch.py"],
-          "reason": "Signed quantity and existing contracts covered."
-        },
-        "integration": {"status":"implemented","references":["tests/integration/test_core_write_batch_live.py","tests/integration/test_accounting_depth_batch_live.py","tests/integration/test_accounting_entry_membership_batch_live.py"],"reason":"Shared native smoke passed; full rollback."},
-        "golden": {
-          "status": "planned",
-          "references": [],
-          "reason": "Deferred."
-        },
-        "e2e": {
-          "status": "planned",
-          "references": [],
-          "reason": "Deferred."
-        }
-      },
-      "status": {
-        "value": "unconfigured",
-        "reason_code": "runtime_context_required",
-        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."
-      },
-      "routing": {
-        "object": "vendor_refund",
-        "actions": [
-          "create"
-        ],
-        "aliases": {
-          "zh_CN": [
-            "创建供应商退款单"
-          ],
-          "en_US": [
-            "Create a vendor refund"
-          ]
-        },
-        "not_for": {
-          "zh_CN": [],
-          "en_US": []
-        },
-        "required_slots": [
-          "database",
-          "company_id",
-          "user_login"
-        ]
-      },
-      "handler_key": "core_write"
-    },
+    "vendor_refund.create": {"summary":{"zh_CN":"创建供应商退款单","en_US":"Create a vendor refund"},"domain":"invoices_and_bills","access":"write","source":{"modules":["account"],"models":["res.company","res.partner.bank","account.journal","account.move","account.move.reversal","res.partner","product.product","account.account","account.tax","account.move.line","account.analytic.account"],"wizards":["account.move.reversal"],"report_handlers":[],"locations":["_references/base/models/res_company.py","_references/base/models/res_bank.py","account/models/account_journal.py","account/models/account_move.py","account/wizard/account_move_reversal.py"]},"schemas":{"request":"schemas/v1/vendor_refund.create.request.schema.json","response":"schemas/v1/vendor_refund.create.response.schema.json"},"requirements":{"modules":["account"],"configuration":["database_alias","company_allowlist","user_mapping"],"company":"required","groups":["account.group_account_invoice"],"acl":["res.partner.bank:read","account.journal:read","account.move:read","account.move:write","account.move:create","account.move.reversal:create","res.partner:read","account.account:read","account.tax:read","account.move.line:read","account.move.line:create","account.move.line:write","account.move.line:unlink"]},"strategies":{"preview":"exact_capability_confirmation_and_closed_request_validation","execute":"fixed_accounting_core_write_action_as_configured_business_user","verify":"same_transaction_rich_refund_line_reread_and_schema_validation","idempotency":"odoo_persisted_business_marker_and_result_replay","reverse":"create_a_new_correcting_bill"},"tests":{"unit":{"status":"implemented","references":["tests/unit/test_core_writes.py","tests/unit/test_core_writes_bridge.py","tests/unit/test_core_writes_runtime.py","tests/unit/test_core_write_cli.py","tests/unit/test_accounting_entry_membership_batch.py","tests/unit/test_invoice_rounds_write_contract.py","tests/unit/test_invoice_rounds_runtime.py","tests/unit/test_invoice_rounds_product_reads.py","tests/unit/test_invoice_rounds_cli.py"],"reason":"Signed quantity and existing contracts covered."},"integration":{"status":"implemented","references":["tests/integration/test_core_write_batch_live.py","tests/integration/test_accounting_depth_batch_live.py","tests/integration/test_accounting_entry_membership_batch_live.py","tests/integration/test_invoice_rounds_live.py"],"reason":"Shared native smoke passed; full rollback."},"golden":{"status":"planned","references":[],"reason":"Deferred."},"e2e":{"status":"planned","references":[],"reason":"Deferred."}},"status":{"value":"unconfigured","reason_code":"runtime_context_required","reason":"The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime. Batch move_ids creates full native refunds for 2-100 posted sources with operation/key markers binding the complete selection. Markers are not concurrency-unique."},"routing":{"object":"vendor_refund","actions":["create"],"aliases":{"zh_CN":["创建供应商退款单"],"en_US":["Create a vendor refund"]},"not_for":{"zh_CN":[],"en_US":[]},"required_slots":["database","company_id","user_login"]},"handler_key":"core_write"},
     "company.lock_dates.inspect": {
       "summary": {"zh_CN": "检查公司会计锁定日期", "en_US": "Inspect company accounting lock dates"},
       "domain": "accounting_context",
@@ -21171,19 +20738,8 @@
       "routing": {"object": "sale.order", "actions": ["confirm"], "aliases": {"zh_CN": ["确认销售订单"], "en_US": ["Confirm sales order"]}, "not_for": {"zh_CN": ["过账销售发票"], "en_US": ["Posting a customer invoice"]}, "required_slots": ["database", "company_id", "user_login"]},
       "handler_key": "core_write"
     },
-    "sale.order.invoice.create": {
-      "summary": {"zh_CN": "由销售订单创建客户发票", "en_US": "Create a customer invoice from a sales order"},
-      "domain": "sales_accounting",
-      "access": "write",
-      "source": {"modules": ["account", "base", "sale", "sale_stock"], "models": ["account.move", "account.move.line", "res.company", "sale.order", "sale.order.line"], "wizards": [], "report_handlers": [], "locations": ["_references/base/models/res_company.py", "account/models/account_move.py", "sale/models/account_move.py", "sale/models/sale_order.py", "sale_stock/models/sale_order.py"]},
-      "schemas": {"request": "schemas/v1/sale.order.invoice.create.request.schema.json", "response": "schemas/v1/sale.order.invoice.create.response.schema.json"},
-      "requirements": {"modules": ["account", "base", "sale", "sale_stock"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["sales_team.group_sale_salesman"], "acl": ["res.company:read", "sale.order:read", "sale.order:write", "sale.order.line:read", "account.move:read", "account.move:create", "account.move.line:read"]},
-      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_native_sale_order_create_invoices_as_configured_business_user", "verify": "same_transaction_sale_linked_draft_customer_invoice_reread_and_response_schema_validation", "idempotency": "linked_customer_invoice_recheck_without_concurrent_exactly_once_guarantee", "reverse": "invoice.cancel_or_customer_credit_note"},
-      "tests": {"unit": {"status": "implemented", "references": ["tests/unit/test_stock_transfer_writes.py", "tests/unit/test_stock_transfer_write_schemas.py", "tests/unit/test_stock_transfer_writes_runtime.py", "tests/unit/test_stock_transfer_write_cli.py"], "reason": "Unit tests cover the closed order contract, native invoice creation path, company and ACL gates, replay, schemas, and CLI dispatch."}, "integration": {"status": "implemented", "references": ["tests/integration/test_stock_transfer_write_batch_live.py"], "reason": "The guarded shared transactional smoke verifies native sales-order invoicing, replay, and rollback in both isolated databases."}, "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."}, "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}},
-      "status": {"value": "degraded", "reason_code": "odoo_linked_invoice_not_concurrency_unique", "reason": "The native handler rechecks linked customer invoices for ordinary replay, but Odoo provides no database-unique operation key for concurrent exactly-once creation."},
-      "routing": {"object": "sale.order", "actions": ["invoice.create"], "aliases": {"zh_CN": ["销售订单生成客户发票", "订单开票"], "en_US": ["Create customer invoice from sales order", "Invoice sales order"]}, "not_for": {"zh_CN": ["创建无销售订单关联的发票"], "en_US": ["Creating an unlinked customer invoice"]}, "required_slots": ["database", "company_id", "user_login"]},
-      "handler_key": "core_write"
-    },
+    "sale.order.down_payment.create": {"summary":{"zh_CN":"由销售订单创建预付款发票","en_US":"Create a native sales-order down-payment invoice"},"domain":"sales_accounting","access":"write","source":{"modules":["account","base","sale","sale_stock"],"models":["account.move","account.move.line","account.tax","res.company","sale.advance.payment.inv","sale.order","sale.order.line"],"wizards":["sale.advance.payment.inv"],"report_handlers":[],"locations":["_references/base/models/res_company.py","account/models/account_move.py","sale/models/account_move.py","sale/models/sale_order.py","sale_stock/models/sale_order.py","sale/wizard/sale_make_invoice_advance.py","sale/models/sale_order_line.py","account/models/account_tax.py"]},"schemas":{"request":"schemas/v1/sale.order.down_payment.create.request.schema.json","response":"schemas/v1/sale.order.down_payment.create.response.schema.json"},"requirements":{"modules":["account","base","sale","sale_stock"],"configuration":["database_alias","company_allowlist","user_mapping"],"company":"required","groups":["sales_team.group_sale_salesman"],"acl":["account.move.line:read","account.move:create","account.move:read","account.move:write","account.tax:read","res.company:read","sale.advance.payment.inv:create","sale.order.line:create","sale.order.line:read","sale.order.line:write","sale.order:read","sale.order:write"]},"strategies":{"preview":"exact_capability_confirmation_and_closed_request_validation","execute":"fixed_native_sale_advance_payment_inv_create_invoices_as_configured_business_user","verify":"native_downpayment_amount_tax_line_and_sale_source_graph_reread","idempotency":"native_move_operation_and_key_markers_without_concurrent_exactly_once_guarantee","reverse":"invoice.cancel_or_customer_credit_note"},"tests":{"unit":{"status":"implemented","references":["tests/unit/test_invoice_rounds_write_contract.py","tests/unit/test_invoice_rounds_runtime.py","tests/unit/test_invoice_rounds_product_reads.py","tests/unit/test_invoice_rounds_cli.py","tests/unit/test_capability_registry.py"],"reason":"Focused native wizard, percentage/fixed amount, graph, replay, company/ACL, schema and CLI contracts."},"integration":{"status":"implemented","references":["tests/integration/test_invoice_rounds_live.py"],"reason":"Shared native invoice rounds smoke passed; full rollback."},"golden":{"status":"planned","references":[],"reason":"Golden examples are deferred until the capability library reaches target coverage."},"e2e":{"status":"planned","references":[],"reason":"Natural-language routing is outside this capability batch."}},"status":{"value":"degraded","reason_code":"odoo_move_marker_not_concurrency_unique","reason":"Installed native percentage/fixed down-payment wizard executes as the ordinary configured user; native internal invoice creation semantics are preserved. Native move operation/key markers support sequential replay but are not database-unique for concurrent exactly-once creation."},"routing":{"object":"sale.order","actions":["down_payment.create"],"aliases":{"zh_CN":["销售订单预付款发票","订单定金开票"],"en_US":["Sales order down payment","Create down-payment invoice"]},"not_for":{"zh_CN":["直接收取银行款项"],"en_US":["Direct bank transfer or payment collection"]},"required_slots":["database","company_id","user_login"]},"handler_key":"core_write"},
+    "sale.order.invoice.create": {"summary":{"zh_CN":"由销售订单创建客户发票","en_US":"Create a customer invoice from a sales order"},"domain":"sales_accounting","access":"write","source":{"modules":["account","base","sale","sale_stock"],"models":["account.move","account.move.line","res.company","sale.order","sale.order.line"],"wizards":[],"report_handlers":[],"locations":["_references/base/models/res_company.py","account/models/account_move.py","sale/models/account_move.py","sale/models/sale_order.py","sale_stock/models/sale_order.py","sale/models/sale_order_line.py"]},"schemas":{"request":"schemas/v1/sale.order.invoice.create.request.schema.json","response":"schemas/v1/sale.order.invoice.create.response.schema.json"},"requirements":{"modules":["account","base","sale","sale_stock"],"configuration":["database_alias","company_allowlist","user_mapping"],"company":"required","groups":["sales_team.group_sale_salesman"],"acl":["res.company:read","sale.order:read","sale.order:write","sale.order.line:read","account.move:read","account.move:create","account.move.line:read"]},"strategies":{"preview":"exact_capability_confirmation_and_closed_request_validation","execute":"fixed_native_sale_order_create_invoices_as_configured_business_user","verify":"same_transaction_sale_linked_draft_customer_invoice_reread_and_response_schema_validation","idempotency":"linked_customer_invoice_recheck_without_concurrent_exactly_once_guarantee","reverse":"invoice.cancel_or_customer_credit_note"},"tests":{"unit":{"status":"implemented","references":["tests/unit/test_stock_transfer_writes.py","tests/unit/test_stock_transfer_write_schemas.py","tests/unit/test_stock_transfer_writes_runtime.py","tests/unit/test_stock_transfer_write_cli.py","tests/unit/test_invoice_rounds_write_contract.py","tests/unit/test_invoice_rounds_runtime.py","tests/unit/test_invoice_rounds_product_reads.py","tests/unit/test_invoice_rounds_cli.py"],"reason":"Unit tests cover the closed order contract, native invoice creation path, company and ACL gates, replay, schemas, and CLI dispatch."},"integration":{"status":"implemented","references":["tests/integration/test_stock_transfer_write_batch_live.py","tests/integration/test_invoice_rounds_live.py"],"reason":"The guarded shared transactional smoke verifies native sales-order invoicing, replay, and rollback in both isolated databases."},"golden":{"status":"planned","references":[],"reason":"Golden examples are deferred until the capability library reaches target coverage."},"e2e":{"status":"planned","references":[],"reason":"Natural-language routing is outside this capability batch."}},"status":{"value":"degraded","reason_code":"odoo_linked_invoice_not_concurrency_unique","reason":"The native handler rechecks linked customer invoices for ordinary replay, but Odoo provides no database-unique operation key for concurrent exactly-once creation. The order_ids route creates later native invoiceable rounds with ordinary-user native marker write access and actual native grouping/quantities; legacy order_id replay is retained. Operation markers are not concurrency-unique."},"routing":{"object":"sale.order","actions":["invoice.create"],"aliases":{"zh_CN":["销售订单生成客户发票","订单开票"],"en_US":["Create customer invoice from sales order","Invoice sales order"]},"not_for":{"zh_CN":["创建无销售订单关联的发票"],"en_US":["Creating an unlinked customer invoice"]},"required_slots":["database","company_id","user_login"]},"handler_key":"core_write"},
     "sale.order.cancel": {
       "summary": {"zh_CN": "取消销售订单", "en_US": "Cancel a sales order"},
       "domain": "sales_accounting",
@@ -21288,19 +20844,7 @@
       "routing": {"object": "purchase.order", "actions": ["reset_to_draft"], "aliases": {"zh_CN": ["采购订单重置草稿"], "en_US": ["Reset purchase order to draft"]}, "not_for": {"zh_CN": ["账单重置草稿"], "en_US": ["Resetting a vendor bill to draft"]}, "required_slots": ["database", "company_id", "user_login"]},
       "handler_key": "core_write"
     },
-    "purchase.order.bill.create": {
-      "summary": {"zh_CN": "由采购订单生成供应商账单", "en_US": "Create a vendor bill from a purchase order"},
-      "domain": "purchase_accounting",
-      "access": "write",
-      "source": {"modules": ["purchase", "account"], "models": ["purchase.order", "purchase.order.line", "account.move", "account.move.line"], "wizards": [], "report_handlers": [], "locations": ["_references/purchase/models/purchase.py", "_references/purchase/models/account_invoice.py"]},
-      "schemas": {"request": "schemas/v1/purchase.order.bill.create.request.schema.json", "response": "schemas/v1/purchase.order.bill.create.response.schema.json"},
-      "requirements": {"modules": ["purchase", "account"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["account.group_account_invoice"], "acl": ["purchase.order:read", "purchase.order:write", "purchase.order.line:read", "account.move:read", "account.move:create", "account.move:write", "account.move.line:read", "account.move.line:create", "account.move.line:write"]},
-      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "native_purchase_order_action_create_invoice_as_configured_business_user", "verify": "same_transaction_purchase_linked_draft_vendor_bill_reread_and_response_schema_validation", "idempotency": "linked_vendor_bill_recheck_without_concurrent_exactly_once_guarantee", "reverse": "invoice.cancel_or_supplier_credit_note"},
-      "tests": {"unit": {"status": "implemented", "references": ["tests/unit/test_procurement_inventory_writes.py", "tests/unit/test_procurement_inventory_writes_runtime.py", "tests/unit/test_procurement_inventory_write_schemas.py", "tests/unit/test_core_write_cli.py"], "reason": "Unit tests cover the closed order contract, native bill creation path, company and ACL gates, replay, schemas, and CLI dispatch."}, "integration": {"status": "implemented", "references": ["tests/integration/test_accounting_followup_write_batch_live.py"], "reason": "The guarded shared transactional smoke verifies native purchase-to-bill creation and rollback in both isolated databases."}, "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."}, "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}},
-      "status": {"value": "degraded", "reason_code": "odoo_linked_bill_not_concurrency_unique", "reason": "The native handler rechecks linked bills for ordinary replay, but Odoo provides no database-unique operation key for concurrent exactly-once creation."},
-      "routing": {"object": "purchase.order", "actions": ["bill.create"], "aliases": {"zh_CN": ["采购订单生成供应商账单"], "en_US": ["Create vendor bill from purchase order"]}, "not_for": {"zh_CN": ["创建无采购关联的普通账单"], "en_US": ["Creating an unlinked vendor bill"]}, "required_slots": ["database", "company_id", "user_login"]},
-      "handler_key": "core_write"
-    },
+    "purchase.order.bill.create": {"summary":{"zh_CN":"由采购订单生成供应商账单","en_US":"Create a vendor bill from a purchase order"},"domain":"purchase_accounting","access":"write","source":{"modules":["purchase","account"],"models":["purchase.order","purchase.order.line","account.move","account.move.line"],"wizards":[],"report_handlers":[],"locations":["_references/purchase/models/purchase.py","_references/purchase/models/account_invoice.py","purchase/models/purchase_order.py","purchase/models/purchase_order_line.py"]},"schemas":{"request":"schemas/v1/purchase.order.bill.create.request.schema.json","response":"schemas/v1/purchase.order.bill.create.response.schema.json"},"requirements":{"modules":["purchase","account"],"configuration":["database_alias","company_allowlist","user_mapping"],"company":"required","groups":["account.group_account_invoice"],"acl":["purchase.order:read","purchase.order:write","purchase.order.line:read","account.move:read","account.move:create","account.move:write","account.move.line:read","account.move.line:create","account.move.line:write"]},"strategies":{"preview":"exact_capability_confirmation_and_closed_request_validation","execute":"native_purchase_order_action_create_invoice_as_configured_business_user","verify":"same_transaction_purchase_linked_draft_vendor_bill_reread_and_response_schema_validation","idempotency":"linked_vendor_bill_recheck_without_concurrent_exactly_once_guarantee","reverse":"invoice.cancel_or_supplier_credit_note"},"tests":{"unit":{"status":"implemented","references":["tests/unit/test_procurement_inventory_writes.py","tests/unit/test_procurement_inventory_writes_runtime.py","tests/unit/test_procurement_inventory_write_schemas.py","tests/unit/test_core_write_cli.py","tests/unit/test_invoice_rounds_write_contract.py","tests/unit/test_invoice_rounds_runtime.py","tests/unit/test_invoice_rounds_product_reads.py","tests/unit/test_invoice_rounds_cli.py"],"reason":"Unit tests cover the closed order contract, native bill creation path, company and ACL gates, replay, schemas, and CLI dispatch."},"integration":{"status":"implemented","references":["tests/integration/test_accounting_followup_write_batch_live.py","tests/integration/test_invoice_rounds_live.py"],"reason":"The guarded shared transactional smoke verifies native purchase-to-bill creation and rollback in both isolated databases."},"golden":{"status":"planned","references":[],"reason":"Golden examples are deferred until the capability library reaches target coverage."},"e2e":{"status":"planned","references":[],"reason":"Natural-language routing is outside this capability batch."}},"status":{"value":"degraded","reason_code":"odoo_linked_bill_not_concurrency_unique","reason":"The native handler rechecks linked bills for ordinary replay, but Odoo provides no database-unique operation key for concurrent exactly-once creation. The order_ids route creates later native invoiceable rounds with ordinary-user native marker write access and actual native grouping/quantities; legacy order_id replay is retained. Operation markers are not concurrency-unique."},"routing":{"object":"purchase.order","actions":["bill.create"],"aliases":{"zh_CN":["采购订单生成供应商账单"],"en_US":["Create vendor bill from purchase order"]},"not_for":{"zh_CN":["创建无采购关联的普通账单"],"en_US":["Creating an unlinked vendor bill"]},"required_slots":["database","company_id","user_login"]},"handler_key":"core_write"},
     "purchase_bill.lines.unmatch": {
       "summary": {"zh_CN": "取消供应商账单行的采购匹配", "en_US": "Unmatch purchase lines from vendor bill lines"},
       "domain": "purchase_accounting",

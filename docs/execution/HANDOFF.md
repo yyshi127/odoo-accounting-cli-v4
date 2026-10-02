@@ -4,9 +4,9 @@ Updated: 2026-10-02 (Asia/Shanghai)
 
 ## Current authoritative count — 2026-10-02
 
-552 registered IDs;537 implemented handlers (251 reads,286 writes);
-1080 schemas;461 unconfigured,76 degraded,15 disabled. Enabled integrations:
-534 implemented,two planned,one failed. Latest signed-quantity/membership checkpoint
+554 registered IDs;539 handlers (251 reads,288 writes);
+1084 schemas;462 unconfigured,77 degraded,15 disabled. Enabled integrations:
+536 implemented,two planned,one failed. Latest invoice-round/installment checkpoint
 at the end is authoritative; totals are not a full accounting denominator,
 completion percentage or unrestricted ordinary-user permission guarantee.
 
@@ -6453,3 +6453,136 @@ debit-note addon installation not authorized. Overall goal active.
 
 Registry file SHA2567c46753b18bbf06b51d3064a59a7831fe5221b53061a434d1479bd8da568170a;
 canonical SHA25603153dce6623de233374d8ec62f70117903a8a1b15fdcff658930f7eb41730fe.
+
+## Invoice rounds, installment payments and sales advance checkpoint — 2026-10-02
+
+Latest delivery: 8 EXT / 1 NEW sale.order.down_payment.create. Current totals:
+554 registry IDs / 539 handlers / 251 reads / 288 writes / 1084 schemas;
+462 unconfigured / 77 degraded / 15 disabled; enabled native integrations
+536 implemented / two planned / one failed. Overall capability-building goal
+ACTIVE. No full-accounting denominator, completion percentage or unconditional
+ordinary-user permission guarantee. Do not reopen the accepted shared native job.
+
+Frozen nine-target scope:
+
+1. customer_credit_note.create and vendor_refund.create: optional move_ids,
+   2–100 sorted unique sources, full native reversals, source-specific wizard
+   journal, date/reason, fixed batch items/count. Whole-selection operation/key
+   marker detects same-key changed/disjoint selection. Legacy move_id/custom
+   lines stay. No partial/custom-line batch or global lifecycle widening.
+2. receivable.payment.register and payable.payment.register: optional native
+   installments_mode full/next/overdue/before_date, strict group_payment and ISO
+   installment_cutoff_date only for before_date. Cutoff uses native active_domain
+   next_payment_date; no guessed wizard field. Full uses full_amount; nonfull
+   must match the offered mode and native amount_by_default. Explicit editable
+   grouped batches allow amount/difference/writeoff controls; noneditable routes
+   reject inputs they cannot consume. False grouping exposes actual per-term
+   items/count 1–1000. New-path source validation/result source_id use both ends
+   of actual AR/AP account.partial.reconcile links. Native information-only
+   invoice_ids/reconciled_invoice_ids can include unreconciled sources and are
+   not a financial graph. Old helper/routes stay. Initial exact amount/reference/
+   memo/writeoff verification remains; omitted-amount replay cannot reconstruct
+   historical wizard amounts after residual mutation. No new state store.
+3. sale.order.invoice.create and purchase.order.bill.create: optional order_ids
+   1–100, caller operation keys distinguish rounds. Same-company confirmed,
+   currently invoiceable source quantities, actual native links/types, items/count
+   1–1000 even for one merged invoice; source_id is one order or null when merged.
+   Sale consolidated_billing maps native grouping; deduct_down_payments maps
+   final. False consolidation invokes the installed helper per order, unioning
+   its results; True/default stays one batch helper call. Native combo section
+   quantities are checked; refund sign flips only actual product lines as native
+   action_switch_move_type does. Legacy single-order first-linked/key path stays.
+   No unconditional move-write preflight was added to legacy sale invoicing;
+   actual ordinary marker writes remain subject to native write ACL.
+4. NEW sale.order.down_payment.create: order_id, percentage/fixed method,
+   canonical positive amount (percentage <=100), real sale.advance.payment.inv
+   positive check and _create_invoices. Native tax preview includes final delta
+   total-excluded and per-tax amounts, not stale total-included before delta.
+   One source-linked draft invoice with operation/key replay. Installed helper's
+   internal sudo semantics remain native; CLI caller environment stays ordinary.
+5. product.accounting_profile.get/update: invoice_policy order/delivery and
+   purchase_method purchase/receive. Get fields independently optional/nullable;
+   update closed nonnull values. Absent native fields reject only explicit writes,
+   not old get/update inputs. Policy-only writes accept visible shared/multi-variant
+   templates. Native policies are template-global across variants/companies.
+   Old account/tax and mixed updates keep company-specific/single-variant limits.
+   Registry routing/strategy now state this policy-only exception consistently.
+
+New operations reuse native move markers and existing confirmation/company/ACL/
+user scoping. Markers are not database-unique concurrency protection. Existing
+global generic batch bounds remain 2–100; only fixed order/per-term targets use
+local 1–1000. No new generic dispatcher/replay store/control framework.
+
+Acceptance: server 346 focused tests / 50.98s; local same selection 346 / 57.72s.
+Final three registry nodes local 25.50s / server 17.81s. CLI regressions use the
+real OdooCoreWritePort, not a FakePort bypass. Shared real in-process public CLI
+workflow passed both v4-dev/v4-e2e in 53.74s, UID5/su=False/company1; accepted
+PID1700127 terminal exit0 and process absent. Both summaries and units/live logs
+are retained privately. Native workflow proves customer/vendor batch full reversals,
+cash-refund directions, four installment modes/cutoff/per-term/full finish,
+grouped partial 50 against 80+120 with actual replay source stability, sale/PO
+40+60 later rounds, merged/separate two-order sale invoicing, 10% and fixed20
+advances on100 plus final70 deduction, shared-template two-variant policy reads,
+foreign denial and actual product-manager denial. Source service quantities are
+owned fixtures; no stock receipt/picking workflow claim. Taxed advance and new
+writeoff combinations are focused units, not extra native consumer claims here.
+
+Fixture admin and temporary installed sales/purchase/product native groups exist
+only within the outer rollback transaction. Fresh-cursor oracle checks every
+tracked fixture, all stored scalar settings of companies1+2, every ir.default,
+currencies/rates and exact group IDs for ALL users. Success and each failure run
+the full rollback oracle before returning. No permanent permission grant.
+
+Retained diagnostics, not accepted native evidence:
+
+- Initial job PID1675011: 327 unit passes/four old negative assertions now valid
+  new inputs; native not started. Tests retain negatives using amount0/invalid
+  handling and add requested positive route coverage.
+- Repair1 PID1678319: 335 units passed, native DEV10.38s missing reversal journal.
+  Fixed adapter's source-specific journal/move_ids; no journal override or sudo.
+- Repair2 PID1681152: DEV10.37s thin-port rejected new batch shape. Fixed only
+  six target predicates and real-port CLI tests; legacy global bounds remain.
+- Repair3 PID1685168: DEV10.79s unpaid original reversal auto-offsets residual.
+  Fixed fixture to settle sources before a cash refund, not adapter balance guards.
+- Repair4 PID1686542: DEV22.49s partial payment source_id drift on native cache
+  reread. Fixed only new payment routes to actual two-end partial-reconcile graph.
+- Repair5 PID1692126: DEV26.71s purchase fixture used obsolete taxes_id; installed
+  purchase.order.line tax_ids confirmed and fixture alone corrected.
+- Repair6 PID1696866: DEV23.06s custom exchange addon multi-create constraint
+  reads singleton is_exchange on two invoices. Installed source read, never edited.
+  False consolidation now performs independent native calls without bypassing
+  constraints; per-invoice order remains, native reversal association stays native.
+  True/default delegates native grouping unchanged; heterogeneous groups yielding
+  multiple invoices may still hit that installed addon defect. No general fallback.
+
+All native failures above completed full fresh rollback and did not start E2E.
+SSH authentication/connect resets/timeouts also occurred; check batch.pid and
+terminal exit/process before retry. They are not authority to relaunch one handle.
+Only accepted53.74s closes native evidence. Leave unrelated old tax/registry/bank
+fixture assertions alone; the stated focused tests are not a whole-suite claim.
+
+Deployment: 31 exact code/schema/test paths, 24 distinct existing/seven new;
+initial original backup22 plus repairs1/2/2/1/2/1/2/final1 downloaded/hash-verified.
+All31 final local/server byte hashes equal, 545 prior unrelated registry
+descriptors unchanged. Registry2086174bytes under unchanged2MiB limit; no new
+public privacy/lint findings. Two docs are local Git handoff only; server overlays stay.
+Services active, baseline PIDs/restart counts unchanged; free5270847488bytes
+(4.91GiB), rounded90% used. No cleanup/restart/business DB/native source/addon/
+config/Pi/V2/V3/external-send/caller-sudo/newgate change. Normal checkpoint/push
+follows verified facts and must be checked against fresh remote HEAD.
+
+Private resumable evidence: .tooling/accounting-invoice-rounds-audit-20261002
+contains STATE.md, actual native sources/computation/payment relations/custom
+constraint excerpt, manifest, repair-live1..7/final before-backups, accepted
+repair-live7 units.log/live.log and final local/server byte/service facts.
+Do not rerun accepted native just to obtain a newer timestamp.
+
+Next: installed-source audit of remaining high-frequency accounting gaps, including
+source-order-line read projections and invoice handling. Existing partial payment,
+schedule/status/origin reads are not new command IDs. Asset.validate native defect
+and two report sends remain unclosed; missing debit-note addon installation and
+general custom exchange-addon fix require separate authority. Do not claim all
+accounting/country-tax/FX/branch/lock/hash/concurrent combinations are covered.
+
+Registry file SHA256 92612d00ff1b10249968068c60a338c20f38300a3103bc418e6cb6cdfe79536e;
+canonical SHA256 6af0692cb52982816bc6f20a9e66b045f02249c3bac516d9ca03ca6a930fcc28.

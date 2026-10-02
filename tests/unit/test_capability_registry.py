@@ -39,16 +39,16 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 553
-EXPECTED_ENABLED_CAPABILITY_COUNT = 538
+EXPECTED_CAPABILITY_COUNT = 554
+EXPECTED_ENABLED_CAPABILITY_COUNT = 539
 EXPECTED_IMPLEMENTED_READ_COUNT = 251
-EXPECTED_IMPLEMENTED_WRITE_COUNT = 287
+EXPECTED_IMPLEMENTED_WRITE_COUNT = 288
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
 EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 462
-EXPECTED_DEGRADED_CAPABILITY_COUNT = 76
-EXPECTED_SCHEMA_COUNT = 1082
+EXPECTED_DEGRADED_CAPABILITY_COUNT = 77
+EXPECTED_SCHEMA_COUNT = 1084
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "52b21b11bde202247f35e78db4a59cd0e4e099cdb47d502374be77e5b272c460"
+    "fc5a0212045b69a0eacbc276270207b0a5ba6bc5b76454347f6599a536081398"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
@@ -449,6 +449,18 @@ ACCOUNTING_ENTRY_MEMBERSHIP_WRITES = {"journal_entry.lines.add", "journal_entry.
 ACCOUNTING_SIGNED_QUANTITY_WRITES = {"customer_invoice.create", "vendor_bill.create", "invoice.line.create", "invoice.line.update", "invoice.lines.replace", "customer_credit_note.create", "vendor_refund.create"}
 PAYMENT_TAX_INPUT_WRITES = {"receivable.payment.register", "payable.payment.register", "journal_entry.create", "journal_entry.lines.replace", "journal_entry.lines.add", "journal_entry.lines.update"}
 PAYMENT_TAX_INPUT_READS = {"journal_item.processing_details.get", "journal_item.get", "journal_item.search"}
+INVOICE_ROUNDS_EXTENSIONS = {
+    "customer_credit_note.create", "vendor_refund.create",
+    "receivable.payment.register", "payable.payment.register",
+    "sale.order.invoice.create", "purchase.order.bill.create",
+    "product.accounting_profile.get", "product.accounting_profile.update",
+}
+INVOICE_ROUNDS_UNIT_TESTS = [
+    "tests/unit/test_invoice_rounds_write_contract.py",
+    "tests/unit/test_invoice_rounds_runtime.py",
+    "tests/unit/test_invoice_rounds_product_reads.py",
+    "tests/unit/test_invoice_rounds_cli.py",
+]
 
 IMPLEMENTED_WRITES = ACCOUNTING_ENTRY_MEMBERSHIP_WRITES | ACCOUNTING_MAINTENANCE_WRITES | ACCOUNTING_SETUP_WRITES | ACCOUNTING_WORKFLOWS_WRITES | INVOICE_PREPARATION_WRITES | JOURNAL_ITEM_PROCESSING_WRITES | COMPANY_PROCESSING_WRITES | ANALYTIC_PROCESSING_WRITES | JOURNAL_PROCESSING_WRITES | ACCOUNT_PROCESSING_WRITES | TAX_PROCESSING_WRITES | PAYMENT_TERM_PROCESSING_WRITES | RECONCILIATION_PROCESSING_WRITES | PAYMENT_PROCESSING_WRITES | INVOICE_PRESENTATION_WRITES | MOVE_PROCESSING_WRITES | PARTNER_PREFERENCES_WRITES | PAYMENT_CONFIGURATION_WRITES | FISCAL_MAPPING_WRITES | REPORT_BUDGET_WRITES | {
     "account.group.create",
@@ -564,6 +576,7 @@ IMPLEMENTED_WRITES = ACCOUNTING_ENTRY_MEMBERSHIP_WRITES | ACCOUNTING_MAINTENANCE
     "tax.restore",
     "tax.update",
     "sale.order.invoice.create",
+    "sale.order.down_payment.create",
     "stock.transfer.assign",
     "stock.transfer.cancel",
     "stock.transfer.confirm",
@@ -1239,6 +1252,16 @@ def test_every_unimplemented_capability_is_honestly_disabled_without_a_handler()
 
 def _prior_payment_tax_input_evidence(capability_id, descriptor):
     """Check only this extension's evidence, retaining the prior exact assertions."""
+    if capability_id in INVOICE_ROUNDS_EXTENSIONS:
+        descriptor = copy.deepcopy(descriptor)
+        references = descriptor["tests"]["unit"]["references"]
+        assert references[-len(INVOICE_ROUNDS_UNIT_TESTS):] == INVOICE_ROUNDS_UNIT_TESTS
+        descriptor["tests"]["unit"]["references"] = references[:-len(INVOICE_ROUNDS_UNIT_TESTS)]
+        integration = descriptor["tests"]["integration"]["references"]
+        live_test = "tests/integration/test_invoice_rounds_live.py"
+        if live_test in integration:
+            assert integration[-1] == live_test and integration.count(live_test) == 1
+            descriptor["tests"]["integration"]["references"] = integration[:-1]
     bank_extensions = {"bank.transaction.record", "bank.transaction.update", "bank.transaction.get", "bank.transaction.search",
                        "bank.statement.create", "bank.statement.update", "bank.statement.search", "bank.transaction.unmatch"}
     if capability_id in bank_extensions:
@@ -2683,6 +2706,7 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
         "vendor_refund.create": {"account.move.reversal"},
         "period.accrual.generate": {"account.accrued.orders.wizard"},
         "account.return.create": {"account.return.creation.wizard"},
+        "sale.order.down_payment.create": {"sale.advance.payment.inv"},
     }
     extended_modules = {
         "account.return.archive": ["account_reports", "account", "base"],
@@ -2831,6 +2855,7 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
     extended_modules.update(
         {
             "sale.order.invoice.create": ["account", "base", "sale", "sale_stock"],
+            "sale.order.down_payment.create": ["account", "base", "sale", "sale_stock"],
             "stock.transfer.create": ["base", "stock"],
             "stock.transfer.confirm": ["base", "stock"],
             "stock.transfer.assign": ["base", "stock"],
@@ -3126,6 +3151,9 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
                 descriptor["status"]["reason_code"]
                 == "odoo_linked_invoice_not_concurrency_unique"
             )
+        elif capability_id == "sale.order.down_payment.create":
+            assert descriptor["status"]["value"] == "degraded"
+            assert descriptor["status"]["reason_code"] == "odoo_move_marker_not_concurrency_unique"
         elif capability_id == "stock.transfer.create":
             assert descriptor["status"]["value"] == "degraded"
             assert (
@@ -3181,6 +3209,20 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
         else:
             assert descriptor["status"]["value"] == "unconfigured"
             assert descriptor["status"]["reason_code"] == "runtime_context_required"
+        if capability_id == "sale.order.down_payment.create":
+            assert descriptor["tests"]["unit"]["status"] == "implemented"
+            assert descriptor["tests"]["unit"]["references"] == INVOICE_ROUNDS_UNIT_TESTS + ["tests/unit/test_capability_registry.py"]
+            integration = descriptor["tests"]["integration"]
+            if integration["status"] == "implemented":
+                assert integration == {
+                    "status": "implemented",
+                    "references": ["tests/integration/test_invoice_rounds_live.py"],
+                    "reason": "Shared native invoice rounds smoke passed; full rollback.",
+                }
+            else:
+                assert integration["status"] == "planned"
+                assert integration["references"] == []
+            continue
         if capability_id in ACCOUNTING_ENTRY_MEMBERSHIP_WRITES | ACCOUNTING_SIGNED_QUANTITY_WRITES:
             assert descriptor["tests"]["integration"]["reason"] == "Shared native smoke passed; full rollback."
         if capability_id == "bank.transaction.counterparts.replace":

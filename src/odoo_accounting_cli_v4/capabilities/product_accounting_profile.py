@@ -160,7 +160,7 @@ def _valid_selection_slot(
 
 
 def _validate_profile(data: Any, *, company_id: int, product_id: int) -> dict[str, Any]:
-    if not isinstance(data, dict) or set(data) != {
+    required = {
         "company_id",
         "product",
         "template",
@@ -169,8 +169,21 @@ def _validate_profile(data: Any, *, company_id: int, product_id: int) -> dict[st
         "accounts",
         "valuation",
         "cost_method",
-    }:
+    }
+    if (
+        not isinstance(data, dict)
+        or not required <= set(data)
+        or set(data) - required - {"invoice_policy", "purchase_method"}
+    ):
         raise _failed("Odoo returned an invalid product accounting profile.")
+    for name, allowed in (
+        ("invoice_policy", {"order", "delivery"}),
+        ("purchase_method", {"purchase", "receive"}),
+    ):
+        if name in data and data[name] is not None and (
+            not isinstance(data[name], str) or data[name] not in allowed
+        ):
+            raise _failed("Odoo returned an invalid product invoicing policy.")
     product = data["product"]
     template = data["template"]
     category = data["category"]
@@ -265,7 +278,7 @@ def _validate_page(port: ProductAccountingProfilePort, page: Any) -> dict[str, A
 def get_product_accounting_profile(
     port: ProductAccountingProfilePort, request: dict[str, Any]
 ) -> dict[str, Any]:
-    """Read one product's final company-relative accounting properties."""
+    """Read accounting properties and optional template-shared invoicing policies."""
 
     _, context, product_id = validate_product_accounting_profile_request(request)
     page = port.get_profile(

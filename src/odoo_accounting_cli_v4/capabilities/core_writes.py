@@ -192,6 +192,7 @@ CORE_WRITE_CAPABILITY_IDS = invoice_preparation.CAPABILITY_IDS | journal_item_pr
         "analytic.distribution_model.create",
         "analytic.distribution_model.update",
         "sale.order.invoice.create",
+        "sale.order.down_payment.create",
         "stock.transfer.create",
         "stock.transfer.confirm",
         "stock.transfer.assign",
@@ -1350,6 +1351,16 @@ def _validate_reverse_parameters(parameters: Any) -> dict[str, Any]:
 
 
 def _validate_refund_parameters(parameters: Any) -> dict[str, Any]:
+    if isinstance(parameters, dict) and "move_ids" in parameters:
+        if set(parameters) != {"move_ids", "date", "reason"}:
+            raise _invalid("Batch refunds require only move_ids, date, and reason.")
+        move_ids = _validate_ids(parameters["move_ids"])
+        if move_ids is None or not 2 <= len(move_ids) <= 100:
+            raise _invalid("parameters.move_ids must contain 2-100 distinct positive integers.")
+        _validate_reverse_parameters(
+            {"move_id": move_ids[0], "date": parameters["date"], "reason": parameters["reason"]}
+        )
+        return {**parameters, "move_ids": sorted(move_ids)}
     required = {"move_id", "date", "reason"}
     allowed = required | {"lines"}
     if not isinstance(parameters, dict) or not required <= set(parameters) <= allowed:
@@ -1373,6 +1384,9 @@ def _validate_payment_register_parameters(parameters: Any) -> dict[str, Any]:
         "payment_difference_handling",
         "writeoff_account_id",
         "writeoff_label",
+        "installments_mode",
+        "group_payment",
+        "installment_cutoff_date",
     }
     if not isinstance(parameters, dict):
         raise _invalid(
@@ -1380,7 +1394,7 @@ def _validate_payment_register_parameters(parameters: Any) -> dict[str, Any]:
         )
     keys = set(parameters)
     single = common | {"move_id"} <= keys <= common | {"move_id"} | optional
-    many = common | {"move_ids"} <= keys <= common | {"move_ids"} | references
+    many = common | {"move_ids"} <= keys <= common | {"move_ids"} | optional
     if not single and not many:
         raise _invalid(
             "Payment registration parameters do not match the fixed contract."
@@ -1399,6 +1413,18 @@ def _validate_payment_register_parameters(parameters: Any) -> dict[str, Any]:
             raise _invalid(f"parameters.{key} must be a positive integer.")
     if not _is_date(parameters["payment_date"]):
         raise _invalid("parameters.payment_date must be a YYYY-MM-DD date.")
+    mode = parameters.get("installments_mode")
+    if "installments_mode" in parameters and mode not in ("full", "next", "overdue", "before_date"):
+        raise _invalid("installments_mode must be full, next, overdue, or before_date.")
+    if "group_payment" in parameters and not isinstance(parameters["group_payment"], bool):
+        raise _invalid("group_payment must be a boolean.")
+    if mode == "before_date":
+        if not _is_date(parameters.get("installment_cutoff_date")):
+            raise _invalid("before_date requires a YYYY-MM-DD installment_cutoff_date.")
+    elif "installment_cutoff_date" in parameters:
+        raise _invalid("installment_cutoff_date is allowed only for before_date.")
+    if parameters.get("group_payment") is False and "amount" in parameters:
+        raise _invalid("Explicit amount requires grouped payments.")
     if "amount" in parameters:
         amount = _canonical_decimal(parameters["amount"], signed=False)
         if amount is None or amount <= 0:
@@ -1430,6 +1456,43 @@ def _validate_payment_register_parameters(parameters: Any) -> dict[str, Any]:
     if many:
         normalized["move_ids"] = sorted(move_ids)
     return normalized
+
+
+def _payment_register_operation(parameters: dict[str, Any]) -> bool:
+    return bool(
+        {"installments_mode", "group_payment", "installment_cutoff_date"} & parameters.keys()
+        or ("move_ids" in parameters and {
+            "amount", "payment_difference_handling", "writeoff_account_id", "writeoff_label"
+        } & parameters.keys())
+    )
+
+
+def _validate_order_invoice_parameters(capability_id: str, parameters: Any) -> dict[str, Any]:
+    if not isinstance(parameters, dict) or "order_ids" not in parameters:
+        return _validate_single_id(parameters, "order_id")
+    allowed = {"order_ids"}
+    if capability_id == "sale.order.invoice.create":
+        allowed |= {"consolidated_billing", "deduct_down_payments"}
+    if not set(parameters) <= allowed:
+        raise _invalid("Order invoice parameters do not match the fixed contract.")
+    order_ids = _validate_ids(parameters["order_ids"])
+    if order_ids is None or not 1 <= len(order_ids) <= 100:
+        raise _invalid("parameters.order_ids must contain 1-100 distinct positive integers.")
+    for field in ("consolidated_billing", "deduct_down_payments"):
+        if field in parameters and not isinstance(parameters[field], bool):
+            raise _invalid(f"parameters.{field} must be a boolean.")
+    return {**parameters, "order_ids": sorted(order_ids)}
+
+
+def _validate_sale_down_payment_parameters(parameters: Any) -> dict[str, Any]:
+    if not isinstance(parameters, dict) or set(parameters) != {"order_id", "method", "amount"}:
+        raise _invalid("Sales down-payment parameters do not match the fixed contract.")
+    if not _valid_id(parameters["order_id"]) or parameters["method"] not in ("percentage", "fixed"):
+        raise _invalid("Sales down payment requires a positive order_id and percentage or fixed method.")
+    amount = _canonical_decimal(parameters["amount"], signed=False)
+    if amount is None or amount <= 0 or (parameters["method"] == "percentage" and amount > 100):
+        raise _invalid("Down-payment amount must be positive canonical decimal text; percentage must not exceed 100.")
+    return dict(parameters)
 
 
 def _validate_invoice_type_switch_parameters(parameters: Any) -> dict[str, Any]:
@@ -3873,7 +3936,7 @@ def _validate_purchase_bill_parameters(
     capability_id: str, parameters: Any
 ) -> dict[str, Any]:
     if capability_id == "purchase.order.bill.create":
-        return _validate_single_id(parameters, "order_id")
+        return _validate_order_invoice_parameters(capability_id, parameters)
     if capability_id == "purchase_bill.lines.unmatch":
         if not isinstance(parameters, dict) or set(parameters) != {
             "bill_id",
@@ -4334,6 +4397,8 @@ def _validate_product_accounting_changes(
             "expense_account_id",
             "sale_tax_ids",
             "purchase_tax_ids",
+            "invoice_policy",
+            "purchase_method",
         }
     )
     if not isinstance(changes, dict) or not changes or not set(changes) <= allowed:
@@ -4342,6 +4407,9 @@ def _validate_product_accounting_changes(
         if field in changes and not _valid_optional_id(changes[field]):
             raise _invalid(f"changes.{field} must be null or a positive integer.")
     normalized = dict(changes)
+    for field, values in (("invoice_policy", ("order", "delivery")), ("purchase_method", ("purchase", "receive"))):
+        if field in changes and changes[field] not in values:
+            raise _invalid(f"changes.{field} must be one of {values}.")
     for field in ("sale_tax_ids", "purchase_tax_ids"):
         if field not in changes:
             continue
@@ -4529,7 +4597,9 @@ def validate_core_write_request(
     ):
         normalized = _validate_purchase_bill_parameters(capability_id, parameters)
     elif capability_id == "sale.order.invoice.create":
-        normalized = _validate_single_id(parameters, "order_id")
+        normalized = _validate_order_invoice_parameters(capability_id, parameters)
+    elif capability_id == "sale.order.down_payment.create":
+        normalized = _validate_sale_down_payment_parameters(parameters)
     elif capability_id in _STOCK_TRANSFER_WRITE_CAPABILITIES:
         normalized = _validate_stock_transfer_parameters(capability_id, parameters)
     elif capability_id.startswith("fiscal_year."):
@@ -4718,6 +4788,12 @@ def validate_core_write_request(
 def _expected_idempotency_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if (
+        capability_id == "sale.order.down_payment.create"
+        or (capability_id in {"sale.order.invoice.create", "purchase.order.bill.create"} and "order_ids" in parameters)
+        or (capability_id in _PAYMENT_REGISTER_CAPABILITIES and _payment_register_operation(parameters))
+    ):
+        return None
     if capability_id in {"currency.rate.update", "currency.rate.delete", "journal_entry.lines.add", "journal_entry.lines.remove"}:
         return move_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in invoice_preparation.CAPABILITY_IDS:
@@ -5378,8 +5454,21 @@ def _valid_batch_result_shape(result: Any) -> bool:
     )
 
 
+def _valid_invoice_rounds_batch_shape(result: Any) -> bool:
+    return (
+        isinstance(result, dict)
+        and set(result) == _BATCH_RESULT_FIELDS
+        and _is_integer(result["processed_count"])
+        and 1 <= result["processed_count"] <= 1000
+        and isinstance(result["items"], list)
+        and len(result["items"]) == result["processed_count"]
+        and all(_valid_result_shape(item) and _valid_id(item["id"]) for item in result["items"])
+        and [item["id"] for item in result["items"]] == sorted({item["id"] for item in result["items"]})
+    )
+
+
 def _validate_page(
-    port: CoreWritePort, page: Any
+    port: CoreWritePort, page: Any, *, invoice_rounds_batch: bool = False
 ) -> tuple[bool, dict[str, Any] | None]:
     if (
         not isinstance(page, dict)
@@ -5393,6 +5482,7 @@ def _validate_page(
             page["result"] is None
             or _valid_result_shape(page["result"])
             or _valid_batch_result_shape(page["result"])
+            or (invoice_rounds_batch and _valid_invoice_rounds_batch_shape(page["result"]))
         )
     ):
         raise _failed("The Odoo bridge returned an invalid core-write result.")
@@ -6212,6 +6302,28 @@ def _validate_result(
         ):
             raise _failed("Odoo returned a mismatched reconciliation-model result.")
         return deepcopy(result)
+    if capability_id == "sale.order.down_payment.create" or (
+        capability_id in {"sale.order.invoice.create", "purchase.order.bill.create"}
+        and "order_ids" in parameters
+    ):
+        source_ids = parameters.get("order_ids", [parameters.get("order_id")])
+        expected_types = {"out_invoice"} if capability_id == "sale.order.down_payment.create" else (
+            {"out_invoice", "out_refund"} if capability_id == "sale.order.invoice.create" else {"in_invoice", "in_refund"}
+        )
+        if (
+            result["model"] != "account.move"
+            or not _valid_id(result["id"])
+            or result["state"] not in ({"draft", "posted", "cancel"} if idempotent_replay else {"draft"})
+            or result["move_type"] not in expected_types
+            or (result["source_id"] is not None and result["source_id"] not in source_ids)
+            or (len(source_ids) == 1 and result["source_id"] != source_ids[0])
+            or not result["line_ids"]
+            or result["partial_reconcile_ids"]
+            or result["full_reconcile_id"] is not None
+            or result["reconciled"]
+        ):
+            raise _failed("Odoo returned a mismatched source-order invoice result.")
+        return deepcopy(result)
     if capability_id == "sale.order.invoice.create":
         expected_states = (
             {"draft", "posted", "cancel"} if idempotent_replay else {"draft"}
@@ -6995,7 +7107,9 @@ def _validate_result(
     elif capability_id in _PAYMENT_REGISTER_CAPABILITIES:
         expected_move_types = {None}
         expected_states = {"in_process", "paid"}
-        expected_source_id = parameters.get("move_id")
+        expected_source_id = result["source_id"] if _payment_register_operation(parameters) else parameters.get("move_id")
+        if _payment_register_operation(parameters) and result["source_id"] is not None and result["source_id"] not in parameters.get("move_ids", [parameters.get("move_id")]):
+            raise _failed("Odoo returned a mismatched payment source.")
     elif capability_id == "payment.post":
         expected_move_types = {None}
         expected_states = {"in_process", "paid"}
@@ -7011,6 +7125,7 @@ def _validate_result(
         or (
             capability_id in _PAYMENT_REGISTER_CAPABILITIES
             and "move_ids" in parameters
+            and not _payment_register_operation(parameters)
             and (not result["reconciled"] or not result["line_ids"])
         )
     ):
@@ -7054,6 +7169,36 @@ def _validate_batch_result(
     }
 
 
+def _validate_invoice_rounds_batch_result(
+    capability_id: str,
+    parameters: dict[str, Any],
+    result: Any,
+    *,
+    company_id: int,
+    idempotent_replay: bool,
+) -> dict[str, Any]:
+    if not _valid_invoice_rounds_batch_shape(result):
+        raise _failed("Odoo returned a malformed invoice-round batch result.")
+    if capability_id in _REFUND_CAPABILITIES and (
+        result["processed_count"] != len(parameters["move_ids"])
+        or {item["source_id"] for item in result["items"]} != set(parameters["move_ids"])
+    ):
+        raise _failed("Odoo returned a mismatched refund batch result.")
+    return {
+        "items": [
+            _validate_result(
+                capability_id,
+                {"move_id": item["source_id"]} if capability_id in _REFUND_CAPABILITIES else parameters,
+                item,
+                company_id=company_id,
+                idempotent_replay=idempotent_replay,
+            )
+            for item in result["items"]
+        ],
+        "processed_count": result["processed_count"],
+    }
+
+
 def execute_core_write(
     port: CoreWritePort,
     capability_id: str,
@@ -7081,7 +7226,12 @@ def execute_core_write(
         )
     except ValueError as exc:
         raise _failed("The Odoo bridge returned an invalid core-write result.") from exc
-    idempotent_replay, result = _validate_page(port, page)
+    invoice_rounds_batch = (
+        capability_id in _REFUND_CAPABILITIES and "move_ids" in parameters
+        or capability_id in {"sale.order.invoice.create", "purchase.order.bill.create"} and "order_ids" in parameters
+        or capability_id in _PAYMENT_REGISTER_CAPABILITIES and parameters.get("group_payment") is False
+    )
+    idempotent_replay, result = _validate_page(port, page, invoice_rounds_batch=invoice_rounds_batch)
     if result is None:
         raise CoreWriteError(
             "record_not_found",
@@ -7089,7 +7239,15 @@ def execute_core_write(
             exit_code=4,
         )
     validated_result = (
-        _validate_batch_result(
+        _validate_invoice_rounds_batch_result(
+            capability_id,
+            parameters,
+            result,
+            company_id=context["company_id"],
+            idempotent_replay=idempotent_replay,
+        )
+        if invoice_rounds_batch
+        else _validate_batch_result(
             capability_id,
             parameters,
             result,
