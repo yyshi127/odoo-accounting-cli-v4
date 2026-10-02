@@ -13,6 +13,7 @@ from typing import Any, Protocol
 
 from odoo_accounting_cli_v4 import account_processing_contracts as account_processing
 from odoo_accounting_cli_v4 import analytic_processing_contracts as analytic_processing
+from odoo_accounting_cli_v4 import company_processing_contracts as company_processing
 from odoo_accounting_cli_v4 import (
     invoice_presentation_contracts as invoice_presentation,
 )
@@ -64,6 +65,7 @@ CORE_OBJECT_GET_CAPABILITY_IDS = frozenset(
         "analytic.account.invoice_usage.inspect",
         "analytic.applicability.resolve",
         "analytic.distribution.resolve",
+        "company.processing_settings.get",
         "journal.processing_settings.get",
         "account.account.processing_settings.get",
         "tax.processing_settings.get",
@@ -507,6 +509,11 @@ def validate_core_object_read_request(
     """Validate and normalize one fixed core-object request."""
 
     request_id, context, parameters = _validate_envelope(capability_id, request)
+    if capability_id == company_processing.GET_ID:
+        try:
+            return request_id, context, company_processing.normalize_parameters(capability_id, parameters)
+        except ValueError as exc:
+            raise _invalid(str(exc)) from exc
     if capability_id in analytic_processing.READ_IDS:
         try:
             return request_id, context, analytic_processing.normalize_parameters(capability_id, parameters)
@@ -2807,6 +2814,8 @@ def _valid_account_status_item(item: Any, company_id: int) -> bool:
 
 
 def _valid_item(capability_id: str, item: Any, company_id: int) -> bool:
+    if capability_id == company_processing.GET_ID:
+        return company_processing.valid_read_item(item, company_id)
     if capability_id in analytic_processing.READ_IDS:
         return analytic_processing.valid_read_item(capability_id, item, company_id)
     if capability_id == journal_processing.GET_ID:
@@ -3083,6 +3092,10 @@ def read_core_object(
                 "The requested accounting object was not found.",
                 exit_code=4,
             )
+        if capability_id == company_processing.GET_ID:
+            if items[0]["id"] != company_id:
+                raise _failed("Odoo returned another company's settings.")
+            return items[0]
         if capability_id in analytic_processing.READ_IDS:
             expected = (company_id if capability_id == analytic_processing.DISTRIBUTION_ID
                         else parameters["plan_id"] if capability_id == analytic_processing.APPLICABILITY_ID

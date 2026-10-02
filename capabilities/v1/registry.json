@@ -36462,6 +36462,955 @@
         ]
       },
       "handler_key": "core_write"
+    },
+    "company.bill_processing_policy.update": {
+      "summary": {
+        "zh_CN": "设置公司快速录入和账单自动审核选项",
+        "en_US": "Set company quick-entry and bill auto-validation options"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "ir.default",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/company.py",
+          "_references/base/models/res_company.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/company.bill_processing_policy.update.request.schema.json",
+        "response": "schemas/v1/company.bill_processing_policy.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "base.group_erp_manager"
+        ],
+        "acl": [
+          "ir.default:read",
+          "res.company:read",
+          "res.company:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_res_company_write_with_fixed_operation_fields_as_business_user",
+        "verify": "same_savepoint_configuration_reread_with_native_constraints",
+        "idempotency": "serial_current_target_setting_recheck_without_operation_store_or_concurrent_exactly_once",
+        "reverse": "restore_prior_settings_subject_to_native_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_company_processing_batch.py"
+          ],
+          "reason": "Closed operation-specific settings, native typed choices and null clearing, public CLI/schemas/confirmation, deterministic keys and contextual company/result binding. Real ORM behavior belongs to the shared integration workflow."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_company_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs and two reused journal-entry setup IDs; fourteen setting replays plus one posting replay per alias. Ordinary business-user settings read succeeds and native company write is denied before a transaction-local ERP-access group grant. All seven fixed native company writes persist and serial target-state replay is verified. Native April31 fiscal-end validation and existing-accounting price-method denial return the actual ValidationError/business_rule_error and restore all partial changes; February29 is natively accepted. Current-company reads, relation null clearing, all three quick-edit choices and disabled null mode are checked. All seven relation fields reject foreign and missing references; exchange journal selection rejects non-general sale journals. Posted entry identities/accounts/amounts/residuals/taxes, the other company and non-target lock/audit/chart/currency/prefix configuration are unchanged. Actual product-category default values match native company accounts after company.write; fresh cursors prove existing company settings, all ir.default rows, exact groups and synthetic objects roll back, including before rethrow on failure. The test loads the actual immutable CLI registry once per worker but retains real request/response validation and native ACLs. No concurrent exactly-once, child-company native scenario, real invoice rendering/delivery, automatic bill posting or credit-limit amount mutation claim. No business DB, installed addon/source or service/configuration changes; no ERP grant persisted."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed current-company settings are implemented; native company write requires access-rights administration and reference ACLs. Ordinary accountant permission is not implied."
+      },
+      "routing": {
+        "object": "company",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置公司快速录入和账单自动审核选项"
+          ],
+          "en_US": [
+            "Set company quick-entry and bill auto-validation options"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改锁账或审计配置",
+            "绕过原生含税约束或公司权限",
+            "实际自动审核历史账单"
+          ],
+          "en_US": [
+            "Changing locks or audit controls",
+            "Bypassing native tax-price constraints or company ACLs",
+            "Automatically posting existing bills"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "company.cash_discount_accounts.assign": {
+      "summary": {
+        "zh_CN": "设置公司现金折扣损益科目",
+        "en_US": "Assign company cash-discount gain and loss accounts"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "ir.default",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/company.py",
+          "_references/base/models/res_company.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/company.cash_discount_accounts.assign.request.schema.json",
+        "response": "schemas/v1/company.cash_discount_accounts.assign.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "base.group_erp_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "ir.default:read",
+          "res.company:read",
+          "res.company:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_res_company_write_with_fixed_operation_fields_as_business_user",
+        "verify": "same_savepoint_configuration_reread_with_native_constraints",
+        "idempotency": "serial_current_target_setting_recheck_without_operation_store_or_concurrent_exactly_once",
+        "reverse": "restore_prior_settings_subject_to_native_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_company_processing_batch.py"
+          ],
+          "reason": "Closed operation-specific settings, native typed choices and null clearing, public CLI/schemas/confirmation, deterministic keys and contextual company/result binding. Real ORM behavior belongs to the shared integration workflow."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_company_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs and two reused journal-entry setup IDs; fourteen setting replays plus one posting replay per alias. Ordinary business-user settings read succeeds and native company write is denied before a transaction-local ERP-access group grant. All seven fixed native company writes persist and serial target-state replay is verified. Native April31 fiscal-end validation and existing-accounting price-method denial return the actual ValidationError/business_rule_error and restore all partial changes; February29 is natively accepted. Current-company reads, relation null clearing, all three quick-edit choices and disabled null mode are checked. All seven relation fields reject foreign and missing references; exchange journal selection rejects non-general sale journals. Posted entry identities/accounts/amounts/residuals/taxes, the other company and non-target lock/audit/chart/currency/prefix configuration are unchanged. Actual product-category default values match native company accounts after company.write; fresh cursors prove existing company settings, all ir.default rows, exact groups and synthetic objects roll back, including before rethrow on failure. The test loads the actual immutable CLI registry once per worker but retains real request/response validation and native ACLs. No concurrent exactly-once, child-company native scenario, real invoice rendering/delivery, automatic bill posting or credit-limit amount mutation claim. No business DB, installed addon/source or service/configuration changes; no ERP grant persisted."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed current-company settings are implemented; native company write requires access-rights administration and reference ACLs. Ordinary accountant permission is not implied."
+      },
+      "routing": {
+        "object": "company",
+        "actions": [
+          "assign"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置公司现金折扣损益科目"
+          ],
+          "en_US": [
+            "Assign company cash-discount gain and loss accounts"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改锁账或审计配置",
+            "绕过原生含税约束或公司权限",
+            "实际自动审核历史账单"
+          ],
+          "en_US": [
+            "Changing locks or audit controls",
+            "Bypassing native tax-price constraints or company ACLs",
+            "Automatically posting existing bills"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "company.credit_policy.update": {
+      "summary": {
+        "zh_CN": "设置公司信用限额启用选项",
+        "en_US": "Set the company credit-limit enable option"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "ir.default",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/company.py",
+          "_references/base/models/res_company.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/company.credit_policy.update.request.schema.json",
+        "response": "schemas/v1/company.credit_policy.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "base.group_erp_manager"
+        ],
+        "acl": [
+          "ir.default:read",
+          "res.company:read",
+          "res.company:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_res_company_write_with_fixed_operation_fields_as_business_user",
+        "verify": "same_savepoint_configuration_reread_with_native_constraints",
+        "idempotency": "serial_current_target_setting_recheck_without_operation_store_or_concurrent_exactly_once",
+        "reverse": "restore_prior_settings_subject_to_native_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_company_processing_batch.py"
+          ],
+          "reason": "Closed operation-specific settings, native typed choices and null clearing, public CLI/schemas/confirmation, deterministic keys and contextual company/result binding. Real ORM behavior belongs to the shared integration workflow."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_company_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs and two reused journal-entry setup IDs; fourteen setting replays plus one posting replay per alias. Ordinary business-user settings read succeeds and native company write is denied before a transaction-local ERP-access group grant. All seven fixed native company writes persist and serial target-state replay is verified. Native April31 fiscal-end validation and existing-accounting price-method denial return the actual ValidationError/business_rule_error and restore all partial changes; February29 is natively accepted. Current-company reads, relation null clearing, all three quick-edit choices and disabled null mode are checked. All seven relation fields reject foreign and missing references; exchange journal selection rejects non-general sale journals. Posted entry identities/accounts/amounts/residuals/taxes, the other company and non-target lock/audit/chart/currency/prefix configuration are unchanged. Actual product-category default values match native company accounts after company.write; fresh cursors prove existing company settings, all ir.default rows, exact groups and synthetic objects roll back, including before rethrow on failure. The test loads the actual immutable CLI registry once per worker but retains real request/response validation and native ACLs. No concurrent exactly-once, child-company native scenario, real invoice rendering/delivery, automatic bill posting or credit-limit amount mutation claim. No business DB, installed addon/source or service/configuration changes; no ERP grant persisted."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed current-company settings are implemented; native company write requires access-rights administration and reference ACLs. Ordinary accountant permission is not implied."
+      },
+      "routing": {
+        "object": "company",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "设置公司信用限额启用选项"
+          ],
+          "en_US": [
+            "Set the company credit-limit enable option"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改锁账或审计配置",
+            "绕过原生含税约束或公司权限",
+            "实际自动审核历史账单"
+          ],
+          "en_US": [
+            "Changing locks or audit controls",
+            "Bypassing native tax-price constraints or company ACLs",
+            "Automatically posting existing bills"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "company.exchange_configuration.update": {
+      "summary": {
+        "zh_CN": "修改公司汇兑损益配置",
+        "en_US": "Update company exchange gain and loss configuration"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "account.journal",
+          "ir.default",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/company.py",
+          "_references/base/models/res_company.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/company.exchange_configuration.update.request.schema.json",
+        "response": "schemas/v1/company.exchange_configuration.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "base.group_erp_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.journal:read",
+          "ir.default:read",
+          "res.company:read",
+          "res.company:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_res_company_write_with_fixed_operation_fields_as_business_user",
+        "verify": "same_savepoint_configuration_reread_with_native_constraints",
+        "idempotency": "serial_current_target_setting_recheck_without_operation_store_or_concurrent_exactly_once",
+        "reverse": "restore_prior_settings_subject_to_native_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_company_processing_batch.py"
+          ],
+          "reason": "Closed operation-specific settings, native typed choices and null clearing, public CLI/schemas/confirmation, deterministic keys and contextual company/result binding. Real ORM behavior belongs to the shared integration workflow."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_company_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs and two reused journal-entry setup IDs; fourteen setting replays plus one posting replay per alias. Ordinary business-user settings read succeeds and native company write is denied before a transaction-local ERP-access group grant. All seven fixed native company writes persist and serial target-state replay is verified. Native April31 fiscal-end validation and existing-accounting price-method denial return the actual ValidationError/business_rule_error and restore all partial changes; February29 is natively accepted. Current-company reads, relation null clearing, all three quick-edit choices and disabled null mode are checked. All seven relation fields reject foreign and missing references; exchange journal selection rejects non-general sale journals. Posted entry identities/accounts/amounts/residuals/taxes, the other company and non-target lock/audit/chart/currency/prefix configuration are unchanged. Actual product-category default values match native company accounts after company.write; fresh cursors prove existing company settings, all ir.default rows, exact groups and synthetic objects roll back, including before rethrow on failure. The test loads the actual immutable CLI registry once per worker but retains real request/response validation and native ACLs. No concurrent exactly-once, child-company native scenario, real invoice rendering/delivery, automatic bill posting or credit-limit amount mutation claim. No business DB, installed addon/source or service/configuration changes; no ERP grant persisted."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed current-company settings are implemented; native company write requires access-rights administration and reference ACLs. Ordinary accountant permission is not implied."
+      },
+      "routing": {
+        "object": "company",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "修改公司汇兑损益配置"
+          ],
+          "en_US": [
+            "Update company exchange gain and loss configuration"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改锁账或审计配置",
+            "绕过原生含税约束或公司权限",
+            "实际自动审核历史账单"
+          ],
+          "en_US": [
+            "Changing locks or audit controls",
+            "Bypassing native tax-price constraints or company ACLs",
+            "Automatically posting existing bills"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "company.fiscal_year_end.update": {
+      "summary": {
+        "zh_CN": "修改公司会计年度结束日",
+        "en_US": "Update the root-company fiscal year end"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "ir.default",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/company.py",
+          "_references/base/models/res_company.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/company.fiscal_year_end.update.request.schema.json",
+        "response": "schemas/v1/company.fiscal_year_end.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "base.group_erp_manager"
+        ],
+        "acl": [
+          "ir.default:read",
+          "res.company:read",
+          "res.company:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_res_company_write_with_fixed_operation_fields_as_business_user",
+        "verify": "same_savepoint_configuration_reread_with_native_constraints",
+        "idempotency": "serial_current_target_setting_recheck_without_operation_store_or_concurrent_exactly_once",
+        "reverse": "restore_prior_settings_subject_to_native_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_company_processing_batch.py"
+          ],
+          "reason": "Closed operation-specific settings, native typed choices and null clearing, public CLI/schemas/confirmation, deterministic keys and contextual company/result binding. Real ORM behavior belongs to the shared integration workflow."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_company_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs and two reused journal-entry setup IDs; fourteen setting replays plus one posting replay per alias. Ordinary business-user settings read succeeds and native company write is denied before a transaction-local ERP-access group grant. All seven fixed native company writes persist and serial target-state replay is verified. Native April31 fiscal-end validation and existing-accounting price-method denial return the actual ValidationError/business_rule_error and restore all partial changes; February29 is natively accepted. Current-company reads, relation null clearing, all three quick-edit choices and disabled null mode are checked. All seven relation fields reject foreign and missing references; exchange journal selection rejects non-general sale journals. Posted entry identities/accounts/amounts/residuals/taxes, the other company and non-target lock/audit/chart/currency/prefix configuration are unchanged. Actual product-category default values match native company accounts after company.write; fresh cursors prove existing company settings, all ir.default rows, exact groups and synthetic objects roll back, including before rethrow on failure. The test loads the actual immutable CLI registry once per worker but retains real request/response validation and native ACLs. No concurrent exactly-once, child-company native scenario, real invoice rendering/delivery, automatic bill posting or credit-limit amount mutation claim. No business DB, installed addon/source or service/configuration changes; no ERP grant persisted."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed current-company settings are implemented; native company write requires access-rights administration and reference ACLs. Ordinary accountant permission is not implied."
+      },
+      "routing": {
+        "object": "company",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "修改公司会计年度结束日"
+          ],
+          "en_US": [
+            "Update the root-company fiscal year end"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改锁账或审计配置",
+            "绕过原生含税约束或公司权限",
+            "实际自动审核历史账单"
+          ],
+          "en_US": [
+            "Changing locks or audit controls",
+            "Bypassing native tax-price constraints or company ACLs",
+            "Automatically posting existing bills"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "company.invoice_display.update": {
+      "summary": {
+        "zh_CN": "修改公司发票显示选项",
+        "en_US": "Update company invoice display options"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "ir.default",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/company.py",
+          "_references/base/models/res_company.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/company.invoice_display.update.request.schema.json",
+        "response": "schemas/v1/company.invoice_display.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "base.group_erp_manager"
+        ],
+        "acl": [
+          "ir.default:read",
+          "res.company:read",
+          "res.company:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_res_company_write_with_fixed_operation_fields_as_business_user",
+        "verify": "same_savepoint_configuration_reread_with_native_constraints",
+        "idempotency": "serial_current_target_setting_recheck_without_operation_store_or_concurrent_exactly_once",
+        "reverse": "restore_prior_settings_subject_to_native_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_company_processing_batch.py"
+          ],
+          "reason": "Closed operation-specific settings, native typed choices and null clearing, public CLI/schemas/confirmation, deterministic keys and contextual company/result binding. Real ORM behavior belongs to the shared integration workflow."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_company_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs and two reused journal-entry setup IDs; fourteen setting replays plus one posting replay per alias. Ordinary business-user settings read succeeds and native company write is denied before a transaction-local ERP-access group grant. All seven fixed native company writes persist and serial target-state replay is verified. Native April31 fiscal-end validation and existing-accounting price-method denial return the actual ValidationError/business_rule_error and restore all partial changes; February29 is natively accepted. Current-company reads, relation null clearing, all three quick-edit choices and disabled null mode are checked. All seven relation fields reject foreign and missing references; exchange journal selection rejects non-general sale journals. Posted entry identities/accounts/amounts/residuals/taxes, the other company and non-target lock/audit/chart/currency/prefix configuration are unchanged. Actual product-category default values match native company accounts after company.write; fresh cursors prove existing company settings, all ir.default rows, exact groups and synthetic objects roll back, including before rethrow on failure. The test loads the actual immutable CLI registry once per worker but retains real request/response validation and native ACLs. No concurrent exactly-once, child-company native scenario, real invoice rendering/delivery, automatic bill posting or credit-limit amount mutation claim. No business DB, installed addon/source or service/configuration changes; no ERP grant persisted."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed current-company settings are implemented; native company write requires access-rights administration and reference ACLs. Ordinary accountant permission is not implied."
+      },
+      "routing": {
+        "object": "company",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "修改公司发票显示选项"
+          ],
+          "en_US": [
+            "Update company invoice display options"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改锁账或审计配置",
+            "绕过原生含税约束或公司权限",
+            "实际自动审核历史账单"
+          ],
+          "en_US": [
+            "Changing locks or audit controls",
+            "Bypassing native tax-price constraints or company ACLs",
+            "Automatically posting existing bills"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
+    },
+    "company.processing_settings.get": {
+      "summary": {
+        "zh_CN": "查看公司会计业务设置",
+        "en_US": "Read current-company accounting operating settings"
+      },
+      "domain": "accounting_configuration",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/company.py",
+          "_references/base/models/res_company.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/company.processing_settings.get.request.schema.json",
+        "response": "schemas/v1/company.processing_settings.get.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "res.company:read"
+        ]
+      },
+      "strategies": {
+        "preview": "request_schema_validation",
+        "execute": "fixed_context_company_field_read",
+        "verify": "closed_typed_company_singleton_binding",
+        "idempotency": "read_only",
+        "reverse": "not_applicable"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_company_processing_batch.py"
+          ],
+          "reason": "Closed operation-specific settings, native typed choices and null clearing, public CLI/schemas/confirmation, deterministic keys and contextual company/result binding. Real ORM behavior belongs to the shared integration workflow."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_company_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs and two reused journal-entry setup IDs; fourteen setting replays plus one posting replay per alias. Ordinary business-user settings read succeeds and native company write is denied before a transaction-local ERP-access group grant. All seven fixed native company writes persist and serial target-state replay is verified. Native April31 fiscal-end validation and existing-accounting price-method denial return the actual ValidationError/business_rule_error and restore all partial changes; February29 is natively accepted. Current-company reads, relation null clearing, all three quick-edit choices and disabled null mode are checked. All seven relation fields reject foreign and missing references; exchange journal selection rejects non-general sale journals. Posted entry identities/accounts/amounts/residuals/taxes, the other company and non-target lock/audit/chart/currency/prefix configuration are unchanged. Actual product-category default values match native company accounts after company.write; fresh cursors prove existing company settings, all ir.default rows, exact groups and synthetic objects roll back, including before rethrow on failure. The test loads the actual immutable CLI registry once per worker but retains real request/response validation and native ACLs. No concurrent exactly-once, child-company native scenario, real invoice rendering/delivery, automatic bill posting or credit-limit amount mutation claim. No business DB, installed addon/source or service/configuration changes; no ERP grant persisted."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed current-company read is implemented; availability requires a configured context, the native read-only accounting group and company read access, not company-write administration."
+      },
+      "routing": {
+        "object": "company",
+        "actions": [
+          "get"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "查看公司会计业务设置"
+          ],
+          "en_US": [
+            "Read current-company accounting operating settings"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改锁账或审计配置",
+            "绕过原生含税约束或公司权限",
+            "实际自动审核历史账单"
+          ],
+          "en_US": [
+            "Changing locks or audit controls",
+            "Bypassing native tax-price constraints or company ACLs",
+            "Automatically posting existing bills"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "company_processing_settings_get"
+    },
+    "company.tax_policy.update": {
+      "summary": {
+        "zh_CN": "修改公司默认税和计算方式",
+        "en_US": "Update company default taxes and tax computation"
+      },
+      "domain": "accounting_configuration",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.tax",
+          "ir.default",
+          "res.company"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/company.py",
+          "_references/base/models/res_company.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/company.tax_policy.update.request.schema.json",
+        "response": "schemas/v1/company.tax_policy.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "base.group_erp_manager"
+        ],
+        "acl": [
+          "account.tax:read",
+          "ir.default:read",
+          "res.company:read",
+          "res.company:write"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_res_company_write_with_fixed_operation_fields_as_business_user",
+        "verify": "same_savepoint_configuration_reread_with_native_constraints",
+        "idempotency": "serial_current_target_setting_recheck_without_operation_store_or_concurrent_exactly_once",
+        "reverse": "restore_prior_settings_subject_to_native_constraints"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_company_processing_batch.py"
+          ],
+          "reason": "Closed operation-specific settings, native typed choices and null clearing, public CLI/schemas/confirmation, deterministic keys and contextual company/result binding. Real ORM behavior belongs to the shared integration workflow."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_company_processing_batch_live.py"
+          ],
+          "reason": "One shared rollback-only public CLI/real-ORM workflow passed both isolated aliases as uid 5/su=False/company 1: eight new IDs and two reused journal-entry setup IDs; fourteen setting replays plus one posting replay per alias. Ordinary business-user settings read succeeds and native company write is denied before a transaction-local ERP-access group grant. All seven fixed native company writes persist and serial target-state replay is verified. Native April31 fiscal-end validation and existing-accounting price-method denial return the actual ValidationError/business_rule_error and restore all partial changes; February29 is natively accepted. Current-company reads, relation null clearing, all three quick-edit choices and disabled null mode are checked. All seven relation fields reject foreign and missing references; exchange journal selection rejects non-general sale journals. Posted entry identities/accounts/amounts/residuals/taxes, the other company and non-target lock/audit/chart/currency/prefix configuration are unchanged. Actual product-category default values match native company accounts after company.write; fresh cursors prove existing company settings, all ir.default rows, exact groups and synthetic objects roll back, including before rethrow on failure. The test loads the actual immutable CLI registry once per worker but retains real request/response validation and native ACLs. No concurrent exactly-once, child-company native scenario, real invoice rendering/delivery, automatic bill posting or credit-limit amount mutation claim. No business DB, installed addon/source or service/configuration changes; no ERP grant persisted."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed current-company settings are implemented; native company write requires access-rights administration and reference ACLs. Ordinary accountant permission is not implied."
+      },
+      "routing": {
+        "object": "company",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "修改公司默认税和计算方式"
+          ],
+          "en_US": [
+            "Update company default taxes and tax computation"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "修改锁账或审计配置",
+            "绕过原生含税约束或公司权限",
+            "实际自动审核历史账单"
+          ],
+          "en_US": [
+            "Changing locks or audit controls",
+            "Bypassing native tax-price constraints or company ACLs",
+            "Automatically posting existing bills"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "core_write"
     }
   }
 }

@@ -1,0 +1,260 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/company.processing_settings.get.response.schema.json",
+  "title": "company.processing_settings.get response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "success",
+    "capability",
+    "status",
+    "data",
+    "warnings",
+    "error",
+    "odoo",
+    "audit"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v1"
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "success": {
+      "type": "boolean"
+    },
+    "capability": {
+      "const": "company.processing_settings.get"
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "data": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/item"
+        }
+      ]
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "error": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "response.schema.json#/$defs/error"
+        }
+      ]
+    },
+    "odoo": {
+      "$ref": "response.schema.json#/$defs/odoo"
+    },
+    "audit": {
+      "$ref": "response.schema.json#/$defs/audit"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "success": {
+            "const": true
+          }
+        },
+        "required": [
+          "success"
+        ]
+      },
+      "then": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "const": "verified"
+          },
+          "data": {
+            "$ref": "#/$defs/item"
+          },
+          "error": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "data": {
+            "type": "null"
+          },
+          "error": {
+            "$ref": "response.schema.json#/$defs/error"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "company_id",
+        "account_journal_early_pay_discount_gain_account_id",
+        "account_journal_early_pay_discount_loss_account_id",
+        "account_price_include",
+        "account_purchase_tax_id",
+        "account_sale_tax_id",
+        "account_use_credit_limit",
+        "autopost_bills",
+        "currency_exchange_journal_id",
+        "display_invoice_amount_total_words",
+        "display_invoice_tax_company_currency",
+        "expense_currency_exchange_account_id",
+        "fiscalyear_last_day",
+        "fiscalyear_last_month",
+        "income_currency_exchange_account_id",
+        "link_qr_code",
+        "qr_code",
+        "quick_edit_mode",
+        "tax_calculation_rounding_method"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "company_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "account_journal_early_pay_discount_gain_account_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "account_journal_early_pay_discount_loss_account_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "account_price_include": {
+          "enum": [
+            "tax_excluded",
+            "tax_included"
+          ]
+        },
+        "account_purchase_tax_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "account_sale_tax_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "account_use_credit_limit": {
+          "type": "boolean"
+        },
+        "autopost_bills": {
+          "type": "boolean"
+        },
+        "currency_exchange_journal_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "display_invoice_amount_total_words": {
+          "type": "boolean"
+        },
+        "display_invoice_tax_company_currency": {
+          "type": "boolean"
+        },
+        "expense_currency_exchange_account_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "fiscalyear_last_day": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 31
+        },
+        "fiscalyear_last_month": {
+          "enum": [
+            "1",
+            "10",
+            "11",
+            "12",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9"
+          ]
+        },
+        "income_currency_exchange_account_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "link_qr_code": {
+          "type": "boolean"
+        },
+        "qr_code": {
+          "type": "boolean"
+        },
+        "quick_edit_mode": {
+          "enum": [
+            "in_invoices",
+            "out_and_in_invoices",
+            "out_invoices",
+            null
+          ]
+        },
+        "tax_calculation_rounding_method": {
+          "enum": [
+            "round_globally",
+            "round_per_line"
+          ]
+        }
+      }
+    }
+  }
+}

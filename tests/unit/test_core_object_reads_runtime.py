@@ -16,6 +16,7 @@ from odoo_accounting_cli_v4.capabilities.core_object_reads import (
 
 EXPECTED_CAPABILITY_IDS = frozenset(
     {
+        "company.processing_settings.get",
         "analytic.account.balance.inspect",
         "analytic.account.invoice_usage.inspect",
         "analytic.applicability.resolve",
@@ -179,6 +180,7 @@ GET_ID_FIELDS = {
 }
 
 PRIMARY_MODELS = {
+    "company.processing_settings.get": "res.company",
     "analytic.account.balance.inspect": "account.analytic.account",
     "analytic.account.invoice_usage.inspect": "account.analytic.account",
     "analytic.applicability.resolve": "account.analytic.plan",
@@ -1482,6 +1484,8 @@ def _dispatch(
 
 
 def _parameters(capability_id: str) -> dict[str, Any]:
+    if capability_id == "company.processing_settings.get":
+        return {}
     if capability_id in {
         "analytic.account.balance.inspect", "analytic.account.invoice_usage.inspect",
         "analytic.applicability.resolve", "analytic.distribution.resolve",
@@ -3893,6 +3897,7 @@ def test_each_capability_gates_its_primary_model_and_read_acl(
 ) -> None:
     env, _ = _fixture()
     primary_model = PRIMARY_MODELS[capability_id]
+    env.registry.models = dict(env.registry.models)
     env.registry.models.pop(primary_model)
     missing = _dispatch(env, capability_id, _parameters(capability_id))
     assert missing["module_installed"] is False

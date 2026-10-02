@@ -19,6 +19,7 @@ from typing import Any
 
 from odoo_accounting_cli_v4 import account_processing_contracts as account_processing
 from odoo_accounting_cli_v4 import analytic_processing_contracts as analytic_processing
+from odoo_accounting_cli_v4 import company_processing_contracts as company_processing
 from odoo_accounting_cli_v4 import fiscal_mapping_contracts as fiscal_mappings
 from odoo_accounting_cli_v4 import (
     invoice_presentation_contracts as invoice_presentation,
@@ -40,7 +41,7 @@ from odoo_accounting_cli_v4 import report_budget_contracts as report_budgets
 from odoo_accounting_cli_v4 import tax_processing_contracts as tax_processing
 
 ACTION = "accounting.core_write.execute"
-CAPABILITIES = analytic_processing.CAPABILITY_IDS | journal_processing.CAPABILITY_IDS | account_processing.CAPABILITY_IDS | tax_processing.CAPABILITY_IDS | payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
+CAPABILITIES = company_processing.CAPABILITY_IDS | analytic_processing.CAPABILITY_IDS | journal_processing.CAPABILITY_IDS | account_processing.CAPABILITY_IDS | tax_processing.CAPABILITY_IDS | payment_term_processing.CAPABILITY_IDS | reconciliation_processing.CAPABILITY_IDS | payment_processing.CAPABILITY_IDS | invoice_presentation.CAPABILITY_IDS | move_processing.CAPABILITY_IDS | partner_preferences.CAPABILITY_IDS | payment_configuration.CAPABILITY_IDS | fiscal_mappings.CAPABILITY_IDS | report_budgets.CAPABILITY_IDS | frozenset(
     {
         "customer_invoice.create",
         "vendor_bill.create",
@@ -3328,6 +3329,28 @@ def _protocol(failure_type: type[Exception]) -> Exception:
     )
 
 
+_PARAMETER_KEYS.update(company_processing.PARAMETER_KEYS)
+_GROUPS['company.bill_processing_policy.update'] = "base.group_erp_manager"
+_MODELS['company.bill_processing_policy.update'] = {'res.company', 'ir.default'}
+_ACCESS['company.bill_processing_policy.update'] = {('ir.default', 'read'), ('res.company', 'write'), ('res.company', 'read')}
+_GROUPS['company.cash_discount_accounts.assign'] = "base.group_erp_manager"
+_MODELS['company.cash_discount_accounts.assign'] = {'res.company', 'account.account', 'ir.default'}
+_ACCESS['company.cash_discount_accounts.assign'] = {('ir.default', 'read'), ('res.company', 'write'), ('account.account', 'read'), ('res.company', 'read')}
+_GROUPS['company.credit_policy.update'] = "base.group_erp_manager"
+_MODELS['company.credit_policy.update'] = {'res.company', 'ir.default'}
+_ACCESS['company.credit_policy.update'] = {('ir.default', 'read'), ('res.company', 'write'), ('res.company', 'read')}
+_GROUPS['company.exchange_configuration.update'] = "base.group_erp_manager"
+_MODELS['company.exchange_configuration.update'] = {'res.company', 'account.account', 'ir.default', 'account.journal'}
+_ACCESS['company.exchange_configuration.update'] = {('res.company', 'read'), ('ir.default', 'read'), ('res.company', 'write'), ('account.journal', 'read'), ('account.account', 'read')}
+_GROUPS['company.fiscal_year_end.update'] = "base.group_erp_manager"
+_MODELS['company.fiscal_year_end.update'] = {'res.company', 'ir.default'}
+_ACCESS['company.fiscal_year_end.update'] = {('ir.default', 'read'), ('res.company', 'write'), ('res.company', 'read')}
+_GROUPS['company.invoice_display.update'] = "base.group_erp_manager"
+_MODELS['company.invoice_display.update'] = {'res.company', 'ir.default'}
+_ACCESS['company.invoice_display.update'] = {('ir.default', 'read'), ('res.company', 'write'), ('res.company', 'read')}
+_GROUPS['company.tax_policy.update'] = "base.group_erp_manager"
+_MODELS['company.tax_policy.update'] = {'res.company', 'ir.default', 'account.tax'}
+_ACCESS['company.tax_policy.update'] = {('ir.default', 'read'), ('account.tax', 'read'), ('res.company', 'write'), ('res.company', 'read')}
 _PARAMETER_KEYS.update(analytic_processing.PARAMETER_KEYS)
 _GROUPS['analytic.account.delete'] = "account.group_account_manager"
 _MODELS['analytic.account.delete'] = {'res.company', 'account.analytic.account'}
@@ -5530,6 +5553,11 @@ def _valid_parameters(
 ) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id in company_processing.CAPABILITY_IDS:
+        try:
+            return company_processing.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
     if capability_id in analytic_processing.CAPABILITY_IDS:
         try:
             return analytic_processing.normalize_parameters(capability_id, parameters) == parameters
@@ -6173,6 +6201,8 @@ def _validated_payload(
 def _deterministic_key(
     capability_id: str, parameters: dict[str, Any], company_id: int
 ) -> str | None:
+    if capability_id in company_processing.CAPABILITY_IDS:
+        return company_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in analytic_processing.CAPABILITY_IDS:
         return analytic_processing.idempotency_key(capability_id, parameters, company_id)
     if capability_id in journal_processing.CAPABILITY_IDS:
@@ -17857,6 +17887,40 @@ def _journal_processing_values(journal: Any) -> dict[str, Any]:
     return values
 
 
+def _company_processing_values(company: Any) -> dict[str, Any]:
+    values = {field: getattr(company, field) for field in company_processing.SETTING_FIELDS}
+    for field in company_processing.RELATION_MODELS:
+        values[field] = values[field].id or None
+    values["quick_edit_mode"] = values["quick_edit_mode"] or None
+    return values
+
+
+def _write_company_processing(
+    env: Any, capability_id: str, parameters: dict[str, Any],
+    company_id: int, failure_type: type[Exception],
+) -> tuple[dict[str, Any], bool]:
+    with env.cr.savepoint():
+        company = _search_one(env, "res.company", [("id", "=", company_id)], company_id, failure_type)
+        changes = parameters["changes"]
+        if capability_id == "company.fiscal_year_end.update" and company.parent_id:
+            raise _fail(failure_type, "company_unavailable", "Fiscal year-end is root-delegated; target its root company explicitly.", exit_code=3)
+        for field, value in changes.items():
+            model = company_processing.RELATION_MODELS.get(field)
+            if model and value is not None:
+                domain = [("company_ids", "in", [company_id])] if model == "account.account" else [("company_id", "=", company_id)]
+                if model == "account.journal":
+                    domain.append(("type", "=", "general"))
+                _ensure_ids(env, model, {value}, domain, company_id, failure_type)
+        current = _company_processing_values(company)
+        replay = all(current[field] == value for field, value in changes.items())
+        if not replay:
+            company.write({field: False if value is None else value for field, value in changes.items()})
+            company.invalidate_recordset()
+        if any(_company_processing_values(company)[field] != value for field, value in changes.items()):
+            raise _fail(failure_type, "odoo_write_error", "Native company settings did not persist.", exit_code=6)
+        return _config_result(company, "res.company", company_id), replay
+
+
 def _write_analytic_processing(
     env: Any, capability_id: str, parameters: dict[str, Any],
     company_id: int, failure_type: type[Exception],
@@ -20336,6 +20400,8 @@ def _dispatch_allowed(
     marker: str,
     failure_type: type[Exception],
 ) -> tuple[dict[str, Any], bool]:
+    if capability_id in company_processing.CAPABILITY_IDS:
+        return _write_company_processing(env, capability_id, parameters, company_id, failure_type)
     if capability_id in analytic_processing.CAPABILITY_IDS:
         return _write_analytic_processing(env, capability_id, parameters, company_id, failure_type)
     if capability_id in journal_processing.CAPABILITY_IDS:

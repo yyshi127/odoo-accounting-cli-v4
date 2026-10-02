@@ -11,6 +11,7 @@ from typing import Any
 
 from odoo_accounting_cli_v4 import account_processing_contracts as account_processing
 from odoo_accounting_cli_v4 import analytic_processing_contracts as analytic_processing
+from odoo_accounting_cli_v4 import company_processing_contracts as company_processing
 from odoo_accounting_cli_v4 import (
     invoice_presentation_contracts as invoice_presentation,
 )
@@ -82,6 +83,7 @@ CAPABILITY_IDS = frozenset(
         "analytic.account.invoice_usage.inspect",
         "analytic.applicability.resolve",
         "analytic.distribution.resolve",
+        "company.processing_settings.get",
         "journal.processing_settings.get",
         "account.account.processing_settings.get",
         "tax.processing_settings.get",
@@ -826,6 +828,7 @@ _REQUIRED_MODELS = {
     'analytic.account.invoice_usage.inspect': ('res.company', 'account.analytic.account', 'account.move', 'account.move.line'),
     'analytic.applicability.resolve': ('res.company', 'account.analytic.plan', 'account.analytic.applicability', 'account.account', 'product.product', 'product.category'),
     'analytic.distribution.resolve': ('res.company', 'account.analytic.distribution.model', 'account.analytic.account', 'account.analytic.plan', 'account.account', 'res.partner', 'res.partner.category', 'product.product', 'product.category'),
+    "company.processing_settings.get": ("res.company",),
     "journal.processing_settings.get": ("res.company", "account.journal", "account.account", "ir.actions.report"),
     "account.account.processing_settings.get": ('res.company', 'account.account', 'account.group', 'account.account.tag', 'account.tax', 'res.currency', 'account.move.line'),
     "tax.processing_settings.get": ('res.company', 'account.tax', 'account.tax.repartition.line', 'account.move.line', 'account.reconcile.model.line'),
@@ -1649,6 +1652,11 @@ def _scope_domain(env: Any, capability_id: str, company_id: int) -> list[Any]:
 def _valid_parameters(capability_id: str, parameters: Any) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id == company_processing.GET_ID:
+        try:
+            return company_processing.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
     if capability_id in analytic_processing.READ_IDS:
         try:
             return analytic_processing.normalize_parameters(capability_id, parameters) == parameters
@@ -4649,6 +4657,20 @@ def _normalize_partner_preferences(env: Any, capability_id: str, rows: list[dict
     return result
 
 
+def _company_processing_rows(env: Any, company_id: int) -> list[dict[str, Any]]:
+    company = env["res.company"].with_context(allowed_company_ids=[company_id], active_test=False).search([("id", "=", company_id)], limit=1)
+    if not company:
+        return []
+    item = {field: getattr(company, field) for field in company_processing.SETTING_FIELDS}
+    for field in company_processing.RELATION_MODELS:
+        item[field] = item[field].id or None
+    item["quick_edit_mode"] = item["quick_edit_mode"] or None
+    item.update(id=company.id, company_id=company.id)
+    if not company_processing.valid_read_item(item, company_id):
+        raise ValueError("invalid native company-settings result")
+    return [item]
+
+
 def _analytic_processing_rows(
     env: Any, capability_id: str, parameters: dict[str, Any], company_id: int,
 ) -> list[dict[str, Any]]:
@@ -6517,7 +6539,9 @@ def dispatch(
 
         cursor_found = True
         removes_all_taxes = False
-        if capability_id in analytic_processing.READ_IDS:
+        if capability_id == company_processing.GET_ID:
+            rows = _company_processing_rows(env, company_id)
+        elif capability_id in analytic_processing.READ_IDS:
             rows = _analytic_processing_rows(env, capability_id, parameters, company_id)
         elif capability_id == tax_processing.LIST_ID:
             rows, cursor_found = _tax_usage_rows(env, parameters, company_id)
@@ -6600,7 +6624,7 @@ def dispatch(
                 cursor_found=False,
             )
 
-        if capability_id in analytic_processing.READ_IDS:
+        if capability_id == company_processing.GET_ID or capability_id in analytic_processing.READ_IDS:
             items = rows
         elif capability_id == journal_processing.GET_ID:
             items = _normalize_journal_processing(rows, company_id)

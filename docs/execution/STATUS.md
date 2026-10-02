@@ -2,6 +2,86 @@
 
 ## Current accounting phase — 2026-10-02
 
+524 registered IDs; 509 implemented handlers (239 reads, 270 writes);
+1024 schemas. Availability: 435 unconfigured, 74 degraded, 15 disabled.
+Enabled integrations: 505 implemented, three planned, one failed. Historical
+non-accounting extensions are included; these are not a complete accounting
+denominator, completion percentage or ordinary-runtime permission guarantee.
+
+Eight native current-company operating-settings capabilities: one contextual
+read and seven fixed writes for root fiscal-year end, default taxes/tax method,
+cash-discount accounts, exchange journal/accounts, invoice display, credit-limit
+enable option and quick-entry/bill auto-validation options. Reuse the existing
+configuration inspection and fiscal-year CRUD; no aliases to pad the count,
+arbitrary ORM field writer, new operation store or approval/release framework.
+
+One shared public CLI/real-ORM workflow passed both isolated aliases in23.73s
+as uid5/su=False/company1: eight new and two reused journal-entry setup IDs;
+fourteen setting replay variants plus one posting replay per alias. The ordinary
+accounting user can read the contextual singleton but cannot write company
+settings before a transaction-local base.group_erp_manager grant. Native company
+ACLs/reference access remain; no ERP grant persisted and no caller-sudo.
+
+Native company.write persists all seven setting groups and its product-category
+default values are verified. Nullable relation clearing and all three quick-edit
+choices plus disabled null mode work. April31 fiscal end and a multi-field price
+method change after accounting starts raise the actual native ValidationError,
+mapped to business_rule_error/exit6; rejected changes are atomic. Native February29
+is accepted. Fiscal end is root-delegated; a child must target its root explicitly
+rather than implicitly mutating another company. Smoke uses the existing roots,
+not a child-company or initial empty-company tax-price positive scenario.
+
+All seven relation fields reject foreign and missing IDs; the exchange journal
+must be an available current-company general journal, not a sale journal. Ledger
+account types follow native company checks, without extra rules that invalidate
+localization defaults. The other company and non-target lock/audit/chart/currency/
+account-prefix fields and posted-entry identities/accounts/amounts/residuals/tax
+links remain unchanged. Fresh cursors prove existing company settings, all
+ir.default rows, exact group membership and synthetic fixtures roll back,
+including before rethrow on failure. Native calls remain real; the actual
+immutable CLI registry is loaded once per test worker while request/response
+validation and every native ACL check still execute. No production-cache change.
+
+No concurrent exactly-once claim: replay compares the current target settings.
+No real invoice rendering/delivery, automatic posting of existing bills,
+credit-limit amount mutation or fiscal-year date-computation smoke claim.
+First native attempt failed13.82s only because a test asserted verified user ID
+after BridgeError occurred before a returned page. Production deliberately keeps
+unverified database/company/user/model metadata null. One-file test repair keeps
+the real caller/company and native ValidationError checks, then the same shared
+workflow passes. The failed worker's fresh rollback checks passed before rethrow;
+the failed log is retained, not counted as acceptance. Production mapping is
+unchanged. A generic read fixture's shared model-dictionary alias was likewise
+fixed only in the test; clean affected-read and focused-write reruns passed.
+
+Local:21 new unit cases;877 affected read cases2.13s;21 focused company-write/
+capability-set cases56.52s;19 registry cases197.50s with one known stale
+bank_statement_payment_maintenance deselection; final22 new/read-metadata cases
+25.39s. Server:21 new unit cases6.28s and final19 registry cases in
+134.81s with the same explicit stale deselection, not a full-suite pass.
+Ruff/diff and changed-code/schema/test privacy checks passed. Final staged-added
+privacy/diff checks passed for the exact33-path recovery commit; five historical
+whole-tree document findings remain, not a full-tree clean privacy claim.
+
+The initial31-file SHA allowlist backed up12 old files and deployed19 new ones.
+The one-file fixture repair and two-file metadata closure checked prior SHA and
+backed up targets first; all31 final code hashes match. Local STATUS/HANDOFF are
+updated, server overlays remain untouched. After the user's earlier pause the
+service baseline had changed externally; this run's fresh active PIDs/restart
+counts stayed stable, not a claim about historical continuity. No business DB,
+installed addon/source, service/configuration, Pi/V2/V3, actual external-send or
+disk-cleanup changes were made. Disk space remains tight; no implicit deletion.
+
+Unclosed limitations: asset.validate failed; product accounting-profile readback
+and two real external-send integrations are planned. Addon repair/actual sends
+need separate authority. Continue genuine native accounting gaps; full target
+coverage and an overall completion percentage remain unproven.
+
+Reproducibility: registry file SHA256 4b8fb3471670fd8ee92d1ab3e772d3f0e706edbe24337e5a86e9506b90ca8250;
+canonical registry SHA256 b0b7b29430a2a07901e93c818ab0798eb256d4f98984a91d0e37bdbbafccf5ea.
+
+## Previous checkpoint — native analytic processing, 2026-10-02
+
 516 registered IDs; 501 implemented handlers (238 reads, 263 writes);
 1008 schemas. Availability: 427 unconfigured, 74 degraded, 15 disabled.
 Enabled integrations: 497 implemented, three planned, one failed. Historical

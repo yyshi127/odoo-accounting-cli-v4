@@ -30,6 +30,7 @@ CAPABILITY_IDS = frozenset(
         "analytic.account.invoice_usage.inspect",
         "analytic.applicability.resolve",
         "analytic.distribution.resolve",
+        "company.processing_settings.get",
         "journal.processing_settings.get",
         "account.account.processing_settings.get",
         "tax.processing_settings.get",
