@@ -1,0 +1,309 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/tax.compute.response.schema.json",
+  "title": "tax.compute response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "success",
+    "capability",
+    "status",
+    "data",
+    "warnings",
+    "error",
+    "odoo",
+    "audit"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v1"
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "success": {
+      "type": "boolean"
+    },
+    "capability": {
+      "const": "tax.compute"
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "data": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/item"
+        }
+      ]
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "error": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "response.schema.json#/$defs/error"
+        }
+      ]
+    },
+    "odoo": {
+      "$ref": "response.schema.json#/$defs/odoo"
+    },
+    "audit": {
+      "$ref": "response.schema.json#/$defs/audit"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "success": {
+            "const": true
+          }
+        },
+        "required": [
+          "success"
+        ]
+      },
+      "then": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "const": "verified"
+          },
+          "data": {
+            "$ref": "#/$defs/item"
+          },
+          "error": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "data": {
+            "type": "null"
+          },
+          "error": {
+            "$ref": "response.schema.json#/$defs/error"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "company_id",
+        "currency_id",
+        "input",
+        "total_excluded",
+        "total_included",
+        "total_void",
+        "base_tag_ids",
+        "taxes"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "company_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "currency_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "input": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tax_ids",
+            "currency_id",
+            "price_unit",
+            "quantity",
+            "product_id",
+            "partner_id",
+            "is_refund",
+            "handle_price_include",
+            "include_caba_tags"
+          ],
+          "properties": {
+            "tax_ids": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "maxItems": 100
+            },
+            "currency_id": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "price_unit": {
+              "type": "string",
+              "maxLength": 256,
+              "pattern": "^(?:0|-?(?:0\\.[0-9]*[1-9]|[1-9][0-9]*(?:\\.[0-9]*[1-9])?))$(?![\\s\\S])"
+            },
+            "quantity": {
+              "type": "string",
+              "maxLength": 256,
+              "pattern": "^(?:0|-?(?:0\\.[0-9]*[1-9]|[1-9][0-9]*(?:\\.[0-9]*[1-9])?))$(?![\\s\\S])"
+            },
+            "product_id": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            },
+            "partner_id": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            },
+            "is_refund": {
+              "type": "boolean"
+            },
+            "handle_price_include": {
+              "type": "boolean"
+            },
+            "include_caba_tags": {
+              "type": "boolean"
+            }
+          }
+        },
+        "total_excluded": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^(?:0|-?(?:0\\.[0-9]*[1-9]|[1-9][0-9]*(?:\\.[0-9]*[1-9])?))$(?![\\s\\S])"
+        },
+        "total_included": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^(?:0|-?(?:0\\.[0-9]*[1-9]|[1-9][0-9]*(?:\\.[0-9]*[1-9])?))$(?![\\s\\S])"
+        },
+        "total_void": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^(?:0|-?(?:0\\.[0-9]*[1-9]|[1-9][0-9]*(?:\\.[0-9]*[1-9])?))$(?![\\s\\S])"
+        },
+        "base_tag_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "taxes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "tax_id",
+              "tax_repartition_line_id",
+              "name",
+              "amount",
+              "base",
+              "sequence",
+              "account_id",
+              "price_include",
+              "tax_exigibility",
+              "group_tax_id",
+              "tag_ids"
+            ],
+            "properties": {
+              "tax_id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "tax_repartition_line_id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "amount": {
+                "type": "string",
+                "maxLength": 256,
+                "pattern": "^(?:0|-?(?:0\\.[0-9]*[1-9]|[1-9][0-9]*(?:\\.[0-9]*[1-9])?))$(?![\\s\\S])"
+              },
+              "base": {
+                "type": "string",
+                "maxLength": 256,
+                "pattern": "^(?:0|-?(?:0\\.[0-9]*[1-9]|[1-9][0-9]*(?:\\.[0-9]*[1-9])?))$(?![\\s\\S])"
+              },
+              "sequence": {
+                "type": "integer"
+              },
+              "account_id": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
+              },
+              "price_include": {
+                "type": "boolean"
+              },
+              "tax_exigibility": {
+                "enum": [
+                  "on_invoice",
+                  "on_payment"
+                ]
+              },
+              "group_tax_id": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
+              },
+              "tag_ids": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

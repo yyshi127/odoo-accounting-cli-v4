@@ -3422,39 +3422,135 @@
       "handler_key": "bank_statement_search"
     },
     "bank.statement.create": {
-      "summary": {"zh_CN": "从银行流水创建银行对账单", "en_US": "Create a bank statement from bank transactions"},
+      "summary": {
+        "zh_CN": "创建含期初与期末余额的银行对账单",
+        "en_US": "Create bank statement with starting and ending balances"
+      },
       "domain": "bank_reconciliation",
       "access": "write",
       "source": {
-        "modules": ["account"],
-        "models": ["res.company", "res.currency", "account.journal", "account.bank.statement", "account.bank.statement.line", "account.move"],
+        "modules": [
+          "account"
+        ],
+        "models": [
+          "account.bank.statement",
+          "account.bank.statement.line",
+          "account.journal",
+          "account.move",
+          "res.company",
+          "res.currency"
+        ],
         "wizards": [],
         "report_handlers": [],
-        "locations": ["_references/base/models/res_company.py", "_references/base/models/res_currency.py", "account/models/account_journal.py", "account/models/account_bank_statement.py", "account/models/account_bank_statement_line.py", "account/models/account_move.py"]
+        "locations": [
+          "_references/base/models/res_company.py",
+          "_references/base/models/res_currency.py",
+          "account/models/account_journal.py",
+          "account/models/account_bank_statement.py",
+          "account/models/account_bank_statement_line.py",
+          "account/models/account_move.py"
+        ]
       },
-      "schemas": {"request": "schemas/v1/bank.statement.create.request.schema.json", "response": "schemas/v1/bank.statement.create.response.schema.json"},
+      "schemas": {
+        "request": "schemas/v1/bank.statement.create.request.schema.json",
+        "response": "schemas/v1/bank.statement.create.response.schema.json"
+      },
       "requirements": {
-        "modules": ["account"],
-        "configuration": ["database_alias", "company_allowlist", "user_mapping"],
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
         "company": "required",
-        "groups": ["account.group_account_user"],
-        "acl": ["res.currency:read", "account.journal:read", "account.bank.statement:read", "account.bank.statement:create", "account.bank.statement.line:read", "account.bank.statement.line:write", "account.move:read"]
+        "groups": [
+          "account.group_account_user"
+        ],
+        "acl": [
+          "account.bank.statement.line:read",
+          "account.bank.statement.line:write",
+          "account.bank.statement:create",
+          "account.bank.statement:read",
+          "account.journal:read",
+          "account.move:read",
+          "res.currency:read"
+        ]
       },
-      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_scoped_bank_statement_create_from_contiguous_ungrouped_transactions", "verify": "same_transaction_statement_transaction_set_balance_and_response_schema_validation", "idempotency": "company_contiguous_transaction_set_and_full_normalized_parameters_recheck_without_concurrent_exactly_once_guarantee", "reverse": "bank.statement.delete"},
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "native_statement_create_or_write_with_optional_currency_rounded_balance_start_and_existing_contiguous_membership_rules",
+        "verify": "explicit_start_and_end_reread_or_native_end_recompute_for_start_only_without_financial_line_change",
+        "idempotency": "company_contiguous_transaction_set_and_full_normalized_parameters_recheck_without_concurrent_exactly_once_guarantee",
+        "reverse": "bank.statement.delete"
+      },
       "tests": {
-        "unit": {"status": "implemented", "references": ["tests/unit/test_bank_statement_payment_maintenance_public.py", "tests/unit/test_bank_statement_payment_maintenance_runtime.py", "tests/unit/test_core_writes.py", "tests/unit/test_capability_registry.py"], "reason": "Focused tests cover the closed normalized request, native transaction continuity, exact confirmation, runtime result contract, CLI dispatch, registry descriptor, and schemas."},
-        "integration": {"status": "implemented", "references": ["tests/integration/test_bank_statement_payment_maintenance_live.py"], "reason": "The guarded shared smoke passed both isolated aliases through the public CLI as uid 5 with su=False, exercising all six bank/payment-maintenance commands, three immediate replays, native statement/payment readbacks, and fresh-cursor rollback verification."},
-        "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."},
-        "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_accounting_settlement_batch.py"
+          ],
+          "reason": "Focused closed preview inputs/results, native scopes, optional field normalization and unchanged legacy omission/key tests; execution is required before acceptance."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_accounting_settlement_batch_live.py"
+          ],
+          "reason": "Shared public CLI/native ORM workflow passed both isolated aliases in 21.89s as uid5/su=False/company1. Tax/invoice and installment/schedule consumers, signed nonzero discount cash rounding, nullable tax-group accounts, statement start/end/replay, foreign denials, preserved financial graphs and full fresh rollback verified. Callers supply both currencies and already-cash-rounded totals; native Float residuals stay unchanged. Transaction-only roles, no sudo business calls. Tax-closing/CABA posting, all hierarchy/localization/precision paths, automatic FX, sends and concurrent exactly-once are not claimed. Details: docs/execution/STATUS.md."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples are deferred until the capability library reaches target coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing is outside this capability batch."
+        }
       },
-      "status": {"value": "degraded", "reason_code": "concurrent_idempotency_limit", "reason": "The handler rechecks the contiguous company-scoped transaction set and normalized statement values, but Odoo provides no matching uniqueness constraint for concurrent exactly-once creation."},
-      "routing": {"object": "bank.statement", "actions": ["create"], "aliases": {"zh_CN": ["创建银行对账单", "将银行流水组成对账单"], "en_US": ["Create bank statement", "Group bank transactions into a statement"]}, "not_for": {"zh_CN": ["合并不同日记账的流水", "合并非连续或已有对账单的流水"], "en_US": ["Combining transactions from different journals", "Combining non-contiguous or already grouped transactions"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "status": {
+        "value": "degraded",
+        "reason_code": "concurrent_idempotency_limit",
+        "reason": "The handler rechecks the contiguous company-scoped transaction set and normalized statement values, but Odoo provides no matching uniqueness constraint for concurrent exactly-once creation."
+      },
+      "routing": {
+        "object": "bank.statement",
+        "actions": [
+          "create"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "创建含期初与期末余额的银行对账单"
+          ],
+          "en_US": [
+            "Create bank statement with starting and ending balances"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "合并不同日记账的流水",
+            "合并非连续或已有对账单的流水"
+          ],
+          "en_US": [
+            "Combining transactions from different journals",
+            "Combining non-contiguous or already grouped transactions"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
       "handler_key": "core_write"
     },
     "bank.statement.update": {
       "summary": {
-        "zh_CN": "更新银行对账单",
-        "en_US": "Update a bank statement"
+        "zh_CN": "维护银行对账单期初期末余额及流水归组",
+        "en_US": "Update bank statement starting/ending balances and membership"
       },
       "domain": "bank_reconciliation",
       "access": "write",
@@ -3508,8 +3604,8 @@
       },
       "strategies": {
         "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "native_statement_write_with_nonempty_same_journal_contiguous_membership_set_without_line_deletion",
-        "verify": "same_transaction_complete_requested_membership_and_metadata_reread",
+        "execute": "native_statement_create_or_write_with_optional_currency_rounded_balance_start_and_existing_contiguous_membership_rules",
+        "verify": "explicit_start_and_end_reread_or_native_end_recompute_for_start_only_without_financial_line_change",
         "idempotency": "requested_target_state_hash_and_result_replay",
         "reverse": "bank.statement.update_with_prior_values"
       },
@@ -3517,16 +3613,16 @@
         "unit": {
           "status": "implemented",
           "references": [
-            "tests/unit/test_accounting_maintenance_batch.py"
+            "tests/unit/test_accounting_settlement_batch.py"
           ],
-          "reason": "Focused closed-input, legacy omission/key, company/state/ACL and result binding tests; execution is required before acceptance."
+          "reason": "Focused closed preview inputs/results, native scopes, optional field normalization and unchanged legacy omission/key tests; execution is required before acceptance."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_accounting_maintenance_batch_live.py"
+            "tests/integration/test_accounting_settlement_batch_live.py"
           ],
-          "reason": "One shared public CLI/native ORM workflow passed both isolated aliases in 24.70s as uid5/su=False/company1. Two new IDs and six extensions: exact-current-root currency-rate correction/date/replay, native technical Float readback, conversion/delete fallback and missing denial; explicit foreign-bank positive/negative paired amount set/clear/replay while legacy omitted shapes remain unchanged; reconciled statement membership/detach retaining native lines, posted moves, financial snapshots and matching graphs; posted unsent invoice bank set/clear with native PDF-link sent denial; posted preferred-method wizard default and Incoterm/location set/clear; a real partially reconciled invoice retaining raw matching IDs/amounts and financial lines. Native configuration roles exist only inside the isolated transaction, never sudo business calls. Fresh tracked fixtures, both companies settings, all defaults, currencies/rates and exact caller/native group memberships roll back. Live companies are independent roots; branch context rejection has unit evidence only. PDF uses synthetic DB-only raw bytes and native linking, not generation or delivery. Wizard defaults do not make payments. All hierarchy/currency/precision/localization/hash/lock paths, fully-paid/CABA invoices, existing foreign-invoice revaluation and concurrent exactly-once are not claimed. Legacy currency.rate.record guard is unchanged. No business DB, native source/addon, configuration, service or external-send changes."
+          "reason": "Shared public CLI/native ORM workflow passed both isolated aliases in 21.89s as uid5/su=False/company1. Tax/invoice and installment/schedule consumers, signed nonzero discount cash rounding, nullable tax-group accounts, statement start/end/replay, foreign denials, preserved financial graphs and full fresh rollback verified. Callers supply both currencies and already-cash-rounded totals; native Float residuals stay unchanged. Transaction-only roles, no sudo business calls. Tax-closing/CABA posting, all hierarchy/localization/precision paths, automatic FX, sends and concurrent exactly-once are not claimed. Details: docs/execution/STATUS.md."
         },
         "golden": {
           "status": "planned",
@@ -3551,10 +3647,10 @@
         ],
         "aliases": {
           "zh_CN": [
-            "更新银行对账单参考、期末余额或完整流水归组"
+            "维护银行对账单期初期末余额及流水归组"
           ],
           "en_US": [
-            "Update statement reference, ending balance or complete transaction membership"
+            "Update bank statement starting/ending balances and membership"
           ]
         },
         "not_for": {
@@ -20286,8 +20382,8 @@
     },
     "tax.group.get": {
       "summary": {
-        "zh_CN": "获取税组详情",
-        "en_US": "Get one tax group"
+        "zh_CN": "读取税组及税款结算科目",
+        "en_US": "Get tax group with settlement accounts"
       },
       "domain": "taxes",
       "access": "read",
@@ -20299,14 +20395,16 @@
         "models": [
           "res.company",
           "account.tax.group",
-          "res.country"
+          "res.country",
+          "account.account"
         ],
         "wizards": [],
         "report_handlers": [],
         "locations": [
           "_references/base/models/res_company.py",
           "account/models/account_tax.py",
-          "_references/base/models/res_country.py"
+          "_references/base/models/res_country.py",
+          "account/models/account_account.py"
         ]
       },
       "schemas": {
@@ -20330,13 +20428,14 @@
         "acl": [
           "res.company:read",
           "account.tax.group:read",
-          "res.country:read"
+          "res.country:read",
+          "account.account:read"
         ]
       },
       "strategies": {
         "preview": "not_applicable_read_only",
         "execute": "fixed_company_scoped_core_object_read_action",
-        "verify": "same_transaction_acl_result_cursor_and_response_schema_validation",
+        "verify": "ordinary_visible_company_or_ancestor_account_scope_and_same_transaction_nullable_native_account_field_reread_with_old_six_or_complete_nine_field_response",
         "idempotency": "not_applicable_read_only",
         "reverse": "not_applicable_read_only"
       },
@@ -20344,20 +20443,16 @@
         "unit": {
           "status": "implemented",
           "references": [
-            "tests/unit/test_core_object_reads.py",
-            "tests/unit/test_core_object_reads_bridge.py",
-            "tests/unit/test_core_object_reads_runtime.py",
-            "tests/unit/test_core_object_read_cli.py",
-            "tests/unit/test_capability_registry.py"
+            "tests/unit/test_accounting_settlement_batch.py"
           ],
-          "reason": "Unit tests cover the closed request and response, fixed bridge action, company scope, ACL gates, ORM normalization, and CLI dispatch."
+          "reason": "Focused closed preview inputs/results, native scopes, optional field normalization and unchanged legacy omission/key tests; execution is required before acceptance."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_reference_object_read_batch_live.py"
+            "tests/integration/test_accounting_settlement_batch_live.py"
           ],
-          "reason": "The shared live read-only smoke verifies the capability against both dedicated isolated database aliases as the ordinary accounting user."
+          "reason": "Shared public CLI/native ORM workflow passed both isolated aliases in 21.89s as uid5/su=False/company1. Tax/invoice and installment/schedule consumers, signed nonzero discount cash rounding, nullable tax-group accounts, statement start/end/replay, foreign denials, preserved financial graphs and full fresh rollback verified. Callers supply both currencies and already-cash-rounded totals; native Float residuals stay unchanged. Transaction-only roles, no sudo business calls. Tax-closing/CABA posting, all hierarchy/localization/precision paths, automatic FX, sends and concurrent exactly-once are not claimed. Details: docs/execution/STATUS.md."
         },
         "golden": {
           "status": "planned",
@@ -20383,10 +20478,10 @@
         ],
         "aliases": {
           "zh_CN": [
-            "获取税组详情"
+            "读取税组及税款结算科目"
           ],
           "en_US": [
-            "Get one tax group"
+            "Get tax group with settlement accounts"
           ]
         },
         "not_for": {
@@ -20403,8 +20498,8 @@
     },
     "tax.group.list": {
       "summary": {
-        "zh_CN": "列出税组",
-        "en_US": "List tax groups"
+        "zh_CN": "列出税组及税款结算科目",
+        "en_US": "List tax groups with settlement accounts"
       },
       "domain": "taxes",
       "access": "read",
@@ -20416,14 +20511,16 @@
         "models": [
           "res.company",
           "account.tax.group",
-          "res.country"
+          "res.country",
+          "account.account"
         ],
         "wizards": [],
         "report_handlers": [],
         "locations": [
           "_references/base/models/res_company.py",
           "account/models/account_tax.py",
-          "_references/base/models/res_country.py"
+          "_references/base/models/res_country.py",
+          "account/models/account_account.py"
         ]
       },
       "schemas": {
@@ -20447,13 +20544,14 @@
         "acl": [
           "res.company:read",
           "account.tax.group:read",
-          "res.country:read"
+          "res.country:read",
+          "account.account:read"
         ]
       },
       "strategies": {
         "preview": "not_applicable_read_only",
         "execute": "fixed_company_scoped_core_object_read_action",
-        "verify": "same_transaction_acl_result_cursor_and_response_schema_validation",
+        "verify": "ordinary_visible_company_or_ancestor_account_scope_and_same_transaction_nullable_native_account_field_reread_with_old_six_or_complete_nine_field_response",
         "idempotency": "not_applicable_read_only",
         "reverse": "not_applicable_read_only"
       },
@@ -20461,20 +20559,16 @@
         "unit": {
           "status": "implemented",
           "references": [
-            "tests/unit/test_core_object_reads.py",
-            "tests/unit/test_core_object_reads_bridge.py",
-            "tests/unit/test_core_object_reads_runtime.py",
-            "tests/unit/test_core_object_read_cli.py",
-            "tests/unit/test_capability_registry.py"
+            "tests/unit/test_accounting_settlement_batch.py"
           ],
-          "reason": "Unit tests cover the closed request and response, fixed bridge action, company scope, ACL gates, ORM normalization, cursor pagination, and CLI dispatch."
+          "reason": "Focused closed preview inputs/results, native scopes, optional field normalization and unchanged legacy omission/key tests; execution is required before acceptance."
         },
         "integration": {
           "status": "implemented",
           "references": [
-            "tests/integration/test_reference_object_read_batch_live.py"
+            "tests/integration/test_accounting_settlement_batch_live.py"
           ],
-          "reason": "The shared live read-only smoke verifies the capability against both dedicated isolated database aliases as the ordinary accounting user."
+          "reason": "Shared public CLI/native ORM workflow passed both isolated aliases in 21.89s as uid5/su=False/company1. Tax/invoice and installment/schedule consumers, signed nonzero discount cash rounding, nullable tax-group accounts, statement start/end/replay, foreign denials, preserved financial graphs and full fresh rollback verified. Callers supply both currencies and already-cash-rounded totals; native Float residuals stay unchanged. Transaction-only roles, no sudo business calls. Tax-closing/CABA posting, all hierarchy/localization/precision paths, automatic FX, sends and concurrent exactly-once are not claimed. Details: docs/execution/STATUS.md."
         },
         "golden": {
           "status": "planned",
@@ -20499,10 +20593,10 @@
         ],
         "aliases": {
           "zh_CN": [
-            "列出税组"
+            "列出税组及税款结算科目"
           ],
           "en_US": [
-            "List tax groups"
+            "List tax groups with settlement accounts"
           ]
         },
         "not_for": {
@@ -20518,27 +20612,243 @@
       "handler_key": "tax_group_list"
     },
     "tax.group.create": {
-      "summary": {"zh_CN": "创建税组", "en_US": "Create a tax group"},
-      "domain": "taxes", "access": "write",
-      "source": {"modules": ["account", "base"], "models": ["res.company", "account.tax.group", "res.country"], "wizards": [], "report_handlers": [], "locations": ["account/models/account_tax.py", "_references/base/models/res_country.py", "_references/base/models/res_company.py"]},
-      "schemas": {"request": "schemas/v1/tax.group.create.request.schema.json", "response": "schemas/v1/tax.group.create.response.schema.json"},
-      "requirements": {"modules": ["account", "base"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["account.group_account_manager"], "acl": ["res.company:read", "res.country:read", "account.tax.group:read", "account.tax.group:create"]},
-      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_tax_group_create_as_configured_business_user", "verify": "same_transaction_name_sequence_preceding_subtotal_company_and_country_reread", "idempotency": "company_name_natural_key_and_full_target_recheck_without_concurrent_exactly_once_guarantee", "reverse": "manual_reconfiguration_or_remove_if_unused"},
-      "tests": {"unit": {"status": "implemented", "references": ["tests/unit/test_core_writes.py", "tests/unit/test_accounting_master_data_completion_contracts.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_accounting_master_data_completion_registry.py"], "reason": "Unit tests cover the closed tax-group contract, fixed company and derived country, manager ACL, natural-key replay, schemas, registry metadata, and CLI dispatch."}, "integration": {"status": "implemented", "references": ["tests/integration/test_accounting_master_data_completion_live.py"], "reason": "The guarded shared dual-database transactional smoke verifies first execution, immediate replay, readback, and rollback in both isolated database aliases."}, "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."}, "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}},
-      "status": {"value": "degraded", "reason_code": "concurrent_idempotency_limit", "reason": "The fixed handler replays an exact company-and-name target, but Odoo provides no request-id uniqueness constraint, so concurrent exactly-once creation is not guaranteed."},
-      "routing": {"object": "tax.group", "actions": ["create"], "aliases": {"zh_CN": ["创建税组"], "en_US": ["Create tax group"]}, "not_for": {"zh_CN": ["创建税率"], "en_US": ["Creating an accounting tax"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "summary": {
+        "zh_CN": "创建含税款结算科目的税组",
+        "en_US": "Create tax group with settlement accounts"
+      },
+      "domain": "taxes",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "account.tax.group",
+          "res.company",
+          "res.country"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_tax.py",
+          "_references/base/models/res_country.py",
+          "_references/base/models/res_company.py",
+          "account/models/account_account.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/tax.group.create.request.schema.json",
+        "response": "schemas/v1/tax.group.create.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.tax.group:create",
+          "account.tax.group:read",
+          "res.company:read",
+          "res.country:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_tax_group_create_as_configured_business_user",
+        "verify": "ordinary_visible_company_or_ancestor_account_scope_and_same_transaction_nullable_native_account_field_reread",
+        "idempotency": "company_name_natural_key_and_full_target_recheck_without_concurrent_exactly_once_guarantee_with_omitted_optional_accounts_preserving_legacy_target_and_key",
+        "reverse": "manual_reconfiguration_or_remove_if_unused"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_accounting_settlement_batch.py"
+          ],
+          "reason": "Focused closed preview inputs/results, native scopes, optional field normalization and unchanged legacy omission/key tests; execution is required before acceptance."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_accounting_settlement_batch_live.py"
+          ],
+          "reason": "Shared public CLI/native ORM workflow passed both isolated aliases in 21.89s as uid5/su=False/company1. Tax/invoice and installment/schedule consumers, signed nonzero discount cash rounding, nullable tax-group accounts, statement start/end/replay, foreign denials, preserved financial graphs and full fresh rollback verified. Callers supply both currencies and already-cash-rounded totals; native Float residuals stay unchanged. Transaction-only roles, no sudo business calls. Tax-closing/CABA posting, all hierarchy/localization/precision paths, automatic FX, sends and concurrent exactly-once are not claimed. Details: docs/execution/STATUS.md."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples are deferred until the capability library reaches target coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing is outside this capability batch."
+        }
+      },
+      "status": {
+        "value": "degraded",
+        "reason_code": "concurrent_idempotency_limit",
+        "reason": "The fixed handler replays an exact company-and-name target, but Odoo provides no request-id uniqueness constraint, so concurrent exactly-once creation is not guaranteed."
+      },
+      "routing": {
+        "object": "tax.group",
+        "actions": [
+          "create"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "创建含税款结算科目的税组"
+          ],
+          "en_US": [
+            "Create tax group with settlement accounts"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "创建税率"
+          ],
+          "en_US": [
+            "Creating an accounting tax"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
       "handler_key": "core_write"
     },
     "tax.group.update": {
-      "summary": {"zh_CN": "更新税组", "en_US": "Update a tax group"},
-      "domain": "taxes", "access": "write",
-      "source": {"modules": ["account", "base"], "models": ["res.company", "account.tax.group", "res.country"], "wizards": [], "report_handlers": [], "locations": ["account/models/account_tax.py", "_references/base/models/res_country.py", "_references/base/models/res_company.py"]},
-      "schemas": {"request": "schemas/v1/tax.group.update.request.schema.json", "response": "schemas/v1/tax.group.update.response.schema.json"},
-      "requirements": {"modules": ["account", "base"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["account.group_account_manager"], "acl": ["res.company:read", "res.country:read", "account.tax.group:read", "account.tax.group:write"]},
-      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_company_tax_group_update", "verify": "same_transaction_name_sequence_preceding_subtotal_company_and_country_reread", "idempotency": "target_tax_group_state_recheck_without_operation_store", "reverse": "repeat_update_with_previous_values"},
-      "tests": {"unit": {"status": "implemented", "references": ["tests/unit/test_core_writes.py", "tests/unit/test_accounting_master_data_completion_contracts.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_accounting_master_data_completion_registry.py"], "reason": "Unit tests cover the closed patch contract, company ownership, manager ACL, target-state replay, schemas, registry metadata, and CLI dispatch."}, "integration": {"status": "implemented", "references": ["tests/integration/test_accounting_master_data_completion_live.py"], "reason": "The guarded shared dual-database transactional smoke verifies first execution, immediate replay, readback, and rollback in both isolated database aliases."}, "golden": {"status": "planned", "references": [], "reason": "Golden examples are deferred until the capability library reaches target coverage."}, "e2e": {"status": "planned", "references": [], "reason": "Natural-language routing is outside this capability batch."}},
-      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, tax group, and user at runtime."},
-      "routing": {"object": "tax.group", "actions": ["update"], "aliases": {"zh_CN": ["更新税组"], "en_US": ["Update tax group"]}, "not_for": {"zh_CN": ["更新税率"], "en_US": ["Updating an accounting tax"]}, "required_slots": ["database", "company_id", "user_login"]},
+      "summary": {
+        "zh_CN": "维护税组及税款结算科目",
+        "en_US": "Update tax group and settlement accounts"
+      },
+      "domain": "taxes",
+      "access": "write",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.account",
+          "account.tax.group",
+          "res.company",
+          "res.country"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_tax.py",
+          "_references/base/models/res_country.py",
+          "_references/base/models/res_company.py",
+          "account/models/account_account.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/tax.group.update.request.schema.json",
+        "response": "schemas/v1/tax.group.update.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_manager"
+        ],
+        "acl": [
+          "account.account:read",
+          "account.tax.group:read",
+          "account.tax.group:write",
+          "res.company:read",
+          "res.country:read"
+        ]
+      },
+      "strategies": {
+        "preview": "exact_capability_confirmation_and_closed_request_validation",
+        "execute": "fixed_company_tax_group_update",
+        "verify": "ordinary_visible_company_or_ancestor_account_scope_and_same_transaction_nullable_native_account_field_reread",
+        "idempotency": "target_tax_group_state_recheck_without_operation_store_with_omitted_optional_accounts_preserving_legacy_target_and_key",
+        "reverse": "repeat_update_with_previous_values"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_accounting_settlement_batch.py"
+          ],
+          "reason": "Focused closed preview inputs/results, native scopes, optional field normalization and unchanged legacy omission/key tests; execution is required before acceptance."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_accounting_settlement_batch_live.py"
+          ],
+          "reason": "Shared public CLI/native ORM workflow passed both isolated aliases in 21.89s as uid5/su=False/company1. Tax/invoice and installment/schedule consumers, signed nonzero discount cash rounding, nullable tax-group accounts, statement start/end/replay, foreign denials, preserved financial graphs and full fresh rollback verified. Callers supply both currencies and already-cash-rounded totals; native Float residuals stay unchanged. Transaction-only roles, no sudo business calls. Tax-closing/CABA posting, all hierarchy/localization/precision paths, automatic FX, sends and concurrent exactly-once are not claimed. Details: docs/execution/STATUS.md."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "Golden examples are deferred until the capability library reaches target coverage."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "Natural-language routing is outside this capability batch."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, tax group, and user at runtime."
+      },
+      "routing": {
+        "object": "tax.group",
+        "actions": [
+          "update"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "维护税组及税款结算科目"
+          ],
+          "en_US": [
+            "Update tax group and settlement accounts"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "更新税率"
+          ],
+          "en_US": [
+            "Updating an accounting tax"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
       "handler_key": "core_write"
     },
     "tax.get": {
@@ -40924,6 +41234,266 @@
         ]
       },
       "handler_key": "core_write"
+    },
+    "tax.compute": {
+      "summary": {
+        "zh_CN": "试算原生税额",
+        "en_US": "Preview native tax amounts"
+      },
+      "domain": "taxes",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "base",
+          "product"
+        ],
+        "models": [
+          "account.account",
+          "account.account.tag",
+          "account.tax",
+          "account.tax.repartition.line",
+          "product.product",
+          "product.template",
+          "res.company",
+          "res.currency",
+          "res.partner"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_tax.py",
+          "account/models/account_account.py",
+          "account/models/account_account_tag.py",
+          "_references/base/models/res_company.py",
+          "_references/base/models/res_currency.py",
+          "_references/base/models/res_partner.py",
+          "_references/product/models/product_product.py",
+          "_references/product/models/product_template.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/tax.compute.request.schema.json",
+        "response": "schemas/v1/tax.compute.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account",
+          "product"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "account.account.tag:read",
+          "account.account:read",
+          "account.tax.repartition.line:read",
+          "account.tax:read",
+          "product.product:read",
+          "product.template:read",
+          "res.company:read",
+          "res.currency:read",
+          "res.partner:read"
+        ]
+      },
+      "strategies": {
+        "preview": "not_applicable_read_only",
+        "execute": "native_tax_compute_all_without_invoice_or_ledger_write",
+        "verify": "closed_native_result_identity_company_currency_and_complete_normalized_input_echo",
+        "idempotency": "not_applicable_read_only",
+        "reverse": "not_applicable_read_only"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_accounting_settlement_batch.py"
+          ],
+          "reason": "Focused closed preview inputs/results, native scopes, optional field normalization and unchanged legacy omission/key tests; execution is required before acceptance."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_accounting_settlement_batch_live.py"
+          ],
+          "reason": "Shared public CLI/native ORM workflow passed both isolated aliases in 21.89s as uid5/su=False/company1. Tax/invoice and installment/schedule consumers, signed nonzero discount cash rounding, nullable tax-group accounts, statement start/end/replay, foreign denials, preserved financial graphs and full fresh rollback verified. Callers supply both currencies and already-cash-rounded totals; native Float residuals stay unchanged. Transaction-only roles, no sudo business calls. Tax-closing/CABA posting, all hierarchy/localization/precision paths, automatic FX, sends and concurrent exactly-once are not claimed. Details: docs/execution/STATUS.md."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed read-only native calculation; configured database, ordinary caller permissions and company context are required."
+      },
+      "routing": {
+        "object": "tax",
+        "actions": [
+          "compute"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "试算原生税额"
+          ],
+          "en_US": [
+            "Preview native tax amounts"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "创建或过账发票",
+            "写入税款结算或付款"
+          ],
+          "en_US": [
+            "Creating or posting invoices",
+            "Writing tax-closing entries or payments"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "tax_compute"
+    },
+    "payment_term.compute": {
+      "summary": {
+        "zh_CN": "试算付款期限及提前付款折扣",
+        "en_US": "Preview native payment installments and early discount"
+      },
+      "domain": "accounting_master_data",
+      "access": "read",
+      "source": {
+        "modules": [
+          "account",
+          "base"
+        ],
+        "models": [
+          "account.cash.rounding",
+          "account.payment.term",
+          "account.payment.term.line",
+          "res.company",
+          "res.currency"
+        ],
+        "wizards": [],
+        "report_handlers": [],
+        "locations": [
+          "account/models/account_payment_term.py",
+          "account/models/account_cash_rounding.py",
+          "_references/base/models/res_company.py",
+          "_references/base/models/res_currency.py"
+        ]
+      },
+      "schemas": {
+        "request": "schemas/v1/payment_term.compute.request.schema.json",
+        "response": "schemas/v1/payment_term.compute.response.schema.json"
+      },
+      "requirements": {
+        "modules": [
+          "account"
+        ],
+        "configuration": [
+          "database_alias",
+          "company_allowlist",
+          "user_mapping"
+        ],
+        "company": "required",
+        "groups": [
+          "account.group_account_readonly"
+        ],
+        "acl": [
+          "account.cash.rounding:read",
+          "account.payment.term.line:read",
+          "account.payment.term:read",
+          "res.company:read",
+          "res.currency:read"
+        ]
+      },
+      "strategies": {
+        "preview": "not_applicable_read_only",
+        "execute": "native_payment_term_compute_terms_with_explicit_signed_company_and_foreign_totals",
+        "verify": "closed_native_result_identity_company_currency_and_complete_normalized_input_echo",
+        "idempotency": "not_applicable_read_only",
+        "reverse": "not_applicable_read_only"
+      },
+      "tests": {
+        "unit": {
+          "status": "implemented",
+          "references": [
+            "tests/unit/test_accounting_settlement_batch.py"
+          ],
+          "reason": "Focused closed preview inputs/results, native scopes, optional field normalization and unchanged legacy omission/key tests; execution is required before acceptance."
+        },
+        "integration": {
+          "status": "implemented",
+          "references": [
+            "tests/integration/test_accounting_settlement_batch_live.py"
+          ],
+          "reason": "Shared public CLI/native ORM workflow passed both isolated aliases in 21.89s as uid5/su=False/company1. Tax/invoice and installment/schedule consumers, signed nonzero discount cash rounding, nullable tax-group accounts, statement start/end/replay, foreign denials, preserved financial graphs and full fresh rollback verified. Callers supply both currencies and already-cash-rounded totals; native Float residuals stay unchanged. Transaction-only roles, no sudo business calls. Tax-closing/CABA posting, all hierarchy/localization/precision paths, automatic FX, sends and concurrent exactly-once are not claimed. Details: docs/execution/STATUS.md."
+        },
+        "golden": {
+          "status": "planned",
+          "references": [],
+          "reason": "The golden definition is frozen; implementation evidence is pending."
+        },
+        "e2e": {
+          "status": "planned",
+          "references": [],
+          "reason": "The e2e definition is frozen; implementation evidence is pending."
+        }
+      },
+      "status": {
+        "value": "unconfigured",
+        "reason_code": "runtime_context_required",
+        "reason": "Fixed read-only native calculation; configured database, ordinary caller permissions and company context are required."
+      },
+      "routing": {
+        "object": "payment_term",
+        "actions": [
+          "compute"
+        ],
+        "aliases": {
+          "zh_CN": [
+            "试算付款期限及提前付款折扣"
+          ],
+          "en_US": [
+            "Preview native payment installments and early discount"
+          ]
+        },
+        "not_for": {
+          "zh_CN": [
+            "创建或过账发票",
+            "写入税款结算或付款",
+            "自动汇率换算或自动现金舍入总额"
+          ],
+          "en_US": [
+            "Creating or posting invoices",
+            "Writing tax-closing entries or payments",
+            "Automatic FX conversion or cash-rounding the supplied total"
+          ]
+        },
+        "required_slots": [
+          "database",
+          "company_id",
+          "user_login"
+        ]
+      },
+      "handler_key": "payment_term_compute"
     }
   }
 }

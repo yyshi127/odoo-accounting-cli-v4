@@ -528,7 +528,10 @@ _ACCOUNTING_REFERENCE_WRITE_CAPABILITIES = frozenset(
     }
 )
 _ACCOUNT_TAG_FIELDS = frozenset({"name", "applicability", "color", "country_id"})
-_TAX_GROUP_FIELDS = frozenset({"name", "sequence", "preceding_subtotal"})
+_TAX_GROUP_ACCOUNT_FIELDS = frozenset({
+    "tax_payable_account_id", "tax_receivable_account_id", "advance_tax_payment_account_id",
+})
+_TAX_GROUP_FIELDS = frozenset({"name", "sequence", "preceding_subtotal"}) | _TAX_GROUP_ACCOUNT_FIELDS
 _CASH_ROUNDING_FIELDS = frozenset(
     {
         "name",
@@ -894,6 +897,7 @@ _PARAMETER_KEYS = {
         "transaction_ids",
         "reference",
         "balance_end_real",
+        "balance_start",
     },
     "bank.statement.update": {"statement_id", "changes"},
     "bank.statement.delete": {"statement_id"},
@@ -3158,11 +3162,12 @@ for _capability_id in ("account.tag.update", "account.tag.archive", "account.tag
     _ACCESS[_capability_id].add(("account.account.tag", "write"))
 
 for _capability_id in ("tax.group.create", "tax.group.update"):
-    _MODELS[_capability_id] = {"res.company", "res.country", "account.tax.group"}
+    _MODELS[_capability_id] = {"res.company", "res.country", "account.tax.group", "account.account"}
     _ACCESS[_capability_id] = {
         ("res.company", "read"),
         ("res.country", "read"),
         ("account.tax.group", "read"),
+        ("account.account", "read"),
     }
 _ACCESS["tax.group.create"].add(("account.tax.group", "create"))
 _ACCESS["tax.group.update"].add(("account.tax.group", "write"))
@@ -4341,20 +4346,22 @@ def _valid_statement_values(values: Any, *, partial: bool) -> bool:
     if not isinstance(values, dict):
         return False
     if partial:
-        if not values or not set(values) <= fields | {"transaction_ids"}:
+        if not values or not set(values) <= fields | {"transaction_ids", "balance_start"}:
             return False
-    elif set(values) != fields:
+    elif not fields <= set(values) <= fields | {"balance_start"}:
         return False
     if "reference" in values and not (
         values["reference"] is None
         or _is_text(values["reference"], maximum=200)
     ):
         return False
-    if "balance_end_real" in values:
-        balance = _signed_decimal(values["balance_end_real"])
+    for field in ("balance_end_real", "balance_start"):
+        if field not in values:
+            continue
+        balance = _signed_decimal(values[field])
         if (
             balance is None
-            or _canonical_decimal_text(balance) != values["balance_end_real"]
+            or _canonical_decimal_text(balance) != values[field]
         ):
             return False
     if "transaction_ids" in values:
@@ -5589,12 +5596,13 @@ def _valid_account_tag_values(values: Any, *, partial: bool) -> bool:
 def _valid_tax_group_values(values: Any, *, partial: bool) -> bool:
     if not isinstance(values, dict) or (partial and not values):
         return False
-    if (not partial and set(values) != _TAX_GROUP_FIELDS) or not set(values) <= _TAX_GROUP_FIELDS:
+    if (not partial and not (_TAX_GROUP_FIELDS - _TAX_GROUP_ACCOUNT_FIELDS) <= set(values)) or not set(values) <= _TAX_GROUP_FIELDS:
         return False
     return bool(
         ("name" not in values or _is_text(values["name"], maximum=256))
         and ("sequence" not in values or isinstance(values["sequence"], int) and not isinstance(values["sequence"], bool) and values["sequence"] >= 0)
         and ("preceding_subtotal" not in values or values["preceding_subtotal"] is None or _is_text(values["preceding_subtotal"], maximum=256))
+        and all(values[field] is None or _is_id(values[field]) for field in _TAX_GROUP_ACCOUNT_FIELDS if field in values)
     )
 
 
@@ -5896,6 +5904,10 @@ def _valid_parameters(
         required_keys = _TAX_CONFIG_REQUIRED_KEYS
     elif capability_id == "bank.transaction.record":
         required_keys = allowed_keys - {"foreign_currency_id", "amount_currency"}
+    elif capability_id == "bank.statement.create":
+        required_keys = allowed_keys - {"balance_start"}
+    elif capability_id == "tax.group.create":
+        required_keys = _TAX_GROUP_FIELDS - _TAX_GROUP_ACCOUNT_FIELDS
     if not required_keys <= parameter_keys <= allowed_keys:
         return False
     if capability_id in _BATCH_LIFECYCLE_CAPABILITIES:
@@ -6203,6 +6215,7 @@ def _valid_parameters(
                 {
                     "reference": parameters["reference"],
                     "balance_end_real": parameters["balance_end_real"],
+                    **({"balance_start": parameters["balance_start"]} if "balance_start" in parameters else {}),
                 },
                 partial=False,
             )
@@ -14544,12 +14557,15 @@ def _statement_matches(
     reference: str | None,
     balance_end_real: Decimal,
     company_id: int,
+    *,
+    balance_start: Decimal | None = None,
 ) -> bool:
     return bool(
         statement.company_id.id == company_id
         and _record_ids(statement.line_ids) == transaction_ids
         and _statement_reference(statement.reference) == reference
         and Decimal(str(statement.balance_end_real)) == balance_end_real
+        and (balance_start is None or Decimal(str(statement.balance_start)) == balance_start)
     )
 
 
@@ -14607,6 +14623,8 @@ def _create_bank_statement(
             _statement_reference(parameters["reference"]),
             expected_balance,
             company_id,
+            balance_start=_rounded_statement_balance(overlapping, parameters["balance_start"])
+            if "balance_start" in parameters else None,
         ):
             raise _fail(
                 failure_type,
@@ -14666,6 +14684,8 @@ def _create_bank_statement(
             "line_ids": [Command.set(transaction_ids)],
             "reference": parameters["reference"] or False,
             "balance_end_real": rounded_balance,
+            **({"balance_start": _rounded_statement_balance(journal, parameters["balance_start"])}
+               if "balance_start" in parameters else {}),
         }
     )
     statement.invalidate_recordset(
@@ -14675,6 +14695,7 @@ def _create_bank_statement(
             "currency_id",
             "reference",
             "balance_end_real",
+            "balance_start",
             "is_complete",
             "line_ids",
         ]
@@ -14687,6 +14708,8 @@ def _create_bank_statement(
             _statement_reference(parameters["reference"]),
             rounded_balance,
             company_id,
+            balance_start=_rounded_statement_balance(journal, parameters["balance_start"])
+            if "balance_start" in parameters else None,
         )
     ):
         raise _fail(
@@ -14716,6 +14739,11 @@ def _update_bank_statement(
         "reference": _statement_reference(statement.reference),
         "balance_end_real": _canonical_decimal_text(statement.balance_end_real),
     }
+    native_ending_balance = "balance_start" in changes and "balance_end_real" not in changes
+    if native_ending_balance:
+        actual.pop("balance_end_real")
+    if "balance_start" in changes:
+        actual["balance_start"] = _canonical_decimal_text(statement.balance_start)
     membership = "transaction_ids" in changes
     if membership:
         journal_id = statement.journal_id.id
@@ -14749,6 +14777,10 @@ def _update_bank_statement(
         target["balance_end_real"] = _canonical_decimal_text(
             _rounded_statement_balance(statement, changes["balance_end_real"])
         )
+    if "balance_start" in changes:
+        target["balance_start"] = _canonical_decimal_text(
+            _rounded_statement_balance(statement, changes["balance_start"])
+        )
     if membership:
         target["transaction_ids"] = changes["transaction_ids"]
     if actual == target:
@@ -14758,18 +14790,26 @@ def _update_bank_statement(
         write_values["reference"] = changes["reference"] or False
     if "balance_end_real" in changes:
         write_values["balance_end_real"] = Decimal(target["balance_end_real"])
+    if "balance_start" in changes:
+        write_values["balance_start"] = Decimal(target["balance_start"])
     if membership:
         from odoo import Command
 
         write_values["line_ids"] = [Command.set(changes["transaction_ids"])]
     statement.write(write_values)
     statement.invalidate_recordset(
-        ["reference", "balance_end_real", "is_complete", "line_ids", "journal_id", "company_id"]
+        ["reference", "balance_start", "balance_end", "balance_end_real", "is_complete", "line_ids", "journal_id", "company_id"]
     )
     reread = {
         "reference": _statement_reference(statement.reference),
         "balance_end_real": _canonical_decimal_text(statement.balance_end_real),
     }
+    if native_ending_balance:
+        reread.pop("balance_end_real")
+        if Decimal(str(statement.balance_end_real)) != Decimal(str(statement.balance_end)):
+            raise _fail(failure_type, "odoo_write_error", "Native starting-balance update did not recompute the ending balance.", exit_code=6)
+    if "balance_start" in changes:
+        reread["balance_start"] = _canonical_decimal_text(statement.balance_start)
     if membership:
         transactions.invalidate_recordset()
         retained = _ensure_ids(env, "account.bank.statement.line", existing_ids | target_ids, [
@@ -19253,13 +19293,17 @@ def _write_account_tag(env: Any, capability_id: str, parameters: dict[str, Any],
     return _reference_result(tag, "account.account.tag", company_id, active=bool(tag.active)), False
 
 
-def _tax_group_values(group: Any) -> dict[str, Any]:
-    return {"name": group.name, "sequence": group.sequence, "preceding_subtotal": group.preceding_subtotal or None}
+def _tax_group_values(group: Any, account_fields: set[str] | frozenset[str] = frozenset()) -> dict[str, Any]:
+    return {"name": group.name, "sequence": group.sequence, "preceding_subtotal": group.preceding_subtotal or None,
+            **{field: _many2one_id(getattr(group, field)) for field in account_fields}}
 
 
 def _write_tax_group(env: Any, capability_id: str, parameters: dict[str, Any], company_id: int, failure_type: type[Exception]) -> tuple[dict[str, Any], bool]:
     create = capability_id == "tax.group.create"
     values = parameters if create else parameters["changes"]
+    account_fields = set(values) & _TAX_GROUP_ACCOUNT_FIELDS
+    _ensure_ids(env, "account.account", {values[field] for field in account_fields if values[field] is not None},
+                [("company_ids", "parent_of", [company_id])], company_id, failure_type)
     company = _search_one(env, "res.company", [("id", "=", company_id)], company_id, failure_type)
     country_id = _many2one_id(getattr(company, "account_fiscal_country_id", False)) or _many2one_id(getattr(company, "country_id", False))
     if create:
@@ -19270,22 +19314,22 @@ def _write_tax_group(env: Any, capability_id: str, parameters: dict[str, Any], c
                 len(existing) == 1
                 and _many2one_id(existing.company_id) == company_id
                 and _many2one_id(existing.country_id) == country_id
-                and _tax_group_values(existing) == values
+                and _tax_group_values(existing, account_fields) == values
             ):
                 return _reference_result(existing, "account.tax.group", company_id), True
             raise _fail(failure_type, "state_conflict", "A different tax group already uses this company and name.", exit_code=5)
-        group = model.create({**values, "preceding_subtotal": values["preceding_subtotal"] or False, "company_id": company_id, "country_id": country_id or False})
-        if _many2one_id(group.company_id) != company_id or _many2one_id(group.country_id) != country_id or _tax_group_values(group) != values:
+        group = model.create({**{field: False if value is None else value for field, value in values.items()}, "company_id": company_id, "country_id": country_id or False})
+        if _many2one_id(group.company_id) != company_id or _many2one_id(group.country_id) != country_id or _tax_group_values(group, account_fields) != values:
             raise _fail(failure_type, "odoo_write_error", "Odoo did not create the requested tax group.", exit_code=6)
         return _reference_result(group, "account.tax.group", company_id), False
     group = _search_one(env, "account.tax.group", [("id", "=", parameters["tax_group_id"]), ("company_id", "=", company_id)], company_id, failure_type)
     if _many2one_id(group.company_id) != company_id or _many2one_id(group.country_id) != country_id:
         raise _fail(failure_type, "record_not_found", "The tax group is unavailable in the company country.", exit_code=4)
-    target = {**_tax_group_values(group), **values}
-    if _tax_group_values(group) == target:
+    target = {**_tax_group_values(group, account_fields), **values}
+    if _tax_group_values(group, account_fields) == target:
         return _reference_result(group, "account.tax.group", company_id), True
     group.write({key: (False if value is None else value) for key, value in values.items()}); group.invalidate_recordset(list(values))
-    if _many2one_id(group.company_id) != company_id or _many2one_id(group.country_id) != country_id or _tax_group_values(group) != target:
+    if _many2one_id(group.company_id) != company_id or _many2one_id(group.country_id) != country_id or _tax_group_values(group, account_fields) != target:
         raise _fail(failure_type, "odoo_write_error", "Odoo did not update the tax group.", exit_code=6)
     return _reference_result(group, "account.tax.group", company_id), False
 

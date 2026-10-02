@@ -27,6 +27,8 @@ EXPECTED_CAPABILITY_IDS = frozenset(
         "journal_item.analytic_lines.list",
         "company.processing_settings.get",
         "cash_rounding.compute",
+        "tax.compute",
+        "payment_term.compute",
         "analytic.account.balance.inspect",
         "analytic.account.invoice_usage.inspect",
         "analytic.applicability.resolve",
@@ -791,6 +793,9 @@ def _fixture() -> tuple[Env, dict[str, Any]]:
         country_id=china,
         preceding_subtotal=False,
         company_id=company,
+        tax_payable_account_id=False,
+        tax_receivable_account_id=False,
+        advance_tax_payment_account_id=False,
     )
     tax = _record(
         31,
@@ -1360,6 +1365,9 @@ def _fixture() -> tuple[Env, dict[str, Any]]:
             country_id=china,
             preceding_subtotal="Untaxed Amount",
             company_id=company,
+            tax_payable_account_id=False,
+            tax_receivable_account_id=False,
+            advance_tax_payment_account_id=False,
         ),
         _record(
             33,
@@ -1368,6 +1376,9 @@ def _fixture() -> tuple[Env, dict[str, Any]]:
             country_id=japan,
             preceding_subtotal=False,
             company_id=other_company,
+            tax_payable_account_id=False,
+            tax_receivable_account_id=False,
+            advance_tax_payment_account_id=False,
         ),
     ]
     root_account_group = _record(
@@ -1843,6 +1854,9 @@ def _expected_item(capability_id: str, record_id: int = 31) -> dict[str, Any]:
             "country": {"id": 156, "name": "China"},
             "preceding_subtotal": None if record_id == 5 else "Untaxed Amount",
             "company_id": 7,
+            "tax_payable_account_id": None,
+            "tax_receivable_account_id": None,
+            "advance_tax_payment_account_id": None,
         }
     if capability_id in {"payment.method.list", "payment.method.get"}:
         return {

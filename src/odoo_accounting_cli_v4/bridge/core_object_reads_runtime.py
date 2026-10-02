@@ -30,6 +30,7 @@ from odoo_accounting_cli_v4 import (
 from odoo_accounting_cli_v4 import (
     reconciliation_processing_contracts as reconciliation_processing,
 )
+from odoo_accounting_cli_v4 import settlement_preview_contracts as settlement_preview
 from odoo_accounting_cli_v4 import tax_processing_contracts as tax_processing
 
 ACTION = "accounting.core_object.read"
@@ -47,7 +48,7 @@ class _JournalItemNotFound(LookupError):
     pass
 
 
-CAPABILITY_IDS = frozenset(
+CAPABILITY_IDS = settlement_preview.READ_IDS | frozenset(
     {
         *invoice_preparation.READ_IDS,
         *journal_item_processing.READ_IDS,
@@ -419,6 +420,9 @@ _REFERENCE_FIELDS = {
         "country_id",
         "preceding_subtotal",
         "company_id",
+        "tax_payable_account_id",
+        "tax_receivable_account_id",
+        "advance_tax_payment_account_id",
     ),
     "cash_rounding": (
         "id",
@@ -850,6 +854,13 @@ _REQUIRED_MODELS = {
         "account.account",
     ),
     cash_rounding.COMPUTE_ID: ("res.company", "account.cash.rounding", "res.currency"),
+    settlement_preview.TAX_ID: (
+        "res.company", "res.currency", "account.tax", "account.tax.repartition.line",
+        "account.account", "account.account.tag", "res.partner", "product.product", "product.template",
+    ),
+    settlement_preview.PAYMENT_TERM_ID: (
+        "res.company", "res.currency", "account.payment.term", "account.payment.term.line", "account.cash.rounding",
+    ),
     "journal.group.list": (
         "res.company",
         "account.journal.group",
@@ -947,8 +958,8 @@ _REQUIRED_MODELS = {
     ),
     "account.tag.list": ("res.company", "account.account.tag", "res.country"),
     "account.tag.get": ("res.company", "account.account.tag", "res.country"),
-    "tax.group.list": ("res.company", "account.tax.group", "res.country"),
-    "tax.group.get": ("res.company", "account.tax.group", "res.country"),
+    "tax.group.list": ("res.company", "account.tax.group", "res.country", "account.account"),
+    "tax.group.get": ("res.company", "account.tax.group", "res.country", "account.account"),
     "partner.bank_account.search": (
         "res.company",
         "res.partner.bank",
@@ -1692,6 +1703,11 @@ def _scope_domain(env: Any, capability_id: str, company_id: int) -> list[Any]:
 def _valid_parameters(capability_id: str, parameters: Any) -> bool:
     if not isinstance(parameters, dict):
         return False
+    if capability_id in settlement_preview.READ_IDS:
+        try:
+            return settlement_preview.normalize_parameters(capability_id, parameters) == parameters
+        except ValueError:
+            return False
     if capability_id == cash_rounding.COMPUTE_ID:
         try:
             return cash_rounding.normalize_parameters(capability_id, parameters) == parameters
@@ -3869,6 +3885,16 @@ def _normalize_tags_or_tax_groups(
     country_ids = {_reference_id(row.get("country_id")) for row in rows}
     country_ids.discard(None)
     countries = _related_rows(env, "res.country", country_ids, ("name",))
+    account_fields = ("tax_payable_account_id", "tax_receivable_account_id", "advance_tax_payment_account_id")
+    if capability_id in {"tax.group.list", "tax.group.get"}:
+        account_ids = {_reference_id(row.get(field)) for row in rows for field in account_fields}
+        account_ids.discard(None)
+        if account_ids:
+            accounts = env["account.account"].with_context(allowed_company_ids=[company_id], active_test=False).search([
+                ("id", "in", sorted(account_ids)), ("company_ids", "parent_of", [company_id]),
+            ])
+            if set(accounts.ids) != account_ids:
+                raise ValueError("tax-group settlement account unavailable in company")
     result = []
     for row in rows:
         country_id = _reference_id(row["country_id"])
@@ -3897,6 +3923,7 @@ def _normalize_tags_or_tax_groups(
                     "country": country,
                     "preceding_subtotal": _optional_text(row["preceding_subtotal"]),
                     "company_id": company_id,
+                    **{field: _reference_id(row.get(field)) for field in account_fields},
                 }
             )
     return result
@@ -4983,6 +5010,98 @@ def _cash_rounding_compute_rows(
     }
     if not cash_rounding.valid_read_item(item, company_id):
         raise ValueError("invalid native cash-rounding calculation")
+    return [item]
+
+
+def _tax_compute_rows(env: Any, parameters: dict[str, Any], company_id: int) -> list[dict[str, Any]]:
+    context = {"allowed_company_ids": [company_id], "active_test": False}
+    company = env["res.company"].with_context(**context).search([("id", "=", company_id)], limit=1)
+    currency = env["res.currency"].with_context(**context).search([
+        ("id", "=", parameters["currency_id"]), ("active", "=", True),
+    ], limit=1)
+    if not company or not currency:
+        return []
+    tax_model = env["account.tax"].with_context(**context).with_company(company)
+    tax_domain = [("company_id", "=", company_id), ("active", "=", True)]
+    taxes = tax_model.search([("id", "in", parameters["tax_ids"]), *tax_domain])
+    if set(taxes.ids) != set(parameters["tax_ids"]):
+        return []
+    children = taxes.filtered(lambda tax: tax.amount_type == "group").children_tax_ids
+    if children and set(tax_model.search([("id", "in", children.ids), *tax_domain]).ids) != set(children.ids):
+        return []
+    product = env["product.product"].with_context(**context).browse([])
+    partner = env["res.partner"].with_context(**context).browse([])
+    if parameters["product_id"] is not None:
+        product = product.search([
+            ("id", "=", parameters["product_id"]), ("company_id", "in", [False, company_id]),
+        ], limit=1)
+        if not product:
+            return []
+    if parameters["partner_id"] is not None:
+        partner = partner.search([
+            ("id", "=", parameters["partner_id"]), ("company_id", "in", [False, company_id]),
+        ], limit=1)
+        if not partner:
+            return []
+    native = taxes.compute_all(
+        float(parameters["price_unit"]), currency=currency, quantity=float(parameters["quantity"]),
+        product=product, partner=partner, is_refund=parameters["is_refund"],
+        handle_price_include=parameters["handle_price_include"], include_caba_tags=parameters["include_caba_tags"],
+    )
+    item = {
+        "id": company_id, "company_id": company_id, "currency_id": currency.id, "input": dict(parameters),
+        **{field: _decimal_string(native[field]) for field in ("total_excluded", "total_included", "total_void")},
+        "base_tag_ids": sorted(set(native["base_tags"])),
+        "taxes": [{
+            "tax_id": row["id"], "tax_repartition_line_id": row["tax_repartition_line_id"], "name": row["name"],
+            "amount": _decimal_string(row["amount"]), "base": _decimal_string(row["base"]),
+            "sequence": row["sequence"], "account_id": row["account_id"] or None,
+            "price_include": row["price_include"], "tax_exigibility": row["tax_exigibility"],
+            "group_tax_id": row["group"].id if row["group"] else None, "tag_ids": sorted(set(row["tag_ids"])),
+        } for row in native["taxes"]],
+    }
+    if not settlement_preview.valid_read_item(settlement_preview.TAX_ID, item, company_id):
+        raise ValueError("invalid native tax calculation")
+    return [item]
+
+
+def _payment_term_compute_rows(env: Any, parameters: dict[str, Any], company_id: int) -> list[dict[str, Any]]:
+    context = {"allowed_company_ids": [company_id], "active_test": False}
+    company = env["res.company"].with_context(**context).search([("id", "=", company_id)], limit=1)
+    currency = env["res.currency"].with_context(**context).search([
+        ("id", "=", parameters["currency_id"]), ("active", "=", True),
+    ], limit=1)
+    term = env["account.payment.term"].with_context(**context).with_company(company).search([
+        ("id", "=", parameters["payment_term_id"]), ("company_id", "in", [False, company_id]),
+    ], limit=1) if company else False
+    if not company or not currency or not term:
+        return []
+    cash_rounding = None
+    if parameters["cash_rounding_id"] is not None:
+        cash_rounding = env["account.cash.rounding"].with_context(**context).search([
+            ("id", "=", parameters["cash_rounding_id"]),
+        ], limit=1)
+        if not cash_rounding:
+            return []
+    native = term._compute_terms(
+        date_ref=date_type.fromisoformat(parameters["date_ref"]), currency=currency, company=company,
+        tax_amount=float(parameters["tax_amount"]), tax_amount_currency=float(parameters["tax_amount_currency"]),
+        sign=parameters["sign"], untaxed_amount=float(parameters["untaxed_amount"]),
+        untaxed_amount_currency=float(parameters["untaxed_amount_currency"]), cash_rounding=cash_rounding,
+    )
+    item = {
+        "id": term.id, "company_id": company_id, "currency_id": currency.id,
+        "company_currency_id": company.currency_id.id, "input": dict(parameters),
+        "total_amount": _decimal_string(native["total_amount"]),
+        "discount_percentage": _decimal_string(native["discount_percentage"]),
+        "discount_date": str(native["discount_date"]) if native["discount_date"] else None,
+        "discount_balance": _decimal_string(native["discount_balance"]),
+        "discount_amount_currency": _decimal_string(native.get("discount_amount_currency", 0)),
+        "line_ids": [{"date": str(row["date"]), "company_amount": _decimal_string(row["company_amount"]),
+                      "foreign_amount": _decimal_string(row["foreign_amount"])} for row in native["line_ids"]],
+    }
+    if not settlement_preview.valid_read_item(settlement_preview.PAYMENT_TERM_ID, item, company_id):
+        raise ValueError("invalid native payment-term calculation")
     return [item]
 
 
@@ -6870,6 +6989,10 @@ def dispatch(
         removes_all_taxes = False
         if capability_id in invoice_preparation.READ_IDS:
             rows = _invoice_preparation_rows(env, capability_id, parameters, company_id)
+        elif capability_id == settlement_preview.TAX_ID:
+            rows = _tax_compute_rows(env, parameters, company_id)
+        elif capability_id == settlement_preview.PAYMENT_TERM_ID:
+            rows = _payment_term_compute_rows(env, parameters, company_id)
         elif capability_id == cash_rounding.COMPUTE_ID:
             rows = _cash_rounding_compute_rows(env, parameters, company_id)
         elif capability_id == company_processing.GET_ID:
@@ -6961,7 +7084,7 @@ def dispatch(
                 cursor_found=False,
             )
 
-        if capability_id in invoice_preparation.READ_IDS or capability_id in {company_processing.GET_ID, cash_rounding.COMPUTE_ID} or capability_id in analytic_processing.READ_IDS or capability_id in journal_item_processing.GET_IDS:
+        if capability_id in settlement_preview.READ_IDS or capability_id in invoice_preparation.READ_IDS or capability_id in {company_processing.GET_ID, cash_rounding.COMPUTE_ID} or capability_id in analytic_processing.READ_IDS or capability_id in journal_item_processing.GET_IDS:
             items = rows
         elif capability_id == journal_processing.GET_ID:
             items = _normalize_journal_processing(rows, company_id)

@@ -4,9 +4,9 @@ Updated: 2026-10-02 (Asia/Shanghai)
 
 ## Current authoritative count — 2026-10-02
 
-548 registered IDs;533 implemented handlers (249 reads,284 writes);
-1072 schemas;458 unconfigured,75 degraded,15 disabled. Enabled integrations:
-530 implemented,two planned,one failed. Latest rate/bank/posted-metadata checkpoint
+550 registered IDs;535 implemented handlers (251 reads,284 writes);
+1076 schemas;460 unconfigured,75 degraded,15 disabled. Enabled integrations:
+532 implemented,two planned,one failed. Latest tax/settlement-preview checkpoint
 at the end is authoritative; totals are not a full accounting denominator,
 completion percentage or unrestricted ordinary-user permission guarantee.
 
@@ -6149,3 +6149,80 @@ silently install the absent debit-note addon. Overall goal remains active.
 
 Registry file SHA256 72ca147d16ee900f02366928bad4a94de2eb2dab723b097901d92e11418eef93;
 canonical registry SHA256 ece5778e19d44d455bf7cd6670c03bc12507c734a670fee1019d4769e630ba8a.
+
+## Checkpoint — tax and settlement previews, 2026-10-02
+
+Authoritative:550 registered;535 handlers=251 reads+284 writes;1076 schemas;
+460 unconfigured/75 degraded/15 disabled; enabled integrations532 implemented/
+two planned/one failed. This closes one eight-target batch, not the entire goal
+or a complete accounting coverage denominator.
+
+New IDs:tax.compute and payment_term.compute. Six extensions:tax.group.create/
+update/get/list nullable native settlement accounts, and bank.statement.create/
+update optional balance_start. The three tax-group fields are
+tax_payable_account_id,tax_receivable_account_id,advance_tax_payment_account_id.
+Runtime returns nine fields; SDK/schema allow old six or full nine only. Omitted
+write extensions preserve legacy normalized targets/keys. Native check_company
+and ordinary account visibility apply; no new arbitrary model/method dispatcher.
+
+Tax preview calls native compute_all without invoice/ledger writes and preserves
+native ordered repartition rows, including repeated tax IDs. group_tax_id is a
+parent account.tax. Payment-term preview calls native _compute_terms:caller
+explicitly supplies signed tax/untaxed amounts in both currencies. There is no
+automatic FX conversion, and an already-cash-rounded foreign total is a caller
+precondition. Native Float technical residuals are returned unchanged, without
+invented money rounding. Both previews bind output to the full normalized input.
+Statement starting balance uses native currency rounding; start-only recomputes
+the real end, while explicit start+end preserves both native manual values.
+Existing membership/contiguity policy and financial line protections remain.
+
+Actual acceptance:one shared public CLI/native ORM workflow passed both isolated
+aliases in21.89s as uid5/su=False/company1. Tax previews agree with actual sale,
+purchase and refund invoice amounts/tax repartition accounts; foreign installments
+agree with a posted invoice schedule. Signed early discounts exercise nonzero
+cash-rounding adjustment and exact total/line/discount native projections. Tax-group
+set/clear/get/list/replay and foreign denials, statement positive/negative/zero
+start/native-end/explicit-end/replay/neighbor validity are verified. Posted invoice
+and bank financial/matching snapshots stay unchanged. Full fresh rollback verifies
+tracked fixtures, both companies' settings, all defaults, currency/rates and exact
+caller/native group memberships. Required configuration roles are transaction-only.
+
+Server65 selected units passed in29.96s; three final metadata nodes in17.76s.
+Local final metadata three nodes passed in28.19s. Local unit fixture/key and
+old-six/new-nine registry expectations were corrected and only their failed nodes
+retested. A premature local metadata run before expectation synchronization failed
+three nodes on planned-versus-implemented status; it is not a CLI defect or pass.
+No full-suite claim. Detailed scoped evidence is in STATUS.md and the checked-in
+unit/integration tests.
+
+Retained native failure:10.42s, DEV only, complete fresh rollback before rethrow.
+An exact Decimal115.05 sum assertion ignored the native Float tail in
+14.04+101.01=115.05000000000001. Only the test was repaired to native currency
+precision for monetary equivalence; all native output projections remain exact.
+The successful21.89s dual-alias run alone is acceptance.
+
+Deployment:22 exact paths,15 prior files backed up and seven new; one test-only
+repair, two final metadata/test updates and one registry-text compaction. All22
+final local/server hashes match, existing checker limit unchanged. Initial15-file
+backup was downloaded and its original hashes independently verified. Server docs
+were not overwritten. All services active/fresh-baseline PIDs and restart counts
+unchanged; disk4.95GiB free/94% used(df), no cleanup. Changed22 privacy/Ruff findings
+zero; staged-added privacy checked separately, no historical clean-tree claim.
+
+Next:continue actual installed accounting gaps in related capability-first batches.
+Do not rerun this accepted batch or add aliases/per-command control machinery.
+Deferred candidates include negative invoice quantities, manual-entry tax reporting
+inputs, non-destructive journal-row membership edits and explicit payment-register
+method/bank selection. Payment.memo currently carries a legacy replay marker:
+do not overwrite it without resolving that conflict. Cross-currency registration
+needs native verification before implementation. No automatic expansion to stock,
+source/addon restoration, external delivery or schema-history cleanup.
+
+Not claimed:live branch/ancestor topology, all currency/localization/precision
+paths, tax-closing/CABA posting, automatic FX/cash-rounding totals, external sends
+and concurrent exactly-once. No business DB, native source/addon, service/config,
+Pi/V2/V3 or sudo business changes. Asset.validate addon defect and two report sends
+remain unclosed; do not install the absent debit-note addon. Goal remains active.
+
+Registry file SHA256 866230cb26a1b00fed4a498070e4da157531d535a9009dd4e85ff13a71d5963b;
+canonical registry SHA256 4696717ee90d9c3d501bf9153fc7b4184345cc20df1c23d5a13fb47a166f6a53.

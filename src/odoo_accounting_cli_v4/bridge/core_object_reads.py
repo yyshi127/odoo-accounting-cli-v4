@@ -26,6 +26,8 @@ CAPABILITY_IDS = frozenset(
         "cash_rounding.get",
         "cash_rounding.list",
         "cash_rounding.compute",
+        "tax.compute",
+        "payment_term.compute",
         "journal_item.search",
         "journal_item.get",
         "journal.group.get",

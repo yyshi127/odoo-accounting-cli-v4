@@ -23,7 +23,8 @@
           "description": "Unique transaction IDs; the public contract normalizes them to ascending order."
         },
         "reference": {"$ref": "#/$defs/nullableText"},
-        "balance_end_real": {"$ref": "#/$defs/signedDecimal"}
+        "balance_end_real": {"$ref": "#/$defs/signedDecimal"},
+        "balance_start": {"$ref": "#/$defs/signedDecimal"}
       }
     }
   },

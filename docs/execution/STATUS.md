@@ -1,6 +1,83 @@
 # Execution status
 
-## Current accounting phase — rates, foreign bank lines and posted metadata, 2026-10-02
+## Current accounting phase — tax and settlement previews, 2026-10-02
+
+550 registered IDs; 535 implemented handlers (251 reads, 284 writes);
+1076 schemas. Availability: 460 unconfigured, 75 degraded, 15 disabled.
+Enabled integrations: 532 implemented, two planned, one failed. Counts include
+historical non-accounting extensions; they are not a complete accounting
+denominator, completion percentage or unrestricted ordinary-user permission.
+
+Two new command IDs and six extensions:
+
+- tax.compute — read-only native compute_all, including empty/grouped/included
+  taxes, signed quantity/price and refund calculation. Returns the complete
+  normalized input, native totals and ordered repartition rows; repeated tax
+  IDs are retained. group_tax_id refers to a parent account.tax, not a tax group.
+- payment_term.compute — read-only native installments and early discounts.
+  Caller supplies date, currency and signed tax/untaxed amounts in both company
+  and foreign currencies, plus optional sign/cash_rounding_id. No automatic FX
+  conversion; cash rounding assumes the supplied foreign total is already rounded.
+- tax.group.create/update/get/list — tax_payable_account_id,
+  tax_receivable_account_id and advance_tax_payment_account_id, nullable with
+  native check_company/ordinary visible parent-company account scope. Runtime
+  reads return all nine fields; SDK/schema accept the old six or complete nine,
+  never a partial extension. Old external strict-validator compatibility is not
+  claimed. Omitted write fields do not alter legacy normalized targets or keys.
+- bank.statement.create/update — optional signed balance_start using native
+  statement-currency rounding. Start-only updates let Odoo recompute the real
+  ending balance; explicitly supplying start and end preserves both requested
+  values. Existing transaction membership/contiguity policy is unchanged.
+
+One shared public CLI/native ORM workflow passed both isolated aliases in
+21.89s as uid5/su=False/company1. It compares tax previews with actual sale,
+purchase and refund invoice amounts/tax lines, and foreign installments with an
+actual posted invoice schedule. Positive/negative early discounts exercise
+nonzero native cash-rounding differences and exact native result projections.
+Tax-group account set/clear/get/list/replay and foreign reference/target denials,
+statement signed/zero start, native end recomputation, explicit end override,
+serial replay and neighbor validity are verified. Posted invoice/bank financial
+and matching graphs stay unchanged. Fresh cursors verify all tracked fixtures,
+both companies' settings, all defaults, currencies/rates and exact caller/native
+group memberships roll back. Configuration roles exist only in that transaction.
+
+Server scoped units:65 passed in29.96s; final metadata:three nodes passed
+in17.76s. Local new units initially56 passed/one incorrect legacy-key expectation;
+the corrected node passed in0.26s. Eight selected registry/compatibility nodes
+initially seven passed/one old-six/new-nine expectation failed; the corrected
+node passed in7.39s. Final three local metadata nodes passed in28.19s after
+expectations were synchronized. These are scoped checks, not a full-suite claim.
+
+The first native attempt failed in10.42s at an over-strict Decimal assertion:
+Odoo's Float total14.04+101.01 retains115.05000000000001 in the final installment.
+DEV fresh rollback completed; E2E did not start. Only the test was corrected:
+monetary equivalence uses native currency precision, while every installment,
+total and discount projection is checked exactly against native output. Production
+calculation is unchanged; the failure is retained and is not acceptance evidence.
+
+Deployment:22 explicit code/schema/test paths,15 existing recoverable backups
+and seven new files; then one live-test repair, two final metadata/test files
+and one registry-text compaction. Every overwrite checks prior hashes and keeps
+a backup. All22 final local/server hashes match. Duplicate new acceptance reasons
+were shortened to keep the registry under the existing2MiB public-file limit;
+no checker limit or functional contract was changed. Changed-path privacy/Ruff
+findings are zero; staged-added privacy is checked separately from historical
+document contents. Server document overlays remain untouched. Services are
+active with unchanged fresh-baseline PIDs/restart counts; disk4.95GiB free/94%
+used(df), no cleanup/deletion.
+
+Unclaimed:all hierarchy/localization/currency/precision paths, actual tax-closing
+or CABA posting, automatic FX, automatic cash-rounding totals, invoice/payment
+creation by previews, external sends and concurrent exactly-once. Native business
+ACL/company scope applies; no sudo business call, business DB, source/addon,
+service/configuration or Pi/V2/V3 change. Asset.validate native-addon defect and
+two actual report sends remain unclosed; the absent debit-note addon is not an
+authorized installation. Continue practical accounting gaps; the goal is active.
+
+Registry file SHA256 866230cb26a1b00fed4a498070e4da157531d535a9009dd4e85ff13a71d5963b;
+canonical registry SHA256 4696717ee90d9c3d501bf9153fc7b4184345cc20df1c23d5a13fb47a166f6a53.
+
+## Previous checkpoint — rates, foreign bank lines and posted metadata, 2026-10-02
 
 548 registered IDs; 533 implemented handlers (249 reads, 284 writes);
 1072 schemas. Availability: 458 unconfigured, 75 degraded, 15 disabled.

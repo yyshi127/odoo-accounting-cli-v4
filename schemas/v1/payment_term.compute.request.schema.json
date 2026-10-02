@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sudotech.ai/odoo-accounting-cli-v4/v1/payment_term.compute.request.schema.json",
+  "title": "payment_term.compute request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "context",
+    "parameters"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v1"
+    },
+    "request_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "context": {
+      "$ref": "request.schema.json#/$defs/context"
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "payment_term_id",
+        "date_ref",
+        "currency_id",
+        "tax_amount",
+        "tax_amount_currency",
+        "untaxed_amount",
+        "untaxed_amount_currency"
+      ],
+      "properties": {
+        "payment_term_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "date_ref": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$(?![\\s\\S])"
+        },
+        "currency_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "tax_amount": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^(?:0|-?(?:0\\.[0-9]*[1-9]|[1-9][0-9]*(?:\\.[0-9]*[1-9])?))$(?![\\s\\S])"
+        },
+        "tax_amount_currency": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^(?:0|-?(?:0\\.[0-9]*[1-9]|[1-9][0-9]*(?:\\.[0-9]*[1-9])?))$(?![\\s\\S])"
+        },
+        "untaxed_amount": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^(?:0|-?(?:0\\.[0-9]*[1-9]|[1-9][0-9]*(?:\\.[0-9]*[1-9])?))$(?![\\s\\S])"
+        },
+        "untaxed_amount_currency": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^(?:0|-?(?:0\\.[0-9]*[1-9]|[1-9][0-9]*(?:\\.[0-9]*[1-9])?))$(?![\\s\\S])"
+        },
+        "sign": {
+          "type": "integer",
+          "enum": [
+            -1,
+            1
+          ]
+        },
+        "cash_rounding_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

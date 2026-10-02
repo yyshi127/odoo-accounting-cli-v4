@@ -628,6 +628,8 @@ _HANDLERS: dict[str, Callable[[object, dict[str, Any]], dict[str, Any]]] = {
     "reconciliation_full_list": partial(read_core_object, "reconciliation.full.list"),
     "cash_rounding_get": partial(read_core_object, "cash_rounding.get"),
     "cash_rounding_compute": partial(read_core_object, "cash_rounding.compute"),
+    "tax_compute": partial(read_core_object, "tax.compute"),
+    "payment_term_compute": partial(read_core_object, "payment_term.compute"),
     "cash_rounding_list": partial(read_core_object, "cash_rounding.list"),
     "journal_group_get": partial(read_core_object, "journal.group.get"),
     "journal_group_list": partial(read_core_object, "journal.group.list"),
@@ -1184,6 +1186,8 @@ _REQUEST_VALIDATORS: dict[str, Callable[[Any], object]] = {
     "cash_rounding_compute": partial(
         validate_core_object_read_request, "cash_rounding.compute"
     ),
+    "tax_compute": partial(validate_core_object_read_request, "tax.compute"),
+    "payment_term_compute": partial(validate_core_object_read_request, "payment_term.compute"),
     "cash_rounding_list": partial(
         validate_core_object_read_request, "cash_rounding.list"
     ),
@@ -1550,6 +1554,8 @@ _CAPABILITY_MODELS = {
     "reconciliation.full.list": "account.full.reconcile",
     "cash_rounding.get": "account.cash.rounding",
     "cash_rounding.compute": "account.cash.rounding",
+    "tax.compute": "res.company",
+    "payment_term.compute": "account.payment.term",
     "cash_rounding.list": "account.cash.rounding",
     "cash_rounding.create": "account.cash.rounding",
     "cash_rounding.update": "account.cash.rounding",

@@ -53,8 +53,19 @@
         "sequence": {"type": "integer"},
         "company_id": {"type": "integer", "minimum": 1},
         "country": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/named"}]},
-        "preceding_subtotal": {"type": ["string", "null"]}
-      }
+        "preceding_subtotal": {"type": ["string", "null"]},
+        "tax_payable_account_id": {"type": ["integer", "null"], "minimum": 1},
+        "tax_receivable_account_id": {"type": ["integer", "null"], "minimum": 1},
+        "advance_tax_payment_account_id": {"type": ["integer", "null"], "minimum": 1}
+      },
+      "allOf": [{
+        "if": {"anyOf": [
+          {"required": ["tax_payable_account_id"]},
+          {"required": ["tax_receivable_account_id"]},
+          {"required": ["advance_tax_payment_account_id"]}
+        ]},
+        "then": {"required": ["tax_payable_account_id", "tax_receivable_account_id", "advance_tax_payment_account_id"]}
+      }]
     },
     "named": {
       "type": "object",

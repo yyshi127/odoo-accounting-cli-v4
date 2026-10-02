@@ -32,6 +32,7 @@ from odoo_accounting_cli_v4 import (
 from odoo_accounting_cli_v4 import (
     reconciliation_processing_contracts as reconciliation_processing,
 )
+from odoo_accounting_cli_v4 import settlement_preview_contracts as settlement_preview
 from odoo_accounting_cli_v4 import tax_processing_contracts as tax_processing
 
 DEFAULT_LIMIT = 100
@@ -46,6 +47,7 @@ _UTC_DATETIME_PATTERN = re.compile(
 CORE_OBJECT_GET_CAPABILITY_IDS = frozenset(
     {
         *invoice_preparation.READ_IDS,
+        *settlement_preview.READ_IDS,
         "account.account.get",
         "journal.get",
         "tax.get",
@@ -522,6 +524,11 @@ def validate_core_object_read_request(
     """Validate and normalize one fixed core-object request."""
 
     request_id, context, parameters = _validate_envelope(capability_id, request)
+    if capability_id in settlement_preview.READ_IDS:
+        try:
+            return request_id, context, settlement_preview.normalize_parameters(capability_id, parameters)
+        except ValueError as exc:
+            raise _invalid(str(exc)) from exc
     if capability_id == cash_rounding.COMPUTE_ID:
         try:
             return request_id, context, cash_rounding.normalize_parameters(capability_id, parameters)
@@ -1961,23 +1968,18 @@ def _valid_tag_item(item: Any) -> bool:
 
 
 def _valid_tax_group_item(item: Any, company_id: int) -> bool:
+    fields = {"id", "name", "sequence", "country", "preceding_subtotal", "company_id"}
+    account_fields = {"tax_payable_account_id", "tax_receivable_account_id", "advance_tax_payment_account_id"}
     return bool(
         isinstance(item, dict)
-        and set(item)
-        == {
-            "id",
-            "name",
-            "sequence",
-            "country",
-            "preceding_subtotal",
-            "company_id",
-        }
+        and set(item) in (fields, fields | account_fields)
         and _valid_id(item["id"])
         and _nonempty(item["name"])
         and _is_integer(item["sequence"])
         and _optional_reference(item["country"], _named_reference)
         and _optional_text(item["preceding_subtotal"])
         and item["company_id"] == company_id
+        and all(move_processing.optional_id(item[field]) for field in account_fields if field in item)
     )
 
 
@@ -2849,6 +2851,8 @@ def _valid_account_status_item(item: Any, company_id: int) -> bool:
 
 
 def _valid_item(capability_id: str, item: Any, company_id: int) -> bool:
+    if capability_id in settlement_preview.READ_IDS:
+        return settlement_preview.valid_read_item(capability_id, item, company_id)
     if capability_id == cash_rounding.COMPUTE_ID:
         return cash_rounding.valid_read_item(item, company_id)
     if capability_id in invoice_preparation.READ_IDS:
@@ -3136,6 +3140,11 @@ def read_core_object(
                 "The requested accounting object was not found.",
                 exit_code=4,
             )
+        if capability_id in settlement_preview.READ_IDS:
+            expected = company_id if capability_id == settlement_preview.TAX_ID else parameters["payment_term_id"]
+            if items[0]["id"] != expected or items[0]["input"] != parameters:
+                raise _failed("Odoo returned a settlement calculation for another input.")
+            return items[0]
         if capability_id == company_processing.GET_ID:
             if items[0]["id"] != company_id:
                 raise _failed("Odoo returned another company's settings.")

@@ -39,21 +39,23 @@ from odoo_accounting_cli_v4.registry import (
     load_registry,
 )
 
-EXPECTED_CAPABILITY_COUNT = 548
-EXPECTED_ENABLED_CAPABILITY_COUNT = 533
-EXPECTED_IMPLEMENTED_READ_COUNT = 249
+EXPECTED_CAPABILITY_COUNT = 550
+EXPECTED_ENABLED_CAPABILITY_COUNT = 535
+EXPECTED_IMPLEMENTED_READ_COUNT = 251
 EXPECTED_IMPLEMENTED_WRITE_COUNT = 284
 EXPECTED_DISABLED_CAPABILITY_COUNT = 15
-EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 458
+EXPECTED_UNCONFIGURED_CAPABILITY_COUNT = 460
 EXPECTED_DEGRADED_CAPABILITY_COUNT = 75
-EXPECTED_SCHEMA_COUNT = 1072
+EXPECTED_SCHEMA_COUNT = 1076
 EXPECTED_CAPABILITY_IDS_SHA256 = (
-    "e334dd5367a429788feb4b0f91976c2468e9db57f4324d1b09fda905acd5daee"
+    "4629c9b8f9d64ed109b82500f49cca634f45b6d9743b33bf4e4152209fed8c3c"
 )
 EXPECTED_FIRST_CAPABILITY_SHA256 = (
     "7b15597c6b11ea1a421b1a8ca56f25b653492951ee0efd3c9e1c70c06b448216"
 )
 IMPLEMENTED_READS = {
+    "tax.compute": "tax_compute",
+    "payment_term.compute": "payment_term_compute",
     "cash_rounding.compute": "cash_rounding_compute",
     "invoice.service_dates.get": "invoice_service_dates_get",
     "invoice.alerts.inspect": "invoice_alerts_inspect",
@@ -439,6 +441,9 @@ ACCOUNTING_SETUP_WRITES = {"company.cash_basis_configuration.update", "tax.creat
 ACCOUNTING_SETUP_READS = {"cash_rounding.compute", "company.processing_settings.get"}
 
 ACCOUNTING_MAINTENANCE_WRITES = {"currency.rate.update", "currency.rate.delete", "bank.statement.update", "bank.transaction.record", "bank.transaction.update", "invoice.update", "invoice.payment_method.assign", "invoice.incoterm.update"}
+
+ACCOUNTING_SETTLEMENT_WRITES = {"tax.group.create", "tax.group.update", "bank.statement.create", "bank.statement.update"}
+ACCOUNTING_SETTLEMENT_READS = {"tax.compute", "payment_term.compute", "tax.group.get", "tax.group.list"}
 
 IMPLEMENTED_WRITES = ACCOUNTING_MAINTENANCE_WRITES | ACCOUNTING_SETUP_WRITES | ACCOUNTING_WORKFLOWS_WRITES | INVOICE_PREPARATION_WRITES | JOURNAL_ITEM_PROCESSING_WRITES | COMPANY_PROCESSING_WRITES | ANALYTIC_PROCESSING_WRITES | JOURNAL_PROCESSING_WRITES | ACCOUNT_PROCESSING_WRITES | TAX_PROCESSING_WRITES | PAYMENT_TERM_PROCESSING_WRITES | RECONCILIATION_PROCESSING_WRITES | PAYMENT_PROCESSING_WRITES | INVOICE_PRESENTATION_WRITES | MOVE_PROCESSING_WRITES | PARTNER_PREFERENCES_WRITES | PAYMENT_CONFIGURATION_WRITES | FISCAL_MAPPING_WRITES | REPORT_BUDGET_WRITES | {
     "account.group.create",
@@ -912,6 +917,8 @@ RETURN_JOURNAL_ANALYSIS_LIVE_READS = {
     "journal_item.analysis.summary",
 }
 CORE_OBJECT_READ_HANDLERS = {
+    "tax.compute": "tax_compute",
+    "payment_term.compute": "payment_term_compute",
     "cash_rounding.compute": "cash_rounding_compute",
     "invoice.service_dates.get": "invoice_service_dates_get",
     "invoice.alerts.inspect": "invoice_alerts_inspect",
@@ -1250,6 +1257,11 @@ def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> No
             ]
             continue
         assert descriptor["tests"]["unit"]["status"] == "implemented"
+        if capability_id in ACCOUNTING_SETTLEMENT_READS:
+            assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_accounting_settlement_batch.py"]
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == ["tests/integration/test_accounting_settlement_batch_live.py"]
+            continue
         if capability_id in ACCOUNTING_SETUP_READS:
             assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_accounting_setup_batch.py"]
             assert descriptor["tests"]["integration"]["status"] == "implemented"
@@ -1672,6 +1684,9 @@ def test_reference_object_reads_have_fixed_sources_and_closed_contracts() -> Non
             "company_id",
             "country",
             "preceding_subtotal",
+            "tax_payable_account_id",
+            "tax_receivable_account_id",
+            "advance_tax_payment_account_id",
         },
     }
     get_sources = {
@@ -1719,12 +1734,12 @@ def test_reference_object_reads_have_fixed_sources_and_closed_contracts() -> Non
         )
         assert descriptor["tests"]["unit"] == {
             "status": "implemented",
-            "references": unit_tests,
+            "references": ["tests/unit/test_accounting_settlement_batch.py"] if capability_id in ACCOUNTING_SETTLEMENT_READS else unit_tests,
             "reason": descriptor["tests"]["unit"]["reason"],
         }
         assert descriptor["tests"]["integration"]["status"] == "implemented"
         assert descriptor["tests"]["integration"]["references"] == [
-            "tests/integration/test_reference_object_read_batch_live.py"
+            "tests/integration/test_accounting_settlement_batch_live.py" if capability_id in ACCOUNTING_SETTLEMENT_READS else "tests/integration/test_reference_object_read_batch_live.py"
         ]
 
         request_schema = registry.load_schema(descriptor["schemas"]["request"])
@@ -1744,7 +1759,8 @@ def test_reference_object_reads_have_fixed_sources_and_closed_contracts() -> Non
             assert set(parameters["properties"]) == request_fields[capability_id]
             assert (
                 set(response_schema["$defs"]["item"]["required"])
-                == (item_fields[capability_id])
+                == (item_fields[capability_id] - {"tax_payable_account_id", "tax_receivable_account_id", "advance_tax_payment_account_id"}
+                    if capability_id == "tax.group.list" else item_fields[capability_id])
             )
             assert (
                 set(response_schema["$defs"]["item"]["properties"])
@@ -1758,6 +1774,11 @@ def test_reference_object_reads_have_fixed_sources_and_closed_contracts() -> Non
         "type": "integer",
         "minimum": 1,
     }
+    settlement_accounts = ["tax_payable_account_id", "tax_receivable_account_id", "advance_tax_payment_account_id"]
+    assert tax_group["allOf"] == [{
+        "if": {"anyOf": [{"required": [field]} for field in settlement_accounts]},
+        "then": {"required": settlement_accounts},
+    }]
     product = registry.load_schema("schemas/v1/product.search.response.schema.json")[
         "$defs"
     ]["item"]
@@ -3097,6 +3118,12 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
         else:
             assert descriptor["status"]["value"] == "unconfigured"
             assert descriptor["status"]["reason_code"] == "runtime_context_required"
+        if capability_id in ACCOUNTING_SETTLEMENT_WRITES:
+            assert descriptor["tests"]["unit"]["status"] == "implemented"
+            assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_accounting_settlement_batch.py"]
+            assert descriptor["tests"]["integration"]["status"] == "implemented"
+            assert descriptor["tests"]["integration"]["references"] == ["tests/integration/test_accounting_settlement_batch_live.py"]
+            continue
         if capability_id in ACCOUNTING_MAINTENANCE_WRITES:
             assert descriptor["tests"]["unit"]["status"] == "implemented"
             assert descriptor["tests"]["unit"]["references"] == ["tests/unit/test_accounting_maintenance_batch.py"]

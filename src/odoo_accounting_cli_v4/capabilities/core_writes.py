@@ -1578,12 +1578,12 @@ def _validate_bank_transaction_update_parameters(parameters: Any) -> dict[str, A
 
 
 def _validate_bank_statement_values(values: Any, *, partial: bool) -> dict[str, Any]:
-    allowed = {"reference", "balance_end_real"}
-    required = allowed | {"transaction_ids"}
+    required = {"reference", "balance_end_real", "transaction_ids"}
+    allowed = required | {"balance_start"}
     if (
         not isinstance(values, dict)
-        or (partial and (not values or not set(values) <= required))
-        or (not partial and set(values) != required)
+        or (partial and (not values or not set(values) <= allowed))
+        or (not partial and not required <= set(values) <= allowed)
     ):
         raise _invalid("Bank-statement values do not match the fixed contract.")
     normalized = dict(values)
@@ -1599,10 +1599,9 @@ def _validate_bank_statement_values(values: Any, *, partial: bool) -> dict[str, 
         or _is_bounded_text(normalized["reference"], 200)
     ):
         raise _invalid("reference must be null or a trimmed 1-200 character string.")
-    if "balance_end_real" in normalized and _canonical_decimal(
-        normalized["balance_end_real"], signed=True
-    ) is None:
-        raise _invalid("balance_end_real must be a canonical signed decimal string.")
+    for field in ("balance_start", "balance_end_real"):
+        if field in normalized and _canonical_decimal(normalized[field], signed=True) is None:
+            raise _invalid(f"{field} must be a canonical signed decimal string.")
     return normalized
 
 
@@ -2418,16 +2417,21 @@ def _validate_account_tag_parameters(
 
 
 _TAX_GROUP_FIELDS = frozenset({"name", "sequence", "preceding_subtotal"})
+_TAX_GROUP_ACCOUNT_FIELDS = frozenset({"tax_payable_account_id", "tax_receivable_account_id", "advance_tax_payment_account_id"})
 
 
 def _validate_tax_group_values(values: Any, *, partial: bool) -> dict[str, Any]:
+    allowed = _TAX_GROUP_FIELDS | _TAX_GROUP_ACCOUNT_FIELDS
     if (
         not isinstance(values, dict)
-        or (partial and (not values or not set(values) <= _TAX_GROUP_FIELDS))
-        or (not partial and set(values) != _TAX_GROUP_FIELDS)
+        or (partial and (not values or not set(values) <= allowed))
+        or (not partial and not _TAX_GROUP_FIELDS <= set(values) <= allowed)
     ):
         raise _invalid("Tax-group parameters do not match the fixed contract.")
     normalized = dict(values)
+    for field in _TAX_GROUP_ACCOUNT_FIELDS:
+        if field in normalized and not _valid_optional_id(normalized[field]):
+            raise _invalid(f"{field} must be null or a positive integer.")
     if "name" in normalized:
         normalized["name"] = _normalize_configuration_text(
             normalized["name"], field="name", maximum=256

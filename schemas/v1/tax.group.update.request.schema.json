@@ -22,7 +22,10 @@
           "properties": {
             "name": {"$ref": "#/$defs/text"},
             "sequence": {"type": "integer", "minimum": 0},
-            "preceding_subtotal": {"type": ["string", "null"], "minLength": 1, "maxLength": 256, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"}
+            "preceding_subtotal": {"type": ["string", "null"], "minLength": 1, "maxLength": 256, "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"},
+            "tax_payable_account_id": {"type": ["integer", "null"], "minimum": 1},
+            "tax_receivable_account_id": {"type": ["integer", "null"], "minimum": 1},
+            "advance_tax_payment_account_id": {"type": ["integer", "null"], "minimum": 1}
           }
         }
       }
