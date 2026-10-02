@@ -249,6 +249,41 @@
           "maxLength": 256,
           "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
         },
+        "tax_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "tax_tag_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "tax_repartition_line_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "tax_base_amount": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
+        },
+        "tax_line_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
         "no_followup": {
           "type": "boolean"
         }

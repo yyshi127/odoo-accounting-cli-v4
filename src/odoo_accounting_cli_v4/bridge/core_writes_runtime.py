@@ -740,8 +740,12 @@ _DOCUMENT_LINE_OPTIONAL_KEYS = frozenset(
 _ENTRY_LINE_REQUIRED_KEYS = frozenset(
     {"name", "account_id", "partner_id", "debit", "credit"}
 )
+_ENTRY_TAX_FIELDS = frozenset(journal_item_processing.TAX_FIELDS)
 _ENTRY_LINE_OPTIONAL_KEYS = frozenset(
     {"currency_id", "amount_currency", "analytic_distribution", "date_maturity"}
+) | _ENTRY_TAX_FIELDS
+_PAYMENT_REGISTER_REFERENCE_FIELDS = frozenset(
+    {"payment_method_line_id", "partner_bank_id"}
 )
 _REFUND_REQUIRED_KEYS = frozenset({"move_id", "date", "reason"})
 _PAYMENT_REGISTER_REQUIRED_KEYS = frozenset({"move_id", "journal_id", "payment_date"})
@@ -810,6 +814,8 @@ _PARAMETER_KEYS = {
         "payment_difference_handling",
         "writeoff_account_id",
         "writeoff_label",
+        "payment_method_line_id",
+        "partner_bank_id",
     },
     "payable.payment.register": {
         "move_id",
@@ -820,6 +826,8 @@ _PARAMETER_KEYS = {
         "payment_difference_handling",
         "writeoff_account_id",
         "writeoff_label",
+        "payment_method_line_id",
+        "partner_bank_id",
     },
     "reconciliation.apply": {"line_ids", "invoice_id", "outstanding_line_id"},
     "payment.cancel": {"payment_id", "payment_ids"},
@@ -3299,7 +3307,10 @@ for _capability_id in (
     "payable.payment.register",
 ):
     _MODELS[_capability_id].update(
-        {"account.partial.reconcile", "account.full.reconcile"}
+        {
+            "account.partial.reconcile", "account.full.reconcile",
+            "account.payment.method.line", "res.partner.bank",
+        }
     )
     _ACCESS[_capability_id].update(
         {
@@ -3307,6 +3318,8 @@ for _capability_id in (
             ("account.partial.reconcile", "read"),
             ("account.partial.reconcile", "create"),
             ("account.full.reconcile", "read"),
+            ("account.payment.method.line", "read"),
+            ("res.partner.bank", "read"),
         }
     )
 
@@ -3479,6 +3492,17 @@ _ACCESS["journal_entry.lines.remove"] = {
     ("account.account", "read"), ("account.journal", "read"),
     ("account.analytic.line", "read"), ("account.analytic.line", "unlink"),
 }
+for _capability_id in (
+    "journal_entry.create", "journal_entry.lines.replace",
+    "journal_entry.lines.add", "journal_entry.lines.update",
+):
+    _MODELS[_capability_id].update({
+        "account.tax", "account.tax.repartition.line", "account.account.tag",
+    })
+    _ACCESS[_capability_id].update({
+        ("account.tax", "read"), ("account.tax.repartition.line", "read"),
+        ("account.account.tag", "read"),
+    })
 for _journal_item_capability in (
     "invoice.line.unit.assign", "invoice.line.deductibility.update",
 ):
@@ -4036,6 +4060,21 @@ def _valid_entry_lines(value: Any, *, minimum: int = 2) -> bool:
                     or (amount_currency > 0) != (debit > credit)
                 ):
                     return False
+        for field in ("tax_ids", "tax_tag_ids"):
+            if field in line and not (
+                isinstance(line[field], list)
+                and len(line[field]) <= 100
+                and all(_is_id(item) for item in line[field])
+                and line[field] == sorted(set(line[field]))
+            ):
+                return False
+        if "tax_repartition_line_id" in line and not (
+            line["tax_repartition_line_id"] is None
+            or _is_id(line["tax_repartition_line_id"])
+        ):
+            return False
+        if "tax_base_amount" in line and _signed_decimal(line["tax_base_amount"]) is None:
+            return False
         debit_total += debit
         credit_total += credit
     return debit_total > 0 and debit_total == credit_total
@@ -4217,6 +4256,10 @@ def _normalized_entry_replacement_lines(
             "analytic_distribution": _normalized_analytic_distribution(
                 line.get("analytic_distribution")
             ),
+            "tax_ids": list(line.get("tax_ids", [])),
+            "tax_tag_ids": list(line.get("tax_tag_ids", [])),
+            "tax_repartition_line_id": line.get("tax_repartition_line_id"),
+            "tax_base_amount": _canonical_decimal_text(line.get("tax_base_amount", "0")),
         }
         for line in lines
     ]
@@ -4230,10 +4273,14 @@ def _entry_lines_match(
     expected = _normalized_entry_replacement_lines(lines, company_currency_id)
     if current is None or len(current) != len(expected):
         return False
+    current = [dict(item) for item in current]
     for actual, target, requested in zip(current, expected, lines, strict=True):
         if "date_maturity" not in requested:
             # An omitted date must not make an otherwise unchanged replay rewrite lines.
             target["date_maturity"] = actual["date_maturity"]
+        for field in _ENTRY_TAX_FIELDS - set(requested):
+            actual.pop(field, None)
+            target.pop(field, None)
     return current == expected
 
 
@@ -6096,10 +6143,15 @@ def _valid_parameters(
         "receivable.payment.register",
         "payable.payment.register",
     }:
+        if any(
+            field in parameters and not _is_id(parameters[field])
+            for field in _PAYMENT_REGISTER_REFERENCE_FIELDS
+        ):
+            return False
         if "move_ids" in parameters:
             move_ids = parameters["move_ids"]
             return (
-                set(parameters) == _PAYMENT_REGISTER_MANY_REQUIRED_KEYS
+                set(parameters) <= _PAYMENT_REGISTER_MANY_REQUIRED_KEYS | _PAYMENT_REGISTER_REFERENCE_FIELDS
                 and isinstance(move_ids, list)
                 and 2 <= len(move_ids) <= 100
                 and all(_is_id(move_id) for move_id in move_ids)
@@ -11551,6 +11603,9 @@ def _create_entry(
     _validate_line_analytic_references(
         env, parameters["lines"], company_id, failure_type
     )
+    tax_inputs = any(_ENTRY_TAX_FIELDS & set(line) for line in parameters["lines"])
+    if tax_inputs:
+        _validate_entry_tax_references(env, parameters["lines"], company_id, failure_type)
     values = {
         "move_type": "entry",
         "company_id": company_id,
@@ -11575,6 +11630,9 @@ def _create_entry(
                     "partner_id": line["partner_id"] or False,
                     "debit": Decimal(line["debit"]),
                     "credit": Decimal(line["credit"]),
+                    **_journal_item_write_values({
+                        field: line[field] for field in _ENTRY_TAX_FIELDS if field in line
+                    }),
                     **(
                         {"date_maturity": line["date_maturity"] or False}
                         if "date_maturity" in line
@@ -11606,7 +11664,19 @@ def _create_entry(
             for line in parameters["lines"]
         ],
     }
-    move = _scoped(env, "account.move", company_id).create(values)
+    if tax_inputs:
+        with env.cr.savepoint():
+            move = _scoped(env, "account.move", company_id).create(values)
+            if not _entry_lines_match(
+                _current_entry_lines(move), parameters["lines"], company_currency_id
+            ):
+                raise _fail(
+                    failure_type, "state_conflict",
+                    "Provide the complete balanced base and tax rows; native tax synchronization must preserve the requested rows.",
+                    exit_code=5,
+                )
+    else:
+        move = _scoped(env, "account.move", company_id).create(values)
     return _move_result(move, company_id), False
 
 
@@ -11932,6 +12002,7 @@ def _current_entry_lines(move: Any) -> list[dict[str, Any]] | None:
                 "analytic_distribution": _normalized_analytic_distribution(
                     getattr(line, "analytic_distribution", None)
                 ),
+                **_journal_item_current(line, _ENTRY_TAX_FIELDS),
             }
         )
     return result
@@ -12036,7 +12107,28 @@ def _validate_entry_line_references(
                 exit_code=5,
             )
     _validate_line_analytic_references(env, lines, company_id, failure_type)
+    if any(_ENTRY_TAX_FIELDS & set(line) for line in lines):
+        _validate_entry_tax_references(env, lines, company_id, failure_type)
     return company_currency_id
+
+
+def _validate_entry_tax_references(
+    env: Any, lines: list[dict[str, Any]], company_id: int,
+    failure_type: type[Exception],
+) -> None:
+    _ensure_ids(
+        env, "account.tax", {item for line in lines for item in line.get("tax_ids", [])},
+        [("company_id", "=", company_id)], company_id, failure_type,
+    )
+    _ensure_ids(
+        env, "account.account.tag", {item for line in lines for item in line.get("tax_tag_ids", [])},
+        [("applicability", "=", "taxes")], company_id, failure_type,
+    )
+    _ensure_ids(
+        env, "account.tax.repartition.line",
+        {line["tax_repartition_line_id"] for line in lines if line.get("tax_repartition_line_id") is not None},
+        [("company_id", "=", company_id)], company_id, failure_type,
+    )
 
 
 def _has_external_invoice_line_source(move: Any) -> bool:
@@ -12086,6 +12178,9 @@ def _replacement_commands(
                 "partner_id": line["partner_id"] or False,
                 "debit": Decimal(line["debit"]),
                 "credit": Decimal(line["credit"]),
+                **_journal_item_write_values({
+                    field: line[field] for field in _ENTRY_TAX_FIELDS if field in line
+                }),
                 **(
                     {"date_maturity": line["date_maturity"] or False}
                     if "date_maturity" in line
@@ -12123,6 +12218,18 @@ def _replace_move_lines(
     )
     lines = parameters["lines"]
     invoice_action = capability_id == "invoice.lines.replace"
+    if not invoice_action and any(_ENTRY_TAX_FIELDS & set(line) for line in lines):
+        if move.state != "draft":
+            raise _fail(
+                failure_type, "state_conflict",
+                "Explicit journal-entry tax inputs require a draft entry.", exit_code=5,
+            )
+        if _generated_entry(move) or any(_journal_item_sourced(line) for line in move.line_ids):
+            raise _fail(
+                failure_type, "business_rule_error",
+                "Explicit journal-entry tax inputs require an ordinary source-unlinked entry.",
+                exit_code=6,
+            )
     if invoice_action:
         _validate_invoice_line_references(env, move, lines, company_id, failure_type)
         matches = _invoice_lines_match(_current_invoice_lines(move), lines)
@@ -13229,6 +13336,71 @@ def _rounded_currency_amount(currency: Any, value: str) -> Decimal:
     return Decimal(str(currency.round(float(Decimal(value)))))
 
 
+def _register_payment_references(
+    env: Any, parameters: dict[str, Any], payment_type: str,
+    company_id: int, failure_type: type[Exception],
+) -> dict[str, int]:
+    references = {
+        field: parameters[field]
+        for field in _PAYMENT_REGISTER_REFERENCE_FIELDS if field in parameters
+    }
+    if not references:
+        return references
+    journal = _search_one(
+        env, "account.journal",
+        [("id", "=", parameters["journal_id"]), ("company_id", "=", company_id),
+         ("type", "in", ["bank", "cash"])],
+        company_id, failure_type,
+    )
+    if "payment_method_line_id" in references:
+        _ensure_ids(
+            env, "account.payment.method.line", {references["payment_method_line_id"]},
+            [("journal_id", "=", journal.id), ("payment_type", "=", payment_type)],
+            company_id, failure_type,
+        )
+    if "partner_bank_id" in references:
+        _ensure_ids(
+            env, "res.partner.bank", {references["partner_bank_id"]},
+            [("company_id", "in", [False, company_id])], company_id, failure_type,
+        )
+    return references
+
+
+def _register_payment_references_match(
+    payment: Any, references: dict[str, int], payment_type: str,
+) -> bool:
+    return not references or (
+        payment.payment_type == payment_type
+        and all(_many2one_id(getattr(payment, field)) == value for field, value in references.items())
+    )
+
+
+def _validate_register_wizard_references(
+    wizard: Any, references: dict[str, int], payment_type: str,
+    failure_type: type[Exception],
+) -> None:
+    if not references:
+        return
+    if "partner_bank_id" in references and not (
+        wizard.can_edit_wizard and wizard.batches
+        and (len(wizard.batches[0]["lines"]) == 1 or wizard.group_payment)
+    ):
+        raise _fail(
+            failure_type, "state_conflict",
+            "The native non-editable payment route cannot carry an explicit bank selection.",
+            exit_code=5,
+        )
+    if not _register_payment_references_match(wizard, references, payment_type) or any(
+        value not in getattr(wizard, "available_payment_method_line_ids" if field == "payment_method_line_id" else "available_partner_bank_ids").ids
+        for field, value in references.items()
+    ):
+        raise _fail(
+            failure_type, "business_rule_error",
+            "The native payment wizard cannot honor the requested payment method or bank account.",
+            exit_code=6,
+        )
+
+
 def _register_many_payments(
     env: Any,
     capability_id: str,
@@ -13273,6 +13445,10 @@ def _register_many_payments(
             "Every batch payment source must be posted.",
             exit_code=5,
         )
+    payment_type = "inbound" if move_type == "out_invoice" else "outbound"
+    references = _register_payment_references(
+        env, parameters, payment_type, company_id, failure_type
+    )
     operation_marker = _operation_marker(capability_id, key, parameters)
     candidates = _scoped(env, "account.payment", company_id).search(
         [("company_id", "=", company_id), ("memo", "=", key)], limit=2
@@ -13286,6 +13462,7 @@ def _register_many_payments(
             or str(payment.date) != parameters["payment_date"]
             or payment.move_id.invoice_origin != operation_marker
             or _payment_sources(payment) != set(move_ids)
+            or not _register_payment_references_match(payment, references, payment_type)
         ):
             raise _fail(
                 failure_type,
@@ -13327,9 +13504,11 @@ def _register_many_payments(
                 "communication": key,
                 "installments_mode": "full",
                 "group_payment": True,
+                **references,
             }
         )
     )
+    _validate_register_wizard_references(wizard, references, payment_type, failure_type)
     if (
         len(wizard.batches) != 1
         or not wizard.can_edit_wizard
@@ -13366,6 +13545,7 @@ def _register_many_payments(
         or str(payment.date) != parameters["payment_date"]
         or payment.move_id.invoice_origin != operation_marker
         or _payment_sources(payment) != set(move_ids)
+        or not _register_payment_references_match(payment, references, payment_type)
         or _rounded_currency_amount(currency, str(payment.amount)) != total_residual
         or any(
             _rounded_currency_amount(currency, str(source.amount_residual)) != 0
@@ -13415,6 +13595,10 @@ def _register_payment(
         else None
     )
     handling = parameters.get("payment_difference_handling")
+    payment_type = "inbound" if source.move_type in {"out_invoice", "in_refund"} else "outbound"
+    references = _register_payment_references(
+        env, parameters, payment_type, company_id, failure_type
+    )
     operation_marker = _operation_marker(capability_id, key, parameters)
     residual = Decimal(str(source.amount_residual))
     candidates = _scoped(env, "account.payment", company_id).search(
@@ -13439,6 +13623,7 @@ def _register_payment(
             or (
                 (
                     handling is not None
+                    or bool(references)
                     or (
                         isinstance(stored_marker, str)
                         and stored_marker.startswith("ODACV4:")
@@ -13446,6 +13631,7 @@ def _register_payment(
                 )
                 and stored_marker != operation_marker
             )
+            or not _register_payment_references_match(matching, references, payment_type)
         ):
             raise _fail(
                 failure_type,
@@ -13480,6 +13666,7 @@ def _register_payment(
         "journal_id": parameters["journal_id"],
         "payment_date": parameters["payment_date"],
         "communication": key,
+        **references,
     }
     if requested_amount is not None:
         wizard_values.update(
@@ -13507,7 +13694,7 @@ def _register_payment(
         if "writeoff_label" in parameters:
             wizard_values["writeoff_label"] = parameters["writeoff_label"]
     wizard_context = {"active_model": "account.move", "active_ids": [source.id]}
-    if handling is not None:
+    if handling is not None or references:
         # Native move creation consumes this standard default; no posted write.
         wizard_context["default_invoice_origin"] = operation_marker
     wizard = (
@@ -13515,6 +13702,7 @@ def _register_payment(
         .with_context(**wizard_context)
         .create(wizard_values)
     )
+    _validate_register_wizard_references(wizard, references, payment_type, failure_type)
     if handling is not None and wizard.currency_id.id != source.currency_id.id:
         raise _fail(
             failure_type,
@@ -13567,7 +13755,8 @@ def _register_payment(
             and _rounded_currency_amount(source.currency_id, str(payment.amount))
             != requested_amount
         )
-        or (handling is not None and payment.move_id.invoice_origin != operation_marker)
+        or ((handling is not None or references) and payment.move_id.invoice_origin != operation_marker)
+        or not _register_payment_references_match(payment, references, payment_type)
     ):
         raise _fail(
             failure_type,
@@ -21263,11 +21452,16 @@ def _write_move_processing(
 def _journal_item_current(line: Any, fields: set[str]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for field in fields:
-        value = getattr(line, field)
-        if field in {"account_id", "partner_id", "product_uom_id", "currency_id"}:
+        value = (
+            getattr(line, field, [] if field in {"tax_ids", "tax_tag_ids"} else 0 if field == "tax_base_amount" else None)
+            if field in _ENTRY_TAX_FIELDS else getattr(line, field)
+        )
+        if field in {"account_id", "partner_id", "product_uom_id", "currency_id", "tax_repartition_line_id"}:
             result[field] = _relation_id(value)
-        elif field in {"debit", "credit", "deductible_amount", "amount_currency"}:
+        elif field in {"debit", "credit", "deductible_amount", "amount_currency", "tax_base_amount"}:
             result[field] = _canonical_decimal_text(value)
+        elif field in {"tax_ids", "tax_tag_ids"}:
+            result[field] = _relation_ids(value)
         elif field == "analytic_distribution":
             result[field] = _normalized_analytic_distribution(value) or None
         elif field == "date_maturity":
@@ -21280,8 +21474,10 @@ def _journal_item_current(line: Any, fields: set[str]) -> dict[str, Any]:
 def _journal_item_write_values(changes: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for field, value in changes.items():
-        if field in {"debit", "credit", "deductible_amount", "amount_currency"}:
+        if field in {"debit", "credit", "deductible_amount", "amount_currency", "tax_base_amount"}:
             result[field] = float(Decimal(value))
+        elif field in {"tax_ids", "tax_tag_ids"}:
+            result[field] = [(6, 0, value)]
         elif field == "analytic_distribution":
             result[field] = _odoo_analytic_distribution(value)
         else:
@@ -21322,7 +21518,7 @@ def _write_journal_item_processing(
         requested = parameters["lines"]
         lines = _ensure_ids(env, "account.move.line", {item["line_id"] for item in requested}, [
             ("move_id", "=", move.id), ("company_id", "=", company_id),
-            ("display_type", "in", [False, "product"]), ("account_id", "!=", False),
+            ("display_type", "in", [False, "product", "tax"]), ("account_id", "!=", False),
         ], company_id, failure_type)
         by_id = {line.id: line for line in lines}
         _ensure_ids(env, "account.account", {
@@ -21342,8 +21538,22 @@ def _write_journal_item_processing(
                 if _rounded_currency_amount(currency, changes["amount_currency"]) != Decimal(changes["amount_currency"]):
                     raise _fail(failure_type, "business_rule_error", "The foreign amount must match its native currency precision.", exit_code=6)
         _validate_line_analytic_references(env, [item["changes"] for item in requested], company_id, failure_type)
+        if any(_ENTRY_TAX_FIELDS & set(item["changes"]) for item in requested):
+            if any(_journal_item_sourced(line) for line in move.line_ids):
+                raise _fail(
+                    failure_type, "business_rule_error",
+                    "Explicit journal-entry tax inputs require an ordinary source-unlinked entry.",
+                    exit_code=6,
+                )
+            _validate_entry_tax_references(
+                env, [item["changes"] for item in requested], company_id, failure_type
+            )
+        targets = {item["line_id"]: dict(item["changes"]) for item in requested}
+        for target in targets.values():
+            if "tax_base_amount" in target:
+                target["tax_base_amount"] = _canonical_decimal_text(target["tax_base_amount"])
         replay = all(
-            _journal_item_current(by_id[item["line_id"]], set(item["changes"])) == item["changes"]
+            _journal_item_current(by_id[item["line_id"]], set(item["changes"])) == targets[item["line_id"]]
             for item in requested
         )
         with env.cr.savepoint():
@@ -21357,7 +21567,7 @@ def _write_journal_item_processing(
                 lines.invalidate_recordset()
                 move.invalidate_recordset()
             if set(move.line_ids.ids) != before_ids or any(
-                _journal_item_current(by_id[item["line_id"]], set(item["changes"])) != item["changes"]
+                _journal_item_current(by_id[item["line_id"]], set(item["changes"])) != targets[item["line_id"]]
                 for item in requested
             ):
                 raise _fail(failure_type, "odoo_write_error", "Native journal-line changes were not persisted with the existing line IDs.", exit_code=6)

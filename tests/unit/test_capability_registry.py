@@ -447,6 +447,8 @@ ACCOUNTING_SETTLEMENT_READS = {"tax.compute", "payment_term.compute", "tax.group
 
 ACCOUNTING_ENTRY_MEMBERSHIP_WRITES = {"journal_entry.lines.add", "journal_entry.lines.remove"}
 ACCOUNTING_SIGNED_QUANTITY_WRITES = {"customer_invoice.create", "vendor_bill.create", "invoice.line.create", "invoice.line.update", "invoice.lines.replace", "customer_credit_note.create", "vendor_refund.create"}
+PAYMENT_TAX_INPUT_WRITES = {"receivable.payment.register", "payable.payment.register", "journal_entry.create", "journal_entry.lines.replace", "journal_entry.lines.add", "journal_entry.lines.update"}
+PAYMENT_TAX_INPUT_READS = {"journal_item.processing_details.get", "journal_item.get", "journal_item.search"}
 
 IMPLEMENTED_WRITES = ACCOUNTING_ENTRY_MEMBERSHIP_WRITES | ACCOUNTING_MAINTENANCE_WRITES | ACCOUNTING_SETUP_WRITES | ACCOUNTING_WORKFLOWS_WRITES | INVOICE_PREPARATION_WRITES | JOURNAL_ITEM_PROCESSING_WRITES | COMPANY_PROCESSING_WRITES | ANALYTIC_PROCESSING_WRITES | JOURNAL_PROCESSING_WRITES | ACCOUNT_PROCESSING_WRITES | TAX_PROCESSING_WRITES | PAYMENT_TERM_PROCESSING_WRITES | RECONCILIATION_PROCESSING_WRITES | PAYMENT_PROCESSING_WRITES | INVOICE_PRESENTATION_WRITES | MOVE_PROCESSING_WRITES | PARTNER_PREFERENCES_WRITES | PAYMENT_CONFIGURATION_WRITES | FISCAL_MAPPING_WRITES | REPORT_BUDGET_WRITES | {
     "account.group.create",
@@ -1234,11 +1236,52 @@ def test_every_unimplemented_capability_is_honestly_disabled_without_a_handler()
         )
 
 
+def _prior_payment_tax_input_evidence(capability_id, descriptor):
+    """Check only this extension's evidence, retaining the prior exact assertions."""
+    if capability_id not in PAYMENT_TAX_INPUT_WRITES | PAYMENT_TAX_INPUT_READS:
+        return descriptor
+    descriptor = copy.deepcopy(descriptor)
+    unit = descriptor["tests"]["unit"]
+    extra_units = ["tests/unit/test_accounting_payment_tax_inputs_batch.py"]
+    if capability_id in PAYMENT_TAX_INPUT_WRITES:
+        extra_units.append("tests/unit/test_entry_payment_explicit_inputs_contract.py")
+    if capability_id not in {"receivable.payment.register", "payable.payment.register"}:
+        extra_units.append("tests/unit/test_journal_item_tax_projection_contract.py")
+    if capability_id in PAYMENT_TAX_INPUT_WRITES:
+        extra_units.append("tests/unit/test_payment_tax_input_runtime.py")
+    assert unit["references"][-len(extra_units):] == extra_units
+    unit["references"] = unit["references"][:-len(extra_units)]
+    if capability_id in {"journal_item.get", "journal_item.search"}:
+        assert unit["references"] == [
+            "tests/unit/test_core_object_reads.py",
+            "tests/unit/test_core_object_reads_bridge.py",
+            "tests/unit/test_core_object_reads_runtime.py",
+            "tests/unit/test_core_object_read_cli.py",
+            "tests/unit/test_journal_item_tax_links.py",
+        ]
+    integration = descriptor["tests"]["integration"]
+    live_test = "tests/integration/test_accounting_payment_tax_inputs_batch_live.py"
+    if live_test in integration["references"]:
+        assert integration["references"][-1] == live_test
+        assert integration["references"].count(live_test) == 1
+        assert integration["reason"] == "Shared native payment/tax smoke passed; full rollback."
+        integration["references"] = integration["references"][:-1]
+    else:
+        assert integration["reason"] == "Prior native evidence retained; explicit payment/tax extension smoke pending."
+    if capability_id == "journal_entry.lines.add":
+        integration["reason"] = "Shared native smoke passed; full rollback."
+    if capability_id in PAYMENT_TAX_INPUT_WRITES:
+        new_models = {"account.payment.method.line", "res.partner.bank"} if capability_id.startswith(("receivable.", "payable.")) else {"account.tax", "account.tax.repartition.line", "account.account.tag"}
+        assert new_models <= set(descriptor["source"]["models"])
+        assert {f"{model}:read" for model in new_models} <= set(descriptor["requirements"]["acl"])
+    return descriptor
+
+
 def test_implemented_reads_have_specialized_contracts_and_runtime_status() -> None:
     registry = load_registry()
 
     for capability_id, handler_key in IMPLEMENTED_READS.items():
-        descriptor = registry.describe(capability_id)
+        descriptor = _prior_payment_tax_input_evidence(capability_id, registry.describe(capability_id))
         assert descriptor["handler_key"] == handler_key
         assert descriptor["schemas"] == {
             "request": f"schemas/v1/{capability_id}.request.schema.json",
@@ -2886,7 +2929,7 @@ def test_implemented_writes_match_the_fixed_runtime_and_specialized_contracts() 
     assert set(CORE_WRITE_ACCESS) == IMPLEMENTED_WRITES
     assert set(CORE_WRITE_GROUPS) == IMPLEMENTED_WRITES
     for capability_id in IMPLEMENTED_WRITES:
-        descriptor = registry.describe(capability_id)
+        descriptor = _prior_payment_tax_input_evidence(capability_id, registry.describe(capability_id))
         assert descriptor["handler_key"] == "core_write"
         assert descriptor["schemas"] == {
             "request": f"schemas/v1/{capability_id}.request.schema.json",

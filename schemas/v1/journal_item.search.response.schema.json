@@ -405,6 +405,21 @@
           "uniqueItems": true,
           "items": {"type": "integer", "minimum": 1}
         },
+        "tax_tag_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "tax_repartition_line_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
         "tax_base_amount": {
           "$ref": "#/$defs/decimal",
           "description": "Tax base in the journal item's company currency."

@@ -959,6 +959,10 @@ def _validate_journal_lines(lines: Any, *, minimum: int) -> list[dict[str, Any]]
         "amount_currency",
         "analytic_distribution",
         "date_maturity",
+        "tax_ids",
+        "tax_tag_ids",
+        "tax_repartition_line_id",
+        "tax_base_amount",
     }
     total_debit = Decimal(0)
     total_credit = Decimal(0)
@@ -985,6 +989,15 @@ def _validate_journal_lines(lines: Any, *, minimum: int) -> list[dict[str, Any]]
             raise _invalid(
                 "Journal-entry line date_maturity must be null or a YYYY-MM-DD date."
             )
+        for field in ("tax_ids", "tax_tag_ids"):
+            if field in line:
+                identifiers = _validate_ids(line[field])
+                if identifiers is None or len(identifiers) > 100 or identifiers != sorted(identifiers):
+                    raise _invalid(f"Journal-entry {field} must contain 0-100 sorted unique positive integers.")
+        if "tax_repartition_line_id" in line and not _valid_optional_id(line["tax_repartition_line_id"]):
+            raise _invalid("Journal-entry tax_repartition_line_id must be null or a positive integer.")
+        if "tax_base_amount" in line and _decimal(line["tax_base_amount"], signed=True) is None:
+            raise _invalid("Journal-entry tax_base_amount must be a signed decimal string.")
         debit = _decimal(line["debit"], signed=False)
         credit = _decimal(line["credit"], signed=False)
         if debit is None or credit is None:
@@ -1352,7 +1365,8 @@ def _validate_refund_parameters(parameters: Any) -> dict[str, Any]:
 
 def _validate_payment_register_parameters(parameters: Any) -> dict[str, Any]:
     common = {"journal_id", "payment_date"}
-    optional = {
+    references = {"payment_method_line_id", "partner_bank_id"}
+    optional = references | {
         "amount",
         "payment_difference_handling",
         "writeoff_account_id",
@@ -1364,7 +1378,7 @@ def _validate_payment_register_parameters(parameters: Any) -> dict[str, Any]:
         )
     keys = set(parameters)
     single = common | {"move_id"} <= keys <= common | {"move_id"} | optional
-    many = keys == common | {"move_ids"}
+    many = common | {"move_ids"} <= keys <= common | {"move_ids"} | references
     if not single and not many:
         raise _invalid(
             "Payment registration parameters do not match the fixed contract."
@@ -1377,6 +1391,9 @@ def _validate_payment_register_parameters(parameters: Any) -> dict[str, Any]:
             )
     for key in ("move_id", "journal_id") if single else ("journal_id",):
         if not _valid_id(parameters[key]):
+            raise _invalid(f"parameters.{key} must be a positive integer.")
+    for key in references:
+        if key in parameters and not _valid_id(parameters[key]):
             raise _invalid(f"parameters.{key} must be a positive integer.")
     if not _is_date(parameters["payment_date"]):
         raise _invalid("parameters.payment_date must be a YYYY-MM-DD date.")

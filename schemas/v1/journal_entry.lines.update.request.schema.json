@@ -88,6 +88,36 @@
                     ],
                     "format": "date"
                   },
+                  "tax_ids": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  },
+                  "tax_tag_ids": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  },
+                  "tax_repartition_line_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "tax_base_amount": {
+                    "type": "string",
+                    "maxLength": 256,
+                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$(?![\\s\\S])"
+                  },
                   "analytic_distribution": {
                     "$ref": "invoice.lines.replace.request.schema.json#/$defs/invoice_line/properties/analytic_distribution"
                   },

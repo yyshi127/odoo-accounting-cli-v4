@@ -1515,7 +1515,7 @@ def _valid_bank_item(item: Any, company_id: int) -> bool:
 def _valid_journal_item(item: Any, company_id: int) -> bool:
     return bool(
         isinstance(item, dict)
-        and set(item)
+        and set(item) - {"tax_tag_ids", "tax_repartition_line_id"}
         == {
             "id",
             "company_id",
@@ -1567,6 +1567,8 @@ def _valid_journal_item(item: Any, company_id: int) -> bool:
         and (item["tax_line_id"] is None or _valid_id(item["tax_line_id"]))
         and (item["tax_ids"] == [] or _sorted_unique_ids(item["tax_ids"]))
         and _decimal_text(item["tax_base_amount"])
+        and ("tax_tag_ids" not in item or item["tax_tag_ids"] == [] or _sorted_unique_ids(item["tax_tag_ids"]))
+        and ("tax_repartition_line_id" not in item or item["tax_repartition_line_id"] is None or _valid_id(item["tax_repartition_line_id"]))
     )
 
 

@@ -10048,129 +10048,16 @@
       "handler_key": "core_write"
     },
     "journal_entry.create": {
-      "summary": {
-        "zh_CN": "创建草稿总账分录",
-        "en_US": "Create a draft general journal entry"
-      },
+      "summary": {"zh_CN": "创建草稿总账分录", "en_US": "Create a draft general journal entry"},
       "domain": "general_ledger",
       "access": "write",
-      "source": {
-        "modules": [
-          "account"
-        ],
-        "models": [
-          "res.company",
-          "res.partner",
-          "account.journal",
-          "account.account",
-          "account.move",
-          "account.move.line",
-          "res.currency",
-          "account.analytic.account"
-        ],
-        "wizards": [],
-        "report_handlers": [],
-        "locations": [
-          "_references/base/models/res_company.py",
-          "_references/base/models/res_partner.py",
-          "account/models/account_journal.py",
-          "account/models/account_account.py",
-          "account/models/account_move.py",
-          "account/models/account_move_line.py"
-        ]
-      },
-      "schemas": {
-        "request": "schemas/v1/journal_entry.create.request.schema.json",
-        "response": "schemas/v1/journal_entry.create.response.schema.json"
-      },
-      "requirements": {
-        "modules": [
-          "account"
-        ],
-        "configuration": [
-          "database_alias",
-          "company_allowlist",
-          "user_mapping"
-        ],
-        "company": "required",
-        "groups": [
-          "account.group_account_user"
-        ],
-        "acl": [
-          "res.partner:read",
-          "account.journal:read",
-          "account.account:read",
-          "account.move:read",
-          "account.move:create",
-          "account.move.line:read",
-          "account.move.line:create"
-        ]
-      },
-      "strategies": {
-        "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_accounting_core_write_action_as_configured_business_user",
-        "verify": "same_transaction_rich_journal_field_reread_and_schema_validation",
-        "idempotency": "odoo_persisted_business_marker_and_result_replay",
-        "reverse": "delete_draft_or_reverse_after_posting"
-      },
-      "tests": {
-        "unit": {
-          "status": "implemented",
-          "references": [
-            "tests/unit/test_core_writes.py",
-            "tests/unit/test_core_writes_bridge.py",
-            "tests/unit/test_core_writes_runtime.py",
-            "tests/unit/test_core_write_cli.py"
-          ],
-          "reason": "Unit tests cover the closed request, exact confirmation, fixed bridge action, Odoo-side execution, idempotent replay, and CLI response contract."
-        },
-        "integration": {
-          "status": "implemented",
-          "references": [
-            "tests/integration/test_core_write_batch_live.py",
-            "tests/integration/test_accounting_depth_batch_live.py"
-          ],
-          "reason": "The shared dual-database rollback smoke covers rich journal fields and replay."
-        },
-        "golden": {
-          "status": "planned",
-          "references": [],
-          "reason": "The golden definition is frozen; implementation evidence is pending."
-        },
-        "e2e": {
-          "status": "planned",
-          "references": [],
-          "reason": "The e2e definition is frozen; implementation evidence is pending."
-        }
-      },
-      "status": {
-        "value": "unconfigured",
-        "reason_code": "runtime_context_required",
-        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."
-      },
-      "routing": {
-        "object": "journal_entry",
-        "actions": [
-          "create"
-        ],
-        "aliases": {
-          "zh_CN": [
-            "创建草稿总账分录"
-          ],
-          "en_US": [
-            "Create a draft general journal entry"
-          ]
-        },
-        "not_for": {
-          "zh_CN": [],
-          "en_US": []
-        },
-        "required_slots": [
-          "database",
-          "company_id",
-          "user_login"
-        ]
-      },
+      "source": {"modules": ["account"], "models": ["res.company", "res.partner", "account.journal", "account.account", "account.move", "account.move.line", "res.currency", "account.analytic.account", "account.tax", "account.tax.repartition.line", "account.account.tag"], "wizards": [], "report_handlers": [], "locations": ["_references/base/models/res_company.py", "_references/base/models/res_partner.py", "account/models/account_journal.py", "account/models/account_account.py", "account/models/account_move.py", "account/models/account_move_line.py", "account/models/account_tax.py", "account/models/account_account_tag.py"]},
+      "schemas": {"request": "schemas/v1/journal_entry.create.request.schema.json", "response": "schemas/v1/journal_entry.create.response.schema.json"},
+      "requirements": {"modules": ["account"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["account.group_account_user"], "acl": ["res.partner:read", "account.journal:read", "account.account:read", "account.move:read", "account.move:create", "account.move.line:read", "account.move.line:create", "account.tax:read", "account.tax.repartition.line:read", "account.account.tag:read"]},
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_accounting_core_write_action_as_configured_business_user", "verify": "same_transaction_rich_journal_field_reread_and_schema_validation", "idempotency": "odoo_persisted_business_marker_and_result_replay", "reverse": "delete_draft_or_reverse_after_posting"},
+      "tests": {"unit": {"status": "implemented", "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_bridge.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_core_write_cli.py", "tests/unit/test_accounting_payment_tax_inputs_batch.py", "tests/unit/test_entry_payment_explicit_inputs_contract.py", "tests/unit/test_journal_item_tax_projection_contract.py", "tests/unit/test_payment_tax_input_runtime.py"], "reason": "Existing contracts and explicit payment/tax input extensions are covered."}, "integration": {"status": "implemented", "references": ["tests/integration/test_core_write_batch_live.py", "tests/integration/test_accounting_depth_batch_live.py", "tests/integration/test_accounting_payment_tax_inputs_batch_live.py"], "reason": "Shared native payment/tax smoke passed; full rollback."}, "golden": {"status": "planned", "references": [], "reason": "Deferred."}, "e2e": {"status": "planned", "references": [], "reason": "Deferred."}},
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
+      "routing": {"object": "journal_entry", "actions": ["create"], "aliases": {"zh_CN": ["创建草稿总账分录"], "en_US": ["Create a draft general journal entry"]}, "not_for": {"zh_CN": [], "en_US": []}, "required_slots": ["database", "company_id", "user_login"]},
       "handler_key": "core_write"
     },
     "journal_entry.get": {
@@ -10289,129 +10176,16 @@
       "handler_key": "journal_entry_get"
     },
     "journal_entry.lines.replace": {
-      "summary": {
-        "zh_CN": "替换草稿总账分录的全部行",
-        "en_US": "Replace all lines on a draft general journal entry"
-      },
+      "summary": {"zh_CN": "替换草稿总账分录的全部行", "en_US": "Replace all lines on a draft general journal entry"},
       "domain": "general_ledger",
       "access": "write",
-      "source": {
-        "modules": [
-          "account"
-        ],
-        "models": [
-          "res.company",
-          "res.partner",
-          "account.account",
-          "account.move",
-          "account.move.line",
-          "res.currency",
-          "account.analytic.account"
-        ],
-        "wizards": [],
-        "report_handlers": [],
-        "locations": [
-          "_references/base/models/res_company.py",
-          "_references/base/models/res_partner.py",
-          "account/models/account_account.py",
-          "account/models/account_move.py",
-          "account/models/account_move_line.py"
-        ]
-      },
-      "schemas": {
-        "request": "schemas/v1/journal_entry.lines.replace.request.schema.json",
-        "response": "schemas/v1/journal_entry.lines.replace.response.schema.json"
-      },
-      "requirements": {
-        "modules": [
-          "account"
-        ],
-        "configuration": [
-          "database_alias",
-          "company_allowlist",
-          "user_mapping"
-        ],
-        "company": "required",
-        "groups": [
-          "account.group_account_user"
-        ],
-        "acl": [
-          "res.partner:read",
-          "account.account:read",
-          "account.move:read",
-          "account.move:write",
-          "account.move.line:read",
-          "account.move.line:create",
-          "account.move.line:write",
-          "account.move.line:unlink"
-        ]
-      },
-      "strategies": {
-        "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_native_draft_account_move_line_replacement_write_action",
-        "verify": "same_transaction_exact_rich_journal_line_reread_and_schema_validation",
-        "idempotency": "target_line_payload_state_check_before_native_write",
-        "reverse": "repeat_replace_with_previous_journal_lines"
-      },
-      "tests": {
-        "unit": {
-          "status": "implemented",
-          "references": [
-            "tests/unit/test_document_lifecycle_writes.py",
-            "tests/unit/test_document_lifecycle_writes_runtime.py",
-            "tests/unit/test_core_writes_bridge.py",
-            "tests/unit/test_core_write_cli.py",
-            "tests/unit/test_document_lifecycle_write_cli.py"
-          ],
-          "reason": "Unit tests cover the closed request, draft-only replacement, configured-user ACL gates, target-payload replay, bridge contract, and CLI dispatch."
-        },
-        "integration": {
-          "status": "implemented",
-          "references": [
-            "tests/integration/test_document_lifecycle_write_batch_live.py",
-            "tests/integration/test_accounting_depth_batch_live.py"
-          ],
-          "reason": "The shared dual-database rollback smoke covers rich journal lines and replay."
-        },
-        "golden": {
-          "status": "planned",
-          "references": [],
-          "reason": "The golden definition is frozen; implementation evidence is pending."
-        },
-        "e2e": {
-          "status": "planned",
-          "references": [],
-          "reason": "The e2e definition is frozen; implementation evidence is pending."
-        }
-      },
-      "status": {
-        "value": "unconfigured",
-        "reason_code": "runtime_context_required",
-        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."
-      },
-      "routing": {
-        "object": "account.move",
-        "actions": [
-          "replace_lines"
-        ],
-        "aliases": {
-          "zh_CN": [
-            "替换草稿总账分录行"
-          ],
-          "en_US": [
-            "Replace draft journal-entry lines"
-          ]
-        },
-        "not_for": {
-          "zh_CN": [],
-          "en_US": []
-        },
-        "required_slots": [
-          "database",
-          "company_id",
-          "user_login"
-        ]
-      },
+      "source": {"modules": ["account"], "models": ["res.company", "res.partner", "account.account", "account.move", "account.move.line", "res.currency", "account.analytic.account", "account.tax", "account.tax.repartition.line", "account.account.tag"], "wizards": [], "report_handlers": [], "locations": ["_references/base/models/res_company.py", "_references/base/models/res_partner.py", "account/models/account_account.py", "account/models/account_move.py", "account/models/account_move_line.py", "account/models/account_tax.py", "account/models/account_account_tag.py"]},
+      "schemas": {"request": "schemas/v1/journal_entry.lines.replace.request.schema.json", "response": "schemas/v1/journal_entry.lines.replace.response.schema.json"},
+      "requirements": {"modules": ["account"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["account.group_account_user"], "acl": ["res.partner:read", "account.account:read", "account.move:read", "account.move:write", "account.move.line:read", "account.move.line:create", "account.move.line:write", "account.move.line:unlink", "account.tax:read", "account.tax.repartition.line:read", "account.account.tag:read"]},
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_native_draft_account_move_line_replacement_write_action", "verify": "same_transaction_exact_rich_journal_line_reread_and_schema_validation", "idempotency": "target_line_payload_state_check_before_native_write", "reverse": "repeat_replace_with_previous_journal_lines"},
+      "tests": {"unit": {"status": "implemented", "references": ["tests/unit/test_document_lifecycle_writes.py", "tests/unit/test_document_lifecycle_writes_runtime.py", "tests/unit/test_core_writes_bridge.py", "tests/unit/test_core_write_cli.py", "tests/unit/test_document_lifecycle_write_cli.py", "tests/unit/test_accounting_payment_tax_inputs_batch.py", "tests/unit/test_entry_payment_explicit_inputs_contract.py", "tests/unit/test_journal_item_tax_projection_contract.py", "tests/unit/test_payment_tax_input_runtime.py"], "reason": "Existing contracts and explicit payment/tax input extensions are covered."}, "integration": {"status": "implemented", "references": ["tests/integration/test_document_lifecycle_write_batch_live.py", "tests/integration/test_accounting_depth_batch_live.py", "tests/integration/test_accounting_payment_tax_inputs_batch_live.py"], "reason": "Shared native payment/tax smoke passed; full rollback."}, "golden": {"status": "planned", "references": [], "reason": "Deferred."}, "e2e": {"status": "planned", "references": [], "reason": "Deferred."}},
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
+      "routing": {"object": "account.move", "actions": ["replace_lines"], "aliases": {"zh_CN": ["替换草稿总账分录行"], "en_US": ["Replace draft journal-entry lines"]}, "not_for": {"zh_CN": [], "en_US": []}, "required_slots": ["database", "company_id", "user_login"]},
       "handler_key": "core_write"
     },
     "journal_entry.post": {
@@ -11010,261 +10784,29 @@
       "handler_key": "localization_china_configuration_inspect"
     },
     "journal_item.get": {
-      "summary": {
-        "zh_CN": "获取会计分录行详情",
-        "en_US": "Get one journal item"
-      },
+      "summary": {"zh_CN": "获取会计分录行详情", "en_US": "Get one journal item"},
       "domain": "general_ledger",
       "access": "read",
-      "source": {
-        "modules": [
-          "account",
-          "base"
-        ],
-        "models": [
-          "res.company",
-          "account.move.line",
-          "account.move",
-          "account.account",
-          "account.journal",
-          "res.partner",
-          "res.currency"
-        ],
-        "wizards": [],
-        "report_handlers": [],
-        "locations": [
-          "_references/base/models/res_company.py",
-          "account/models/account_move_line.py",
-          "account/models/account_move.py",
-          "account/models/account_account.py",
-          "account/models/account_journal.py",
-          "_references/base/models/res_partner.py",
-          "_references/base/models/res_currency.py"
-        ]
-      },
-      "schemas": {
-        "request": "schemas/v1/journal_item.get.request.schema.json",
-        "response": "schemas/v1/journal_item.get.response.schema.json"
-      },
-      "requirements": {
-        "modules": [
-          "account"
-        ],
-        "configuration": [
-          "database_alias",
-          "company_allowlist",
-          "user_mapping"
-        ],
-        "company": "required",
-        "groups": [
-          "account.group_account_readonly"
-        ],
-        "acl": [
-          "res.company:read",
-          "account.move.line:read",
-          "account.move:read",
-          "account.account:read",
-          "account.journal:read",
-          "res.partner:read",
-          "res.currency:read"
-        ]
-      },
-      "strategies": {
-        "preview": "not_applicable_read_only",
-        "execute": "fixed_company_scoped_core_object_read_action",
-        "verify": "same_transaction_acl_result_cursor_and_response_schema_validation",
-        "idempotency": "not_applicable_read_only",
-        "reverse": "not_applicable_read_only"
-      },
-      "tests": {
-        "unit": {
-          "status": "implemented",
-          "references": [
-            "tests/unit/test_core_object_reads.py",
-            "tests/unit/test_core_object_reads_bridge.py",
-            "tests/unit/test_core_object_reads_runtime.py",
-            "tests/unit/test_core_object_read_cli.py",
-            "tests/unit/test_journal_item_tax_links.py"
-          ],
-          "reason": "Unit tests cover the closed request and response, cursor binding, fixed bridge action, company scope, ACL gates, ORM normalization, CLI dispatch, and tax IDs/company-currency tax-base readback."
-        },
-        "integration": {
-          "status": "implemented",
-          "references": [
-            "tests/integration/test_core_object_read_batch_live.py",
-            "tests/integration/test_invoice_tax_flow_batch_live.py"
-          ],
-          "reason": "Shared isolated-database tests cover ordinary-user object reads and the rollback-only invoice, tax-line, and generic tax-report amount chain."
-        },
-        "golden": {
-          "status": "planned",
-          "references": [],
-          "reason": "The golden definition is frozen; implementation evidence is pending."
-        },
-        "e2e": {
-          "status": "planned",
-          "references": [],
-          "reason": "The e2e definition is frozen; implementation evidence is pending."
-        }
-      },
-      "status": {
-        "value": "unconfigured",
-        "reason_code": "runtime_context_required",
-        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."
-      },
-      "routing": {
-        "object": "journal_item",
-        "actions": [
-          "get",
-          "inspect"
-        ],
-        "aliases": {
-          "zh_CN": [
-            "获取会计分录行详情"
-          ],
-          "en_US": [
-            "Get one journal item"
-          ]
-        },
-        "not_for": {
-          "zh_CN": [],
-          "en_US": []
-        },
-        "required_slots": [
-          "database",
-          "company_id",
-          "user_login"
-        ]
-      },
+      "source": {"modules": ["account", "base"], "models": ["res.company", "account.move.line", "account.move", "account.account", "account.journal", "res.partner", "res.currency"], "wizards": [], "report_handlers": [], "locations": ["_references/base/models/res_company.py", "account/models/account_move_line.py", "account/models/account_move.py", "account/models/account_account.py", "account/models/account_journal.py", "_references/base/models/res_partner.py", "_references/base/models/res_currency.py"]},
+      "schemas": {"request": "schemas/v1/journal_item.get.request.schema.json", "response": "schemas/v1/journal_item.get.response.schema.json"},
+      "requirements": {"modules": ["account"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["account.group_account_readonly"], "acl": ["res.company:read", "account.move.line:read", "account.move:read", "account.account:read", "account.journal:read", "res.partner:read", "res.currency:read"]},
+      "strategies": {"preview": "not_applicable_read_only", "execute": "fixed_company_scoped_core_object_read_action", "verify": "same_transaction_acl_result_cursor_and_response_schema_validation", "idempotency": "not_applicable_read_only", "reverse": "not_applicable_read_only"},
+      "tests": {"unit": {"status": "implemented", "references": ["tests/unit/test_core_object_reads.py", "tests/unit/test_core_object_reads_bridge.py", "tests/unit/test_core_object_reads_runtime.py", "tests/unit/test_core_object_read_cli.py", "tests/unit/test_journal_item_tax_links.py", "tests/unit/test_accounting_payment_tax_inputs_batch.py", "tests/unit/test_journal_item_tax_projection_contract.py"], "reason": "Existing contracts and explicit payment/tax input extensions are covered."}, "integration": {"status": "implemented", "references": ["tests/integration/test_core_object_read_batch_live.py", "tests/integration/test_invoice_tax_flow_batch_live.py", "tests/integration/test_accounting_payment_tax_inputs_batch_live.py"], "reason": "Shared native payment/tax smoke passed; full rollback."}, "golden": {"status": "planned", "references": [], "reason": "Deferred."}, "e2e": {"status": "planned", "references": [], "reason": "Deferred."}},
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
+      "routing": {"object": "journal_item", "actions": ["get", "inspect"], "aliases": {"zh_CN": ["获取会计分录行详情"], "en_US": ["Get one journal item"]}, "not_for": {"zh_CN": [], "en_US": []}, "required_slots": ["database", "company_id", "user_login"]},
       "handler_key": "journal_item_get"
     },
     "journal_item.search": {
-      "summary": {
-        "zh_CN": "搜索会计分录行",
-        "en_US": "Search journal items"
-      },
+      "summary": {"zh_CN": "搜索会计分录行", "en_US": "Search journal items"},
       "domain": "general_ledger",
       "access": "read",
-      "source": {
-        "modules": [
-          "account",
-          "base"
-        ],
-        "models": [
-          "res.company",
-          "account.move.line",
-          "account.move",
-          "account.account",
-          "account.journal",
-          "res.partner",
-          "res.currency"
-        ],
-        "wizards": [],
-        "report_handlers": [],
-        "locations": [
-          "_references/base/models/res_company.py",
-          "account/models/account_move_line.py",
-          "account/models/account_move.py",
-          "account/models/account_account.py",
-          "account/models/account_journal.py",
-          "_references/base/models/res_partner.py",
-          "_references/base/models/res_currency.py"
-        ]
-      },
-      "schemas": {
-        "request": "schemas/v1/journal_item.search.request.schema.json",
-        "response": "schemas/v1/journal_item.search.response.schema.json"
-      },
-      "requirements": {
-        "modules": [
-          "account"
-        ],
-        "configuration": [
-          "database_alias",
-          "company_allowlist",
-          "user_mapping"
-        ],
-        "company": "required",
-        "groups": [
-          "account.group_account_readonly"
-        ],
-        "acl": [
-          "res.company:read",
-          "account.move.line:read",
-          "account.move:read",
-          "account.account:read",
-          "account.journal:read",
-          "res.partner:read",
-          "res.currency:read"
-        ]
-      },
-      "strategies": {
-        "preview": "not_applicable_read_only",
-        "execute": "fixed_company_scoped_core_object_read_action",
-        "verify": "same_transaction_acl_result_cursor_and_response_schema_validation",
-        "idempotency": "not_applicable_read_only",
-        "reverse": "not_applicable_read_only"
-      },
-      "tests": {
-        "unit": {
-          "status": "implemented",
-          "references": [
-            "tests/unit/test_core_object_reads.py",
-            "tests/unit/test_core_object_reads_bridge.py",
-            "tests/unit/test_core_object_reads_runtime.py",
-            "tests/unit/test_core_object_read_cli.py",
-            "tests/unit/test_journal_item_tax_links.py"
-          ],
-          "reason": "Unit tests cover the closed request and response, cursor binding, fixed bridge action, company scope, ACL gates, ORM normalization, CLI dispatch, and tax IDs/company-currency tax-base readback."
-        },
-        "integration": {
-          "status": "implemented",
-          "references": [
-            "tests/integration/test_core_object_read_batch_live.py",
-            "tests/integration/test_invoice_tax_flow_batch_live.py"
-          ],
-          "reason": "Shared isolated-database tests cover ordinary-user object reads and the rollback-only invoice, tax-line, and generic tax-report amount chain."
-        },
-        "golden": {
-          "status": "planned",
-          "references": [],
-          "reason": "The golden definition is frozen; implementation evidence is pending."
-        },
-        "e2e": {
-          "status": "planned",
-          "references": [],
-          "reason": "The e2e definition is frozen; implementation evidence is pending."
-        }
-      },
-      "status": {
-        "value": "unconfigured",
-        "reason_code": "runtime_context_required",
-        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."
-      },
-      "routing": {
-        "object": "journal_item",
-        "actions": [
-          "search",
-          "list"
-        ],
-        "aliases": {
-          "zh_CN": [
-            "搜索会计分录行"
-          ],
-          "en_US": [
-            "Search journal items"
-          ]
-        },
-        "not_for": {
-          "zh_CN": [],
-          "en_US": []
-        },
-        "required_slots": [
-          "database",
-          "company_id",
-          "user_login"
-        ]
-      },
+      "source": {"modules": ["account", "base"], "models": ["res.company", "account.move.line", "account.move", "account.account", "account.journal", "res.partner", "res.currency"], "wizards": [], "report_handlers": [], "locations": ["_references/base/models/res_company.py", "account/models/account_move_line.py", "account/models/account_move.py", "account/models/account_account.py", "account/models/account_journal.py", "_references/base/models/res_partner.py", "_references/base/models/res_currency.py"]},
+      "schemas": {"request": "schemas/v1/journal_item.search.request.schema.json", "response": "schemas/v1/journal_item.search.response.schema.json"},
+      "requirements": {"modules": ["account"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["account.group_account_readonly"], "acl": ["res.company:read", "account.move.line:read", "account.move:read", "account.account:read", "account.journal:read", "res.partner:read", "res.currency:read"]},
+      "strategies": {"preview": "not_applicable_read_only", "execute": "fixed_company_scoped_core_object_read_action", "verify": "same_transaction_acl_result_cursor_and_response_schema_validation", "idempotency": "not_applicable_read_only", "reverse": "not_applicable_read_only"},
+      "tests": {"unit": {"status": "implemented", "references": ["tests/unit/test_core_object_reads.py", "tests/unit/test_core_object_reads_bridge.py", "tests/unit/test_core_object_reads_runtime.py", "tests/unit/test_core_object_read_cli.py", "tests/unit/test_journal_item_tax_links.py", "tests/unit/test_accounting_payment_tax_inputs_batch.py", "tests/unit/test_journal_item_tax_projection_contract.py"], "reason": "Existing contracts and explicit payment/tax input extensions are covered."}, "integration": {"status": "implemented", "references": ["tests/integration/test_core_object_read_batch_live.py", "tests/integration/test_invoice_tax_flow_batch_live.py", "tests/integration/test_accounting_payment_tax_inputs_batch_live.py"], "reason": "Shared native payment/tax smoke passed; full rollback."}, "golden": {"status": "planned", "references": [], "reason": "Deferred."}, "e2e": {"status": "planned", "references": [], "reason": "Deferred."}},
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
+      "routing": {"object": "journal_item", "actions": ["search", "list"], "aliases": {"zh_CN": ["搜索会计分录行"], "en_US": ["Search journal items"]}, "not_for": {"zh_CN": [], "en_US": []}, "required_slots": ["database", "company_id", "user_login"]},
       "handler_key": "journal_item_search"
     },
     "localization.china.period_transfer.run": {
@@ -12869,145 +12411,16 @@
       "handler_key": "payable_open_items_list"
     },
     "payable.payment.register": {
-      "summary": {
-        "zh_CN": "登记供应商账单付款（支持多账单合并）或供应商退款收款",
-        "en_US": "Register vendor bill payments (including grouped bills) or refund receipts"
-      },
+      "summary": {"zh_CN": "登记供应商账单付款（支持多账单合并）或供应商退款收款", "en_US": "Register vendor bill payments (including grouped bills) or refund receipts"},
       "domain": "payments",
       "access": "write",
-      "source": {
-        "modules": [
-          "account"
-        ],
-        "models": [
-          "res.company",
-          "account.account",
-          "account.journal",
-          "account.move",
-          "account.move.line",
-          "account.payment",
-          "account.payment.register",
-          "account.partial.reconcile",
-          "account.full.reconcile"
-        ],
-        "wizards": [
-          "account.payment.register"
-        ],
-        "report_handlers": [],
-        "locations": [
-          "_references/base/models/res_company.py",
-          "account/models/account_account.py",
-          "account/models/account_journal.py",
-          "account/models/account_move.py",
-          "account/models/account_move_line.py",
-          "account/models/account_payment.py",
-          "account/wizard/account_payment_register.py"
-        ]
-      },
-      "schemas": {
-        "request": "schemas/v1/payable.payment.register.request.schema.json",
-        "response": "schemas/v1/payable.payment.register.response.schema.json"
-      },
-      "requirements": {
-        "modules": [
-          "account"
-        ],
-        "configuration": [
-          "database_alias",
-          "company_allowlist",
-          "user_mapping"
-        ],
-        "company": "required",
-        "groups": [
-          "account.group_account_invoice"
-        ],
-        "acl": [
-          "account.account:read",
-          "account.journal:read",
-          "account.move:read",
-          "account.move.line:read",
-          "account.payment:read",
-          "account.payment:create",
-          "account.payment.register:create",
-          "account.move.line:write",
-          "account.partial.reconcile:read",
-          "account.partial.reconcile:create",
-          "account.full.reconcile:read"
-        ]
-      },
-      "strategies": {
-        "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_single_or_full_grouped_invoice_payment_registration_as_configured_business_user",
-        "verify": "same_transaction_single_or_grouped_residual_and_replay_validation",
-        "idempotency": "single_document_legacy_key_or_company_and_normalized_batch_digest_with_odoo_persisted_business_marker_and_result_replay",
-        "reverse": "payment.cancel"
-      },
-      "tests": {
-        "unit": {
-          "status": "implemented",
-          "references": [
-            "tests/unit/test_core_writes.py",
-            "tests/unit/test_core_writes_bridge.py",
-            "tests/unit/test_core_writes_runtime.py",
-            "tests/unit/test_payment_register_writeoff_runtime.py",
-            "tests/unit/test_payment_register_many_contract.py",
-            "tests/unit/test_payment_register_many_runtime.py",
-            "tests/unit/test_core_write_cli.py"
-          ],
-          "reason": "Unit tests cover compatible single-document and normalized grouped requests, exact confirmation, deterministic keys, fixed bridge action, Odoo-side execution, idempotent replay, and CLI response contract."
-        },
-        "integration": {
-          "status": "implemented",
-          "references": [
-            "tests/integration/test_core_write_batch_live.py",
-            "tests/integration/test_accounting_depth_batch_live.py",
-            "tests/integration/test_invoice_cash_refund_batch_live.py",
-            "tests/integration/test_payment_register_many_batch_live.py"
-          ],
-          "reason": "Shared dual-database rollback smokes cover single invoice and credit-note payments, grouped full bill payments, partial residuals, direction, reconciliation and immediate replay."
-        },
-        "golden": {
-          "status": "planned",
-          "references": [],
-          "reason": "The golden definition is frozen; implementation evidence is pending."
-        },
-        "e2e": {
-          "status": "planned",
-          "references": [],
-          "reason": "The e2e definition is frozen; implementation evidence is pending."
-        }
-      },
-      "status": {
-        "value": "unconfigured",
-        "reason_code": "runtime_context_required",
-        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."
-      },
-      "routing": {
-        "object": "payable.payment",
-        "actions": [
-          "register"
-        ],
-        "aliases": {
-          "zh_CN": [
-            "登记供应商付款",
-            "登记供应商退款收款"
-          ],
-          "en_US": [
-            "Register a vendor payment",
-            "Register a vendor refund receipt",
-            "Register one payment for multiple vendor bills"
-          ]
-        },
-        "not_for": {
-          "zh_CN": [],
-          "en_US": []
-        },
-        "required_slots": [
-          "database",
-          "company_id",
-          "user_login"
-        ]
-      },
+      "source": {"modules": ["account"], "models": ["res.company", "account.account", "account.journal", "account.move", "account.move.line", "account.payment", "account.payment.register", "account.partial.reconcile", "account.full.reconcile", "account.payment.method.line", "res.partner.bank"], "wizards": ["account.payment.register"], "report_handlers": [], "locations": ["_references/base/models/res_company.py", "account/models/account_account.py", "account/models/account_journal.py", "account/models/account_move.py", "account/models/account_move_line.py", "account/models/account_payment.py", "account/wizard/account_payment_register.py", "account/models/account_payment_method.py", "_references/base/models/res_bank.py"]},
+      "schemas": {"request": "schemas/v1/payable.payment.register.request.schema.json", "response": "schemas/v1/payable.payment.register.response.schema.json"},
+      "requirements": {"modules": ["account"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["account.group_account_invoice"], "acl": ["account.account:read", "account.journal:read", "account.move:read", "account.move.line:read", "account.payment:read", "account.payment:create", "account.payment.register:create", "account.move.line:write", "account.partial.reconcile:read", "account.partial.reconcile:create", "account.full.reconcile:read", "account.payment.method.line:read", "res.partner.bank:read"]},
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_single_or_full_grouped_invoice_payment_registration_as_configured_business_user", "verify": "same_transaction_single_or_grouped_residual_and_replay_validation", "idempotency": "single_document_legacy_key_or_company_and_normalized_batch_digest_with_odoo_persisted_business_marker_and_result_replay", "reverse": "payment.cancel"},
+      "tests": {"unit": {"status": "implemented", "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_bridge.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_payment_register_writeoff_runtime.py", "tests/unit/test_payment_register_many_contract.py", "tests/unit/test_payment_register_many_runtime.py", "tests/unit/test_core_write_cli.py", "tests/unit/test_accounting_payment_tax_inputs_batch.py", "tests/unit/test_entry_payment_explicit_inputs_contract.py", "tests/unit/test_payment_tax_input_runtime.py"], "reason": "Existing contracts and explicit payment/tax input extensions are covered."}, "integration": {"status": "implemented", "references": ["tests/integration/test_core_write_batch_live.py", "tests/integration/test_accounting_depth_batch_live.py", "tests/integration/test_invoice_cash_refund_batch_live.py", "tests/integration/test_payment_register_many_batch_live.py", "tests/integration/test_accounting_payment_tax_inputs_batch_live.py"], "reason": "Shared native payment/tax smoke passed; full rollback."}, "golden": {"status": "planned", "references": [], "reason": "Deferred."}, "e2e": {"status": "planned", "references": [], "reason": "Deferred."}},
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
+      "routing": {"object": "payable.payment", "actions": ["register"], "aliases": {"zh_CN": ["登记供应商付款", "登记供应商退款收款"], "en_US": ["Register a vendor payment", "Register a vendor refund receipt", "Register one payment for multiple vendor bills"]}, "not_for": {"zh_CN": [], "en_US": []}, "required_slots": ["database", "company_id", "user_login"]},
       "handler_key": "core_write"
     },
     "payment.method.get": {
@@ -15534,145 +14947,16 @@
       "handler_key": "receivable_open_items_list"
     },
     "receivable.payment.register": {
-      "summary": {
-        "zh_CN": "登记客户发票收款（支持多发票合并）或退款",
-        "en_US": "Register customer invoice receipts (including grouped invoices) or refunds"
-      },
+      "summary": {"zh_CN": "登记客户发票收款（支持多发票合并）或退款", "en_US": "Register customer invoice receipts (including grouped invoices) or refunds"},
       "domain": "payments",
       "access": "write",
-      "source": {
-        "modules": [
-          "account"
-        ],
-        "models": [
-          "res.company",
-          "account.account",
-          "account.journal",
-          "account.move",
-          "account.move.line",
-          "account.payment",
-          "account.payment.register",
-          "account.partial.reconcile",
-          "account.full.reconcile"
-        ],
-        "wizards": [
-          "account.payment.register"
-        ],
-        "report_handlers": [],
-        "locations": [
-          "_references/base/models/res_company.py",
-          "account/models/account_account.py",
-          "account/models/account_journal.py",
-          "account/models/account_move.py",
-          "account/models/account_move_line.py",
-          "account/models/account_payment.py",
-          "account/wizard/account_payment_register.py"
-        ]
-      },
-      "schemas": {
-        "request": "schemas/v1/receivable.payment.register.request.schema.json",
-        "response": "schemas/v1/receivable.payment.register.response.schema.json"
-      },
-      "requirements": {
-        "modules": [
-          "account"
-        ],
-        "configuration": [
-          "database_alias",
-          "company_allowlist",
-          "user_mapping"
-        ],
-        "company": "required",
-        "groups": [
-          "account.group_account_invoice"
-        ],
-        "acl": [
-          "account.account:read",
-          "account.journal:read",
-          "account.move:read",
-          "account.move.line:read",
-          "account.payment:read",
-          "account.payment:create",
-          "account.payment.register:create",
-          "account.move.line:write",
-          "account.partial.reconcile:read",
-          "account.partial.reconcile:create",
-          "account.full.reconcile:read"
-        ]
-      },
-      "strategies": {
-        "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "fixed_single_or_full_grouped_invoice_payment_registration_as_configured_business_user",
-        "verify": "same_transaction_single_or_grouped_residual_and_replay_validation",
-        "idempotency": "single_document_legacy_key_or_company_and_normalized_batch_digest_with_odoo_persisted_business_marker_and_result_replay",
-        "reverse": "payment.cancel"
-      },
-      "tests": {
-        "unit": {
-          "status": "implemented",
-          "references": [
-            "tests/unit/test_core_writes.py",
-            "tests/unit/test_core_writes_bridge.py",
-            "tests/unit/test_core_writes_runtime.py",
-            "tests/unit/test_payment_register_writeoff_runtime.py",
-            "tests/unit/test_payment_register_many_contract.py",
-            "tests/unit/test_payment_register_many_runtime.py",
-            "tests/unit/test_core_write_cli.py"
-          ],
-          "reason": "Unit tests cover compatible single-document and normalized grouped requests, exact confirmation, deterministic keys, fixed bridge action, Odoo-side execution, idempotent replay, and CLI response contract."
-        },
-        "integration": {
-          "status": "implemented",
-          "references": [
-            "tests/integration/test_core_write_batch_live.py",
-            "tests/integration/test_accounting_depth_batch_live.py",
-            "tests/integration/test_invoice_cash_refund_batch_live.py",
-            "tests/integration/test_payment_register_many_batch_live.py"
-          ],
-          "reason": "Shared dual-database rollback smokes cover single invoice and credit-note payments, grouped full invoice receipts, partial residuals, direction, reconciliation and immediate replay."
-        },
-        "golden": {
-          "status": "planned",
-          "references": [],
-          "reason": "The golden definition is frozen; implementation evidence is pending."
-        },
-        "e2e": {
-          "status": "planned",
-          "references": [],
-          "reason": "The e2e definition is frozen; implementation evidence is pending."
-        }
-      },
-      "status": {
-        "value": "unconfigured",
-        "reason_code": "runtime_context_required",
-        "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."
-      },
-      "routing": {
-        "object": "receivable.payment",
-        "actions": [
-          "register"
-        ],
-        "aliases": {
-          "zh_CN": [
-            "登记客户收款",
-            "登记客户退款"
-          ],
-          "en_US": [
-            "Register a customer receipt",
-            "Register a customer refund",
-            "Register one receipt for multiple customer invoices"
-          ]
-        },
-        "not_for": {
-          "zh_CN": [],
-          "en_US": []
-        },
-        "required_slots": [
-          "database",
-          "company_id",
-          "user_login"
-        ]
-      },
+      "source": {"modules": ["account"], "models": ["res.company", "account.account", "account.journal", "account.move", "account.move.line", "account.payment", "account.payment.register", "account.partial.reconcile", "account.full.reconcile", "account.payment.method.line", "res.partner.bank"], "wizards": ["account.payment.register"], "report_handlers": [], "locations": ["_references/base/models/res_company.py", "account/models/account_account.py", "account/models/account_journal.py", "account/models/account_move.py", "account/models/account_move_line.py", "account/models/account_payment.py", "account/wizard/account_payment_register.py", "account/models/account_payment_method.py", "_references/base/models/res_bank.py"]},
+      "schemas": {"request": "schemas/v1/receivable.payment.register.request.schema.json", "response": "schemas/v1/receivable.payment.register.response.schema.json"},
+      "requirements": {"modules": ["account"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["account.group_account_invoice"], "acl": ["account.account:read", "account.journal:read", "account.move:read", "account.move.line:read", "account.payment:read", "account.payment:create", "account.payment.register:create", "account.move.line:write", "account.partial.reconcile:read", "account.partial.reconcile:create", "account.full.reconcile:read", "account.payment.method.line:read", "res.partner.bank:read"]},
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "fixed_single_or_full_grouped_invoice_payment_registration_as_configured_business_user", "verify": "same_transaction_single_or_grouped_residual_and_replay_validation", "idempotency": "single_document_legacy_key_or_company_and_normalized_batch_digest_with_odoo_persisted_business_marker_and_result_replay", "reverse": "payment.cancel"},
+      "tests": {"unit": {"status": "implemented", "references": ["tests/unit/test_core_writes.py", "tests/unit/test_core_writes_bridge.py", "tests/unit/test_core_writes_runtime.py", "tests/unit/test_payment_register_writeoff_runtime.py", "tests/unit/test_payment_register_many_contract.py", "tests/unit/test_payment_register_many_runtime.py", "tests/unit/test_core_write_cli.py", "tests/unit/test_accounting_payment_tax_inputs_batch.py", "tests/unit/test_entry_payment_explicit_inputs_contract.py", "tests/unit/test_payment_tax_input_runtime.py"], "reason": "Existing contracts and explicit payment/tax input extensions are covered."}, "integration": {"status": "implemented", "references": ["tests/integration/test_core_write_batch_live.py", "tests/integration/test_accounting_depth_batch_live.py", "tests/integration/test_invoice_cash_refund_batch_live.py", "tests/integration/test_payment_register_many_batch_live.py", "tests/integration/test_accounting_payment_tax_inputs_batch_live.py"], "reason": "Shared native payment/tax smoke passed; full rollback."}, "golden": {"status": "planned", "references": [], "reason": "Deferred."}, "e2e": {"status": "planned", "references": [], "reason": "Deferred."}},
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "The fixed handler is implemented; availability is evaluated for each configured database, company, and user at runtime."},
+      "routing": {"object": "receivable.payment", "actions": ["register"], "aliases": {"zh_CN": ["登记客户收款", "登记客户退款"], "en_US": ["Register a customer receipt", "Register a customer refund", "Register one receipt for multiple customer invoices"]}, "not_for": {"zh_CN": [], "en_US": []}, "required_slots": ["database", "company_id", "user_login"]},
       "handler_key": "core_write"
     },
     "reconciliation.apply": {
@@ -38407,147 +37691,16 @@
       "handler_key": "core_write"
     },
     "journal_entry.lines.update": {
-      "summary": {
-        "zh_CN": "保留行标识批量修改草稿分录",
-        "en_US": "Update existing draft entry lines while preserving identifiers"
-      },
+      "summary": {"zh_CN": "保留行标识批量修改草稿分录", "en_US": "Update existing draft entry lines while preserving identifiers"},
       "domain": "journal_entry",
       "access": "write",
-      "source": {
-        "modules": [
-          "account",
-          "analytic",
-          "product",
-          "uom"
-        ],
-        "models": [
-          "account.account",
-          "account.analytic.account",
-          "account.analytic.line",
-          "account.analytic.plan",
-          "account.journal",
-          "account.move",
-          "account.move.line",
-          "res.company",
-          "res.currency",
-          "res.currency.rate",
-          "res.partner"
-        ],
-        "wizards": [],
-        "report_handlers": [],
-        "locations": [
-          "account/models/account_move_line.py",
-          "account/models/account_move.py",
-          "analytic/models/analytic_mixin.py"
-        ]
-      },
-      "schemas": {
-        "request": "schemas/v1/journal_entry.lines.update.request.schema.json",
-        "response": "schemas/v1/journal_entry.lines.update.response.schema.json"
-      },
-      "requirements": {
-        "modules": [
-          "account",
-          "analytic",
-          "product",
-          "uom"
-        ],
-        "configuration": [
-          "database_alias",
-          "company_allowlist",
-          "user_mapping"
-        ],
-        "company": "required",
-        "groups": [
-          "account.group_account_user"
-        ],
-        "acl": [
-          "account.account:read",
-          "account.analytic.account:read",
-          "account.analytic.line:create",
-          "account.analytic.line:read",
-          "account.analytic.line:unlink",
-          "account.analytic.plan:read",
-          "account.journal:read",
-          "account.move.line:read",
-          "account.move.line:write",
-          "account.move:read",
-          "account.move:write",
-          "res.company:read",
-          "res.currency.rate:read",
-          "res.currency:read",
-          "res.partner:read"
-        ]
-      },
-      "strategies": {
-        "preview": "exact_capability_confirmation_and_closed_request_validation",
-        "execute": "native_line_or_atomic_parent_write_with_closed_existing_targets_as_business_user",
-        "verify": "same_transaction_parent_line_readback_with_native_constraints_and_recomputation",
-        "idempotency": "serial_current_target_recheck_without_operation_store_or_concurrent_exactly_once",
-        "reverse": "restore_prior_values_subject_to_native_constraints"
-      },
-      "tests": {
-        "unit": {
-          "status": "implemented",
-          "references": [
-            "tests/unit/test_accounting_workflows_batch.py"
-          ],
-          "reason": "Closed typed inputs, schema and target binding; compatible legacy branches remain covered."
-        },
-        "integration": {
-          "status": "implemented",
-          "references": [
-            "tests/integration/test_accounting_workflows_batch_live.py"
-          ],
-          "reason": "Shared native CLI workflow: both isolated aliases passed32.80s as uid5/su=False/company1. Verified sale/purchase reversal plus draft reissue and replay, native foreign-currency line edits, full/partial matching-group leaf undo and shrinking replay, statement-scoped bank pagination and actual payment bank matches, three company account assignments/clearing/readback and product fallback, purchase self-billing sequence. Native configuration roles and independent bank fixtures exist only in the test transaction. Fresh-cursor objects, caller groups, company settings, defaults and currency/rate rollback checks passed. Bank response additions require synchronized SDK/bridge/schema. No business DB, native source/addon, service, external-send or operation-store changes. Prior-paid reissue, cashbasis/exchange undo workflows, all ancestry/currency/localization/lock/hash branches, all setting consumers and concurrent exactly-once are not claimed."
-        },
-        "golden": {
-          "status": "planned",
-          "references": [],
-          "reason": "Golden examples are deferred until the capability library reaches target coverage."
-        },
-        "e2e": {
-          "status": "planned",
-          "references": [],
-          "reason": "Natural-language routing is outside this capability batch."
-        }
-      },
-      "status": {
-        "value": "unconfigured",
-        "reason_code": "runtime_context_required",
-        "reason": "Fixed line-targeted operations are implemented; native accounting, reference and analytic synchronization ACLs apply. Runtime context and native acceptance are not an unrestricted permission claim."
-      },
-      "routing": {
-        "object": "journal_entry",
-        "actions": [
-          "update"
-        ],
-        "aliases": {
-          "zh_CN": [
-            "保留行标识批量修改草稿分录"
-          ],
-          "en_US": [
-            "Update existing draft entry lines while preserving identifiers"
-          ]
-        },
-        "not_for": {
-          "zh_CN": [
-            "修改已过账行的金额或科目",
-            "任意 ORM 写入或跨公司操作",
-            "绕过原生重算、锁账或核销检查"
-          ],
-          "en_US": [
-            "Changing posted monetary fields or accounts",
-            "Arbitrary ORM writes or cross-company operations",
-            "Bypassing native recomputation, locks or reconciliation checks"
-          ]
-        },
-        "required_slots": [
-          "database",
-          "company_id",
-          "user_login"
-        ]
-      },
+      "source": {"modules": ["account", "analytic", "product", "uom"], "models": ["account.account", "account.analytic.account", "account.analytic.line", "account.analytic.plan", "account.journal", "account.move", "account.move.line", "res.company", "res.currency", "res.currency.rate", "res.partner", "account.tax", "account.tax.repartition.line", "account.account.tag"], "wizards": [], "report_handlers": [], "locations": ["account/models/account_move_line.py", "account/models/account_move.py", "analytic/models/analytic_mixin.py", "account/models/account_tax.py", "account/models/account_account_tag.py"]},
+      "schemas": {"request": "schemas/v1/journal_entry.lines.update.request.schema.json", "response": "schemas/v1/journal_entry.lines.update.response.schema.json"},
+      "requirements": {"modules": ["account", "analytic", "product", "uom"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["account.group_account_user"], "acl": ["account.account:read", "account.analytic.account:read", "account.analytic.line:create", "account.analytic.line:read", "account.analytic.line:unlink", "account.analytic.plan:read", "account.journal:read", "account.move.line:read", "account.move.line:write", "account.move:read", "account.move:write", "res.company:read", "res.currency.rate:read", "res.currency:read", "res.partner:read", "account.tax:read", "account.tax.repartition.line:read", "account.account.tag:read"]},
+      "strategies": {"preview": "exact_capability_confirmation_and_closed_request_validation", "execute": "native_line_or_atomic_parent_write_with_closed_existing_targets_as_business_user", "verify": "same_transaction_parent_line_readback_with_native_constraints_and_recomputation", "idempotency": "serial_current_target_recheck_without_operation_store_or_concurrent_exactly_once", "reverse": "restore_prior_values_subject_to_native_constraints"},
+      "tests": {"unit": {"status": "implemented", "references": ["tests/unit/test_accounting_workflows_batch.py", "tests/unit/test_accounting_payment_tax_inputs_batch.py", "tests/unit/test_entry_payment_explicit_inputs_contract.py", "tests/unit/test_journal_item_tax_projection_contract.py", "tests/unit/test_payment_tax_input_runtime.py"], "reason": "Existing contracts and explicit payment/tax input extensions are covered."}, "integration": {"status": "implemented", "references": ["tests/integration/test_accounting_workflows_batch_live.py", "tests/integration/test_accounting_payment_tax_inputs_batch_live.py"], "reason": "Shared native payment/tax smoke passed; full rollback."}, "golden": {"status": "planned", "references": [], "reason": "Deferred."}, "e2e": {"status": "planned", "references": [], "reason": "Deferred."}},
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "Fixed line-targeted operations are implemented; native accounting, reference and analytic synchronization ACLs apply. Runtime context and native acceptance are not an unrestricted permission claim."},
+      "routing": {"object": "journal_entry", "actions": ["update"], "aliases": {"zh_CN": ["保留行标识批量修改草稿分录"], "en_US": ["Update existing draft entry lines while preserving identifiers"]}, "not_for": {"zh_CN": ["修改已过账行的金额或科目", "任意 ORM 写入或跨公司操作", "绕过原生重算、锁账或核销检查"], "en_US": ["Changing posted monetary fields or accounts", "Arbitrary ORM writes or cross-company operations", "Bypassing native recomputation, locks or reconciliation checks"]}, "required_slots": ["database", "company_id", "user_login"]},
       "handler_key": "core_write"
     },
     "journal_item.analytic_distribution.replace": {
@@ -38953,139 +38106,16 @@
       "handler_key": "core_write"
     },
     "journal_item.processing_details.get": {
-      "summary": {
-        "zh_CN": "查看分录行处理详情",
-        "en_US": "Read journal-item processing details"
-      },
+      "summary": {"zh_CN": "查看分录行处理详情", "en_US": "Read journal-item processing details"},
       "domain": "journal_item",
       "access": "read",
-      "source": {
-        "modules": [
-          "account",
-          "analytic",
-          "product",
-          "uom"
-        ],
-        "models": [
-          "res.company",
-          "account.move.line",
-          "account.move",
-          "account.account",
-          "product.product",
-          "uom.uom",
-          "account.payment",
-          "account.bank.statement.line",
-          "res.currency"
-        ],
-        "wizards": [],
-        "report_handlers": [],
-        "locations": [
-          "account/models/account_move_line.py",
-          "account/models/account_move.py",
-          "analytic/models/analytic_mixin.py"
-        ]
-      },
-      "schemas": {
-        "request": "schemas/v1/journal_item.processing_details.get.request.schema.json",
-        "response": "schemas/v1/journal_item.processing_details.get.response.schema.json"
-      },
-      "requirements": {
-        "modules": [
-          "account",
-          "analytic",
-          "product",
-          "uom"
-        ],
-        "configuration": [
-          "database_alias",
-          "company_allowlist",
-          "user_mapping"
-        ],
-        "company": "required",
-        "groups": [
-          "account.group_account_readonly"
-        ],
-        "acl": [
-          "res.company:read",
-          "account.move.line:read",
-          "account.move:read",
-          "account.account:read",
-          "product.product:read",
-          "uom.uom:read",
-          "account.payment:read",
-          "account.bank.statement.line:read",
-          "res.currency:read"
-        ]
-      },
-      "strategies": {
-        "preview": "request_schema_validation",
-        "execute": "fixed_company_line_target_read_as_business_user",
-        "verify": "typed_target_binding_and_native_keyset_cursor",
-        "idempotency": "read_only",
-        "reverse": "not_applicable"
-      },
-      "tests": {
-        "unit": {
-          "status": "implemented",
-          "references": [
-            "tests/unit/test_journal_item_processing_batch.py"
-          ],
-          "reason": "Closed typed parameters, bound parent/line results, shared CLI/schemas/confirmation/keys and target-bound pagination; native behavior is covered separately."
-        },
-        "integration": {
-          "status": "implemented",
-          "references": [
-            "tests/integration/test_journal_item_processing_batch_live.py"
-          ],
-          "reason": "One shared public CLI/real-ORM workflow passed both isolated aliases in21.41s as uid5/su=False/company1: bound line reads, target analytic keyset pages and actual partial/full reconciliation; native atomic draft entry updates preserve IDs and reject imbalance; posted maturity/full analytic replacement/clearing preserve financial fields and replay avoids child recreation; draft product UOM reprices/retaxes natively and purchase deductibility50/0/100 synchronizes native rows. Temporary analytic permission and an admin-created purchase-journal default-account fixture are transaction-local; missing/foreign parent and parent-line mismatch, posted financial writes and draft sales partial-deductibility are rejected. All objects/journal/mail alias and exact groups roll back in fresh cursors. First numeric-conversion and second analytic-sign failures retained, not acceptance; no concurrent exactly-once, receipt, business DB or real external-send claim."
-        },
-        "golden": {
-          "status": "planned",
-          "references": [],
-          "reason": "The golden definition is frozen; implementation evidence is pending."
-        },
-        "e2e": {
-          "status": "planned",
-          "references": [],
-          "reason": "The e2e definition is frozen; implementation evidence is pending."
-        }
-      },
-      "status": {
-        "value": "unconfigured",
-        "reason_code": "runtime_context_required",
-        "reason": "Fixed line-targeted operations are implemented; native accounting, reference and analytic synchronization ACLs apply. Runtime context and native acceptance are not an unrestricted permission claim."
-      },
-      "routing": {
-        "object": "journal_item",
-        "actions": [
-          "get"
-        ],
-        "aliases": {
-          "zh_CN": [
-            "查看分录行处理详情"
-          ],
-          "en_US": [
-            "Read journal-item processing details"
-          ]
-        },
-        "not_for": {
-          "zh_CN": [
-            "修改已过账行的金额或科目",
-            "任意 ORM 写入或跨公司操作",
-            "绕过原生重算、锁账或核销检查"
-          ],
-          "en_US": [
-            "Changing posted monetary fields or accounts",
-            "Arbitrary ORM writes or cross-company operations",
-            "Bypassing native recomputation, locks or reconciliation checks"
-          ]
-        },
-        "required_slots": [
-          "database",
-          "company_id",
-          "user_login"
-        ]
-      },
+      "source": {"modules": ["account", "analytic", "product", "uom"], "models": ["res.company", "account.move.line", "account.move", "account.account", "product.product", "uom.uom", "account.payment", "account.bank.statement.line", "res.currency"], "wizards": [], "report_handlers": [], "locations": ["account/models/account_move_line.py", "account/models/account_move.py", "analytic/models/analytic_mixin.py"]},
+      "schemas": {"request": "schemas/v1/journal_item.processing_details.get.request.schema.json", "response": "schemas/v1/journal_item.processing_details.get.response.schema.json"},
+      "requirements": {"modules": ["account", "analytic", "product", "uom"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["account.group_account_readonly"], "acl": ["res.company:read", "account.move.line:read", "account.move:read", "account.account:read", "product.product:read", "uom.uom:read", "account.payment:read", "account.bank.statement.line:read", "res.currency:read"]},
+      "strategies": {"preview": "request_schema_validation", "execute": "fixed_company_line_target_read_as_business_user", "verify": "typed_target_binding_and_native_keyset_cursor", "idempotency": "read_only", "reverse": "not_applicable"},
+      "tests": {"unit": {"status": "implemented", "references": ["tests/unit/test_journal_item_processing_batch.py", "tests/unit/test_accounting_payment_tax_inputs_batch.py", "tests/unit/test_journal_item_tax_projection_contract.py"], "reason": "Existing contracts and explicit payment/tax input extensions are covered."}, "integration": {"status": "implemented", "references": ["tests/integration/test_journal_item_processing_batch_live.py", "tests/integration/test_accounting_payment_tax_inputs_batch_live.py"], "reason": "Shared native payment/tax smoke passed; full rollback."}, "golden": {"status": "planned", "references": [], "reason": "Deferred."}, "e2e": {"status": "planned", "references": [], "reason": "Deferred."}},
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "Fixed line-targeted operations are implemented; native accounting, reference and analytic synchronization ACLs apply. Runtime context and native acceptance are not an unrestricted permission claim."},
+      "routing": {"object": "journal_item", "actions": ["get"], "aliases": {"zh_CN": ["查看分录行处理详情"], "en_US": ["Read journal-item processing details"]}, "not_for": {"zh_CN": ["修改已过账行的金额或科目", "任意 ORM 写入或跨公司操作", "绕过原生重算、锁账或核销检查"], "en_US": ["Changing posted monetary fields or accounts", "Arbitrary ORM writes or cross-company operations", "Bypassing native recomputation, locks or reconciliation checks"]}, "required_slots": ["database", "company_id", "user_login"]},
       "handler_key": "journal_item_processing_details_get"
     },
     "journal_item.reconciliation.inspect": {
@@ -41429,16 +40459,16 @@
       "handler_key": "payment_term_compute"
     },
     "journal_entry.lines.add": {
-      "summary": {"zh_CN":"保留其他行 ID，追加草稿手工分录行","en_US":"Append balanced rows without replacing other rows"},
+      "summary": {"zh_CN": "保留其他行 ID，追加草稿手工分录行", "en_US": "Append balanced rows without replacing other rows"},
       "domain": "general_ledger",
       "access": "write",
-      "source": {"modules":["account"],"models":["account.account","account.analytic.account","account.analytic.line","account.analytic.plan","account.journal","account.move","account.move.line","res.company","res.currency","res.currency.rate","res.partner"],"wizards":[],"report_handlers":[],"locations":["account/models/account_move.py","account/models/account_move_line.py"]},
-      "schemas": {"request":"schemas/v1/journal_entry.lines.add.request.schema.json","response":"schemas/v1/journal_entry.lines.add.response.schema.json"},
-      "requirements": {"modules":["account"],"configuration":["database_alias","company_allowlist","user_mapping"],"company":"required","groups":["account.group_account_user"],"acl":["account.account:read","account.analytic.account:read","account.analytic.line:create","account.analytic.line:read","account.analytic.line:unlink","account.analytic.plan:read","account.journal:read","account.move.line:create","account.move.line:read","account.move:read","account.move:write","res.company:read","res.currency.rate:read","res.currency:read","res.partner:read"]},
-      "strategies": {"preview":"exact_confirmation_closed_contract","execute":"native_parent_create_commands_with_balance_check","verify":"same_transaction_membership_and_preserved_rows","idempotency":"serial_expected_ids_and_added_row_match","reverse":"remove_added_rows"},
-      "tests": {"unit":{"status":"implemented","references":["tests/unit/test_accounting_entry_membership_batch.py","tests/unit/test_capability_registry.py"],"reason":"Contract, native writes, preservation and replay."},"integration":{"status":"implemented","references":["tests/integration/test_accounting_entry_membership_batch_live.py"],"reason":"Shared native smoke passed; full rollback."},"golden":{"status":"planned","references":[],"reason":"Deferred."},"e2e":{"status":"planned","references":[],"reason":"Deferred."}},
-      "status": {"value":"unconfigured","reason_code":"runtime_context_required","reason":"Runtime required; serial target replay is not concurrent exactly-once."},
-      "routing": {"object":"account.move","actions":["add_lines"],"aliases":{"zh_CN":["追加手工分录行"],"en_US":["Append manual journal rows"]},"not_for":{"zh_CN":["已过账或系统生成的分录","发票和账单行"],"en_US":["Posted or generated entries","Invoice or bill lines"]},"required_slots":["database","company_id","user_login"]},
+      "source": {"modules": ["account"], "models": ["account.account", "account.analytic.account", "account.analytic.line", "account.analytic.plan", "account.journal", "account.move", "account.move.line", "res.company", "res.currency", "res.currency.rate", "res.partner", "account.tax", "account.tax.repartition.line", "account.account.tag"], "wizards": [], "report_handlers": [], "locations": ["account/models/account_move.py", "account/models/account_move_line.py", "account/models/account_tax.py", "account/models/account_account_tag.py"]},
+      "schemas": {"request": "schemas/v1/journal_entry.lines.add.request.schema.json", "response": "schemas/v1/journal_entry.lines.add.response.schema.json"},
+      "requirements": {"modules": ["account"], "configuration": ["database_alias", "company_allowlist", "user_mapping"], "company": "required", "groups": ["account.group_account_user"], "acl": ["account.account:read", "account.analytic.account:read", "account.analytic.line:create", "account.analytic.line:read", "account.analytic.line:unlink", "account.analytic.plan:read", "account.journal:read", "account.move.line:create", "account.move.line:read", "account.move:read", "account.move:write", "res.company:read", "res.currency.rate:read", "res.currency:read", "res.partner:read", "account.tax:read", "account.tax.repartition.line:read", "account.account.tag:read"]},
+      "strategies": {"preview": "exact_confirmation_closed_contract", "execute": "native_parent_create_commands_with_balance_check", "verify": "same_transaction_membership_and_preserved_rows", "idempotency": "serial_expected_ids_and_added_row_match", "reverse": "remove_added_rows"},
+      "tests": {"unit": {"status": "implemented", "references": ["tests/unit/test_accounting_entry_membership_batch.py", "tests/unit/test_capability_registry.py", "tests/unit/test_accounting_payment_tax_inputs_batch.py", "tests/unit/test_entry_payment_explicit_inputs_contract.py", "tests/unit/test_journal_item_tax_projection_contract.py", "tests/unit/test_payment_tax_input_runtime.py"], "reason": "Existing contracts and explicit payment/tax input extensions are covered."}, "integration": {"status": "implemented", "references": ["tests/integration/test_accounting_entry_membership_batch_live.py", "tests/integration/test_accounting_payment_tax_inputs_batch_live.py"], "reason": "Shared native payment/tax smoke passed; full rollback."}, "golden": {"status": "planned", "references": [], "reason": "Deferred."}, "e2e": {"status": "planned", "references": [], "reason": "Deferred."}},
+      "status": {"value": "unconfigured", "reason_code": "runtime_context_required", "reason": "Runtime required; serial target replay is not concurrent exactly-once."},
+      "routing": {"object": "account.move", "actions": ["add_lines"], "aliases": {"zh_CN": ["追加手工分录行"], "en_US": ["Append manual journal rows"]}, "not_for": {"zh_CN": ["已过账或系统生成的分录", "发票和账单行"], "en_US": ["Posted or generated entries", "Invoice or bill lines"]}, "required_slots": ["database", "company_id", "user_login"]},
       "handler_key": "core_write"
     },
     "journal_entry.lines.remove": {

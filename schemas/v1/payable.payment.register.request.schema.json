@@ -61,6 +61,14 @@
           "type": "integer",
           "minimum": 1
         },
+        "payment_method_line_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "partner_bank_id": {
+          "type": "integer",
+          "minimum": 1
+        },
         "payment_date": {
           "type": "string",
           "format": "date"

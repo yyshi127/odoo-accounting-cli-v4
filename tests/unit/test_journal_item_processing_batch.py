@@ -155,7 +155,8 @@ def test_native_nullable_distribution_and_existing_line_only_contract():
     assert contracts.normalize_parameters("journal_item.analytic_distribution.replace", {**PARAMETERS["journal_item.analytic_distribution.replace"], "analytic_distribution": None})["analytic_distribution"] is None
     assert contracts.normalize_parameters("invoice.line.deductibility.update", {**PARAMETERS["invoice.line.deductibility.update"], "deductible_amount": "0"})["deductible_amount"] == "0"
     assert contracts.PARAMETER_KEYS["journal_entry.lines.update"] == {"move_id", "lines"}
-    assert {"currency_id", "amount_currency"} <= contracts.ENTRY_FIELDS and "tax_ids" not in contracts.ENTRY_FIELDS
+    assert {"currency_id", "amount_currency"} | contracts.TAX_FIELDS <= contracts.ENTRY_FIELDS
+    assert "tax_line_id" not in contracts.ENTRY_FIELDS
 
 
 @pytest.mark.parametrize("capability_id", ["journal_item.date_maturity.update", "journal_item.analytic_distribution.replace"])

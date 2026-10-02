@@ -2539,6 +2539,8 @@ def _raw_get_rows(
                 "tax_line_id",
                 "tax_ids",
                 "tax_base_amount",
+                "tax_tag_ids",
+                "tax_repartition_line_id",
             ),
             "payment.method.get": (
                 "id",
@@ -2843,6 +2845,8 @@ def _journal_item_rows(
             "tax_line_id",
             "tax_ids",
             "tax_base_amount",
+            "tax_tag_ids",
+            "tax_repartition_line_id",
         ],
         limit=parameters["limit"],
         order="id",
@@ -2900,8 +2904,10 @@ def _journal_item_processing_rows(
     for field in ("amount_residual", "amount_residual_currency"):
         item[field] = _decimal_string(row[field])
     if capability_id == journal_item_processing.DETAIL_ID:
-        for field in ("deductible_amount", "discount_amount_currency"):
+        for field in ("deductible_amount", "discount_amount_currency", "tax_base_amount"):
             item[field] = _decimal_string(row[field])
+        for field in ("tax_ids", "tax_tag_ids"):
+            item[field] = _sorted_relation_ids(row[field])
         for field in ("date_maturity", "discount_date"):
             item[field] = _optional_date_string(row[field])
         for field, model_name, scope_field, shared in (
@@ -3043,6 +3049,8 @@ def _normalize_journal_items(
                 "tax_line_id": tax_line_id,
                 "tax_ids": _sorted_relation_ids(row["tax_ids"]),
                 "tax_base_amount": _decimal_string(row["tax_base_amount"]),
+                "tax_tag_ids": _sorted_relation_ids(row["tax_tag_ids"]),
+                "tax_repartition_line_id": _reference_id(row["tax_repartition_line_id"]),
                 "currency": _currency_reference(currencies[currency_id]),
                 "reconciled": row["reconciled"],
                 "matching_number": _optional_text(row["matching_number"]),

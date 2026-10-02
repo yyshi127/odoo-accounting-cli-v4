@@ -971,6 +971,8 @@ def _fixture() -> tuple[Env, dict[str, Any]]:
             tax_line_id=False,
             tax_ids=Records(),
             tax_base_amount=Decimal("0.00"),
+            tax_tag_ids=Records(),
+            tax_repartition_line_id=False,
         )
 
     journal_lines = [journal_line(31), journal_line(32)]
@@ -1784,6 +1786,8 @@ def _expected_item(capability_id: str, record_id: int = 31) -> dict[str, Any]:
             "tax_line_id": None,
             "tax_ids": [],
             "tax_base_amount": "0",
+            "tax_tag_ids": [],
+            "tax_repartition_line_id": None,
         }
     if capability_id in {"product.search", "product.get"}:
         return {

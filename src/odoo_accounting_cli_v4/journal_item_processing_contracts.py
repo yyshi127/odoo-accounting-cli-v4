@@ -28,12 +28,14 @@ PARAMETER_KEYS = {
     "journal_entry.lines.update": {"move_id", "lines"},
 }
 CAPABILITY_IDS = frozenset(PARAMETER_KEYS)
-ENTRY_FIELDS = {"name", "account_id", "partner_id", "debit", "credit", "currency_id", "amount_currency", "date_maturity", "analytic_distribution"}
+TAX_FIELDS = {"tax_ids", "tax_tag_ids", "tax_repartition_line_id", "tax_base_amount"}
+ENTRY_FIELDS = {"name", "account_id", "partner_id", "debit", "credit", "currency_id", "amount_currency", "date_maturity", "analytic_distribution"} | TAX_FIELDS
 DETAIL_FIELDS = (
     "id", "move_id", "company_id", "parent_state", "move_type", "display_type",
     "account_id", "product_id", "product_uom_id", "deductible_amount", "date_maturity",
     "amount_residual", "amount_residual_currency", "discount_date", "discount_amount_currency",
     "payment_id", "statement_line_id", "no_followup", "currency_id", "company_currency_id",
+    "tax_ids", "tax_line_id", "tax_base_amount", "tax_tag_ids", "tax_repartition_line_id",
 )
 RECONCILIATION_FIELDS = (
     "id", "move_id", "company_id", "reconciled", "matching_number", "amount_residual",
@@ -98,6 +100,14 @@ def _changes(values: Any) -> dict[str, Any]:
             result[field] = amount_text(value, signed=True)
         if field == "analytic_distribution":
             result[field] = distribution(value)
+        if field in {"tax_ids", "tax_tag_ids"}:
+            if not isinstance(value, list) or len(value) > 100 or not all(valid_id(item) for item in value) or value != sorted(set(value)):
+                raise ValueError("Tax references must be 0-100 sorted unique positive identifiers.")
+            result[field] = list(value)
+        if field == "tax_repartition_line_id" and not optional_id(value):
+            raise ValueError("Tax repartition reference must be null or a positive identifier.")
+        if field == "tax_base_amount":
+            result[field] = amount_text(value, signed=True)
     return result
 
 
@@ -140,7 +150,9 @@ def normalize_parameters(capability_id: str, parameters: Any) -> dict[str, Any]:
 
 def valid_read_item(capability_id: str, item: Any, company_id: int) -> bool:
     fields = DETAIL_FIELDS if capability_id == DETAIL_ID else RECONCILIATION_FIELDS
-    if capability_id not in GET_IDS or not isinstance(item, dict) or set(item) != set(fields):
+    optional_fields = TAX_FIELDS | {"tax_line_id"} if capability_id == DETAIL_ID else set()
+    required_fields = set(fields) - optional_fields
+    if capability_id not in GET_IDS or not isinstance(item, dict) or not required_fields <= set(item) <= set(fields):
         return False
     if not all(valid_id(item[field]) for field in ("id", "move_id", "company_id", "currency_id", "company_currency_id")) or item["company_id"] != company_id:
         return False
@@ -148,6 +160,13 @@ def valid_read_item(capability_id: str, item: Any, company_id: int) -> bool:
         for field in ("amount_residual", "amount_residual_currency"):
             amount_text(item[field], signed=True)
         if capability_id == DETAIL_ID:
+            if any(field in item and not optional_id(item[field]) for field in ("tax_line_id", "tax_repartition_line_id")):
+                return False
+            for field in ("tax_ids", "tax_tag_ids"):
+                if field in item and (not isinstance(item[field], list) or not all(valid_id(value) for value in item[field]) or item[field] != sorted(set(item[field]))):
+                    return False
+            if "tax_base_amount" in item:
+                amount_text(item["tax_base_amount"], signed=True)
             amount_text(item["discount_amount_currency"], signed=True)
             if not 0 <= Decimal(amount_text(item["deductible_amount"])) <= 100:
                 return False

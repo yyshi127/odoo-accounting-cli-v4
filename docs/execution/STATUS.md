@@ -1,6 +1,77 @@
 # Execution status
 
-## Current accounting phase — signed invoice quantities and journal-row membership, 2026-10-02
+## Current accounting phase — explicit payment selection and manual tax rows, 2026-10-02
+
+Nine existing-interface extensions, zero new command IDs. Totals remain
+552 registered / 537 implemented handlers (251 reads, 286 writes), 1080 schemas;
+461 unconfigured, 76 degraded, 15 disabled. Enabled integration statuses remain
+534 implemented, two planned, one failed. This is not an accounting completion
+percentage or unrestricted ordinary-user permission claim.
+
+- receivable.payment.register/payable.payment.register accept optional positive
+  payment_method_line_id and partner_bank_id, in single and grouped requests;
+  null is rejected. Native wizard availability and actual created payment fields
+  are checked. Explicit bank selection rejects a non-editable native route before
+  payment creation. Batch payments remain same-partner/currency, full and grouped.
+  Omitted normalization and old keys remain unchanged. New explicit replay binds
+  the existing full-parameter marker and actual references; no posted payment is
+  changed and no new replay store is created. Refund direction has focused mocked
+  coverage; this native batch demonstrates invoice/bill receipt/payment flows.
+- journal_entry.create/lines.replace/lines.add/lines.update accept tax_ids,
+  tax_tag_ids, tax_repartition_line_id and tax_base_amount. Arrays are sorted
+  unique positive IDs (0–100); [] clears, null clears repartition, "0" clears base.
+  Tax/repartition references are visible/current-company; tags must be tax tags.
+  Full-row amounts retain literal decimal strings; partial patches retain their
+  existing canonical format. Omitted fields do not gain defaults or change old
+  keys/replay. Complete balanced manual base and tax rows are required: native
+  tax synchronization stays enabled, and unrequested row changes reject/roll back.
+  New explicit tax paths reject posted/generated/source-linked targets. ADD
+  preserves other rows; UPDATE preserves IDs. No independent tax_line_id input.
+- journal_item.get/search now include tax_tag_ids and tax_repartition_line_id;
+  processing_details.get includes all five native tax fields. SDKs/schemas still
+  accept old result shapes and independent optional additions. Pagination and
+  filters are unchanged; flat tax IDs do not fetch tax/tag/repartition names.
+
+Server batch:436 tests passed19.09s. Shared native public-CLI workflow passed both
+isolated aliases31.34s as uid5/su=False/company1. It verifies explicit alternate
+payment methods/banks, actual posted payment/residual/reconciliation consumers,
+replay and conflicts; complete manual tax create/replace/clear/restore/add and
+three read projections; actual tax-report tagged balance27.5 and sequential
+leading-minus expression-27.5, independently of stored tax_base_amount999.
+Unsupported auto-sync, posted/generated/source-linked and genuinely foreign
+references reject. Fresh cursors verify fixtures, both companies' settings,
+all defaults/currencies/rates and exact all-user groups roll back.
+
+Two native fixture failures are retained, not acceptance:DEV9.93s expected
+state_conflict where the preserved single-document key correctly yields
+idempotency_conflict; DEV15.04s attached a supposedly foreign bank to a shared
+partner. Installed company_id is related to the bank owner, so the corrected
+fixture uses an owned company2 partner and asserts native company2 before denial.
+Both failures completed full fresh rollback; E2E did not start. Production code
+was unchanged by these test repairs. Local combined437tests48.29s and precise
+journal-item135tests14.23s passed. Final metadata3nodes passed locally53.05s,
+server17.86s. Existing unrelated stale test cases are not an all-suite claim.
+
+21 explicit deployed files:16 existing originals backed up, downloaded and
+hash-verified; five new files. Test-only repairs and final registry update have
+before-hash backups. All21 final local/server hashes match; public-tree privacy
+and Ruff findings are zero. Only nine registry descriptors changed; unchanged
+2MiB size limit,543 unrelated descriptors retained. Final registry2086977bytes.
+Services stay active at unchanged fresh-baseline PIDs/restart counts;4.94GiB free,
+no cleanup or restart. Public documents updated locally; server document overlays
+are preserved. Normal GitHub checkpoint follows these verified facts.
+
+Next: inspect actual high-frequency accounting/bank/settlement gaps against the
+installed native source, then build another small capability batch. Do not reopen
+accepted batches, expand controls, alter business databases/native addons, or
+claim all country reports, tax/currency/branch/lock combinations or concurrent
+exactly-once. Asset.validate's native defect and two report sends remain unclosed;
+absent debit-note addon installation is not authorized. Overall goal stays active.
+
+Registry file SHA256 dce502f954b451eb29328f7a739f3a2607c786813028b0a6fed646bb745d8270;
+canonical SHA256 fe4c73e65f723aa0f5b1d4aa00edbe278472030435a29d16bf0982d58ec07920.
+
+## Previous accounting phase — signed invoice quantities and journal-row membership, 2026-10-02
 
 552 registered IDs; 537 implemented handlers (251 reads, 286 writes);
 1080 schemas. Availability: 461 unconfigured, 76 degraded, 15 disabled.

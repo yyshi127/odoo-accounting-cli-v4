@@ -6291,3 +6291,80 @@ source/addon/service/config/Pi/V2/V3 or sudo business change. Overall goal activ
 
 Registry file SHA256 387fe28b90ccfc5b0e3c0b37b496037bee16e9a9415fa0780a9eab31c69dcc4b;
 canonical registry SHA256 632ce00d6f1bbc0589dee1d12e2eabe24b97b9874e75400cc942a6ccf3e7aa1b.
+
+## Payment selection and manual tax input checkpoint — 2026-10-02
+
+Authoritative latest batch:9 EXT /0 NEW IDs. Totals552 registered,537 handlers
+(251 reads/286 writes),1080 schemas; availability461 unconfigured/76 degraded/
+15 disabled; enabled integrations534 implemented/two planned/one failed.
+No denominator/percentage or unrestricted role claim; overall goal active.
+
+Two payment.register commands now accept optional positive nonboolean method
+and bank IDs for single/grouped flows (no null). Ordinary visibility/company/
+direction checks precede execution; native wizard available_* and actual payment
+references are verified. Explicit bank requires the real editable action route;
+otherwise pre-action conflict, not a silently ignored bank. Grouped invoices/bills
+remain full, same partner/currency. New explicit replay checks full existing
+operation marker and actual refs without recreating a paid-source wizard or
+changing posted records. Omitted params/old deterministic or caller keys stay.
+Single no-amount key remains capability:moveID; changing refs with that same key
+is idempotency_conflict, while a grouped parameter digest changes its key.
+
+Four manual-entry writes(create/replace/add/update) accept tax_ids/tax_tag_ids
+(0–100 sorted unique IDs), nullable tax_repartition_line_id and signed
+tax_base_amount. Clear[]/null/"0"; omit no defaults. Full-row numeric strings
+retain literal form; partial changes keep existing canonical amounts. Native
+tax_line_id is related/read-only input, not independently exposed. Tax and
+repartition references are current-company/visible; tags applicability=taxes;
+no unsupported country or repartition-type restriction was invented.
+Complete balanced base/tax rows are the supported manual shape. Native sync
+stays on; unexpected native row creation/deletion rejects with rollback rather
+than loosening ADD/UPDATE preservation or inventing tax calculations. New tax
+paths require draft ordinary general/source-unlinked entries; old omitted paths
+retain their prior rules. Replace omission is not inheritance of old tax rows.
+
+Three reads(get/search/processing_details.get) return native tax projection;
+get/search add tags/repartition, processing details all five tax fields. Closed
+SDK/schema response types retain old-shape and independent-key compatibility;
+pagination/filtering unchanged, flat IDs do not dereference metadata names.
+
+Evidence:server436scoped tests19.09s; one shared public CLI/native workflow passed
+both isolated aliases31.34s UID5/su=False/company1. Real alternate method and
+selected bank IDs, posted payment/residual/matching consumers, single/grouped
+inbound/outbound replays; four manual tax writes/clearing/restoring/preserved
+IDs and three read pages; public generic tax report ONE transaction-owned plain
+tag/expression yields27.5 then leading-minus-27.5. Stored base999 is separately
+edited metadata, not the tax_tags engine's balance input. Ordinary bank company
+can be shared; the actual foreign bank fixture uses a native company2 partner
+and asserts company2 before denial. Unsupported auto-sync/posted/generated/
+source-linked/foreign checks preserve native financial state. Source-link note
+fixture is a guard proof, not a sale lifecycle. Fresh cursor fixtures/settings
+for both companies/all defaults/currencies/rates/exact all-user groups roll back.
+
+Retain both actual failed diagnostics:DEV9.93s wrong single-key drift expected
+error, DEV15.04s incorrectly constructed foreign bank. Installed res.partner.bank
+company_id derives from partner_id.company_id; only native fixtures were corrected,
+never production keys/ACL/sync. Full rollback completed before each failure was
+propagated and E2E did not run. Only accepted31.34s closes native evidence.
+Local combined437tests48.29s, precisejournal-item135tests14.23s and final metadata
+3nodes53.05s/server17.86s passed. Earlier broad selection exposed an unrelated
+stale tax.compute fixture mapping; no unrelated repair or all-suite claim.
+
+21 exact deployed files/16 original recoverable backups downloaded+verified/
+five new files. Test repairs and final registry update keep before-hash backups.
+All21 final local/server hashes match. Privacy/Ruff zero; current-target registry
+metadata is concise under unchanged2MiB limit,543 unrelated descriptors unchanged.
+Local docs updated, server doc overlays untouched. Services active with baseline
+PIDs/restart counts unchanged,4.94GiB free; no cleanup/restart/business DB/native
+source/addon/config/Pi/V2/V3/external-send/new replay-store/control-framework change.
+Normal checkpoint follows these facts; next worker must not reopen this batch.
+
+Next batch should inspect actual high-frequency accounting/bank/settlement gaps
+using installed source before freezing a small delivery. Not claimed:all country
+tax reports, branch/hierarchy/CABA/multicurrency/installment/lock/hash combinations,
+refund registration native consumer in this batch, arbitrary automatic tax-row
+expansion, or concurrent exactly-once. Asset.validate addon defect/two report sends
+remain unclosed; absent debit-note installation not authorized. Overall goal active.
+
+Registry file SHA256 dce502f954b451eb29328f7a739f3a2607c786813028b0a6fed646bb745d8270;
+canonical SHA256 fe4c73e65f723aa0f5b1d4aa00edbe278472030435a29d16bf0982d58ec07920.
