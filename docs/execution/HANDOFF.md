@@ -2,6 +2,14 @@
 
 Updated: 2026-10-02 (Asia/Shanghai)
 
+Completion planning now has a proposed, finite workflow/evidence crosswalk in
+[ACCOUNTING_ACCEPTANCE.md](ACCOUNTING_ACCEPTANCE.md). It is not an approved
+scope reduction or a completion claim. No new command was implemented by the
+audit; the latest capability checkpoint and counts below remain authoritative.
+Separate ordinary-user availability, fixture-only prerequisites, native blockers
+and actual missing handlers when planning closure. Do not resume unlimited
+optional-field expansion solely because the registry still permits more IDs.
+
 ## Current authoritative count — 2026-10-02
 
 559 registered /544 handlers (253 reads,291 writes),

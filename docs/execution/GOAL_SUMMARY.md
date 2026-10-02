@@ -6,6 +6,8 @@ Retain native ACLs, configured company/user scope, idempotency and explicit writ
 
 Consolidated approvals, audit/evidence packaging, Pi end-to-end tests, offline installation/upgrade/rollback and reproducible release gates are later-phase work after practical accounting coverage. The fixed CLI-Anything v0.4.0 generation checkpoint remains historical provenance, not a reason to rebuild the current implementation or put release gates ahead of capabilities.
 
+The proposed first-phase closure criteria and evidence gaps are in [ACCOUNTING_ACCEPTANCE.md](ACCOUNTING_ACCEPTANCE.md). That document is a workflow acceptance proposal, not an approved reduction of this objective. Command counts and historical integration metadata are not a completion percentage; unresolved required work remains incomplete.
+
 Automated write verification is limited to the two synthetic databases `odoo_cli_v4_dev` and `odoo_cli_v4_e2e`. All business databases, installed Odoo source/add-ons, Odoo/Nginx/PostgreSQL/Pi bridge services, V2/V3 installations and legacy harnesses remain protected; this goal does not authorize modifying or restarting them.
 
 This public repository contains only independently authored V4 code, public contracts and sanitized documentation. It excludes Odoo Enterprise/custom source, private environment evidence, raw generation transcripts, credentials and real business data.

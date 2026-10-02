@@ -1,5 +1,18 @@
 # Execution status
 
+## Completion-boundary audit — 2026-10-02
+
+[ACCOUNTING_ACCEPTANCE.md](ACCOUNTING_ACCEPTANCE.md) records a proposed finite
+first-phase workflow acceptance scope, actual evidence, disabled IDs and blockers.
+This audit adds no capability. Current counts below remain unchanged. Local
+registry/schema/CLI bindings passed; fresh server code/native/service identity
+matched the preceding checkpoint. Existing read-only accounting-access tests
+passed all four dual-alias/company cases in59.58s. Historical export evidence and
+deferred-failure/addon hashes were freshly rechecked, not rerun as new acceptance.
+The proposal does not narrow the objective or mark any unverified work complete.
+Next: resolve the fixed workflow/role boundary and audit required end-to-end
+evidence before another optional-field expansion. Overall goal stays active.
+
 ## Current accounting phase — business-line searches and bulk removal, 2026-10-02
 
 One NEW command and seven EXT queries. 559 registered /544 handlers (253 reads,
