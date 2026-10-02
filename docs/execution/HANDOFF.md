@@ -6,7 +6,7 @@ Updated: 2026-10-02 (Asia/Shanghai)
 
 556 registered IDs;541 handlers (253 reads,288 writes);
 1088 schemas;464 unconfigured,77 degraded,15 disabled. Enabled integrations:
-538 implemented,two planned,one failed. Latest order-accounting-read checkpoint
+538 implemented,two planned,one failed. Latest invoice-line-input checkpoint
 at the end is authoritative; totals are not a full accounting denominator,
 completion percentage or unrestricted ordinary-user permission guarantee.
 
@@ -6645,3 +6645,73 @@ Next: keep building source-backed high-frequency accounting capabilities in
 quantities/status/links or schedules. Native asset validation/report-send/custom
 multi-invoice addon limitations remain unclosed; addon fixes/installations require
 separate authority. Overall goal stays active; no percentage/full-coverage claim.
+
+## Latest checkpoint — native invoice line inputs, 2026-10-02
+
+Eight extensions, no new IDs. Counts stay 556 registered / 541 handlers
+(253 reads, 288 writes), 1088 schemas; enabled native integrations stay
+538 implemented, two planned, one failed. This closes the batch, not the goal.
+
+Seven existing write routes now accept independent optional product_uom_id and
+deductible_amount: customer_invoice.create, vendor_bill.create,
+invoice.line.create/update, invoice.lines.replace, and the singular custom-line
+customer_credit_note.create/vendor_refund.create routes. Full native batch
+refunds without custom lines are untouched. Explicit units must be positive IDs
+in the effective visible product's native allowed units. The deductible field is
+an unsigned decimal percentage 0–100, not money; native partial deduction is
+purchase-only. Caller text such as 50.0/50.001 is accepted without an artificial
+two-decimal limit. Omitted keys preserve old normalization, keys and defaults.
+
+invoice.get consolidates the native unit ID and deductible percentage into its
+line projection. Each field is independently optional; missing native fields
+omit its key. No global UoM ACL/model prerequisite is added to existing reads or
+old writes. The existing separate unit.assign/deductibility.update remain.
+
+Unit-only invoice.line.update permits Odoo to recompute omitted prices/taxes.
+Explicit caller fields must persist and native line/parent/company/display
+identity is checked. Passing price_unit/tax_ids pins those inputs. Omitting the
+unit retains old whole-line verification. Different unit/deductibility values
+on sales/purchase-sourced invoice lines remain refused, same-value replay is
+allowed; this batch does not add a blanket source lock to all editable fields.
+Native partial deductibility creates accounting splits, not a guaranteed drop
+in invoice tax or gross total. No client-side amount or unit conversion.
+
+Verification: local 478 focused/regression tests passed in 63.07s; server 478 in
+25.89s. One shared native smoke passed both isolated aliases in 28.86s, ordinary
+UID5, su=False, company1. All eight targets persisted and replayed, including
+unit-only native recomputation, combined unit/quantity/price input, native
+non-deductible/tax lines, custom customer/vendor refunds and legacy omissions.
+Allowed-unit, parent/membership, sales percentage, posted and foreign input
+denials were exercised. This fixture does not claim native SO/PO source-guard
+coverage; those new-field restrictions have focused runtime tests. The terminal
+shared PID was 1764091, exit0, process absent. Never rerun accepted native work.
+
+Fresh rollback checked every owned fixture, all users/groups and implied groups,
+stored company1+2 settings, all defaults and all currencies/rates. Final metadata
+checks: local two passed 24.17s, server two passed 12.39s. Seventeen final CLI
+code/schema/test byte hashes match local/server; unrelated 548 old descriptors
+are unchanged. Before backups: initial 13 originals plus final registry one,
+downloaded and hash-verified. Two public docs stay local, preserving server
+overlays. Exact public checkpoint scope is 19 paths. New privacy/Ruff findings0;
+old document privacy findings and unrelated legacy test assertions are retained.
+No whole-suite-green claim.
+
+Services remain active at baseline PIDs/restarts; available 5254037504 bytes
+(about 4.89 GiB; physical usage rounded 90%). No cleanup, service/native/addon/
+business-DB/stock-workflow/V2/V3/Pi changes. Actual registry 2089000B stays below
+the unchanged public checker2MiB and loader4MiB limits.
+Registry file SHA256229cf4f4a30ac899c951e40a74787c1800da0df9ed880b26c46f5d0d19f1cdc8;
+canonical SHA256200088657e80b97b6e987d12b1a2e42d9a554f0a84af07e039b70a0592f19ee4.
+
+Private resumable evidence: .tooling/accounting-invoice-line-inputs-20261002
+contains STATE, fresh installed native source/hash excerpts, allowlist manifests,
+before backups, accepted terminal observation/logs and final local/server facts.
+The final Git checkpoint must use only the verified 19 paths, normal non-force
+push, and a fresh remote HEAD comparison.
+
+Next candidates, not a frozen promise: practical invoice search filters such as
+currency/payment-term/fiscal/due-date ranges, and sparse multi-line invoice
+updates retaining IDs. Audit existing contracts and installed source before
+choosing another 8–12-target batch; do not count aliases or existing separate
+commands as new capabilities. Keep the overall goal ACTIVE; missing addon,
+native asset/custom-FX/report-send limitations still need separate authority.

@@ -739,9 +739,10 @@ _DOCUMENT_LINE_REQUIRED_KEYS = frozenset(
     {"name", "account_id", "quantity", "price_unit", "tax_ids"}
 )
 _DEFERRED_LINE_DATE_FIELDS = ("deferred_start_date", "deferred_end_date")
+_INVOICE_LINE_INPUT_FIELDS = frozenset({"product_uom_id", "deductible_amount"})
 _DOCUMENT_LINE_OPTIONAL_KEYS = frozenset(
     {"product_id", "discount", "analytic_distribution", *_DEFERRED_LINE_DATE_FIELDS}
-)
+) | _INVOICE_LINE_INPUT_FIELDS
 _ENTRY_LINE_REQUIRED_KEYS = frozenset(
     {"name", "account_id", "partner_id", "debit", "credit"}
 )
@@ -4077,7 +4078,21 @@ def _valid_document_lines(value: Any) -> bool:
             or any(not _is_id(item) for item in tax_ids)
             or len(tax_ids) != len(set(tax_ids))
             or not _valid_deferred_line_dates(line)
+            or not _valid_invoice_line_inputs(line, partial=False)
         ):
+            return False
+    return True
+
+
+def _valid_invoice_line_inputs(values: dict[str, Any], *, partial: bool) -> bool:
+    if "product_uom_id" in values and (
+        not _is_id(values["product_uom_id"])
+        or ((not partial or "product_id" in values) and not _is_id(values.get("product_id")))
+    ):
+        return False
+    if "deductible_amount" in values:
+        amount = _decimal(values["deductible_amount"])
+        if amount is None or amount > 100:
             return False
     return True
 
@@ -4210,7 +4225,7 @@ def _valid_invoice_line_values(value: Any, *, partial: bool) -> bool:
         "discount",
         "tax_ids",
     }
-    allowed = required | {"analytic_distribution", *_DEFERRED_LINE_DATE_FIELDS}
+    allowed = required | {"analytic_distribution", *_DEFERRED_LINE_DATE_FIELDS} | _INVOICE_LINE_INPUT_FIELDS
     if (
         not isinstance(value, dict)
         or (partial and (not value or not set(value) <= allowed))
@@ -4243,6 +4258,7 @@ def _valid_invoice_line_values(value: Any, *, partial: bool) -> bool:
             return False
     return bool(
         _valid_deferred_line_dates(value)
+        and _valid_invoice_line_inputs(value, partial=partial)
         and (
             "analytic_distribution" not in value
             or _valid_analytic_distribution(value["analytic_distribution"])
@@ -4283,6 +4299,10 @@ def _normalized_invoice_replacement_lines(
                 line.get("analytic_distribution")
             ),
             **{field: line.get(field) for field in _DEFERRED_LINE_DATE_FIELDS},
+            **{
+                field: _canonical_decimal_text(line[field]) if field == "deductible_amount" else line[field]
+                for field in _INVOICE_LINE_INPUT_FIELDS if field in line
+            },
         }
         for line in lines
     ]
@@ -11500,6 +11520,52 @@ def _validate_invoice_financial_references(
         )
 
 
+def _validate_invoice_line_inputs(
+    env: Any, lines: list[dict[str, Any]], company_id: int,
+    failure_type: type[Exception], move_type: str,
+) -> None:
+    requested_fields = set().union(*(set(line) & _INVOICE_LINE_INPUT_FIELDS for line in lines))
+    if not requested_fields:
+        return
+    if not requested_fields <= set(_scoped(env, "account.move.line", company_id)._fields):
+        raise _fail(failure_type, "business_rule_error", "The requested native invoice-line inputs are unavailable.", exit_code=6)
+    if move_type not in {"in_invoice", "in_refund"} and any(
+        "deductible_amount" in line and Decimal(line["deductible_amount"]) != 100 for line in lines
+    ):
+        raise _fail(failure_type, "business_rule_error", "Partial deductibility is only supported on native purchase documents.", exit_code=6)
+    unit_lines = [line for line in lines if "product_uom_id" in line]
+    if not unit_lines:
+        return
+    if any(not _is_id(line.get("product_id")) for line in unit_lines):
+        raise _fail(failure_type, "business_rule_error", "Unit assignment requires a product-backed invoice business line.", exit_code=6)
+    products = _ensure_ids(env, "product.product", {line["product_id"] for line in unit_lines},
+                           [("company_id", "in", [False, company_id])], company_id, failure_type)
+    _ensure_ids(env, "uom.uom", {line["product_uom_id"] for line in unit_lines}, [], company_id, failure_type)
+    by_id = {product.id: product for product in products}
+    if any(line["product_uom_id"] not in (by_id[line["product_id"]].uom_id | by_id[line["product_id"]].uom_ids).ids for line in unit_lines):
+        raise _fail(failure_type, "business_rule_error", "The requested unit is not a native allowed unit for this invoice product.", exit_code=6)
+
+
+def _current_invoice_line_inputs(line: Any, requested: dict[str, Any]) -> dict[str, Any]:
+    return {
+        field: _canonical_decimal_text(getattr(line, field)) if field == "deductible_amount" else _many2one_id(getattr(line, field))
+        for field in _INVOICE_LINE_INPUT_FIELDS if field in requested
+    }
+
+
+def _invoice_line_inputs_match(move: Any, requested: list[dict[str, Any]]) -> bool:
+    if not any(_INVOICE_LINE_INPUT_FIELDS & set(line) for line in requested):
+        return True
+    lines = _ordered_move_lines(move.invoice_line_ids)
+    return len(lines) == len(requested) and all(
+        _current_invoice_line_inputs(line, values) == {
+            field: _canonical_decimal_text(values[field]) if field == "deductible_amount" else values[field]
+            for field in _INVOICE_LINE_INPUT_FIELDS if field in values
+        }
+        for line, values in zip(lines, requested, strict=True)
+    )
+
+
 def _create_document(
     env: Any,
     capability_id: str,
@@ -11516,6 +11582,9 @@ def _create_document(
         env, capability_id, company_id, key, move_type, marker, failure_type
     )
     if existing:
+        _validate_invoice_line_inputs(env, parameters["lines"], company_id, failure_type, move_type)
+        if not _invoice_line_inputs_match(existing, parameters["lines"]):
+            raise _fail(failure_type, "idempotency_conflict", "The document operation key conflicts with different native line inputs.", exit_code=5)
         return _move_result(existing, company_id), True
 
     journal_type = "sale" if move_type == "out_invoice" else "purchase"
@@ -11588,6 +11657,7 @@ def _create_document(
     _validate_line_analytic_references(
         env, parameters["lines"], company_id, failure_type
     )
+    _validate_invoice_line_inputs(env, parameters["lines"], company_id, failure_type, move_type)
     values = {
         "move_type": move_type,
         "company_id": company_id,
@@ -11608,6 +11678,7 @@ def _create_document(
                     "quantity": Decimal(line["quantity"]),
                     "price_unit": Decimal(line["price_unit"]),
                     "tax_ids": [(6, 0, line["tax_ids"])],
+                    **_invoice_line_write_values({field: line[field] for field in _INVOICE_LINE_INPUT_FIELDS if field in line}),
                     **(
                         {"product_id": line["product_id"] or False}
                         if "product_id" in line
@@ -11650,6 +11721,8 @@ def _create_document(
         if parameter_name in parameters:
             values[field_name] = parameters[parameter_name] or False
     move = _scoped(env, "account.move", company_id).create(values)
+    if not _invoice_line_inputs_match(move, parameters["lines"]):
+        raise _fail(failure_type, "odoo_write_error", "Odoo did not persist the requested native invoice-line inputs.", exit_code=6)
     return _move_result(move, company_id), False
 
 
@@ -12088,7 +12161,7 @@ def _ordered_move_lines(lines: Any) -> list[Any]:
     )
 
 
-def _current_invoice_line(line: Any) -> dict[str, Any] | None:
+def _current_invoice_line(line: Any, requested: dict[str, Any] | None = None) -> dict[str, Any] | None:
     if getattr(line, "display_type", None) not in {None, False, "product"}:
         return None
     account_id = _many2one_id(line.account_id)
@@ -12109,13 +12182,14 @@ def _current_invoice_line(line: Any) -> dict[str, Any] | None:
             field: _nullable_value(getattr(line, field, None))
             for field in _DEFERRED_LINE_DATE_FIELDS
         },
+        **_current_invoice_line_inputs(line, requested or {}),
     }
 
 
-def _current_invoice_lines(move: Any) -> list[dict[str, Any]] | None:
+def _current_invoice_lines(move: Any, requested: list[dict[str, Any]] | None = None) -> list[dict[str, Any]] | None:
     result: list[dict[str, Any]] = []
-    for line in _ordered_move_lines(move.invoice_line_ids):
-        values = _current_invoice_line(line)
+    for index, line in enumerate(_ordered_move_lines(move.invoice_line_ids)):
+        values = _current_invoice_line(line, requested[index] if requested and index < len(requested) else None)
         if values is None:
             return None
         result.append(values)
@@ -12188,6 +12262,8 @@ def _validate_invoice_line_references(
         failure_type,
     )
     _validate_line_analytic_references(env, lines, company_id, failure_type)
+    if any(_INVOICE_LINE_INPUT_FIELDS & set(line) for line in lines):
+        _validate_invoice_line_inputs(env, lines, company_id, failure_type, move.move_type)
 
 
 def _validate_entry_line_references(
@@ -12300,6 +12376,7 @@ def _replacement_commands(
                 "price_unit": Decimal(line["price_unit"]),
                 "discount": Decimal(line["discount"]),
                 "tax_ids": [(6, 0, line["tax_ids"])],
+                **_invoice_line_write_values({field: line[field] for field in _INVOICE_LINE_INPUT_FIELDS if field in line}),
                 "analytic_distribution": _odoo_analytic_distribution(
                     line.get("analytic_distribution")
                 ),
@@ -12371,7 +12448,7 @@ def _replace_move_lines(
             )
     if invoice_action:
         _validate_invoice_line_references(env, move, lines, company_id, failure_type)
-        matches = _invoice_lines_match(_current_invoice_lines(move), lines)
+        matches = _invoice_lines_match(_current_invoice_lines(move, lines), lines)
     else:
         company_currency_id = _validate_entry_line_references(
             env, lines, company_id, failure_type
@@ -12399,7 +12476,7 @@ def _replace_move_lines(
     field_name = "invoice_line_ids" if invoice_action else "line_ids"
     move.write({field_name: _replacement_commands(capability_id, lines)})
     verified = (
-        _invoice_lines_match(_current_invoice_lines(move), lines)
+        _invoice_lines_match(_current_invoice_lines(move, lines), lines)
         if invoice_action
         else _entry_lines_match(_current_entry_lines(move), lines, company_currency_id)
     )
@@ -12416,7 +12493,7 @@ def _replace_move_lines(
 def _invoice_line_write_values(values: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for field_name, value in values.items():
-        if field_name in {"quantity", "price_unit", "discount"}:
+        if field_name in {"quantity", "price_unit", "discount", "deductible_amount"}:
             result[field_name] = Decimal(value)
         elif field_name == "tax_ids":
             result[field_name] = [(6, 0, value)]
@@ -12463,7 +12540,7 @@ def _invoice_line(
 
 
 def _invoice_line_matches(line: Any, target: dict[str, Any]) -> bool:
-    current = _current_invoice_line(line)
+    current = _current_invoice_line(line, target)
     expected = _normalized_invoice_replacement_lines([target])[0]
     return current == expected
 
@@ -12554,6 +12631,9 @@ def _update_invoice_line(
             exit_code=4,
         )
     target = {**current, **parameters["changes"]}
+    if _INVOICE_LINE_INPUT_FIELDS & set(parameters["changes"]):
+        _validate_invoice_line_inputs(env, [target], company_id, failure_type, move.move_type)
+        current.update(_current_invoice_line_inputs(line, parameters["changes"]))
     if _invoice_line_matches(line, target):
         return _move_result(move, company_id, source_id=line.id), True
     field_names = getattr(line, "_fields", {})
@@ -12571,9 +12651,30 @@ def _update_invoice_line(
             "A sales- or purchase-sourced invoice line cannot change product.",
             exit_code=6,
         )
+    if sourced and any(
+        current[field] != (_canonical_decimal_text(parameters["changes"][field]) if field == "deductible_amount" else parameters["changes"][field])
+        for field in _INVOICE_LINE_INPUT_FIELDS if field in parameters["changes"]
+    ):
+        raise _fail(failure_type, "business_rule_error", "Source-linked invoice business lines cannot change unit or deductibility by this capability.", exit_code=6)
     _validate_invoice_line_references(env, move, [target], company_id, failure_type)
+    unit_changed = "product_uom_id" in parameters["changes"] and parameters["changes"]["product_uom_id"] != current["product_uom_id"]
+    display_type = getattr(line, "display_type", None)
     line.write(_invoice_line_write_values(parameters["changes"]))
-    if not _invoice_line_matches(line, target):
+    if unit_changed:
+        persisted = _current_invoice_line(line, parameters["changes"])
+        expected = _normalized_invoice_replacement_lines([target])[0]
+        valid = (
+            line.id == parameters["line_id"]
+            and _many2one_id(line.move_id) == move.id
+            and _many2one_id(line.company_id) == company_id
+            and line.id in move.invoice_line_ids.ids
+            and getattr(line, "display_type", None) == display_type
+            and persisted is not None
+            and all(persisted[field] == expected[field] for field in parameters["changes"])
+        )
+    else:
+        valid = _invoice_line_matches(line, target)
+    if not valid:
         raise _fail(
             failure_type,
             "odoo_write_error",
@@ -13322,6 +13423,8 @@ def _create_refund(
         else "in_invoice"
     )
     refund_type = "out_refund" if source_type == "out_invoice" else "in_refund"
+    if "lines" in parameters:
+        _validate_invoice_line_inputs(env, parameters["lines"], company_id, failure_type, refund_type)
     source = _search_one(
         env,
         "account.move",
@@ -13368,7 +13471,7 @@ def _create_refund(
                 exit_code=5,
             )
         if "lines" in parameters and not _invoice_lines_match(
-            _current_invoice_lines(refunds), parameters["lines"]
+            _current_invoice_lines(refunds, parameters["lines"]), parameters["lines"]
         ):
             raise _fail(
                 failure_type,
@@ -13456,7 +13559,7 @@ def _create_refund(
         failure_type,
     )
     if "lines" in parameters and not _invoice_lines_match(
-        _current_invoice_lines(refunds), parameters["lines"]
+        _current_invoice_lines(refunds, parameters["lines"]), parameters["lines"]
     ):
         raise _fail(
             failure_type,

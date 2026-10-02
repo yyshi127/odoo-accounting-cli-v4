@@ -2806,6 +2806,7 @@ def _dispatch_invoice_get(
     line_fields = [
         *_INVOICE_LINE_FIELDS,
         *(field for field in _INVOICE_DEFERRED_DATE_FIELDS if field in line_model._fields),
+        *(field for field in ("product_uom_id", "deductible_amount") if field in line_model._fields),
     ]
     lines = line_model.search_read(
         [
@@ -2862,6 +2863,14 @@ def _dispatch_invoice_get(
             )
         product_id = _reference_id(line.pop("product_id"))
         account_id = _reference_id(line.pop("account_id"))
+        if "product_uom_id" in line:
+            line["product_uom_id"] = _reference_id(line["product_uom_id"])
+        if "deductible_amount" in line:
+            line["deductible_amount"] = _decimal_string(line["deductible_amount"])
+            if not 0 <= Decimal(line["deductible_amount"]) <= 100:
+                raise RuntimeFailure(
+                    "odoo_runtime_error", "The Odoo runtime request failed.", exit_code=7
+                )
         tax_values = line_tax_ids[line_id]
         line.pop("tax_ids")
         line["analytic_distribution"] = _line_analytic_distribution(

@@ -27,6 +27,7 @@
             },
             "lines": {
               "type": "array",
+              "description": "Custom refund lines may include product_uom_id and native deductible_amount percentage; full native batches do not accept custom lines.",
               "minItems": 1,
               "maxItems": 500,
               "items": {

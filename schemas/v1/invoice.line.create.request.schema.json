@@ -15,7 +15,10 @@
       "required": ["move_id", "line"],
       "properties": {
         "move_id": {"type": "integer", "minimum": 1},
-        "line": {"$ref": "invoice.lines.replace.request.schema.json#/$defs/invoice_line"}
+        "line": {
+          "$ref": "invoice.lines.replace.request.schema.json#/$defs/invoice_line",
+          "description": "Optional product_uom_id requires a product-backed line; deductible_amount is a native percentage, not money."
+        }
       }
     }
   }

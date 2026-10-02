@@ -23,6 +23,8 @@
           "properties": {
             "name": {"$ref": "invoice.lines.replace.request.schema.json#/$defs/invoice_line/properties/name"},
             "product_id": {"$ref": "invoice.lines.replace.request.schema.json#/$defs/invoice_line/properties/product_id"},
+            "product_uom_id": {"$ref": "invoice.lines.replace.request.schema.json#/$defs/invoice_line/properties/product_uom_id"},
+            "deductible_amount": {"$ref": "invoice.lines.replace.request.schema.json#/$defs/invoice_line/properties/deductible_amount"},
             "account_id": {"$ref": "invoice.lines.replace.request.schema.json#/$defs/invoice_line/properties/account_id"},
             "quantity": {"$ref": "invoice.lines.replace.request.schema.json#/$defs/invoice_line/properties/quantity"},
             "price_unit": {"$ref": "invoice.lines.replace.request.schema.json#/$defs/invoice_line/properties/price_unit"},
@@ -50,6 +52,10 @@
                 "properties": {"deferred_end_date": {"type": "null"}}
               },
               "then": {"properties": {"deferred_start_date": {"type": "null"}}}
+            },
+            {
+              "if": {"required": ["product_uom_id", "product_id"]},
+              "then": {"properties": {"product_id": {"type": "integer", "minimum": 1}}}
             }
           ]
         }

@@ -842,6 +842,23 @@ def _validate_deferred_line_dates(line: dict[str, Any]) -> None:
         )
 
 
+def _validate_invoice_line_inputs(values: dict[str, Any], *, partial: bool) -> None:
+    if "product_uom_id" in values:
+        if not _valid_id(values["product_uom_id"]):
+            raise _invalid("Invoice line product_uom_id must be a positive integer.")
+        if (not partial or "product_id" in values) and not _valid_id(
+            values.get("product_id")
+        ):
+            raise _invalid("An explicit invoice unit requires a product-backed line.")
+    if "deductible_amount" in values:
+        percentage = _decimal(values["deductible_amount"], signed=False)
+        if percentage is None or percentage > 100:
+            raise _invalid(
+                "Invoice line deductible_amount must be an unsigned decimal "
+                "percentage between 0 and 100."
+            )
+
+
 def _validate_invoice_parameters(parameters: Any) -> dict[str, Any]:
     required = {"partner_id", "journal_id", "invoice_date", "currency_id", "lines"}
     allowed = required | {
@@ -902,6 +919,8 @@ def _validate_invoice_parameters(parameters: Any) -> dict[str, Any]:
     }
     allowed_line_fields = required_line_fields | {
         "product_id",
+        "product_uom_id",
+        "deductible_amount",
         "discount",
         "analytic_distribution",
         "deferred_start_date",
@@ -926,6 +945,7 @@ def _validate_invoice_parameters(parameters: Any) -> dict[str, Any]:
             raise _invalid(
                 "Invoice line product_id must be null or a positive integer."
             )
+        _validate_invoice_line_inputs(line, partial=False)
         if "discount" in line:
             discount = _decimal(line["discount"], signed=False)
             if discount is None or discount > 100:
@@ -1136,6 +1156,8 @@ def _validate_invoice_line_values(
         "tax_ids",
     }
     allowed_line_fields = required_line_fields | {
+        "product_uom_id",
+        "deductible_amount",
         "analytic_distribution",
         "deferred_start_date",
         "deferred_end_date",
@@ -1155,6 +1177,7 @@ def _validate_invoice_line_values(
         raise _invalid(
             "Invoice line product_id must be null or a positive integer."
         )
+    _validate_invoice_line_inputs(values, partial=partial)
     if "account_id" in values and not _valid_id(values["account_id"]):
         raise _invalid("Invoice line account_id must be a positive integer.")
     if "quantity" in values and _decimal(values["quantity"], signed=True) is None:

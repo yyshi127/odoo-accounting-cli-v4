@@ -99,6 +99,7 @@ _LINE_FIELDS = frozenset(
         "analytic_distribution",
     }
 )
+_LINE_INPUT_FIELDS = frozenset({"product_uom_id", "deductible_amount"})
 _TAX_FIELDS = frozenset(
     {
         "id",
@@ -783,7 +784,13 @@ def _validate_invoice(row: Any, *, company_id: int, invoice_id: int) -> dict[str
         non_accountable = display_type in _NON_ACCOUNTABLE_TYPES
         if (
             not isinstance(line, dict)
-            or set(line) != _LINE_FIELDS
+            or not _LINE_FIELDS <= set(line) <= _LINE_FIELDS | _LINE_INPUT_FIELDS
+            or ("product_uom_id" in line and not _valid_optional_id(line["product_uom_id"]))
+            or ("deductible_amount" in line and not (
+                _is_decimal_string(line["deductible_amount"])
+                and not line["deductible_amount"].startswith("-")
+                and 0 <= Decimal(line["deductible_amount"]) <= 100
+            ))
             or not _valid_id(line["id"])
             or not _is_integer(line["sequence"])
             or not (isinstance(display_type, str) and display_type in _DISPLAY_TYPES)

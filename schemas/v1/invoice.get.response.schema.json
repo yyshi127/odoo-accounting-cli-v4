@@ -74,6 +74,8 @@
         "display_type": {"enum": ["product", "line_section", "line_subsection", "line_note"]},
         "name": {"type": ["string", "null"], "minLength": 1},
         "product": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/named_ref"}]},
+        "product_uom_id": {"type": ["integer", "null"], "minimum": 1},
+        "deductible_amount": {"type": "string", "pattern": "^(?:100(?:\\.0+)?|(?:0|[1-9][0-9]?)(?:\\.[0-9]+)?)$(?![\\s\\S])", "description": "Native deductible percentage, not a monetary amount; omitted when the field is unavailable."},
         "account": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/account"}]},
         "quantity": {"$ref": "invoice.search.response.schema.json#/$defs/money"},
         "price_unit": {"$ref": "invoice.search.response.schema.json#/$defs/money"},

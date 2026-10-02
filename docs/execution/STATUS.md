@@ -1,6 +1,50 @@
 # Execution status
 
-## Current accounting phase — order accounting reads, 2026-10-02
+## Current accounting phase — native invoice line inputs, 2026-10-02
+
+Eight EXT, zero NEW. Totals remain 556 registered /541 handlers (253 reads,
+288 writes),1088 schemas;464 unconfigured,77 degraded,15 disabled. Enabled
+integrations remain538 implemented,two planned,one failed. Counts are not a full
+accounting denominator,completion percentage or configured permission guarantee.
+
+- customer_invoice.create/vendor_bill.create,invoice.line.create/update,
+  invoice.lines.replace and singular custom-line customer_credit_note.create/
+  vendor_refund.create accept independent optional product_uom_id and
+  deductible_amount. The former is a positive native allowed product-unit ID;
+  the latter is an unsigned decimal percentage0–100,not money. Partial
+  deductibility is limited to native purchase invoices/refunds. Full native
+  batch refunds without custom lines are unchanged.
+- invoice.get exposes optional product_uom_id (nullable ID) and deductible_amount
+  from available native line fields. Missing native fields omit the new keys;
+  no UoM model gate is added to the old read. Existing unit.assign and
+  deductibility.update commands remain; this batch reduces separate operations.
+- An explicit changed unit on invoice.line.update permits native recomputation
+  of omitted prices/taxes. Explicit caller fields and exact line/parent/company/
+  display identity must persist. Supply price_unit/tax_ids to pin those inputs.
+  Calls omitting unit keep their old whole-line verification and keys. New unit/
+  deductibility changes retain the existing source-link restriction; same-value
+  replay remains allowed. Native partial deduction generates accounting splits;
+  it is not a promise of lower invoice tax or gross total.
+
+Local478 focused/regression tests passed63.07s; server478 passed25.89s.
+One shared dual-isolated native smoke passed28.86s under UID5,su=False,company1.
+It exercised all eight targets,unit-only native recomputation and explicit
+unit/quantity/price inputs,persistence/replays,custom refunds,legacy omission,
+allowed-unit/parent/membership/sales-percentage/posted/foreign denials and native
+non-deductible/tax synchronization. Fresh rollback verified all owned fixtures,
+all users/groups and implied groups,both company settings,all defaults and
+currency/rate snapshots. Source-linked restrictions have focused tests; this
+shared live fixture does not claim native SO/PO source-guard coverage.
+
+Only17 allowlisted CLI code/schema/test files were deployed;13 existing originals
+were backed up before replacement. The unrelated548 registry descriptors remain
+semantically unchanged. Actual registry2089000B stays below the unchanged2MiB
+public-file checker and4MiB loader limits. Existing broad-suite stale assertions
+remain outside this batch; this is not a whole-suite-green claim. No business DB,
+native addon/source,service configuration,restart,inventory workflow,cleanup or
+V2/V3/Pi changes. Public documentation stays local; server overlays are preserved.
+
+## Previous checkpoint — order accounting reads, 2026-10-02
 
 Two NEW commands and eight existing-interface extensions. Totals: 556 registered /
 541 handlers (253 reads, 288 writes), 1088 schemas; 464 unconfigured, 77 degraded,

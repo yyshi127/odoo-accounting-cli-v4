@@ -124,6 +124,14 @@
                 ],
                 "minimum": 1
               },
+              "product_uom_id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "deductible_amount": {
+                "$ref": "#/$defs/percentage_decimal",
+                "description": "Native deductibility percentage, not a monetary amount."
+              },
               "quantity": {
                 "$ref": "#/$defs/nonzero_signed_decimal"
               },
@@ -157,6 +165,13 @@
               "deferred_start_date": ["deferred_end_date"],
               "deferred_end_date": ["deferred_start_date"]
             },
+            "allOf": [{
+              "if": {"required": ["product_uom_id"]},
+              "then": {
+                "required": ["product_id"],
+                "properties": {"product_id": {"type": "integer", "minimum": 1}}
+              }
+            }],
             "oneOf": [
               {
                 "properties": {
