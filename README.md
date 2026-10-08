@@ -4,6 +4,13 @@ Independent accounting automation CLI for Odoo 19. This repository is currently 
 
 The active V4 scope is accounting capabilities, structured JSON contracts, and real Odoo ORM/wizard/report integration. It is not a generic ORM browser. Historical sales, purchasing, and inventory extensions remain registered, but are outside current accounting-core development and must not be counted as accounting-core completion.
 
+## Complete Chinese command and interface manual
+
+Start with [CLI V4 命令接口说明书（按业务场景分类）](docs/reference/CLI_V4_MANUAL.md).
+The 2026-10-03 snapshot covers all 559 registered IDs across 20 business scenarios,
+including the 15 disabled IDs. It includes a new-session quick start, full JSON
+contracts, invocation examples, write-key documentation and explicit limitations.
+
 ## Bootstrap development
 
 ```bash
